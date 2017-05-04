@@ -5,6 +5,7 @@
 #include "media/remoting/remote_demuxer_stream_adapter.h"
 
 #include <memory>
+#include <vector>
 
 #include "base/callback_helpers.h"
 #include "base/run_loop.h"
@@ -39,36 +40,67 @@ class MockRemoteDemuxerStreamAdapter {
     demuxer_stream_adapter_.reset(new RemoteDemuxerStreamAdapter(
         std::move(main_task_runner), std::move(media_task_runner), name,
         demuxer_stream, rpc_broker_->GetWeakPtr(),
-        std::move(stream_sender_info), std::move(producer_handle)));
+        rpc_broker_->GetUniqueHandle(), std::move(stream_sender_info),
+        std::move(producer_handle),
+        base::Bind(&MockRemoteDemuxerStreamAdapter::OnError,
+                   weak_factory_.GetWeakPtr())));
+
+    // Faking initialization with random callback handle to start mojo watcher.
+    demuxer_stream_adapter_->Initialize(3);
+  }
+
+  ~MockRemoteDemuxerStreamAdapter() {
+    // Make sure unit tests that did not expect errors did not cause any errors.
+    EXPECT_TRUE(errors_.empty());
   }
 
   int rpc_handle() const { return demuxer_stream_adapter_->rpc_handle(); }
+
   base::WeakPtr<MockRemoteDemuxerStreamAdapter> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
   }
 
+  void DoDuplicateInitialize() { demuxer_stream_adapter_->Initialize(999); }
+
+  void TakeErrors(std::vector<StopTrigger>* errors) {
+    errors->swap(errors_);
+    errors_.clear();
+  }
+
   // Fake to signal that it's in reading state.
-  void FakeReadUntil(int read_until_count) {
+  void FakeReadUntil(int read_until_count, int callback_handle) {
     std::unique_ptr<pb::RpcMessage> rpc(new pb::RpcMessage());
     rpc->set_handle(rpc_handle());
     rpc->set_proc(pb::RpcMessage::RPC_DS_READUNTIL);
     auto* read_message = rpc->mutable_demuxerstream_readuntil_rpc();
-    read_message->set_callback_handle(999);  // Given an unique callback handle.
+    read_message->set_callback_handle(
+        callback_handle);  // Given an unique callback handle.
     read_message->set_count(read_until_count);  // Request 1 frame
 
     demuxer_stream_adapter_->OnReceivedRpc(std::move(rpc));
   }
   void OnNewBuffer(const scoped_refptr<::media::DecoderBuffer>& frame) {
-    demuxer_stream_adapter_->OnNewBuffer(1, DemuxerStream::kOk, frame);
+    demuxer_stream_adapter_->OnNewBuffer(DemuxerStream::kOk, frame);
   }
 
   void SignalFlush(bool flush) { demuxer_stream_adapter_->SignalFlush(flush); }
 
+  pb::RpcMessage* last_received_rpc() const { return last_received_rpc_.get(); }
+
  private:
-  void OnSendMessageToSink(std::unique_ptr<std::vector<uint8_t>> message) {}
+  void OnSendMessageToSink(std::unique_ptr<std::vector<uint8_t>> message) {
+    last_received_rpc_.reset(new remoting::pb::RpcMessage());
+    CHECK(last_received_rpc_->ParseFromArray(message->data(), message->size()));
+  }
+
+  void OnError(StopTrigger stop_trigger) { errors_.push_back(stop_trigger); }
 
   std::unique_ptr<RpcBroker> rpc_broker_;
   std::unique_ptr<RemoteDemuxerStreamAdapter> demuxer_stream_adapter_;
+  std::unique_ptr<remoting::pb::RpcMessage> last_received_rpc_;
+
+  std::vector<StopTrigger> errors_;
+
   base::WeakPtrFactory<MockRemoteDemuxerStreamAdapter> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MockRemoteDemuxerStreamAdapter);
@@ -93,7 +125,7 @@ class RemoteDemuxerStreamAdapterTest : public ::testing::Test {
         mojo::CreateDataPipe(&data_pipe_options, &producer_end, &consumer_end));
 
     data_stream_sender_.reset(new FakeRemotingDataStreamSender(
-        GetProxy(&stream_sender), std::move(consumer_end)));
+        MakeRequest(&stream_sender), std::move(consumer_end)));
     demuxer_stream_adapter_.reset(new MockRemoteDemuxerStreamAdapter(
         message_loop_.task_runner(), message_loop_.task_runner(), "test",
         demuxer_stream_.get(), stream_sender.PassInterface(),
@@ -111,10 +143,11 @@ class RemoteDemuxerStreamAdapterTest : public ::testing::Test {
  protected:
   void SetUp() override { SetUpDataPipe(); }
 
+  // TODO(miu): Add separate media thread, to test threading also.
+  base::MessageLoop message_loop_;
   std::unique_ptr<DummyDemuxerStream> demuxer_stream_;
   std::unique_ptr<FakeRemotingDataStreamSender> data_stream_sender_;
   std::unique_ptr<MockRemoteDemuxerStreamAdapter> demuxer_stream_adapter_;
-  base::MessageLoop message_loop_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(RemoteDemuxerStreamAdapterTest);
@@ -125,7 +158,7 @@ TEST_F(RemoteDemuxerStreamAdapterTest, SingleReadUntil) {
   // implementation.
   EXPECT_CALL(*demuxer_stream_, Read(_)).Times(1);
 
-  demuxer_stream_adapter_->FakeReadUntil(3);
+  demuxer_stream_adapter_->FakeReadUntil(3, 999);
   RunPendingTasks();
 }
 
@@ -134,36 +167,44 @@ TEST_F(RemoteDemuxerStreamAdapterTest, MultiReadUntil) {
   // implementation, and 2nd one will not proceed when there is ongoing read.
   EXPECT_CALL(*demuxer_stream_, Read(_)).Times(1);
 
-  demuxer_stream_adapter_->FakeReadUntil(1);
+  demuxer_stream_adapter_->FakeReadUntil(1, 100);
   RunPendingTasks();
 
-  demuxer_stream_adapter_->FakeReadUntil(2);
+  demuxer_stream_adapter_->FakeReadUntil(2, 101);
   RunPendingTasks();
 }
 
 TEST_F(RemoteDemuxerStreamAdapterTest, WriteOneFrameSmallerThanCapacity) {
   // Sends a frame with size 50 bytes, pts = 1 and key frame.
   demuxer_stream_->CreateFakeFrame(50, true, 1 /* pts */);
-  demuxer_stream_adapter_->FakeReadUntil(1);
+  demuxer_stream_adapter_->FakeReadUntil(1, 999);
   RunPendingTasks();
 
   // Checks if it's sent to consumer side and data is correct
   ASSERT_EQ(data_stream_sender_->send_frame_count(), 1U);
   ASSERT_EQ(data_stream_sender_->consume_data_chunk_count(), 1U);
   ASSERT_TRUE(data_stream_sender_->ValidateFrameBuffer(0, 50, true, 1));
+  pb::RpcMessage* last_rpc = demuxer_stream_adapter_->last_received_rpc();
+  ASSERT_TRUE(last_rpc);
+  ASSERT_EQ(last_rpc->proc(), pb::RpcMessage::RPC_DS_READUNTIL_CALLBACK);
+  ASSERT_EQ(last_rpc->handle(), 999);
   data_stream_sender_->ResetHistory();
 }
 
 TEST_F(RemoteDemuxerStreamAdapterTest, WriteOneFrameLargerThanCapacity) {
   // Sends a frame with size 800 bytes, pts = 1 and key frame.
   demuxer_stream_->CreateFakeFrame(800, true, 1 /* pts */);
-  demuxer_stream_adapter_->FakeReadUntil(1);
+  demuxer_stream_adapter_->FakeReadUntil(1, 999);
   RunPendingTasks();
 
   // Checks if it's sent to consumer side and data is correct
   ASSERT_EQ(data_stream_sender_->send_frame_count(), 1U);
   ASSERT_EQ(data_stream_sender_->consume_data_chunk_count(), 4U);
   ASSERT_TRUE(data_stream_sender_->ValidateFrameBuffer(0, 800, true, 1));
+  pb::RpcMessage* last_rpc = demuxer_stream_adapter_->last_received_rpc();
+  ASSERT_TRUE(last_rpc);
+  ASSERT_EQ(last_rpc->proc(), pb::RpcMessage::RPC_DS_READUNTIL_CALLBACK);
+  ASSERT_EQ(last_rpc->handle(), 999);
   data_stream_sender_->ResetHistory();
 }
 
@@ -171,21 +212,29 @@ TEST_F(RemoteDemuxerStreamAdapterTest, SendFrameAndSignalFlushMix) {
   // Sends a frame with size 50 bytes, pts = 1 and key frame.
   demuxer_stream_->CreateFakeFrame(50, true, 1 /* pts */);
   // Issues ReadUntil request with frame count up to 1 (fetch #0).
-  demuxer_stream_adapter_->FakeReadUntil(1);
+  demuxer_stream_adapter_->FakeReadUntil(1, 100);
   RunPendingTasks();
   ASSERT_EQ(data_stream_sender_->send_frame_count(), 1U);
   ASSERT_TRUE(data_stream_sender_->ValidateFrameBuffer(0, 50, true, 1));
+  pb::RpcMessage* last_rpc = demuxer_stream_adapter_->last_received_rpc();
+  ASSERT_TRUE(last_rpc);
+  ASSERT_EQ(last_rpc->proc(), pb::RpcMessage::RPC_DS_READUNTIL_CALLBACK);
+  ASSERT_EQ(last_rpc->handle(), 100);
   data_stream_sender_->ResetHistory();
 
   // Sends two frames with size 100 + 150 bytes
   demuxer_stream_->CreateFakeFrame(100, false, 2 /* pts */);
   demuxer_stream_->CreateFakeFrame(150, false, 3 /* pts */);
   // Issues ReadUntil request with frame count up to 3 (fetch #1 and #2).
-  demuxer_stream_adapter_->FakeReadUntil(3);
+  demuxer_stream_adapter_->FakeReadUntil(3, 101);
   RunPendingTasks();
   ASSERT_EQ(data_stream_sender_->send_frame_count(), 2U);
   ASSERT_TRUE(data_stream_sender_->ValidateFrameBuffer(0, 100, false, 2));
   ASSERT_TRUE(data_stream_sender_->ValidateFrameBuffer(1, 150, false, 3));
+  last_rpc = demuxer_stream_adapter_->last_received_rpc();
+  ASSERT_TRUE(last_rpc);
+  ASSERT_EQ(last_rpc->proc(), pb::RpcMessage::RPC_DS_READUNTIL_CALLBACK);
+  ASSERT_EQ(last_rpc->handle(), 101);
   data_stream_sender_->ResetHistory();
 
   // Signal flush
@@ -198,7 +247,7 @@ TEST_F(RemoteDemuxerStreamAdapterTest, SendFrameAndSignalFlushMix) {
   demuxer_stream_->CreateFakeFrame(100, false, 4 /* pts */);
   demuxer_stream_->CreateFakeFrame(100, false, 5 /* pts */);
   // Issues ReadUntil request with frame count up to 5 (fetch #3 and #4).
-  demuxer_stream_adapter_->FakeReadUntil(5);
+  demuxer_stream_adapter_->FakeReadUntil(5, 102);
   RunPendingTasks();
   ASSERT_EQ(data_stream_sender_->send_frame_count(), 0U);
 
@@ -209,11 +258,40 @@ TEST_F(RemoteDemuxerStreamAdapterTest, SendFrameAndSignalFlushMix) {
   data_stream_sender_->ResetHistory();
 
   // Re-issues ReadUntil request with frame count up to 4 (fetch #3).
-  demuxer_stream_adapter_->FakeReadUntil(4);
+  demuxer_stream_adapter_->FakeReadUntil(4, 103);
   RunPendingTasks();
   ASSERT_EQ(data_stream_sender_->send_frame_count(), 1U);
   ASSERT_TRUE(data_stream_sender_->ValidateFrameBuffer(0, 100, false, 4));
+  last_rpc = demuxer_stream_adapter_->last_received_rpc();
+  ASSERT_TRUE(last_rpc);
+  ASSERT_EQ(last_rpc->proc(), pb::RpcMessage::RPC_DS_READUNTIL_CALLBACK);
+  ASSERT_EQ(last_rpc->handle(), 103);
   data_stream_sender_->ResetHistory();
+}
+
+TEST_F(RemoteDemuxerStreamAdapterTest, DuplicateInitializeCausesFatalError) {
+  std::vector<StopTrigger> errors;
+  demuxer_stream_adapter_->TakeErrors(&errors);
+  ASSERT_TRUE(errors.empty());
+
+  demuxer_stream_adapter_->DoDuplicateInitialize();
+  demuxer_stream_adapter_->TakeErrors(&errors);
+  ASSERT_EQ(1u, errors.size());
+  EXPECT_EQ(PEERS_OUT_OF_SYNC, errors[0]);
+}
+
+TEST_F(RemoteDemuxerStreamAdapterTest, ClosingPipeCausesFatalError) {
+  std::vector<StopTrigger> errors;
+  demuxer_stream_adapter_->TakeErrors(&errors);
+  ASSERT_TRUE(errors.empty());
+
+  // Closes one end of mojo message and data pipes.
+  data_stream_sender_.reset();
+  RunPendingTasks();  // Allow notification from mojo to propagate.
+
+  demuxer_stream_adapter_->TakeErrors(&errors);
+  ASSERT_EQ(1u, errors.size());
+  EXPECT_EQ(MOJO_PIPE_ERROR, errors[0]);
 }
 
 }  // namesapce remoting

@@ -5,7 +5,7 @@
 package org.chromium.content.browser;
 
 import android.content.pm.ActivityInfo;
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 import android.view.Surface;
 
 import org.chromium.base.ThreadUtils;
@@ -229,7 +229,8 @@ public class ScreenOrientationListenerTest extends ContentShellTestBase {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                ScreenOrientationProvider.lockOrientation(null, (byte) orientationValue);
+                ScreenOrientationProvider.lockOrientation(
+                        getContentViewCore().getWindowAndroid(), (byte) orientationValue);
             }
         });
         mCallbackHelper.waitForCallback(callCount);

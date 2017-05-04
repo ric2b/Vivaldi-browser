@@ -97,6 +97,9 @@ public class FakeSuggestionsSource implements SuggestionsSource {
     }
 
     @Override
+    public void fetchRemoteSuggestions() {}
+
+    @Override
     public void dismissSuggestion(SnippetArticle suggestion) {
         for (List<SnippetArticle> suggestions : mSuggestions.values()) {
             suggestions.remove(suggestion);
@@ -165,6 +168,7 @@ public class FakeSuggestionsSource implements SuggestionsSource {
             return Collections.emptyList();
         }
         List<SnippetArticle> result = mSuggestions.get(category);
-        return result == null ? Collections.<SnippetArticle>emptyList() : result;
+        return result == null ? Collections.<SnippetArticle>emptyList()
+                              : new ArrayList<SnippetArticle>(result);
     }
 }

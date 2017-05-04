@@ -32,25 +32,31 @@ Network.ResourceWebSocketFrameView = class extends UI.VBox {
     this._splitWidget = new UI.SplitWidget(false, true, 'resourceWebSocketFrameSplitViewState');
     this._splitWidget.show(this.element);
 
-    var columns = /** @type {!Array<!UI.DataGrid.ColumnDescriptor>} */ ([
-      {id: 'data', title: Common.UIString('Data'), sortable: false, weight: 88},
-      {id: 'length', title: Common.UIString('Length'), sortable: false, align: UI.DataGrid.Align.Right, weight: 5},
+    var columns = /** @type {!Array<!DataGrid.DataGrid.ColumnDescriptor>} */ ([
+      {id: 'data', title: Common.UIString('Data'), sortable: false, weight: 88}, {
+        id: 'length',
+        title: Common.UIString('Length'),
+        sortable: false,
+        align: DataGrid.DataGrid.Align.Right,
+        weight: 5
+      },
       {id: 'time', title: Common.UIString('Time'), sortable: true, weight: 7}
     ]);
 
-    this._dataGrid = new UI.SortableDataGrid(columns);
+    this._dataGrid = new DataGrid.SortableDataGrid(columns);
     this._dataGrid.setRowContextMenuCallback(onRowContextMenu);
     this._dataGrid.setStickToBottom(true);
     this._dataGrid.setCellClass('websocket-frame-view-td');
     this._timeComparator =
-        /** @type {!UI.SortableDataGrid.NodeComparator} */ (Network.ResourceWebSocketFrameNodeTimeComparator);
+        /** @type {function(!Network.ResourceWebSocketFrameNode, !Network.ResourceWebSocketFrameNode):number} */ (
+            Network.ResourceWebSocketFrameNodeTimeComparator);
     this._dataGrid.sortNodes(this._timeComparator, false);
-    this._dataGrid.markColumnAsSortedBy('time', UI.DataGrid.Order.Ascending);
-    this._dataGrid.addEventListener(UI.DataGrid.Events.SortingChanged, this._sortItems, this);
+    this._dataGrid.markColumnAsSortedBy('time', DataGrid.DataGrid.Order.Ascending);
+    this._dataGrid.addEventListener(DataGrid.DataGrid.Events.SortingChanged, this._sortItems, this);
 
     this._dataGrid.setName('ResourceWebSocketFrameView');
-    this._dataGrid.addEventListener(UI.DataGrid.Events.SelectedNode, this._onFrameSelected, this);
-    this._dataGrid.addEventListener(UI.DataGrid.Events.DeselectedNode, this._onFrameDeselected, this);
+    this._dataGrid.addEventListener(DataGrid.DataGrid.Events.SelectedNode, this._onFrameSelected, this);
+    this._dataGrid.addEventListener(DataGrid.DataGrid.Events.DeselectedNode, this._onFrameDeselected, this);
     this._splitWidget.setMainWidget(this._dataGrid.asWidget());
 
     var view = new UI.EmptyWidget('Select frame to browse its content.');
@@ -61,7 +67,7 @@ Network.ResourceWebSocketFrameView = class extends UI.VBox {
 
     /**
      * @param {!UI.ContextMenu} contextMenu
-     * @param {!UI.DataGridNode} node
+     * @param {!DataGrid.DataGridNode} node
      */
     function onRowContextMenu(contextMenu, node) {
       contextMenu.appendItem(
@@ -101,14 +107,14 @@ Network.ResourceWebSocketFrameView = class extends UI.VBox {
    */
   _frameAdded(event) {
     var frame = /** @type {!SDK.NetworkRequest.WebSocketFrame} */ (event.data);
-    this._dataGrid.insertChild(new Network.ResourceWebSocketFrameNode(this._request.url, frame));
+    this._dataGrid.insertChild(new Network.ResourceWebSocketFrameNode(this._request.url(), frame));
   }
 
   /**
    * @param {!Common.Event} event
    */
   _onFrameSelected(event) {
-    var selectedNode = /** @type {!Network.ResourceWebSocketFrameNode} */ (event.target.selectedNode);
+    var selectedNode = /** @type {!Network.ResourceWebSocketFrameNode} */ (event.data);
     this._currentSelectedNode = selectedNode;
     var contentProvider = selectedNode.contentProvider();
     contentProvider.requestContent().then(contentHandler.bind(this));
@@ -148,7 +154,7 @@ Network.ResourceWebSocketFrameView = class extends UI.VBox {
     this._dataGrid.rootNode().removeChildren();
     var frames = this._request.frames();
     for (var i = 0; i < frames.length; ++i)
-      this._dataGrid.insertChild(new Network.ResourceWebSocketFrameNode(this._request.url, frames[i]));
+      this._dataGrid.insertChild(new Network.ResourceWebSocketFrameNode(this._request.url(), frames[i]));
   }
 
   _sortItems() {
@@ -183,7 +189,7 @@ Network.ResourceWebSocketFrameView.opCodeDescriptions = (function() {
 /**
  * @unrestricted
  */
-Network.ResourceWebSocketFrameNode = class extends UI.SortableDataGridNode {
+Network.ResourceWebSocketFrameNode = class extends DataGrid.SortableDataGridNode {
   /**
    * @param {string} url
    * @param {!SDK.NetworkRequest.WebSocketFrame} frame
@@ -212,15 +218,15 @@ Network.ResourceWebSocketFrameNode = class extends UI.SortableDataGridNode {
 
   /**
    * @override
+   * @param {!Element} element
    */
-  createCells() {
-    var element = this._element;
+  createCells(element) {
     element.classList.toggle(
         'websocket-frame-view-row-error', this._frame.type === SDK.NetworkRequest.WebSocketFrameType.Error);
     element.classList.toggle(
         'websocket-frame-view-row-outcoming', this._frame.type === SDK.NetworkRequest.WebSocketFrameType.Send);
     element.classList.toggle('websocket-frame-view-row-opcode', !this._isTextFrame);
-    super.createCells();
+    super.createCells(element);
   }
 
   /**

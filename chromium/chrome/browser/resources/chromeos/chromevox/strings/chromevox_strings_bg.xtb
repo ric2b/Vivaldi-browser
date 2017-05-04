@@ -74,6 +74,7 @@
 <translation id="1680732992526857724">„<ph name="NAME" />“ във включено състояние</translation>
 <translation id="1692077714702418899">структурен ред</translation>
 <translation id="1700517974991662022">Посетено</translation>
+<translation id="1714116687360794776">Индикатор</translation>
 <translation id="1722567105086139392">Връзка</translation>
 <translation id="1727806147743597030">долен колонтитул</translation>
 <translation id="174268867904053074">Следващата графика</translation>
@@ -123,6 +124,7 @@
 <translation id="2344193891939537199">Контрола за периода от време</translation>
 <translation id="2347456970887948350">Връзка</translation>
 <translation id="2359897517538099099">Не сте в табличен режим.</translation>
+<translation id="2390264819538553347">За да продължите, натиснете Enter, а за да се върнете – Backspace.</translation>
 <translation id="241124561063364910">последвано от</translation>
 <translation id="2416512023405990736">Квадратче без отметка</translation>
 <translation id="2417569100218200841">Информация за съдържанието</translation>
@@ -177,6 +179,7 @@
 <translation id="2899328121302785497">{COUNT,plural, =1{лява фигурна скоба}other{# леви фигурни скоби}}</translation>
 <translation id="2911433807131383493">Отваряне на урока за ChromeVox</translation>
 <translation id="2932083475399492303">Превключване между структурен или тип ред за оформление</translation>
+<translation id="2944762337049891859">Автоматично прочитане на страницата след приключване на зареждането й.</translation>
 <translation id="2964026537669811554">Група заглавия</translation>
 <translation id="296951647852255825">{COUNT,plural, =1{табулатор}other{# табулатора}}</translation>
 <translation id="2972078295414139404">Няма предишна посетена връзка.</translation>
@@ -188,6 +191,7 @@
 <translation id="3012414509011670858">Няма предишна секция.</translation>
 <translation id="3030432017085518523">Бутон за избор на елемент от меню</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{апостроф}other{# апострофа}}</translation>
+<translation id="3040901448410802366">Индикатор за напредъка</translation>
 <translation id="3046838483509668188">Опции за ChromeVox</translation>
 <translation id="3047143736589213134">Експериментална клавиатурна подредба</translation>
 <translation id="3060756054951570867">Отворихте менюто „<ph name="TITLE" />“</translation>
@@ -230,7 +234,7 @@
 <translation id="3321460131042519426">Активиране на пренасянето на думи</translation>
 <translation id="3322936298410871309">Предишното заглавие от първо ниво</translation>
 <translation id="3323447499041942178">Текстово поле</translation>
-<translation id="3329854757664111426">За да преминете напред, натиснете клавиша Enter.</translation>
+<translation id="3338224621010291843">Плъзгач „<ph name="NAME" />“ – <ph name="VALUE" /></translation>
 <translation id="3353420241558113817">{"en": "английски",
         "en_CA": "английски (Канада)",
         "en_GB": "английски (Обединено кралство)",
@@ -307,6 +311,7 @@
 <translation id="3712520970944678024">Контролиране на говора</translation>
 <translation id="3716845769494773620">Няколко реда</translation>
 <translation id="3731746171184829332">Няма предишно заглавие.</translation>
+<translation id="3735039640698208086">При възпроизвеждане на звук...</translation>
 <translation id="3762198587642264450">Към края на текущия ред</translation>
 <translation id="3777255250339039212">заглавие от първо ниво</translation>
 <translation id="3793710123303304873">Излязохте от диалоговия прозорец.</translation>
@@ -547,6 +552,7 @@
 <translation id="5876817486144482042">Намаляване на силата на звука на говора</translation>
 <translation id="5887397643266327462">Брайловите надписи са активирани.</translation>
 <translation id="5891934789323004067">Таблица</translation>
+<translation id="5899860758576822363">Възпроизвеждане с по-ниска сила на звука, когато ChromeVox говори</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{знак за равенство}other{# знака за равенство}}</translation>
 <translation id="5939518447894949180">Нулиране</translation>
 <translation id="5948123859135882163">Превключвайте между структурно и семантично интерпретиране на математическите изрази</translation>
@@ -569,6 +575,7 @@
 <translation id="6132506484792346370">Списъчно поле или разгъващ се списък</translation>
 <translation id="6138576064440631958">комбинация от $1</translation>
 <translation id="6142308968191113180">Заглавие от четвърто ниво</translation>
+<translation id="6164829606128959761">индикатор</translation>
 <translation id="6169420925157477918">Изображение с дълго описание</translation>
 <translation id="6186305613600865047">Преминаване към края на страницата</translation>
 <translation id="6193330012414963395">AM/PM</translation>
@@ -579,6 +586,7 @@
 <translation id="6281876499889881039">Следващият подобен елемент.</translation>
 <translation id="6282062888058716985">навигация</translation>
 <translation id="6290434000785343030">Няма следващ разгъващ се списък.</translation>
+<translation id="6305702903308659374">Възпроизвеждане с нормална сила на звука дори ако ChromeVox говори</translation>
 <translation id="6307969636681130414">Натиснато</translation>
 <translation id="6322856989298155004">Звуци</translation>
 <translation id="6324551002951139333">Открита е граматична грешка</translation>
@@ -691,7 +699,6 @@
 <translation id="7492049978501397201">Влязохте в диалогов прозорец</translation>
 <translation id="7518543783849163354">За да спрете временно говора на ChromeVox, натиснете клавиша Control.</translation>
 <translation id="7532613204005497612">юни</translation>
-<translation id="7540083713905917247"><ph name="VALUE" />, „<ph name="NAME" />“, плъзгач</translation>
 <translation id="7552432549459840808">Полезни клавишни комбинации в Chrome</translation>
 <translation id="7579911500627256166">точка <ph name="DOT" /></translation>
 <translation id="7596919493010894443">открояването е изчистено</translation>
@@ -769,6 +776,7 @@
 <translation id="8455868257606149352">Максимум <ph name="X" /></translation>
 <translation id="84575901236241018">има клавиш за достъп, „<ph name="KEY" />“</translation>
 <translation id="847154984256717791">заето</translation>
+<translation id="8476408756881832830">Поставяне на възпроизвеждането на пауза, когато ChromeVox говори</translation>
 <translation id="8476508772960940536">общ преглед на прозорците</translation>
 <translation id="8503360654911991865">По-малко подробна навигация</translation>
 <translation id="8520472399088452386">Брояч</translation>

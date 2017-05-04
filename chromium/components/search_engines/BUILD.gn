@@ -9,8 +9,6 @@ static_library("search_engines") {
   sources = [
     "default_search_manager.cc",
     "default_search_manager.h",
-    "default_search_pref_migration.cc",
-    "default_search_pref_migration.h",
     "keyword_table.cc",
     "keyword_table.h",
     "keyword_web_data_service.cc",
@@ -30,6 +28,8 @@ static_library("search_engines") {
     "template_url.h",
     "template_url_data.cc",
     "template_url_data.h",
+    "template_url_data_util.cc",
+    "template_url_data_util.h",
     "template_url_fetcher.cc",
     "template_url_fetcher.h",
     "template_url_id.h",
@@ -81,7 +81,7 @@ static_library("search_engines") {
     "//url",
   ]
 
-  if (enable_configuration_policy) {
+  if (!is_ios) {
     sources += [
       "default_search_policy_handler.cc",
       "default_search_policy_handler.h",
@@ -96,8 +96,6 @@ static_library("search_engines") {
 static_library("test_support") {
   testonly = true
   sources = [
-    "default_search_pref_test_util.cc",
-    "default_search_pref_test_util.h",
     "testing_search_terms_data.cc",
     "testing_search_terms_data.h",
   ]
@@ -113,7 +111,6 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "default_search_manager_unittest.cc",
-    "default_search_pref_migration_unittest.cc",
     "keyword_table_unittest.cc",
     "search_engine_data_type_controller_unittest.cc",
     "search_host_to_urls_map_unittest.cc",
@@ -128,7 +125,7 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//components/google/core/browser",
-    "//components/pref_registry:test_support",
+    "//components/pref_registry:pref_registry",
     "//components/prefs",
     "//components/sync:test_support_driver",
     "//components/sync:test_support_model",
@@ -140,7 +137,7 @@ source_set("unit_tests") {
     "//url",
   ]
 
-  if (enable_configuration_policy) {
+  if (!is_ios) {
     sources += [ "default_search_policy_handler_unittest.cc" ]
 
     deps += [

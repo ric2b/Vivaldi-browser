@@ -97,8 +97,8 @@ bool IsXButtonUpEvent(const ui::MouseEvent* event) {
 // touchcancel.
 void MarkUnchangedTouchPointsAsStationary(blink::WebTouchEvent* event,
                                           int changed_touch_id) {
-  if (event->type == blink::WebInputEvent::TouchMove ||
-      event->type == blink::WebInputEvent::TouchCancel) {
+  if (event->type() == blink::WebInputEvent::TouchMove ||
+      event->type() == blink::WebInputEvent::TouchCancel) {
     for (size_t i = 0; i < event->touchesLength; ++i) {
       if (event->touches[i].id != changed_touch_id)
         event->touches[i].state = blink::WebTouchPoint::StateStationary;
@@ -413,7 +413,6 @@ void RenderWidgetHostViewEventHandler::OnScrollEvent(ui::ScrollEvent* event) {
       host_->ForwardWheelEventWithLatencyInfo(mouse_wheel_event,
                                               *event->latency());
     }
-    RecordAction(base::UserMetricsAction("TrackpadScroll"));
   } else if (event->type() == ui::ET_SCROLL_FLING_START ||
              event->type() == ui::ET_SCROLL_FLING_CANCEL) {
     blink::WebGestureEvent gesture_event = ui::MakeWebGestureEvent(
@@ -505,7 +504,7 @@ void RenderWidgetHostViewEventHandler::OnGestureEvent(ui::GestureEvent* event) {
     // Webkit does not stop a fling-scroll on tap-down. So explicitly send an
     // event to stop any in-progress flings.
     blink::WebGestureEvent fling_cancel = gesture;
-    fling_cancel.type = blink::WebInputEvent::GestureFlingCancel;
+    fling_cancel.setType(blink::WebInputEvent::GestureFlingCancel);
     fling_cancel.sourceDevice = blink::WebGestureDeviceTouchscreen;
     if (ShouldRouteEvent(event)) {
       host_->delegate()->GetInputEventRouter()->RouteGestureEvent(
@@ -516,7 +515,7 @@ void RenderWidgetHostViewEventHandler::OnGestureEvent(ui::GestureEvent* event) {
     }
   }
 
-  if (gesture.type != blink::WebInputEvent::Undefined) {
+  if (gesture.type() != blink::WebInputEvent::Undefined) {
     if (ShouldRouteEvent(event)) {
       host_->delegate()->GetInputEventRouter()->RouteGestureEvent(
           host_view_, &gesture, *event->latency());
@@ -524,9 +523,7 @@ void RenderWidgetHostViewEventHandler::OnGestureEvent(ui::GestureEvent* event) {
       host_->ForwardGestureEventWithLatencyInfo(gesture, *event->latency());
     }
 
-    if (event->type() == ui::ET_GESTURE_SCROLL_BEGIN ||
-        event->type() == ui::ET_GESTURE_SCROLL_UPDATE ||
-        event->type() == ui::ET_GESTURE_SCROLL_END) {
+    if (event->type() == ui::ET_GESTURE_SCROLL_BEGIN) {
       RecordAction(base::UserMetricsAction("TouchscreenScroll"));
     } else if (event->type() == ui::ET_SCROLL_FLING_START) {
       RecordAction(base::UserMetricsAction("TouchscreenScrollFling"));
@@ -548,7 +545,7 @@ bool RenderWidgetHostViewEventHandler::CanRendererHandleEvent(
   if (event->type() == ui::ET_MOUSE_EXITED) {
     if (mouse_locked || selection_popup)
       return false;
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_LINUX)
     // Don't forward the mouse leave message which is received when the context
     // menu is displayed by the page. This confuses the page and causes state
     // changes.

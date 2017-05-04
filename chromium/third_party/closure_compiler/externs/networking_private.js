@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -412,7 +412,7 @@ chrome.networkingPrivate.IPSecProperties;
  *   ClientCertType: (!chrome.networkingPrivate.ManagedDOMString|undefined),
  *   EAP: (!chrome.networkingPrivate.ManagedEAPProperties|undefined),
  *   Group: (!chrome.networkingPrivate.ManagedDOMString|undefined),
- *   IKEVersion: !chrome.networkingPrivate.ManagedLong,
+ *   IKEVersion: (!chrome.networkingPrivate.ManagedLong|undefined),
  *   PSK: (!chrome.networkingPrivate.ManagedDOMString|undefined),
  *   SaveCredentials: (!chrome.networkingPrivate.ManagedBoolean|undefined),
  *   ServerCARefs: (!chrome.networkingPrivate.ManagedDOMStringList|undefined),
@@ -674,6 +674,7 @@ chrome.networkingPrivate.ManagedThirdPartyVPNProperties;
  *   ServingOperator: (!chrome.networkingPrivate.CellularProviderProperties|undefined),
  *   SIMLockStatus: (!chrome.networkingPrivate.SIMLockStatus|undefined),
  *   SIMPresent: (boolean|undefined),
+ *   SignalStrength: (number|undefined),
  *   SupportNetworkScan: (boolean|undefined),
  *   SupportedCarriers: (!Array<string>|undefined)
  * }}
@@ -711,6 +712,7 @@ chrome.networkingPrivate.CellularProperties;
  *   ServingOperator: (!chrome.networkingPrivate.CellularProviderProperties|undefined),
  *   SIMLockStatus: (!chrome.networkingPrivate.SIMLockStatus|undefined),
  *   SIMPresent: (boolean|undefined),
+ *   SignalStrength: (number|undefined),
  *   SupportNetworkScan: (boolean|undefined),
  *   SupportedCarriers: (!Array<string>|undefined)
  * }}
@@ -1010,6 +1012,15 @@ chrome.networkingPrivate.VerificationProperties;
 chrome.networkingPrivate.NetworkFilter;
 
 /**
+ * @typedef {{
+ *   AllowOnlyPolicyNetworksToAutoconnect: (boolean|undefined),
+ *   AllowOnlyPolicyNetworksToConnect: (boolean|undefined)
+ * }}
+ * @see https://developer.chrome.com/extensions/networkingPrivate#type-GlobalPolicy
+ */
+chrome.networkingPrivate.GlobalPolicy;
+
+/**
  * Gets all the properties of the network with id networkGuid. Includes all
  * properties of the network (read-only and read/write values).
  * @param {string} networkGuid The GUID of the network to get properties for.
@@ -1262,6 +1273,7 @@ chrome.networkingPrivate.getCaptivePortalStatus = function(networkGuid, callback
  * succeeds (|puk| is valid), the PIN will be set to |pin|.   (If |pin| is empty
  * or invalid the operation will fail).
  * @param {string} networkGuid The GUID of the cellular network to unlock.
+ *     If empty, the default cellular device will be used.
  * @param {string} pin The current SIM PIN, or the new PIN if PUK is provided.
  * @param {string=} puk The operator provided PUK for unblocking a blocked SIM.
  * @param {function():void=} callback Called when the operation has completed.
@@ -1278,13 +1290,21 @@ chrome.networkingPrivate.unlockCellularSim = function(networkGuid, pin, puk, cal
  * unlockCellularSim() before this can be called (otherwise it will fail and
  * chrome.runtime.lastError will be set to Error.SimLocked).
  * @param {string} networkGuid The GUID of the cellular network to set the SIM
- *     state of.
+ *     state of.     If empty, the default cellular device will be used.
  * @param {!chrome.networkingPrivate.CellularSimState} simState The SIM state to
  *     set.
  * @param {function():void=} callback Called when the operation has completed.
  * @see https://developer.chrome.com/extensions/networkingPrivate#method-setCellularSimState
  */
 chrome.networkingPrivate.setCellularSimState = function(networkGuid, simState, callback) {};
+
+/**
+ * Gets the global policy properties. These properties are not expected to
+ * change during a session.
+ * @param {function(!chrome.networkingPrivate.GlobalPolicy):void} callback
+ * @see https://developer.chrome.com/extensions/networkingPrivate#method-getGlobalPolicy
+ */
+chrome.networkingPrivate.getGlobalPolicy = function(callback) {};
 
 /**
  * Fired when the properties change on any of the networks.  Sends a list of

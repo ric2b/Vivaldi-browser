@@ -9,7 +9,6 @@
 
 #include <map>
 #include <string>
-#include <unordered_set>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
@@ -45,13 +44,17 @@ class CONTENT_EXPORT WebUIDataSourceImpl
       const WebUIDataSource::HandleRequestCallback& callback) override;
   void DisableReplaceExistingSource() override;
   void DisableContentSecurityPolicy() override;
+  void OverrideContentSecurityPolicyScriptSrc(const std::string& data) override;
   void OverrideContentSecurityPolicyObjectSrc(const std::string& data) override;
   void OverrideContentSecurityPolicyChildSrc(const std::string& data) override;
   void DisableDenyXFrameOptions() override;
-  void DisableI18nAndUseGzipForAllPaths() override;
+  void UseGzip(const std::unordered_set<std::string>& excluded_paths) override;
+  const ui::TemplateReplacements* GetReplacements() const override;
 
-  // When DisableI18nAndUseGzipForAllPaths is enabled, exclude the given |path|.
-  void ExcludePathFromGzip(const std::string& path);
+  // Add the locale to the load time data defaults. May be called repeatedly.
+  void EnsureLoadTimeDataDefaultsAdded();
+
+  bool IsWebUIDataSourceImpl() const override;
 
  protected:
   ~WebUIDataSourceImpl() override;
@@ -90,13 +93,18 @@ class CONTENT_EXPORT WebUIDataSourceImpl
   std::string json_path_;
   std::map<std::string, int> path_to_idr_map_;
   std::unordered_set<std::string> excluded_paths_;
-  // The |replacements_| is intended to replace |localized_strings_|.
-  // TODO(dschuyler): phase out |localized_strings_| in Q1 2016. (Or rename
-  // to |load_time_flags_| if the usage is reduced to storing flags only).
+  // The replacements are initiallized in the main thread and then used in the
+  // IO thread. The map is safe to read from multiple threads as long as no
+  // futher changes are made to it after initialization.
   ui::TemplateReplacements replacements_;
+  // The |replacements_| is intended to replace |localized_strings_|.
+  // TODO(dschuyler): phase out |localized_strings_| in Q1 2017. (Or rename
+  // to |load_time_flags_| if the usage is reduced to storing flags only).
   base::DictionaryValue localized_strings_;
   WebUIDataSource::HandleRequestCallback filter_callback_;
   bool add_csp_;
+  bool script_src_set_;
+  std::string script_src_;
   bool object_src_set_;
   std::string object_src_;
   bool frame_src_set_;
@@ -104,7 +112,7 @@ class CONTENT_EXPORT WebUIDataSourceImpl
   bool deny_xframe_options_;
   bool add_load_time_data_defaults_;
   bool replace_existing_source_;
-  bool use_gzip_for_all_paths_;
+  bool use_gzip_;
 
   DISALLOW_COPY_AND_ASSIGN(WebUIDataSourceImpl);
 };

@@ -43,18 +43,19 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/bookmarks/browser/startup_task_runner_service.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing/common/safebrowsing_switches.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/metadata.pb.h"
 #include "components/safe_browsing_db/test_database_manager.h"
 #include "components/safe_browsing_db/util.h"
 #include "components/safe_browsing_db/v4_protocol_manager_util.h"
+#include "components/subresource_filter/content/browser/content_subresource_filter_driver.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features_test_support.h"
@@ -101,6 +102,22 @@ const char kMalwareDelayedLoadsPage[] =
 const char kMalwareIFrame[] = "/safe_browsing/malware_iframe.html";
 const char kMalwareImg[] = "/safe_browsing/malware_image.png";
 const char kNeverCompletesPath[] = "/never_completes";
+
+class MockSubresourceFilterDriver
+    : public subresource_filter::ContentSubresourceFilterDriver {
+ public:
+  explicit MockSubresourceFilterDriver(
+      content::RenderFrameHost* render_frame_host)
+      : subresource_filter::ContentSubresourceFilterDriver(render_frame_host) {}
+
+  ~MockSubresourceFilterDriver() override = default;
+
+  MOCK_METHOD3(ActivateForProvisionalLoad,
+               void(subresource_filter::ActivationState, const GURL&, bool));
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockSubresourceFilterDriver);
+};
 
 class NeverCompletingHttpResponse : public net::test_server::HttpResponse {
  public:
@@ -446,7 +463,7 @@ class MockObserver : public SafeBrowsingUIManager::Observer {
   MockObserver() {}
   virtual ~MockObserver() {}
   MOCK_METHOD1(OnSafeBrowsingHit,
-               void(const SafeBrowsingUIManager::UnsafeResource&));
+               void(const security_interstitials::UnsafeResource&));
 };
 
 MATCHER_P(IsUnsafeResourceFor, url, "") {
@@ -528,7 +545,7 @@ class SafeBrowsingServiceTest : public InProcessBrowserTest {
     // Makes sure the auto update is not triggered during the test.
     // This test will fill up the database using testing prefixes
     // and urls.
-    command_line->AppendSwitch(switches::kSbDisableAutoUpdate);
+    command_line->AppendSwitch(safe_browsing::switches::kSbDisableAutoUpdate);
 #if defined(OS_CHROMEOS)
     command_line->AppendSwitch(
         chromeos::switches::kIgnoreUserProfileMappingForTests);
@@ -539,6 +556,18 @@ class SafeBrowsingServiceTest : public InProcessBrowserTest {
     InProcessBrowserTest::SetUpOnMainThread();
     g_browser_process->safe_browsing_service()->ui_manager()->AddObserver(
         &observer_);
+    WebContents* contents =
+        browser()->tab_strip_model()->GetActiveWebContents();
+    driver_ = new MockSubresourceFilterDriver(contents->GetMainFrame());
+    factory()->SetDriverForFrameHostForTesting(contents->GetMainFrame(),
+                                               base::WrapUnique(driver()));
+  }
+
+  subresource_filter::ContentSubresourceFilterDriverFactory* factory() {
+    WebContents* contents =
+        browser()->tab_strip_model()->GetActiveWebContents();
+    return subresource_filter::ContentSubresourceFilterDriverFactory::
+        FromWebContents(contents);
   }
 
   void TearDownOnMainThread() override {
@@ -623,6 +652,8 @@ class SafeBrowsingServiceTest : public InProcessBrowserTest {
     return ui_manager()->hit_report_;
   }
 
+  MockSubresourceFilterDriver* driver() { return driver_; }
+
  protected:
   StrictMock<MockObserver> observer_;
 
@@ -662,6 +693,9 @@ class SafeBrowsingServiceTest : public InProcessBrowserTest {
   std::unique_ptr<TestSafeBrowsingServiceFactory> sb_factory_;
   TestSafeBrowsingDatabaseFactory db_factory_;
   TestSBProtocolManagerFactory pm_factory_;
+
+  // Owned by ContentSubresourceFilterFactory.
+  MockSubresourceFilterDriver* driver_;
 
   DISALLOW_COPY_AND_ASSIGN(SafeBrowsingServiceTest);
 };
@@ -905,7 +939,7 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest,
       scoped_feature_toggle(
           base::FeatureList::OVERRIDE_ENABLE_FEATURE,
           subresource_filter::kActivationStateEnabled,
-          subresource_filter::kActivationScopeNoSites,
+          subresource_filter::kActivationScopeActivationList,
           subresource_filter::kActivationListSocialEngineeringAdsInterstitial);
   // Tests that when Safe Browsing gets hit which is corresponding to the
   // SOCIAL_ENGINEERING_ADS threat type, then URL is added to the Subresource
@@ -913,26 +947,36 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest,
   GURL bad_url = embedded_test_server()->GetURL(kMalwarePage);
 
   SBFullHashResult malware_full_hash;
-  GenUrlFullHashResultWithMetadata(bad_url, MALWARE,
+  GenUrlFullHashResultWithMetadata(bad_url,
+                                   PHISH,
                                    ThreatPatternType::SOCIAL_ENGINEERING_ADS,
                                    &malware_full_hash);
   SetupResponseForUrl(bad_url, malware_full_hash);
 
+  WebContents* main_contents =
+            browser()->tab_strip_model()->GetActiveWebContents();
+
   EXPECT_CALL(observer_, OnSafeBrowsingHit(IsUnsafeResourceFor(bad_url)))
       .Times(1);
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  subresource_filter::ContentSubresourceFilterDriverFactory* driver_factory =
-      subresource_filter::ContentSubresourceFilterDriverFactory::
-          FromWebContents(web_contents);
+  EXPECT_CALL(*driver(), ActivateForProvisionalLoad(::testing::_, ::testing::_,
+                                                    ::testing::_))
+      .Times(0);
+  ui_test_utils::NavigateToURL(browser(), bad_url);
+  Mock::VerifyAndClearExpectations(&observer_);
+  ASSERT_TRUE(got_hit_report());
 
-  EXPECT_EQ(0U,
-            driver_factory->safe_browsing_blacklisted_patterns_set().size());
-  chrome::NavigateParams params(browser(), bad_url, ui::PAGE_TRANSITION_LINK);
-  ui_test_utils::NavigateToURL(&params);
-  EXPECT_EQ(1U,
-            driver_factory->safe_browsing_blacklisted_patterns_set().size());
-  EXPECT_TRUE(got_hit_report());
+  content::WaitForInterstitialAttach(main_contents);
+  EXPECT_TRUE(ShowingInterstitialPage());
+  testing::Mock::VerifyAndClearExpectations(driver());
+  EXPECT_CALL(*driver(), ActivateForProvisionalLoad(::testing::_, ::testing::_,
+                                                    ::testing::_))
+      .Times(1);
+  InterstitialPage* interstitial_page = main_contents->GetInterstitialPage();
+  ASSERT_TRUE(interstitial_page);
+  interstitial_page->Proceed();
+  content::WaitForInterstitialDetach(main_contents);
+  EXPECT_FALSE(ShowingInterstitialPage());
+  testing::Mock::VerifyAndClearExpectations(driver());
 }
 
 IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest, SocEngReportingBlacklistEmpty) {
@@ -945,27 +989,36 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest, SocEngReportingBlacklistEmpty) {
           subresource_filter::kActivationScopeNoSites,
           subresource_filter::kActivationListSocialEngineeringAdsInterstitial);
 
-  GURL bad_url = embedded_test_server()->GetURL(kMalwarePage);
+  GURL bad_url = embedded_test_server()->base_url().Resolve(kMalwarePage);
 
   SBFullHashResult malware_full_hash;
   GenUrlFullHashResult(bad_url, MALWARE, &malware_full_hash);
   SetupResponseForUrl(bad_url, malware_full_hash);
 
+  WebContents* main_contents =
+            browser()->tab_strip_model()->GetActiveWebContents();
+
   EXPECT_CALL(observer_, OnSafeBrowsingHit(IsUnsafeResourceFor(bad_url)))
       .Times(1);
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  subresource_filter::ContentSubresourceFilterDriverFactory* driver_factory =
-      subresource_filter::ContentSubresourceFilterDriverFactory::
-          FromWebContents(web_contents);
+  EXPECT_CALL(*driver(), ActivateForProvisionalLoad(::testing::_, ::testing::_,
+                                                    ::testing::_))
+      .Times(0);
+  ui_test_utils::NavigateToURL(browser(), bad_url);
+  testing::Mock::VerifyAndClearExpectations(driver());
+  ASSERT_TRUE(got_hit_report());
 
-  EXPECT_EQ(0U,
-            driver_factory->safe_browsing_blacklisted_patterns_set().size());
-  chrome::NavigateParams params(browser(), bad_url, ui::PAGE_TRANSITION_LINK);
-  ui_test_utils::NavigateToURL(&params);
-  EXPECT_EQ(0U,
-            driver_factory->safe_browsing_blacklisted_patterns_set().size());
-  EXPECT_TRUE(got_hit_report());
+  content::WaitForInterstitialAttach(main_contents);
+  EXPECT_TRUE(ShowingInterstitialPage());
+  testing::Mock::VerifyAndClearExpectations(driver());
+  EXPECT_CALL(*driver(), ActivateForProvisionalLoad(::testing::_, ::testing::_,
+                                                    ::testing::_))
+      .Times(0);
+  InterstitialPage* interstitial_page = main_contents->GetInterstitialPage();
+  ASSERT_TRUE(interstitial_page);
+  interstitial_page->Proceed();
+  content::WaitForInterstitialDetach(main_contents);
+  EXPECT_FALSE(ShowingInterstitialPage());
+  testing::Mock::VerifyAndClearExpectations(driver());
 }
 
 IN_PROC_BROWSER_TEST_F(SafeBrowsingServiceTest,
@@ -1633,9 +1686,9 @@ class SafeBrowsingDatabaseManagerCookieTest : public InProcessBrowserTest {
 
   void SetUp() override {
     // We need to start the test server to get the host&port in the url.
-    ASSERT_TRUE(embedded_test_server()->Start());
     embedded_test_server()->RegisterRequestHandler(
         base::Bind(&SafeBrowsingDatabaseManagerCookieTest::HandleRequest));
+    ASSERT_TRUE(embedded_test_server()->Start());
 
     sb_factory_.reset(new TestSafeBrowsingServiceFactory());
     SetProtocolConfigURLPrefix(

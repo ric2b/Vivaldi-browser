@@ -4,7 +4,6 @@
 
 #include <stddef.h>
 
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/test/test_session_state_delegate.h"
@@ -14,6 +13,7 @@
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/content/shell_content_state.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
@@ -34,11 +34,15 @@
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ui/ash/chrome_new_window_client.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_chromeos.h"
 #include "chrome/browser/ui/ash/multi_user/user_switch_animator_chromeos.h"
 #include "chrome/browser/ui/ash/session_util.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_list.h"
+#include "chrome/test/base/test_browser_window_aura.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -53,9 +57,12 @@
 
 namespace {
 
-const char kAAccountIdString[] = "{\"email\":\"A\",\"gaia_id\":\"\"}";
-const char kBAccountIdString[] = "{\"email\":\"B\",\"gaia_id\":\"\"}";
-const char kArrowBAccountIdString[] = "->{\"email\":\"B\",\"gaia_id\":\"\"}";
+const char kAAccountIdString[] =
+    "{\"account_type\":\"unknown\",\"email\":\"A\"}";
+const char kBAccountIdString[] =
+    "{\"account_type\":\"unknown\",\"email\":\"B\"}";
+const char kArrowBAccountIdString[] =
+    "->{\"account_type\":\"unknown\",\"email\":\"B\"}";
 
 // TOOD(beng): This implementation seems only superficially different to the
 //             production impl. Evaluate whether or not we can just use that
@@ -111,7 +118,7 @@ class TestShellDelegateChromeOS : public ash::test::TestShellDelegate {
 
   bool CanShowWindowForUser(ash::WmWindow* window) const override {
     return ::CanShowWindowForUser(
-        ash::WmWindowAura::GetAuraWindow(window),
+        ash::WmWindow::GetAuraWindow(window),
         base::Bind(&ash::ShellContentState::GetActiveBrowserContext,
                    base::Unretained(ash::ShellContentState::GetInstance())));
   }
@@ -119,6 +126,17 @@ class TestShellDelegateChromeOS : public ash::test::TestShellDelegate {
  private:
   DISALLOW_COPY_AND_ASSIGN(TestShellDelegateChromeOS);
 };
+
+std::unique_ptr<Browser> CreateTestBrowser(aura::Window* window,
+                                           const gfx::Rect& bounds,
+                                           Browser::CreateParams* params) {
+  if (!bounds.IsEmpty())
+    window->SetBounds(bounds);
+  std::unique_ptr<Browser> browser =
+      chrome::CreateBrowserWithAuraTestWindowForParams(base::WrapUnique(window),
+                                                       params);
+  return browser;
+}
 
 }  // namespace
 
@@ -1502,7 +1520,7 @@ TEST_F(MultiUserWindowManagerChromeOSTest, WindowsOrderPreservedTests) {
   activation_client->ActivateWindow(window(0));
   EXPECT_EQ(wm::GetActiveWindow(), window(0));
 
-  aura::Window::Windows mru_list = WmWindowAura::ToAuraWindows(
+  aura::Window::Windows mru_list = WmWindow::ToAuraWindows(
       WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
   EXPECT_EQ(mru_list[0], window(0));
   EXPECT_EQ(mru_list[1], window(1));
@@ -1518,11 +1536,48 @@ TEST_F(MultiUserWindowManagerChromeOSTest, WindowsOrderPreservedTests) {
   EXPECT_EQ("S[A], S[A], S[A]", GetStatus());
   EXPECT_EQ(wm::GetActiveWindow(), window(0));
 
-  mru_list = WmWindowAura::ToAuraWindows(
+  mru_list = WmWindow::ToAuraWindows(
       WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
   EXPECT_EQ(mru_list[0], window(0));
   EXPECT_EQ(mru_list[1], window(1));
   EXPECT_EQ(mru_list[2], window(2));
+}
+
+// Tests that ChromeNewWindowClient::GetActiveBrowser works properly in
+// multi-user scenario, that is it should return the browser with active window
+// associated with it (crbug.com/675265).
+TEST_F(MultiUserWindowManagerChromeOSTest, GetActiveBrowserTest) {
+  SetUpForThisManyWindows(1);
+
+  const AccountId account_id_A(AccountId::FromUserEmail("A"));
+  const AccountId account_id_B(AccountId::FromUserEmail("B"));
+  AddTestUser(account_id_A);
+  AddTestUser(account_id_B);
+  session_state_delegate()->set_logged_in_users(2);
+  user_manager()->SwitchActiveUser(account_id_A);
+  multi_user_window_manager()->ActiveUserChanged(account_id_A);
+
+  aura::client::ActivationClient* activation_client =
+      aura::client::GetActivationClient(window(0)->GetRootWindow());
+  multi_user_window_manager()->SetWindowOwner(window(0), account_id_A);
+  Profile* profile = multi_user_util::GetProfileFromAccountId(account_id_A);
+  Browser::CreateParams params(profile);
+  std::unique_ptr<Browser> browser(CreateTestBrowser(
+      CreateTestWindowInShellWithId(0), gfx::Rect(16, 32, 640, 320), &params));
+  aura::Window* browser_native_window = browser->window()->GetNativeWindow();
+  activation_client->ActivateWindow(browser_native_window);
+  // Manually set last active browser in BrowserList for testing.
+  BrowserList::GetInstance()->SetLastActive(browser.get());
+  EXPECT_EQ(browser.get(), BrowserList::GetInstance()->GetLastActive());
+  EXPECT_EQ(browser_native_window, wm::GetActiveWindow());
+  EXPECT_EQ(browser.get(), ChromeNewWindowClient::GetActiveBrowser());
+
+  // Switch to another user's desktop with no active window.
+  user_manager()->SwitchActiveUser(account_id_B);
+  multi_user_window_manager()->ActiveUserChanged(account_id_B);
+  EXPECT_EQ(browser.get(), BrowserList::GetInstance()->GetLastActive());
+  EXPECT_EQ(nullptr, wm::GetActiveWindow());
+  EXPECT_EQ(nullptr, ChromeNewWindowClient::GetActiveBrowser());
 }
 
 }  // namespace test

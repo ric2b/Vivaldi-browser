@@ -186,39 +186,15 @@ TemplateURLRef::SearchTermsArgs::~SearchTermsArgs() {
 TemplateURLRef::SearchTermsArgs::ContextualSearchParams::
     ContextualSearchParams()
     : version(-1),
-      start(base::string16::npos),
-      end(base::string16::npos),
       contextual_cards_version(0) {}
 
 TemplateURLRef::SearchTermsArgs::ContextualSearchParams::ContextualSearchParams(
     int version,
-    const std::string& selection,
-    const std::string& base_page_url,
-    int contextual_cards_version)
+    int contextual_cards_version,
+    const std::string& home_country)
     : version(version),
-      start(base::string16::npos),
-      end(base::string16::npos),
-      selection(selection),
-      base_page_url(base_page_url),
-      contextual_cards_version(contextual_cards_version) {}
-
-TemplateURLRef::SearchTermsArgs::ContextualSearchParams::ContextualSearchParams(
-    int version,
-    size_t start,
-    size_t end,
-    const std::string& selection,
-    const std::string& content,
-    const std::string& base_page_url,
-    const std::string& encoding,
-    int contextual_cards_version)
-    : version(version),
-      start(start),
-      end(end),
-      selection(selection),
-      content(content),
-      base_page_url(base_page_url),
-      encoding(encoding),
-      contextual_cards_version(contextual_cards_version) {}
+      contextual_cards_version(contextual_cards_version),
+      home_country(home_country) {}
 
 TemplateURLRef::SearchTermsArgs::ContextualSearchParams::ContextualSearchParams(
     const ContextualSearchParams& other) = default;
@@ -967,11 +943,13 @@ std::string TemplateURLRef::HandleReplacements(
 
       case GOOGLE_INSTANT_EXTENDED_ENABLED:
         DCHECK(!i->is_post_param);
+        // Regular search requests don't use Instant, so only add the param for
+        // other types.
         HandleReplacement(std::string(),
-                          search_terms_data.InstantExtendedEnabledParam(
-                              type_ == SEARCH),
-                          *i,
-                          &url);
+                          type_ == SEARCH
+                              ? std::string()
+                              : search_terms_data.InstantExtendedEnabledParam(),
+                          *i, &url);
         break;
 
       case GOOGLE_CONTEXTUAL_SEARCH_VERSION:
@@ -992,24 +970,12 @@ std::string TemplateURLRef::HandleReplacements(
             search_terms_args.contextual_search_params;
         std::vector<std::string> args;
 
-        if (params.start != std::string::npos)
-          args.push_back("ctxs_start=" + base::SizeTToString(params.start));
-        if (params.end != std::string::npos)
-          args.push_back("ctxs_end=" + base::SizeTToString(params.end));
-
-        if (!params.selection.empty())
-          args.push_back("q=" + params.selection);
-        if (!params.content.empty())
-          args.push_back("ctxs_content=" + params.content);
-        if (!params.base_page_url.empty())
-          args.push_back("ctxsl_url=" + params.base_page_url);
-        if (!params.encoding.empty())
-          args.push_back("ctxs_encoding=" + params.encoding);
-
         if (params.contextual_cards_version > 0) {
           args.push_back("ctxsl_coca=" +
                          base::IntToString(params.contextual_cards_version));
         }
+        if (!params.home_country.empty())
+          args.push_back("ctxs_hc=" + params.home_country);
 
         HandleReplacement(std::string(), base::JoinString(args, "&"), *i, &url);
         break;
@@ -1253,7 +1219,6 @@ bool TemplateURL::MatchesData(const TemplateURL* t_url,
       (t_url->image_url_post_params() == data->image_url_post_params) &&
       (t_url->favicon_url() == data->favicon_url) &&
       (t_url->safe_for_autoreplace() == data->safe_for_autoreplace) &&
-      (t_url->show_in_default_list() == data->show_in_default_list) &&
       (t_url->input_encodings() == data->input_encodings) &&
       (t_url->alternate_urls() == data->alternate_urls) &&
       (t_url->search_terms_replacement_key() ==
@@ -1264,12 +1229,6 @@ base::string16 TemplateURL::AdjustedShortNameForLocaleDirection() const {
   base::string16 bidi_safe_short_name = data_.short_name();
   base::i18n::AdjustStringForLocaleDirection(&bidi_safe_short_name);
   return bidi_safe_short_name;
-}
-
-bool TemplateURL::ShowInDefaultList(
-    const SearchTermsData& search_terms_data) const {
-  return data_.show_in_default_list &&
-      url_ref_->SupportsReplacement(search_terms_data);
 }
 
 bool TemplateURL::SupportsReplacement(

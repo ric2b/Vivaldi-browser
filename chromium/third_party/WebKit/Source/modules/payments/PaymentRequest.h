@@ -35,22 +35,21 @@ class ScriptState;
 
 class MODULES_EXPORT PaymentRequest final
     : public EventTargetWithInlineData,
-      WTF_NON_EXPORTED_BASE(
-          public payments::mojom::blink::PaymentRequestClient),
+      NON_EXPORTED_BASE(public payments::mojom::blink::PaymentRequestClient),
       public PaymentCompleter,
       public PaymentUpdater,
       public ContextLifecycleObserver,
-      public ActiveScriptWrappable {
+      public ActiveScriptWrappable<PaymentRequest> {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(PaymentRequest)
   WTF_MAKE_NONCOPYABLE(PaymentRequest);
 
  public:
-  static PaymentRequest* create(ScriptState*,
+  static PaymentRequest* create(Document&,
                                 const HeapVector<PaymentMethodData>&,
                                 const PaymentDetails&,
                                 ExceptionState&);
-  static PaymentRequest* create(ScriptState*,
+  static PaymentRequest* create(Document&,
                                 const HeapVector<PaymentMethodData>&,
                                 const PaymentDetails&,
                                 const PaymentOptions&,
@@ -89,14 +88,14 @@ class MODULES_EXPORT PaymentRequest final
   void onCompleteTimeoutForTesting();
 
  private:
-  PaymentRequest(ScriptState*,
+  PaymentRequest(Document&,
                  const HeapVector<PaymentMethodData>&,
                  const PaymentDetails&,
                  const PaymentOptions&,
                  ExceptionState&);
 
   // LifecycleObserver:
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   // payments::mojom::blink::PaymentRequestClient:
   void OnShippingAddressChange(

@@ -18,7 +18,6 @@
 #include "components/sync/base/time.h"
 #include "components/sync/engine/activation_context.h"
 #include "components/sync/engine/commit_queue.h"
-#include "components/sync/model/data_type_error_handler_mock.h"
 #include "components/sync/model/fake_model_type_sync_bridge.h"
 #include "components/sync/test/engine/mock_model_type_worker.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -49,10 +48,6 @@ const std::string kHash5(FakeModelTypeSyncBridge::TagHashFromKey(kKey5));
 // worker/processor will not have been initialized and thus empty.
 const EntitySpecifics kEmptySpecifics;
 
-SyncError CreateSyncError(SyncError::ErrorType error_type) {
-  return SyncError(FROM_HERE, error_type, "TestError", PREFERENCES);
-}
-
 EntitySpecifics GenerateSpecifics(const std::string& key,
                                   const std::string& value) {
   return FakeModelTypeSyncBridge::GenerateSpecifics(key, value);
@@ -66,8 +61,8 @@ std::unique_ptr<EntityData> GenerateEntityData(const std::string& key,
 class TestModelTypeSyncBridge : public FakeModelTypeSyncBridge {
  public:
   TestModelTypeSyncBridge()
-      : FakeModelTypeSyncBridge(base::Bind(&ModelTypeChangeProcessor::Create)) {
-  }
+      : FakeModelTypeSyncBridge(base::Bind(&ModelTypeChangeProcessor::Create,
+                                           base::RepeatingClosure())) {}
 
   explicit TestModelTypeSyncBridge(
       std::unique_ptr<TestModelTypeSyncBridge> other)
@@ -76,7 +71,7 @@ class TestModelTypeSyncBridge : public FakeModelTypeSyncBridge {
   }
 
   void OnPendingCommitDataLoaded() {
-    DCHECK(!data_callback_.is_null());
+    ASSERT_TRUE(data_callback_);
     data_callback_.Run();
     data_callback_.Reset();
   }
@@ -93,33 +88,42 @@ class TestModelTypeSyncBridge : public FakeModelTypeSyncBridge {
     db_->set_model_type_state(model_type_state);
   }
 
+  // Expect a GetData call in the future and return its data immediately.
+  void ExpectSynchronousDataCallback() { synchronous_data_callback_ = true; }
+
   int merge_call_count() const { return merge_call_count_; }
 
   // FakeModelTypeSyncBridge overrides.
 
-  SyncError MergeSyncData(std::unique_ptr<MetadataChangeList> mcl,
-                          EntityDataMap entity_data_map) override {
+  base::Optional<ModelError> MergeSyncData(
+      std::unique_ptr<MetadataChangeList> mcl,
+      EntityDataMap entity_data_map) override {
     merge_call_count_++;
     return FakeModelTypeSyncBridge::MergeSyncData(std::move(mcl),
                                                   entity_data_map);
   }
 
   void GetData(StorageKeyList keys, DataCallback callback) override {
-    FakeModelTypeSyncBridge::GetData(
-        keys, base::Bind(&TestModelTypeSyncBridge::CaptureDataCallback,
-                         base::Unretained(this), callback));
+    if (synchronous_data_callback_) {
+      synchronous_data_callback_ = false;
+      FakeModelTypeSyncBridge::GetData(keys, callback);
+    } else {
+      FakeModelTypeSyncBridge::GetData(
+          keys, base::Bind(&TestModelTypeSyncBridge::CaptureDataCallback,
+                           base::Unretained(this), callback));
+    }
   }
 
   void CheckPostConditions() override {
     FakeModelTypeSyncBridge::CheckPostConditions();
-    DCHECK(data_callback_.is_null());
+    EXPECT_FALSE(synchronous_data_callback_);
+    EXPECT_FALSE(data_callback_);
   }
 
  private:
   void CaptureDataCallback(DataCallback callback,
-                           SyncError error,
                            std::unique_ptr<DataBatch> data) {
-    data_callback_ = base::Bind(callback, error, base::Passed(std::move(data)));
+    data_callback_ = base::Bind(callback, base::Passed(std::move(data)));
   }
 
   // The number of times MergeSyncData has been called.
@@ -127,6 +131,10 @@ class TestModelTypeSyncBridge : public FakeModelTypeSyncBridge {
 
   // Stores the data callback between GetData() and OnPendingCommitDataLoaded().
   base::Closure data_callback_;
+
+  // Whether to return GetData results synchronously. Overrides the default
+  // callback capture behavior if set to true.
+  bool synchronous_data_callback_ = false;
 };
 
 }  // namespace
@@ -155,7 +163,7 @@ class SharedModelTypeProcessorTest : public ::testing::Test {
 
   void InitializeToMetadataLoaded() {
     bridge()->SetInitialSyncDone(true);
-    OnMetadataLoaded();
+    ModelReadyToSync();
   }
 
   // Initialize to a "ready-to-commit" state.
@@ -165,18 +173,16 @@ class SharedModelTypeProcessorTest : public ::testing::Test {
     OnSyncStarting();
   }
 
-  void OnMetadataLoaded() {
-    type_processor()->OnMetadataLoaded(SyncError(), db().CreateMetadataBatch());
+  void ModelReadyToSync() {
+    type_processor()->ModelReadyToSync(db().CreateMetadataBatch());
   }
 
   void OnPendingCommitDataLoaded() { bridge()->OnPendingCommitDataLoaded(); }
 
   void OnSyncStarting() {
-    std::unique_ptr<DataTypeErrorHandlerMock> error_handler =
-        base::MakeUnique<DataTypeErrorHandlerMock>();
-    error_handler_ = error_handler.get();
     type_processor()->OnSyncStarting(
-        std::move(error_handler),
+        base::BindRepeating(&SharedModelTypeProcessorTest::ErrorReceived,
+                            base::Unretained(this)),
         base::Bind(&SharedModelTypeProcessorTest::OnReadyToConnect,
                    base::Unretained(this)));
   }
@@ -235,11 +241,10 @@ class SharedModelTypeProcessorTest : public ::testing::Test {
     return type_processor()->entities_.size();
   }
 
-  // Sets the error type that OnReadyToConnect (our StartCallback) expects to
-  // receive.
-  void ExpectStartError(SyncError::ErrorType error_type) {
-    DCHECK(expected_start_error_ == SyncError::UNSET);
-    expected_start_error_ = error_type;
+  // Expect to receive an error from the processor.
+  void ExpectError() {
+    EXPECT_FALSE(expect_error_);
+    expect_error_ = true;
   }
 
   TestModelTypeSyncBridge* bridge() const { return bridge_.get(); }
@@ -252,26 +257,10 @@ class SharedModelTypeProcessorTest : public ::testing::Test {
     return static_cast<SharedModelTypeProcessor*>(bridge()->change_processor());
   }
 
-  DataTypeErrorHandlerMock* error_handler() const {
-    DCHECK(error_handler_);
-    return error_handler_;
-  }
-
  private:
-  void CheckPostConditions() {
-    DCHECK_EQ(SyncError::UNSET, expected_start_error_);
-  }
+  void CheckPostConditions() { EXPECT_FALSE(expect_error_); }
 
-  void OnReadyToConnect(SyncError error,
-                        std::unique_ptr<ActivationContext> context) {
-    if (expected_start_error_ != SyncError::UNSET) {
-      EXPECT_TRUE(error.IsSet());
-      EXPECT_EQ(expected_start_error_, error.error_type());
-      EXPECT_EQ(nullptr, context);
-      expected_start_error_ = SyncError::UNSET;
-      return;
-    }
-
+  void OnReadyToConnect(std::unique_ptr<ActivationContext> context) {
     std::unique_ptr<MockModelTypeWorker> worker(
         new MockModelTypeWorker(context->model_type_state, type_processor()));
     // Keep an unsafe pointer to the commit queue the processor will use.
@@ -280,6 +269,11 @@ class SharedModelTypeProcessorTest : public ::testing::Test {
     // side-stepping that completely and connecting directly to the real
     // processor, since these tests are single-threaded and don't need proxies.
     type_processor()->ConnectSync(std::move(worker));
+  }
+
+  void ErrorReceived(const ModelError& error) {
+    EXPECT_TRUE(expect_error_);
+    expect_error_ = false;
   }
 
   std::unique_ptr<TestModelTypeSyncBridge> bridge_;
@@ -291,16 +285,13 @@ class SharedModelTypeProcessorTest : public ::testing::Test {
   // The current mock queue, which is owned by |type_processor()|.
   MockModelTypeWorker* worker_;
 
-  // The processor's error handler.
-  DataTypeErrorHandlerMock* error_handler_;
-
-  // The error to expect in OnReadyToConnect().
-  SyncError::ErrorType expected_start_error_ = SyncError::UNSET;
+  // Whether to expect an error from the processor.
+  bool expect_error_ = false;
 };
 
 // Test that an initial sync handles local and remote items properly.
 TEST_F(SharedModelTypeProcessorTest, InitialSync) {
-  OnMetadataLoaded();
+  ModelReadyToSync();
   OnSyncStarting();
 
   // Local write before initial sync.
@@ -327,6 +318,24 @@ TEST_F(SharedModelTypeProcessorTest, InitialSync) {
   worker()->ExpectPendingCommits({kHash1});
 }
 
+// Test that an initial sync filters out tombstones in the processor.
+TEST_F(SharedModelTypeProcessorTest, InitialSyncWithTombstone) {
+  ModelReadyToSync();
+  OnSyncStarting();
+
+  EXPECT_EQ(0, bridge()->merge_call_count());
+  // Initial sync with a tombstone. The fake bridge checks that it doesn't get
+  // any tombstones in its MergeSyncData function.
+  worker()->TombstoneFromServer(kHash1);
+  EXPECT_EQ(1, bridge()->merge_call_count());
+
+  // Should still have no data, metadata, or commit requests.
+  EXPECT_EQ(0U, db().data_count());
+  EXPECT_EQ(0U, db().metadata_count());
+  EXPECT_EQ(0U, ProcessorEntityCount());
+  EXPECT_EQ(0U, worker()->GetNumPendingCommits());
+}
+
 // Test that subsequent starts don't call MergeSyncData.
 TEST_F(SharedModelTypeProcessorTest, NonInitialSync) {
   // This sets initial_sync_done to true.
@@ -346,36 +355,48 @@ TEST_F(SharedModelTypeProcessorTest, NonInitialSync) {
 }
 
 // Test that an error during the merge is propagated to the error handler.
-TEST_F(SharedModelTypeProcessorTest, InitialSyncError) {
-  OnMetadataLoaded();
+TEST_F(SharedModelTypeProcessorTest, MergeError) {
+  ModelReadyToSync();
   OnSyncStarting();
 
-  bridge()->ErrorOnNextCall(SyncError::DATATYPE_ERROR);
-  error_handler()->ExpectError(SyncError::DATATYPE_ERROR);
+  bridge()->ErrorOnNextCall();
+  ExpectError();
   worker()->UpdateFromServer();
 }
 
 // Test that errors before it's called are passed to |start_callback| correctly.
 TEST_F(SharedModelTypeProcessorTest, StartErrors) {
-  type_processor()->OnMetadataLoaded(CreateSyncError(SyncError::DATATYPE_ERROR),
-                                     nullptr);
-  ExpectStartError(SyncError::DATATYPE_ERROR);
+  type_processor()->ReportError(FROM_HERE, "boom");
+  ExpectError();
   OnSyncStarting();
 
   // Test OnSyncStarting happening first.
   ResetState(false);
   OnSyncStarting();
-  ExpectStartError(SyncError::DATATYPE_ERROR);
-  type_processor()->OnMetadataLoaded(CreateSyncError(SyncError::DATATYPE_ERROR),
-                                     nullptr);
+  ExpectError();
+  type_processor()->ReportError(FROM_HERE, "boom");
 
   // Test an error loading pending data.
   ResetStateWriteItem(kKey1, kValue1);
-  bridge()->ErrorOnNextCall(SyncError::DATATYPE_ERROR);
+  bridge()->ErrorOnNextCall();
   InitializeToMetadataLoaded();
-  OnPendingCommitDataLoaded();
-  ExpectStartError(SyncError::DATATYPE_ERROR);
+  ExpectError();
   OnSyncStarting();
+
+  // Test an error prior to metadata load.
+  ResetState(false);
+  type_processor()->ReportError(FROM_HERE, "boom");
+  ExpectError();
+  OnSyncStarting();
+  ModelReadyToSync();
+
+  // Test an error prior to pending data load.
+  ResetStateWriteItem(kKey1, kValue1);
+  InitializeToMetadataLoaded();
+  type_processor()->ReportError(FROM_HERE, "boom");
+  ExpectError();
+  OnSyncStarting();
+  OnPendingCommitDataLoaded();
 }
 
 // This test covers race conditions during loading pending data. All cases
@@ -523,6 +544,25 @@ TEST_F(SharedModelTypeProcessorTest, LoadPendingCommit) {
   worker()->ExpectNthPendingCommit(0, kHash1, kEmptySpecifics);
 }
 
+// Tests cases where pending data loads synchronously.
+TEST_F(SharedModelTypeProcessorTest, LoadPendingSynchronous) {
+  // Model, sync.
+  EntitySpecifics specifics1 = ResetStateWriteItem(kKey1, kValue1);
+  bridge()->ExpectSynchronousDataCallback();
+  InitializeToMetadataLoaded();
+  OnSyncStarting();
+  EXPECT_EQ(1U, worker()->GetNumPendingCommits());
+  worker()->ExpectNthPendingCommit(0, kHash1, specifics1);
+
+  // Sync, model.
+  EntitySpecifics specifics2 = ResetStateWriteItem(kKey1, kValue1);
+  OnSyncStarting();
+  bridge()->ExpectSynchronousDataCallback();
+  InitializeToMetadataLoaded();
+  EXPECT_EQ(1U, worker()->GetNumPendingCommits());
+  worker()->ExpectNthPendingCommit(0, kHash1, specifics2);
+}
+
 // This test covers race conditions during loading a pending delete. All cases
 // start with no processor and one item with a pending delete. There are two
 // different events that can occur in any order once metadata is loaded, since
@@ -639,8 +679,8 @@ TEST_F(SharedModelTypeProcessorTest, LocalCreateItem) {
 TEST_F(SharedModelTypeProcessorTest, ErrorApplyingAck) {
   InitializeToReadyState();
   bridge()->WriteItem(kKey1, kValue1);
-  bridge()->ErrorOnNextCall(SyncError::DATATYPE_ERROR);
-  error_handler()->ExpectError(SyncError::DATATYPE_ERROR);
+  bridge()->ErrorOnNextCall();
+  ExpectError();
   worker()->AckOnePendingCommit();
 }
 
@@ -804,8 +844,8 @@ TEST_F(SharedModelTypeProcessorTest, ServerCreateItem) {
 // propagated to the error handler.
 TEST_F(SharedModelTypeProcessorTest, ErrorApplyingUpdate) {
   InitializeToReadyState();
-  bridge()->ErrorOnNextCall(SyncError::DATATYPE_ERROR);
-  error_handler()->ExpectError(SyncError::DATATYPE_ERROR);
+  bridge()->ErrorOnNextCall();
+  ExpectError();
   worker()->UpdateFromServer(kHash1, GenerateSpecifics(kKey1, kValue1));
 }
 
@@ -859,6 +899,14 @@ TEST_F(SharedModelTypeProcessorTest, LocalDeleteItem) {
   worker()->AckOnePendingCommit();
   EXPECT_EQ(0U, db().metadata_count());
   EXPECT_EQ(0U, ProcessorEntityCount());
+
+  // Create item again.
+  WriteItemAndAck(kKey1, kValue1);
+  const EntityMetadata metadata_v3 = db().GetMetadata(kKey1);
+  EXPECT_FALSE(metadata_v3.is_deleted());
+  EXPECT_EQ(1, metadata_v3.sequence_number());
+  EXPECT_EQ(1, metadata_v3.acked_sequence_number());
+  EXPECT_EQ(3, metadata_v3.server_version());
 }
 
 // Tests creating and deleting an item locally before receiving a commit
@@ -927,6 +975,14 @@ TEST_F(SharedModelTypeProcessorTest, ServerDeleteItem) {
   EXPECT_EQ(0U, db().metadata_count());
   EXPECT_EQ(0U, ProcessorEntityCount());
   EXPECT_EQ(0U, worker()->GetNumPendingCommits());
+
+  // Create item again.
+  WriteItemAndAck(kKey1, kValue1);
+  const EntityMetadata metadata = db().GetMetadata(kKey1);
+  EXPECT_FALSE(metadata.is_deleted());
+  EXPECT_EQ(1, metadata.sequence_number());
+  EXPECT_EQ(1, metadata.acked_sequence_number());
+  EXPECT_EQ(3, metadata.server_version());
 }
 
 // Deletes an item we've never seen before.
@@ -1005,17 +1061,21 @@ TEST_F(SharedModelTypeProcessorTest, ConflictResolutionChangesMatch) {
 
 TEST_F(SharedModelTypeProcessorTest, ConflictResolutionUseLocal) {
   InitializeToReadyState();
-  EntitySpecifics specifics = bridge()->WriteItem(kKey1, kValue1);
+  // WriteAndAck entity to get id from the server.
+  WriteItemAndAck(kKey1, kValue1);
   bridge()->SetConflictResolution(ConflictResolution::UseLocal());
 
-  worker()->UpdateFromServer(kHash1, GenerateSpecifics(kKey1, kValue2));
+  // Change value locally and at the same time simulate conflicting update from
+  // server.
+  EntitySpecifics specifics2 = bridge()->WriteItem(kKey1, kValue2);
+  worker()->UpdateFromServer(kHash1, GenerateSpecifics(kKey1, kValue3));
 
   // Updated metadata but not data; new commit request.
-  EXPECT_EQ(1U, db().data_change_count());
-  EXPECT_EQ(2U, db().metadata_change_count());
-  EXPECT_EQ(1, db().GetMetadata(kKey1).server_version());
+  EXPECT_EQ(2U, db().data_change_count());
+  EXPECT_EQ(4U, db().metadata_change_count());
+  EXPECT_EQ(2, db().GetMetadata(kKey1).server_version());
   worker()->ExpectPendingCommits({kHash1, kHash1});
-  worker()->ExpectNthPendingCommit(1, kHash1, specifics);
+  worker()->ExpectNthPendingCommit(1, kHash1, specifics2);
 }
 
 TEST_F(SharedModelTypeProcessorTest, ConflictResolutionUseRemote) {
@@ -1145,10 +1205,9 @@ TEST_F(SharedModelTypeProcessorTest, ReEncryptCommitsWithNewKey) {
 TEST_F(SharedModelTypeProcessorTest, ReEncryptErrorLoadingData) {
   InitializeToReadyState();
   WriteItemAndAck(kKey1, kValue1);
-  bridge()->ErrorOnNextCall(SyncError::DATATYPE_ERROR);
+  bridge()->ErrorOnNextCall();
+  ExpectError();
   worker()->UpdateWithEncryptionKey("k1");
-  error_handler()->ExpectError(SyncError::DATATYPE_ERROR);
-  OnPendingCommitDataLoaded();
 }
 
 // Test receipt of updates with new and old keys.
@@ -1191,18 +1250,20 @@ TEST_F(SharedModelTypeProcessorTest, ReEncryptUpdatesWithNewKey) {
 // Test that re-encrypting enqueues the right data for USE_LOCAL conflicts.
 TEST_F(SharedModelTypeProcessorTest, ReEncryptConflictResolutionUseLocal) {
   InitializeToReadyState();
+  // WriteAndAck entity to get id from the server.
+  WriteItemAndAck(kKey1, kValue1);
   worker()->UpdateWithEncryptionKey("k1");
-  EntitySpecifics specifics = bridge()->WriteItem(kKey1, kValue1);
+  EntitySpecifics specifics = bridge()->WriteItem(kKey1, kValue2);
   worker()->ExpectPendingCommits({kHash1});
 
   bridge()->SetConflictResolution(ConflictResolution::UseLocal());
   // Unencrypted update needs to be re-commited with key k1.
-  worker()->UpdateFromServer(kHash1, GenerateSpecifics(kKey1, kValue2), 1, "");
+  worker()->UpdateFromServer(kHash1, GenerateSpecifics(kKey1, kValue3), 1, "");
 
   // Ensure the re-commit has the correct value.
   EXPECT_EQ(2U, worker()->GetNumPendingCommits());
   worker()->ExpectNthPendingCommit(1, kHash1, specifics);
-  EXPECT_EQ(kValue1, db().GetValue(kKey1));
+  EXPECT_EQ(kValue2, db().GetValue(kKey1));
 }
 
 // Test that re-encrypting enqueues the right data for USE_REMOTE conflicts.
@@ -1292,10 +1353,12 @@ TEST_F(SharedModelTypeProcessorTest, IgnoreRemoteEncryption) {
 // Same as above but with two commit requests before one ack.
 TEST_F(SharedModelTypeProcessorTest, IgnoreRemoteEncryptionInterleaved) {
   InitializeToReadyState();
-  EntitySpecifics specifics1 = bridge()->WriteItem(kKey1, kValue1);
-  EntitySpecifics specifics2 = bridge()->WriteItem(kKey1, kValue2);
+  // WriteAndAck entity to get id from the server.
+  WriteItemAndAck(kKey1, kValue1);
+  EntitySpecifics specifics1 = bridge()->WriteItem(kKey1, kValue2);
+  EntitySpecifics specifics2 = bridge()->WriteItem(kKey1, kValue3);
   worker()->AckOnePendingCommit();
-  // kValue1 is now the base value.
+  // kValue2 is now the base value.
   EXPECT_EQ(1U, worker()->GetNumPendingCommits());
   worker()->ExpectNthPendingCommit(0, kHash1, specifics2);
 

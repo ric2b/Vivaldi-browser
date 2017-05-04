@@ -41,6 +41,7 @@ Pressione Shift + Alt para alternar.</translation>
 <translation id="1938872420421548906">Shift+Alt</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
+<translation id="2122028596993374965">Parar de transmitir <ph name="TAB_NAME" /> para <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Carregador de baixa potência</translation>
 <translation id="2204305834655267233">Informações de rede</translation>
 <translation id="2208323208084708176">Modo de área de trabalho unificada.</translation>
@@ -54,10 +55,8 @@ Pressione Shift + Alt para alternar.</translation>
 <translation id="2429753432712299108">O dispositivo Bluetooth "<ph name="DEVICE_NAME" />" deseja permissão para realizar o pareamento. Antes de aceitar, verifique se esta senha aparece no dispositivo: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">Ocorreu um erro</translation>
 <translation id="2509468283778169019">CAPS LOCK está ativado</translation>
-<translation id="252373100621549798">Exibição desconhecida</translation>
 <translation id="2532589005999780174">Modo de alto contraste</translation>
 <translation id="2562916301614567480">Rede privada</translation>
-<translation id="2661637000095600270">Não foi possível espelhar as telas porque não foram encontradas resoluções compatíveis. Em vez disso, foi ativada a área de trabalho estendida. Clique para enviar um relatório de feedback.</translation>
 <translation id="2692809339924654275"><ph name="BLUETOOTH" />: conectando...</translation>
 <translation id="2700058918926273959">A sessão termina em <ph name="SESSION_TIME_REMAINING" />. Você será desconectado.</translation>
 <translation id="2727977024730340865">Conectado a um carregador de baixa potência. O carregamento da bateria pode não ser confiável.</translation>
@@ -113,7 +112,6 @@ Pressione Shift + Alt para alternar.</translation>
 <translation id="3846575436967432996">Não há informações de rede disponíveis</translation>
 <translation id="3866182280516392520">Endereço IPv6</translation>
 <translation id="3891340733213178823">Pressione Ctrl+Shift+Q duas vezes para sair.</translation>
-<translation id="3892641579809465218">Display interno</translation>
 <translation id="3893630138897523026">ChromeVox (feedback falado)</translation>
 <translation id="3899995891769452915">Entrada de texto por voz</translation>
 <translation id="3901991538546252627">Conectando-se a <ph name="NAME" /></translation>
@@ -152,6 +150,7 @@ Pressione Shift + Alt para alternar.</translation>
 <translation id="5238774010593222950">Não é possível fazer login em outra conta.</translation>
 <translation id="532063867737390965">Essa configuração de rede foi desativada pelo administrador.</translation>
 <translation id="5331975486040154427">Dispositivo USB-C (porta traseira da esquerda)</translation>
+<translation id="5431825016875453137">OpenVPN / L2TP</translation>
 <translation id="544691375626129091">Todos os usuários disponíveis já foram adicionados a esta sessão.</translation>
 <translation id="5507786745520522457">Configurar dados de dispositivos móveis</translation>
 <translation id="5543001071567407895">SMS</translation>
@@ -176,6 +175,7 @@ Pressione Shift + Alt para alternar.</translation>
 <translation id="5978382165065462689">Compartilhando o controle de sua tela por meio da Assistência remota.</translation>
 <translation id="5980301590375426705">Sair da sessão de visitante</translation>
 <translation id="6041154455840261787">Modo de alto contraste ativado. Pressione a tecla de pesquisa+Shift+H novamente para desativá-lo.</translation>
+<translation id="6043212731627905357">Este monitor não está funcionando bem com seu <ph name="DEVICE_TYPE" /> (o monitor não é compatível).</translation>
 <translation id="6043994281159824495">Sair agora</translation>
 <translation id="6047696787498798094">O compartilhamento de tela será interrompido quando você alternar para outro usuário. Deseja continuar?</translation>
 <translation id="6062360702481658777">Você sairá automaticamente em <ph name="LOGOUT_TIME_LEFT" />.</translation>
@@ -184,7 +184,6 @@ Pressione Shift + Alt para alternar.</translation>
 <translation id="6144938890088808325">Ajudar a melhorar os Chromebooks</translation>
 <translation id="615957422585914272">Mostrar teclado na tela</translation>
 <translation id="6165508094623778733">Saiba mais</translation>
-<translation id="6203030746557259519">Tela virtual</translation>
 <translation id="6248847161401822652">Pressione Control+Shift+Q duas vezes para sair.</translation>
 <translation id="6267036997247669271"><ph name="NAME" />: Ativando...</translation>
 <translation id="6297287540776456956">Use a stylus para selecionar uma região</translation>
@@ -207,6 +206,7 @@ Pressione Shift + Alt para alternar.</translation>
 <translation id="6700713906295497288">Botão do menu do IME</translation>
 <translation id="6713285437468012787">O dispositivo Bluetooth "<ph name="DEVICE_NAME" />" está pareado e disponível para todos os usuários. Para cancelar o pareamento, vá para "Configurações".</translation>
 <translation id="6785414152754474415">A bateria está <ph name="PERCENTAGE" />% cheia e carregando.</translation>
+<translation id="6803622936009808957">Não foi possível espelhar os displays porque não foram encontradas resoluções suportadas. Em vez disso, foi ativada a área de trabalho estendida.</translation>
 <translation id="683971173229319003">Pesquisa+L</translation>
 <translation id="6857811139397017780">Ativar <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Conectar-se a outra...</translation>
@@ -252,13 +252,14 @@ Pressione Ctrl+Alt+Z para desativar.</translation>
 <translation id="8000066093800657092">Sem rede</translation>
 <translation id="8054466585765276473">Calculando duração da bateria.</translation>
 <translation id="8077816382010018681">Título da notificação do recurso QU aqui</translation>
+<translation id="8098591350844501178">Parar de transmitir tela para <ph name="RECEIVER_NAME" /></translation>
 <translation id="8103386449138765447">Mensagens SMS: <ph name="MESSAGE_COUNT" /></translation>
 <translation id="8132793192354020517">Conectado à <ph name="NAME" /></translation>
+<translation id="8180896103888046100">Parar de transmitir para um destinatário desconhecido</translation>
 <translation id="8185286464235484130">Responda a algumas perguntas para que possamos saber como estamos nos saindo.</translation>
 <translation id="8190698733819146287">Personalizar idiomas e entrada...</translation>
 <translation id="8206859287963243715">Celular</translation>
 <translation id="8308637677604853869">Menu anterior</translation>
-<translation id="8356164830168736643">Fechar <ph name="WINDOW_TITLE" /></translation>
 <translation id="8428213095426709021">Configurações</translation>
 <translation id="8454013096329229812">O Wi-Fi está ligado.</translation>
 <translation id="8484916590211895857"><ph name="NAME" />: reconectando…</translation>
@@ -274,7 +275,6 @@ Pressione Ctrl+Alt+Z para desativar.</translation>
 <translation id="8878886163241303700">Tela ampla</translation>
 <translation id="8938800817013097409">Dispositivo USB-C (porta traseira da direita)</translation>
 <translation id="8940956008527784070">Nível de bateria baixo (<ph name="PERCENTAGE" />%)</translation>
-<translation id="9008540565042607572">Prezado monitor, as coisas não estão dando certo entre nós. (Este monitor não é compatível. Clique aqui para enviar um relatório de feedback.)</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9080206825613744995">O microfone está sendo usado.</translation>
 <translation id="9089416786594320554">Métodos de entrada</translation>
@@ -284,5 +284,6 @@ Pressione Ctrl+Alt+Z para desativar.</translation>
 <translation id="923686485342484400">Pressione Control+Shift+Q duas vezes para sair.</translation>
 <translation id="938582441709398163">Sobreposição do teclado</translation>
 <translation id="939252827960237676">Falha ao salvar a captura de tela</translation>
+<translation id="945522503751344254">Enviar comentários</translation>
 <translation id="952992212772159698">Desativado</translation>
 </translationbundle>

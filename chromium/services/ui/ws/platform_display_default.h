@@ -17,7 +17,7 @@
 
 namespace ui {
 
-class CursorLoader;
+class ImageCursors;
 class PlatformWindow;
 
 namespace ws {
@@ -44,9 +44,8 @@ class PlatformDisplayDefault : public PlatformDisplay,
   gfx::Rect GetBounds() const override;
   bool UpdateViewportMetrics(const display::ViewportMetrics& metrics) override;
   const display::ViewportMetrics& GetViewportMetrics() const override;
-  bool IsPrimaryDisplay() const override;
-  void OnGpuChannelEstablished(
-      scoped_refptr<gpu::GpuChannelHost> gpu_channel) override;
+  gfx::AcceleratedWidget GetAcceleratedWidget() const override;
+  FrameGenerator* GetFrameGenerator() override;
 
  private:
   // Update the root_location of located events to be relative to the origin
@@ -70,12 +69,13 @@ class PlatformDisplayDefault : public PlatformDisplay,
   void OnActivationChanged(bool active) override;
 
   // FrameGeneratorDelegate:
+  ServerWindow* GetActiveRootWindow() override;
   bool IsInHighContrastMode() override;
 
-  int64_t display_id_;
+  const int64_t display_id_;
 
 #if !defined(OS_ANDROID)
-  std::unique_ptr<ui::CursorLoader> cursor_loader_;
+  std::unique_ptr<ui::ImageCursors> image_cursors_;
 #endif
 
   PlatformDisplayDelegate* delegate_ = nullptr;
@@ -83,6 +83,7 @@ class PlatformDisplayDefault : public PlatformDisplay,
 
   display::ViewportMetrics metrics_;
   std::unique_ptr<ui::PlatformWindow> platform_window_;
+  gfx::AcceleratedWidget widget_;
 
   DISALLOW_COPY_AND_ASSIGN(PlatformDisplayDefault);
 };

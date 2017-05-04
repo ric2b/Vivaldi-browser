@@ -68,6 +68,11 @@ static_library("test_support_common") {
   testonly = true
   visibility = [ ":*" ]
   sources = [
+    # TODO(jamescook): Move these files into ash/test.
+    "../laser/laser_pointer_controller_test_api.cc",
+    "../laser/laser_pointer_controller_test_api.h",
+    "../laser/laser_pointer_points_test_api.cc",
+    "../laser/laser_pointer_points_test_api.h",
     "../shell/toplevel_window.cc",
     "../shell/toplevel_window.h",
     "ash_md_test_base.cc",
@@ -103,6 +108,8 @@ static_library("test_support_common") {
     "task_switch_time_tracker_test_api.h",
     "test_activation_delegate.cc",
     "test_activation_delegate.h",
+    "test_app_list_view_presenter_impl.cc",
+    "test_app_list_view_presenter_impl.h",
     "test_keyboard_ui.cc",
     "test_keyboard_ui.h",
     "test_overlay_delegate.cc",
@@ -121,10 +128,14 @@ static_library("test_support_common") {
     "test_system_tray_item.h",
     "test_wallpaper_delegate.cc",
     "test_wallpaper_delegate.h",
+    "tray_cast_test_api.cc",
+    "tray_cast_test_api.h",
     "ui_controls_factory_ash.cc",
     "ui_controls_factory_ash.h",
     "user_metrics_recorder_test_api.cc",
     "user_metrics_recorder_test_api.h",
+    "wm_window_test_api.cc",
+    "wm_window_test_api.h",
   ]
   configs += [ "//build/config:precompiled_headers" ]
 
@@ -139,18 +150,22 @@ static_library("test_support_common") {
     "//ash/resources",
     "//base:i18n",
     "//base/test:test_support",
+    "//chromeos",
     "//components/signin/core/account_id",
     "//components/user_manager:user_manager",
     "//device/bluetooth",
+    "//services/ui/public/interfaces",
     "//skia",
     "//testing/gtest",
     "//ui/accessibility",
     "//ui/app_list:test_support",
     "//ui/app_list/presenter",
+    "//ui/app_list/presenter:test_support",
     "//ui/aura",
     "//ui/aura:test_support",
     "//ui/base:test_support",
     "//ui/compositor:test_support",
+    "//ui/display",
     "//ui/display/types",
     "//ui/events:events_base",
     "//ui/events:test_support",
@@ -164,28 +179,8 @@ static_library("test_support_common") {
     "//ui/wm",
   ]
 
-  if (is_win) {
-    deps += [ "//ui/platform_window/win" ]
-  }
-
   if (use_x11) {
     deps += [ "//ui/gfx/x" ]
-  }
-
-  if (is_chromeos) {
-    deps += [
-      "//chromeos",
-      "//ui/display",
-    ]
-
-    sources += [
-      "../laser/laser_pointer_controller_test_api.cc",
-      "../laser/laser_pointer_controller_test_api.h",
-      "../laser/laser_pointer_points_test_api.cc",
-      "../laser/laser_pointer_points_test_api.h",
-      "tray_cast_test_api.cc",
-      "tray_cast_test_api.h",
-    ]
   }
 }
 

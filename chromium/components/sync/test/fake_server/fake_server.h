@@ -165,6 +165,10 @@ class FakeServer {
   bool CreatePermanentBookmarkFolder(const std::string& server_tag,
                                      const std::string& name);
 
+  // Creates and saves a permanent folder for Notes (e.g., main_notes).
+  bool CreatePermanentNotesFolder(const std::string& server_tag,
+                                     const std::string& name);
+
   // Inserts the default permanent items in |entities_|.
   bool CreateDefaultPermanentItems();
 

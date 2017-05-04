@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -392,8 +393,6 @@ void ServiceWorkerRegistration::SetTaskRunnerForTest(
 }
 
 void ServiceWorkerRegistration::EnableNavigationPreload(bool enable) {
-  if (navigation_preload_state_.enabled == enable)
-    return;
   navigation_preload_state_.enabled = enable;
   if (active_version_)
     active_version_->SetNavigationPreloadState(navigation_preload_state_);
@@ -401,8 +400,6 @@ void ServiceWorkerRegistration::EnableNavigationPreload(bool enable) {
 
 void ServiceWorkerRegistration::SetNavigationPreloadHeader(
     const std::string& header) {
-  if (navigation_preload_state_.header == header)
-    return;
   navigation_preload_state_.header = header;
   if (active_version_)
     active_version_->SetNavigationPreloadState(navigation_preload_state_);

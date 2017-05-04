@@ -42,10 +42,12 @@ class LifecycleNotifier : public virtual GarbageCollectedMixin {
   void removeObserver(Observer*);
 
   // notifyContextDestroyed() should be explicitly dispatched from an
-  // observed context to notify observers that contextDestroyed().
+  // observed context to detach its observers, and if the observer kind
+  // requires it, notify each observer by invoking contextDestroyed().
   //
-  // When contextDestroyed() is called, the observer's lifecycleContext()
-  // is still valid and safe to use during the notification.
+  // When contextDestroyed() is called, it is supplied the context as
+  // an argument, but the observer's lifecycleContext() is still valid
+  // and safe to use while handling the notification.
   virtual void notifyContextDestroyed();
 
   DEFINE_INLINE_VIRTUAL_TRACE() { visitor->trace(m_observers); }
@@ -60,8 +62,6 @@ class LifecycleNotifier : public virtual GarbageCollectedMixin {
   T* context() { return static_cast<T*>(this); }
 
   using ObserverSet = HeapHashSet<WeakMember<Observer>>;
-
-  void removePending(ObserverSet&);
 
   enum IterationState {
     AllowingNone = 0,
@@ -84,6 +84,51 @@ inline LifecycleNotifier<T, Observer>::~LifecycleNotifier() {
   // ASSERT(!m_observers.size());
 }
 
+// Determine if |contextDestroyed(Observer*) is a public method on
+// class type |Observer|, or any of the class types it derives from.
+template <typename Observer, typename T>
+class HasContextDestroyed {
+  using YesType = char;
+  using NoType = int;
+
+  template <typename V>
+  static YesType checkHasContextDestroyedMethod(
+      V* observer,
+      T* context = nullptr,
+      typename std::enable_if<
+          std::is_same<decltype(observer->contextDestroyed(context)),
+                       void>::value>::type* g = nullptr);
+  template <typename V>
+  static NoType checkHasContextDestroyedMethod(...);
+
+ public:
+  static_assert(sizeof(Observer), "Observer's class declaration not in scope");
+  static const bool value =
+      sizeof(YesType) ==
+      sizeof(checkHasContextDestroyedMethod<Observer>(nullptr));
+};
+
+// If |Observer::contextDestroyed()| is present, invoke it.
+template <typename Observer,
+          typename T,
+          bool = HasContextDestroyed<Observer, T>::value>
+class ContextDestroyedNotifier {
+  STATIC_ONLY(ContextDestroyedNotifier);
+
+ public:
+  static void call(Observer* observer, T* context) {
+    observer->contextDestroyed(context);
+  }
+};
+
+template <typename Observer, typename T>
+class ContextDestroyedNotifier<Observer, T, false> {
+  STATIC_ONLY(ContextDestroyedNotifier);
+
+ public:
+  static void call(Observer*, T*) {}
+};
+
 template <typename T, typename Observer>
 inline void LifecycleNotifier<T, Observer>::notifyContextDestroyed() {
   // Observer unregistration is allowed, but effectively a no-op.
@@ -92,7 +137,7 @@ inline void LifecycleNotifier<T, Observer>::notifyContextDestroyed() {
   m_observers.swap(observers);
   for (Observer* observer : observers) {
     DCHECK(observer->lifecycleContext() == context());
-    observer->contextDestroyed();
+    ContextDestroyedNotifier<Observer, T>::call(observer, context());
     observer->clearContext();
   }
 }
@@ -113,18 +158,6 @@ inline void LifecycleNotifier<T, Observer>::removeObserver(Observer* observer) {
   }
   RELEASE_ASSERT(m_iterationState & AllowingRemoval);
   m_observers.remove(observer);
-}
-
-template <typename T, typename Observer>
-inline void LifecycleNotifier<T, Observer>::removePending(
-    ObserverSet& observers) {
-  if (m_observers.size()) {
-    // Prevent allocation (==shrinking) while removing;
-    // the table is likely to become garbage soon.
-    ThreadState::NoAllocationScope scope(ThreadState::current());
-    observers.removeAll(m_observers);
-  }
-  m_observers.swap(observers);
 }
 
 }  // namespace blink

@@ -47,21 +47,22 @@ Audits.AuditRules.CacheableResponseCodes = {
  * @return {!Object.<string, !Array.<!SDK.NetworkRequest|string>>}
  */
 Audits.AuditRules.getDomainToResourcesMap = function(requests, types, needFullResources) {
+  /** @type {!Object<string, !Array<!SDK.NetworkRequest|string>>} */
   var domainToResourcesMap = {};
   for (var i = 0, size = requests.length; i < size; ++i) {
     var request = requests[i];
     if (types && types.indexOf(request.resourceType()) === -1)
       continue;
-    var parsedURL = request.url.asParsedURL();
+    var parsedURL = request.url().asParsedURL();
     if (!parsedURL)
       continue;
     var domain = parsedURL.host;
     var domainResources = domainToResourcesMap[domain];
     if (domainResources === undefined) {
-      domainResources = [];
+      domainResources = /** @type {!Array<!SDK.NetworkRequest|string>} */ ([]);
       domainToResourcesMap[domain] = domainResources;
     }
-    domainResources.push(needFullResources ? request : request.url);
+    domainResources.push(needFullResources ? request : request.url());
   }
   return domainToResourcesMap;
 };
@@ -84,8 +85,6 @@ Audits.AuditRules.GzipRule = class extends Audits.AuditRule {
    */
   doRun(target, requests, result, callback, progress) {
     var totalSavings = 0;
-    var compressedSize = 0;
-    var candidateSize = 0;
     var summary = result.addChild('', true);
     for (var i = 0, length = requests.length; i < length; ++i) {
       var request = requests[i];
@@ -93,14 +92,11 @@ Audits.AuditRules.GzipRule = class extends Audits.AuditRule {
         continue;  // Do not test cached resources.
       if (this._shouldCompress(request)) {
         var size = request.resourceSize;
-        candidateSize += size;
-        if (this._isCompressed(request)) {
-          compressedSize += size;
+        if (this._isCompressed(request))
           continue;
-        }
         var savings = 2 * size / 3;
         totalSavings += savings;
-        summary.addFormatted('%r could save ~%s', request.url, Number.bytesToString(savings));
+        summary.addFormatted('%r could save ~%s', request.url(), Number.bytesToString(savings));
         result.violationCount++;
       }
     }
@@ -328,7 +324,7 @@ Audits.AuditRules.ParallelizeDownloadRule = class extends Audits.AuditRule {
             busiestHostResourceCount, hosts[0]),
         true);
     for (var i = 0; i < requestsOnBusiestHost.length; ++i)
-      entry.addURL(requestsOnBusiestHost[i].url);
+      entry.addURL(requestsOnBusiestHost[i].url());
 
     result.violationCount = requestsOnBusiestHost.length;
     callback(result);
@@ -489,7 +485,7 @@ Audits.AuditRules.UnusedCssRule = class extends Audits.AuditRule {
 };
 
 /**
- * @typedef {!{sourceURL: string, rules: !Array.<!SDK.CSSParser.StyleRule>}}
+ * @typedef {!{sourceURL: string, rules: !Array.<!Common.FormatterWorkerPool.CSSStyleRule>}}
  */
 Audits.AuditRules.ParsedStyleSheet;
 
@@ -510,37 +506,38 @@ Audits.AuditRules.StyleSheetProcessor = class {
   }
 
   run() {
-    this._parser = new SDK.CSSParser();
     this._processNextStyleSheet();
-  }
-
-  _terminateWorker() {
-    if (this._parser) {
-      this._parser.dispose();
-      delete this._parser;
-    }
-  }
-
-  _finish() {
-    this._terminateWorker();
-    this._styleSheetsParsedCallback(this._styleSheets);
   }
 
   _processNextStyleSheet() {
     if (!this._styleSheetHeaders.length) {
-      this._finish();
+      this._styleSheetsParsedCallback(this._styleSheets);
       return;
     }
     this._currentStyleSheetHeader = this._styleSheetHeaders.shift();
-    this._parser.fetchAndParse(this._currentStyleSheetHeader, this._onStyleSheetParsed.bind(this));
+
+    var allRules = [];
+    this._currentStyleSheetHeader.requestContent().then(
+        content => Common.formatterWorkerPool.parseCSS(content || '', onRulesParsed.bind(this)));
+
+    /**
+     * @param {boolean} isLastChunk
+     * @param {!Array<!Common.FormatterWorkerPool.CSSRule>} rules
+     * @this {Audits.AuditRules.StyleSheetProcessor}
+     */
+    function onRulesParsed(isLastChunk, rules) {
+      allRules.push(...rules);
+      if (isLastChunk)
+        this._onStyleSheetParsed(allRules);
+    }
   }
 
   /**
-   * @param {!Array.<!SDK.CSSParser.Rule>} rules
+   * @param {!Array.<!Common.FormatterWorkerPool.CSSRule>} rules
    */
   _onStyleSheetParsed(rules) {
     if (this._progress.isCanceled()) {
-      this._finish();
+      this._styleSheetsParsedCallback(this._styleSheets);
       return;
     }
 
@@ -602,7 +599,7 @@ Audits.AuditRules.CacheControlRule = class extends Audits.AuditRule {
     var urls = [];
     for (var i = 0; i < requestCount; ++i) {
       if (requestCheckFunction.call(this, requests[i]))
-        urls.push(requests[i].url);
+        urls.push(requests[i].url());
     }
     if (urls.length) {
       var entry = result.addChild(messageText, true);
@@ -679,7 +676,7 @@ Audits.AuditRules.CacheControlRule = class extends Audits.AuditRule {
     if (this.responseHeaderMatch(request, 'Cache-Control', 'public'))
       return true;
 
-    return request.url.indexOf('?') === -1 && !this.responseHeaderMatch(request, 'Cache-Control', 'private');
+    return request.url().indexOf('?') === -1 && !this.responseHeaderMatch(request, 'Cache-Control', 'private');
   }
 
   /**
@@ -708,11 +705,12 @@ Audits.AuditRules.CacheControlRule = class extends Audits.AuditRule {
    */
   _isExplicitlyNonCacheable(request) {
     var hasExplicitExp = this.hasExplicitExpiration(request);
-    return !!this.responseHeaderMatch(request, 'Cache-Control', '(no-cache|no-store)') ||
+    return !!(
+        !!this.responseHeaderMatch(request, 'Cache-Control', '(no-cache|no-store)') ||
         !!this.responseHeaderMatch(request, 'Pragma', 'no-cache') ||
         (hasExplicitExp && !this.freshnessLifetimeGreaterThan(request, 0)) ||
-        (!hasExplicitExp && !!request.url && request.url.indexOf('?') >= 0) ||
-        (!hasExplicitExp && !this.isCacheableResource(request));
+        (!hasExplicitExp && request.url() && request.url().indexOf('?') >= 0) ||
+        (!hasExplicitExp && !this.isCacheableResource(request)));
   }
 
   /**
@@ -745,7 +743,7 @@ Audits.AuditRules.BrowserCacheControlRule = class extends Audits.AuditRules.Cach
           true);
       result.violationCount += requests.length;
       for (var i = 0; i < requests.length; ++i)
-        entry.addURL(requests[i].url);
+        entry.addURL(requests[i].url());
     }
   }
 
@@ -1232,7 +1230,7 @@ Audits.AuditRules.CSSRuleBase = class extends Audits.AuditRule {
 
   /**
    * @param {!Audits.AuditRules.ParsedStyleSheet} styleSheet
-   * @param {!SDK.CSSParser.StyleRule} rule
+   * @param {!Common.FormatterWorkerPool.CSSStyleRule} rule
    * @param {!Audits.AuditRuleResult} result
    */
   _visitRule(styleSheet, rule, result) {
@@ -1261,7 +1259,7 @@ Audits.AuditRules.CSSRuleBase = class extends Audits.AuditRule {
 
   /**
    * @param {!Audits.AuditRules.ParsedStyleSheet} styleSheet
-   * @param {!SDK.CSSParser.StyleRule} rule
+   * @param {!Common.FormatterWorkerPool.CSSStyleRule} rule
    * @param {!Audits.AuditRuleResult} result
    */
   visitRule(styleSheet, rule, result) {
@@ -1270,7 +1268,7 @@ Audits.AuditRules.CSSRuleBase = class extends Audits.AuditRule {
 
   /**
    * @param {!Audits.AuditRules.ParsedStyleSheet} styleSheet
-   * @param {!SDK.CSSParser.StyleRule} rule
+   * @param {!Common.FormatterWorkerPool.CSSStyleRule} rule
    * @param {!Audits.AuditRuleResult} result
    */
   didVisitRule(styleSheet, rule, result) {
@@ -1279,8 +1277,8 @@ Audits.AuditRules.CSSRuleBase = class extends Audits.AuditRule {
 
   /**
    * @param {!Audits.AuditRules.ParsedStyleSheet} styleSheet
-   * @param {!SDK.CSSParser.StyleRule} rule
-   * @param {!SDK.CSSParser.Property} property
+   * @param {!Common.FormatterWorkerPool.CSSStyleRule} rule
+   * @param {!Common.FormatterWorkerPool.CSSProperty} property
    * @param {!Audits.AuditRuleResult} result
    */
   visitProperty(styleSheet, rule, property, result) {
@@ -1332,7 +1330,7 @@ Audits.AuditRules.CookieRuleBase = class extends Audits.AuditRule {
     if (!requests)
       return;
     for (var i = 0; i < requests.length; ++i) {
-      if (SDK.Cookies.cookieMatchesResourceURL(cookie, requests[i].url))
+      if (SDK.Cookies.cookieMatchesResourceURL(cookie, requests[i].url()))
         callback(requests[i], cookie);
     }
   }
@@ -1460,6 +1458,7 @@ Audits.AuditRules.StaticCookielessRule = class extends Audits.AuditRules.CookieR
       totalStaticResources += domainToResourcesMap[domain].length;
     if (totalStaticResources < this._minResources)
       return;
+    /** @type {!Object<string, number>} */
     var matchingResourceData = {};
     this.mapResourceCookies(domainToResourcesMap, allCookies, this._collectorCallback.bind(this, matchingResourceData));
 
@@ -1481,7 +1480,12 @@ Audits.AuditRules.StaticCookielessRule = class extends Audits.AuditRules.CookieR
     result.violationCount = badUrls.length;
   }
 
+  /**
+   * @param {!Object<string, number>} matchingResourceData
+   * @param {!SDK.NetworkRequest} request
+   * @param {!SDK.Cookie} cookie
+   */
   _collectorCallback(matchingResourceData, request, cookie) {
-    matchingResourceData[request.url] = (matchingResourceData[request.url] || 0) + cookie.size();
+    matchingResourceData[request.url()] = (matchingResourceData[request.url()] || 0) + cookie.size();
   }
 };

@@ -9,6 +9,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/hash.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -52,10 +53,13 @@ class PpdCacheTest : public ::testing::Test {
   }
 
   // Make and return a cache for the test that uses a temporary directory
-  // which is cleaned up at the end of the test.
+  // which is cleaned up at the end of the test.  Note that we pass
+  // a (nonexistant) subdirectory of temp_dir_ to the cache to exercise
+  // the lazy-creation-of-the-cache-directory code.
   std::unique_ptr<PpdCache> CreateTestCache(
       const PpdCache::Options& options = PpdCache::Options()) {
-    return PpdCache::Create(ppd_cache_temp_dir_.GetPath(), options);
+    return PpdCache::Create(ppd_cache_temp_dir_.GetPath().Append("Cache"),
+                            options);
   }
 
  protected:
@@ -154,9 +158,8 @@ TEST_F(PpdCacheTest, StoreAndRetrieveAvailablePrinters) {
   auto cache = CreateTestCache();
 
   // Nothing stored, so should miss in the cache.
-  const PpdProvider::AvailablePrintersMap* result =
-      cache->FindAvailablePrinters();
-  EXPECT_EQ(nullptr, result);
+  auto result = cache->FindAvailablePrinters();
+  EXPECT_FALSE(result);
 
   // Create something to store.
   auto a = base::MakeUnique<PpdProvider::AvailablePrintersMap>();
@@ -168,9 +171,9 @@ TEST_F(PpdCacheTest, StoreAndRetrieveAvailablePrinters) {
   // Store it, get it back.
   cache->StoreAvailablePrinters(std::move(a));
   result = cache->FindAvailablePrinters();
-  ASSERT_NE(nullptr, result);
+  ASSERT_TRUE(result);
 
-  EXPECT_EQ(original, *result);
+  EXPECT_EQ(original, result.value());
 }
 
 // When an entry is too old, we shouldn't return it.
@@ -185,7 +188,7 @@ TEST_F(PpdCacheTest, ExpireStaleAvailablePrinters) {
       base::MakeUnique<PpdProvider::AvailablePrintersMap>());
 
   // Should *miss* in the cache because the entry is already expired.
-  EXPECT_EQ(nullptr, cache->FindAvailablePrinters());
+  EXPECT_FALSE(cache->FindAvailablePrinters());
 }
 
 }  // namespace

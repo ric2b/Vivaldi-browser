@@ -15,4 +15,13 @@
     <dimen name="keyboard_accessory_height">48dp</dimen>
     <dimen name="keyboard_accessory_padding">8dp</dimen>
     <dimen name="keyboard_accessory_text_size">14sp</dimen>
+
+    <!--
+         Larger label and icon sizes for Form-Not-Secure experiment
+         (warning messages on credit card and password forms when users
+         are on HTTP sites).
+    -->
+    <dimen name="dropdown_item_larger_sublabel_font_size">18sp</dimen>
+    <dimen name="dropdown_large_icon_size">24dp</dimen>
+    <dimen name="dropdown_large_icon_margin">10dp</dimen>
 </resources>

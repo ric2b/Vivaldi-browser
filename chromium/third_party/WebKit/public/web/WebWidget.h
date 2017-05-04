@@ -50,7 +50,6 @@ class WebCompositeAndReadbackAsyncCallback;
 class WebInputEvent;
 class WebLayoutAndPaintAsyncCallback;
 class WebPagePopup;
-class WebString;
 struct WebPoint;
 template <typename T>
 class WebVector;
@@ -144,15 +143,6 @@ class WebWidget {
   // Fetches the character range of the current composition, also called the
   // "marked range."
   virtual WebRange compositionRange() { return WebRange(); }
-
-  // Returns information about the current text input of this WebWidget.
-  // Note that this query can be expensive for long fields, as it returns the
-  // plain-text representation of the current editable element. Consider using
-  // the lighter-weight textInputType() when appropriate.
-  virtual WebTextInputInfo textInputInfo() { return WebTextInputInfo(); }
-
-  // Returns the type of current text input of this WebWidget.
-  virtual WebTextInputType textInputType() { return WebTextInputTypeNone; }
 
   // Returns the anchor and focus bounds of the current selection.
   // If the selection range is empty, it returns the caret bounds.

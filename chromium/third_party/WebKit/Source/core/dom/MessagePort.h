@@ -30,7 +30,7 @@
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/SerializedScriptValue.h"
 #include "core/CoreExport.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventListener.h"
 #include "core/events/EventTarget.h"
 #include "public/platform/WebMessagePortChannel.h"
@@ -52,8 +52,8 @@ class SerializedScriptValue;
 typedef Vector<WebMessagePortChannelUniquePtr, 1> MessagePortChannelArray;
 
 class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
-                                public ActiveScriptWrappable,
-                                public ActiveDOMObject,
+                                public ActiveScriptWrappable<MessagePort>,
+                                public ContextLifecycleObserver,
                                 public WebMessagePortChannelClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(MessagePort);
@@ -66,7 +66,7 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
                    PassRefPtr<SerializedScriptValue> message,
                    const MessagePortArray&,
                    ExceptionState&);
-  static bool canTransferArrayBuffer() { return false; }
+  static bool canTransferArrayBuffersAndImageBitmaps() { return false; }
 
   void start();
   void close();
@@ -97,15 +97,15 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
 
   const AtomicString& interfaceName() const override;
   ExecutionContext* getExecutionContext() const override {
-    return ActiveDOMObject::getExecutionContext();
+    return ContextLifecycleObserver::getExecutionContext();
   }
   MessagePort* toMessagePort() override { return this; }
 
   // ScriptWrappable implementation.
   bool hasPendingActivity() const final;
 
-  // ActiveDOMObject implementation.
-  void contextDestroyed() override { close(); }
+  // ContextLifecycleObserver implementation.
+  void contextDestroyed(ExecutionContext*) override { close(); }
 
   void setOnmessage(EventListener* listener) {
     setAttributeEventListener(EventTypeNames::message, listener);

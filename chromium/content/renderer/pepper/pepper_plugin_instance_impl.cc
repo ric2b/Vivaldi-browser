@@ -100,6 +100,7 @@
 #include "third_party/WebKit/public/platform/WebFloatRect.h"
 #include "third_party/WebKit/public/platform/WebGamepads.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "third_party/WebKit/public/platform/WebMouseEvent.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -319,8 +320,8 @@ std::unique_ptr<const char* []> StringVectorToArgArray(
 // for things like screen brightness and volume control.
 bool IsReservedSystemInputEvent(const blink::WebInputEvent& event) {
 #if defined(OS_CHROMEOS)
-  if (event.type != WebInputEvent::KeyDown &&
-      event.type != WebInputEvent::KeyUp)
+  if (event.type() != WebInputEvent::KeyDown &&
+      event.type() != WebInputEvent::KeyUp)
     return false;
   const blink::WebKeyboardEvent& key_event =
       static_cast<const blink::WebKeyboardEvent&>(event);
@@ -478,8 +479,7 @@ PepperPluginInstanceImpl::PepperPluginInstanceImpl(
       layer_bound_to_fullscreen_(false),
       layer_is_hardware_(false),
       plugin_url_(plugin_url),
-      document_url_(container ? GURL(container->document().url())
-                              : GURL()),
+      document_url_(container ? GURL(container->document().url()) : GURL()),
       is_flash_plugin_(module->name() == kFlashPluginName),
       has_been_clicked_(false),
       javascript_used_(false),
@@ -499,6 +499,7 @@ PepperPluginInstanceImpl::PepperPluginInstanceImpl(
       plugin_textinput_interface_(NULL),
       checked_for_plugin_input_event_interface_(false),
       checked_for_plugin_pdf_interface_(false),
+      metafile_(nullptr),
       gamepad_impl_(new GamepadImpl()),
       uma_private_impl_(NULL),
       plugin_print_interface_(NULL),
@@ -1120,8 +1121,8 @@ bool PepperPluginInstanceImpl::HandleInputEvent(
   TRACE_EVENT0("ppapi", "PepperPluginInstanceImpl::HandleInputEvent");
 
   if (!has_been_clicked_ && is_flash_plugin_ &&
-      event.type == blink::WebInputEvent::MouseDown &&
-      (event.modifiers & blink::WebInputEvent::LeftButtonDown)) {
+      event.type() == blink::WebInputEvent::MouseDown &&
+      (event.modifiers() & blink::WebInputEvent::LeftButtonDown)) {
     has_been_clicked_ = true;
     blink::WebRect bounds = container()->element().boundsInViewport();
     render_frame()->GetRenderWidget()->convertViewportToWindow(&bounds);
@@ -1133,7 +1134,7 @@ bool PepperPluginInstanceImpl::HandleInputEvent(
 
   if (!render_frame_)
     return false;
-  if (WebInputEvent::isMouseEventType(event.type)) {
+  if (WebInputEvent::isMouseEventType(event.type())) {
     render_frame_->PepperDidReceiveMouseEvent(this);
   }
 
@@ -1287,7 +1288,8 @@ void PepperPluginInstanceImpl::ViewChanged(
   view_data_.device_scale /= viewport_to_dip_scale_;
 
   gfx::Size scroll_offset = gfx::ScaleToRoundedSize(
-      container_->document().frame()->scrollOffset(), viewport_to_dip_scale_);
+      container_->document().frame()->getScrollOffset(),
+      viewport_to_dip_scale_);
 
   view_data_.scroll_offset = PP_MakePoint(scroll_offset.width(),
                                           scroll_offset.height());
@@ -1455,7 +1457,7 @@ void PepperPluginInstanceImpl::RequestSurroundingText(
       pp_instance(), desired_number_of_characters);
 }
 
-bool PepperPluginInstanceImpl::StartFind(const base::string16& search_text,
+bool PepperPluginInstanceImpl::StartFind(const std::string& search_text,
                                          bool case_sensitive,
                                          int identifier) {
   // Keep a reference on the stack. See NOTE above.
@@ -1463,10 +1465,8 @@ bool PepperPluginInstanceImpl::StartFind(const base::string16& search_text,
   if (!LoadFindInterface())
     return false;
   find_identifier_ = identifier;
-  return PP_ToBool(
-      plugin_find_interface_->StartFind(pp_instance(),
-                                        base::UTF16ToUTF8(search_text).c_str(),
-                                        PP_FromBool(case_sensitive)));
+  return PP_ToBool(plugin_find_interface_->StartFind(
+      pp_instance(), search_text.c_str(), PP_FromBool(case_sensitive)));
 }
 
 void PepperPluginInstanceImpl::SelectFindResult(bool forward, int identifier) {
@@ -1766,15 +1766,21 @@ void PepperPluginInstanceImpl::ReportGeometry() {
 }
 
 bool PepperPluginInstanceImpl::GetPreferredPrintOutputFormat(
-    PP_PrintOutputFormat_Dev* format) {
+    PP_PrintOutputFormat_Dev* format,
+    const WebPrintParams& print_params) {
   // Keep a reference on the stack. See NOTE above.
   scoped_refptr<PepperPluginInstanceImpl> ref(this);
   if (!LoadPrintInterface())
     return false;
   uint32_t supported_formats =
       plugin_print_interface_->QuerySupportedFormats(pp_instance());
-  if (supported_formats & PP_PRINTOUTPUTFORMAT_PDF) {
+  if ((supported_formats & PP_PRINTOUTPUTFORMAT_PDF) &&
+      !print_params.rasterizePDF) {
     *format = PP_PRINTOUTPUTFORMAT_PDF;
+    return true;
+  }
+  if (supported_formats & PP_PRINTOUTPUTFORMAT_RASTER) {
+    *format = PP_PRINTOUTPUTFORMAT_RASTER;
     return true;
   }
   return false;
@@ -1782,7 +1788,9 @@ bool PepperPluginInstanceImpl::GetPreferredPrintOutputFormat(
 
 bool PepperPluginInstanceImpl::SupportsPrintInterface() {
   PP_PrintOutputFormat_Dev format;
-  return GetPreferredPrintOutputFormat(&format);
+  WebPrintParams params;
+  params.rasterizePDF = false;
+  return GetPreferredPrintOutputFormat(&format, params);
 }
 
 bool PepperPluginInstanceImpl::IsPrintScalingDisabled() {
@@ -1796,7 +1804,7 @@ int PepperPluginInstanceImpl::PrintBegin(const WebPrintParams& print_params) {
   // Keep a reference on the stack. See NOTE above.
   scoped_refptr<PepperPluginInstanceImpl> ref(this);
   PP_PrintOutputFormat_Dev format;
-  if (!GetPreferredPrintOutputFormat(&format)) {
+  if (!GetPreferredPrintOutputFormat(&format, print_params)) {
     // PrintBegin should not have been called since SupportsPrintInterface
     // would have returned false;
     NOTREACHED();
@@ -1817,7 +1825,7 @@ int PepperPluginInstanceImpl::PrintBegin(const WebPrintParams& print_params) {
   if (!num_pages)
     return 0;
   current_print_settings_ = print_settings;
-  canvas_.reset();
+  metafile_ = nullptr;
   ranges_.clear();
   return num_pages;
 }
@@ -1829,16 +1837,17 @@ void PepperPluginInstanceImpl::PrintPage(int page_number,
   PP_PrintPageNumberRange_Dev page_range;
   page_range.first_page_number = page_range.last_page_number = page_number;
   // The canvas only has a metafile on it for print preview.
-  bool save_for_later =
-      (printing::MetafileSkiaWrapper::GetMetafileFromCanvas(*canvas) != NULL);
+  printing::PdfMetafileSkia* metafile =
+      printing::MetafileSkiaWrapper::GetMetafileFromCanvas(*canvas);
+  bool save_for_later = (metafile != NULL);
 #if defined(OS_MACOSX)
   save_for_later = save_for_later && skia::IsPreviewMetafile(*canvas);
 #endif  // defined(OS_MACOSX)
   if (save_for_later) {
     ranges_.push_back(page_range);
-    canvas_ = sk_ref_sp(canvas);
+    metafile_ = metafile;
   } else {
-    PrintPageHelper(&page_range, 1, canvas);
+    PrintPageHelper(&page_range, 1, metafile);
   }
 #endif
 }
@@ -1846,7 +1855,7 @@ void PepperPluginInstanceImpl::PrintPage(int page_number,
 void PepperPluginInstanceImpl::PrintPageHelper(
     PP_PrintPageNumberRange_Dev* page_ranges,
     int num_ranges,
-    blink::WebCanvas* canvas) {
+    printing::PdfMetafileSkia* metafile) {
   // Keep a reference on the stack. See NOTE above.
   scoped_refptr<PepperPluginInstanceImpl> ref(this);
   DCHECK(plugin_print_interface_);
@@ -1857,8 +1866,9 @@ void PepperPluginInstanceImpl::PrintPageHelper(
   if (!print_output)
     return;
 
-  if (current_print_settings_.format == PP_PRINTOUTPUTFORMAT_PDF)
-    PrintPDFOutput(print_output, canvas);
+  if (current_print_settings_.format == PP_PRINTOUTPUTFORMAT_PDF ||
+      current_print_settings_.format == PP_PRINTOUTPUTFORMAT_RASTER)
+    PrintPDFOutput(print_output, metafile);
 
   // Now we need to release the print output resource.
   PluginModule::GetCore()->ReleaseResource(print_output);
@@ -1868,8 +1878,8 @@ void PepperPluginInstanceImpl::PrintEnd() {
   // Keep a reference on the stack. See NOTE above.
   scoped_refptr<PepperPluginInstanceImpl> ref(this);
   if (!ranges_.empty())
-    PrintPageHelper(&(ranges_.front()), ranges_.size(), canvas_.get());
-  canvas_.reset();
+    PrintPageHelper(&(ranges_.front()), ranges_.size(), metafile_);
+  metafile_ = nullptr;
   ranges_.clear();
 
   DCHECK(plugin_print_interface_);
@@ -2036,8 +2046,9 @@ bool PepperPluginInstanceImpl::IsViewAccelerated() {
   return view->isAcceleratedCompositingActive();
 }
 
-bool PepperPluginInstanceImpl::PrintPDFOutput(PP_Resource print_output,
-                                              blink::WebCanvas* canvas) {
+bool PepperPluginInstanceImpl::PrintPDFOutput(
+    PP_Resource print_output,
+    printing::PdfMetafileSkia* metafile) {
 #if BUILDFLAG(ENABLE_PRINTING)
   ppapi::thunk::EnterResourceNoLock<PPB_Buffer_API> enter(print_output, true);
   if (enter.failed())
@@ -2049,8 +2060,6 @@ bool PepperPluginInstanceImpl::PrintPDFOutput(PP_Resource print_output,
     return false;
   }
 
-  printing::PdfMetafileSkia* metafile =
-      printing::MetafileSkiaWrapper::GetMetafileFromCanvas(*canvas);
   if (metafile)
     return metafile->InitFromData(mapper.data(), mapper.size());
 
@@ -2251,7 +2260,8 @@ bool PepperPluginInstanceImpl::SimulateIMEEvent(
       if (!render_frame_)
         return false;
       render_frame_->SimulateImeCommitText(
-          base::UTF8ToUTF16(input_event.character_text), gfx::Range());
+          base::UTF8ToUTF16(input_event.character_text),
+          std::vector<blink::WebCompositionUnderline>(), gfx::Range());
       break;
     default:
       return false;
@@ -3085,7 +3095,7 @@ PP_Resource PepperPluginInstanceImpl::CreateImage(gfx::ImageSkia* source_image,
   if (!mapper.is_valid())
     return 0;
 
-  SkCanvas* canvas = image_data->GetPlatformCanvas();
+  SkCanvas* canvas = image_data->GetCanvas();
   // Note: Do not SkBitmap::copyTo the canvas bitmap directly because it will
   // ignore the allocated pixels in shared memory and re-allocate a new buffer.
   canvas->writePixels(image_skia_rep.sk_bitmap(), 0, 0);

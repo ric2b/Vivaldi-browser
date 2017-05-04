@@ -21,58 +21,6 @@ $L$ONE_mont:
 	DQ	0x0000000000000001,0xffffffff00000000,0xffffffffffffffff,0x00000000fffffffe
 
 
-ALIGN	64
-ecp_nistz256_mul_by_2:
-	mov	QWORD[8+rsp],rdi	;WIN64 prologue
-	mov	QWORD[16+rsp],rsi
-	mov	rax,rsp
-$L$SEH_begin_ecp_nistz256_mul_by_2:
-	mov	rdi,rcx
-	mov	rsi,rdx
-
-
-	push	r12
-	push	r13
-
-	mov	r8,QWORD[rsi]
-	xor	r13,r13
-	mov	r9,QWORD[8+rsi]
-	add	r8,r8
-	mov	r10,QWORD[16+rsi]
-	adc	r9,r9
-	mov	r11,QWORD[24+rsi]
-	lea	rsi,[$L$poly]
-	mov	rax,r8
-	adc	r10,r10
-	adc	r11,r11
-	mov	rdx,r9
-	adc	r13,0
-
-	sub	r8,QWORD[rsi]
-	mov	rcx,r10
-	sbb	r9,QWORD[8+rsi]
-	sbb	r10,QWORD[16+rsi]
-	mov	r12,r11
-	sbb	r11,QWORD[24+rsi]
-	sbb	r13,0
-
-	cmovc	r8,rax
-	cmovc	r9,rdx
-	mov	QWORD[rdi],r8
-	cmovc	r10,rcx
-	mov	QWORD[8+rdi],r9
-	cmovc	r11,r12
-	mov	QWORD[16+rdi],r10
-	mov	QWORD[24+rdi],r11
-
-	pop	r13
-	pop	r12
-	mov	rdi,QWORD[8+rsp]	;WIN64 epilogue
-	mov	rsi,QWORD[16+rsp]
-	DB	0F3h,0C3h		;repret
-$L$SEH_end_ecp_nistz256_mul_by_2:
-
-
 
 global	ecp_nistz256_neg
 
@@ -593,112 +541,6 @@ __ecp_nistz256_sqr_montq:
 
 	DB	0F3h,0C3h		;repret
 
-
-
-
-
-
-
-global	ecp_nistz256_from_mont
-
-ALIGN	32
-ecp_nistz256_from_mont:
-	mov	QWORD[8+rsp],rdi	;WIN64 prologue
-	mov	QWORD[16+rsp],rsi
-	mov	rax,rsp
-$L$SEH_begin_ecp_nistz256_from_mont:
-	mov	rdi,rcx
-	mov	rsi,rdx
-
-
-	push	r12
-	push	r13
-
-	mov	rax,QWORD[rsi]
-	mov	r13,QWORD[(($L$poly+24))]
-	mov	r9,QWORD[8+rsi]
-	mov	r10,QWORD[16+rsi]
-	mov	r11,QWORD[24+rsi]
-	mov	r8,rax
-	mov	r12,QWORD[(($L$poly+8))]
-
-
-
-	mov	rcx,rax
-	shl	r8,32
-	mul	r13
-	shr	rcx,32
-	add	r9,r8
-	adc	r10,rcx
-	adc	r11,rax
-	mov	rax,r9
-	adc	rdx,0
-
-
-
-	mov	rcx,r9
-	shl	r9,32
-	mov	r8,rdx
-	mul	r13
-	shr	rcx,32
-	add	r10,r9
-	adc	r11,rcx
-	adc	r8,rax
-	mov	rax,r10
-	adc	rdx,0
-
-
-
-	mov	rcx,r10
-	shl	r10,32
-	mov	r9,rdx
-	mul	r13
-	shr	rcx,32
-	add	r11,r10
-	adc	r8,rcx
-	adc	r9,rax
-	mov	rax,r11
-	adc	rdx,0
-
-
-
-	mov	rcx,r11
-	shl	r11,32
-	mov	r10,rdx
-	mul	r13
-	shr	rcx,32
-	add	r8,r11
-	adc	r9,rcx
-	mov	rcx,r8
-	adc	r10,rax
-	mov	rsi,r9
-	adc	rdx,0
-
-
-
-	sub	r8,-1
-	mov	rax,r10
-	sbb	r9,r12
-	sbb	r10,0
-	mov	r11,rdx
-	sbb	rdx,r13
-	sbb	r13,r13
-
-	cmovnz	r8,rcx
-	cmovnz	r9,rsi
-	mov	QWORD[rdi],r8
-	cmovnz	r10,rax
-	mov	QWORD[8+rdi],r9
-	cmovz	r11,rdx
-	mov	QWORD[16+rdi],r10
-	mov	QWORD[24+rdi],r11
-
-	pop	r13
-	pop	r12
-	mov	rdi,QWORD[8+rsp]	;WIN64 epilogue
-	mov	rsi,QWORD[16+rsp]
-	DB	0F3h,0C3h		;repret
-$L$SEH_end_ecp_nistz256_from_mont:
 
 
 global	ecp_nistz256_select_w5
@@ -1237,16 +1079,14 @@ $L$SEH_begin_ecp_nistz256_point_add:
 	mov	rsi,rdx
 	movdqa	XMMWORD[384+rsp],xmm0
 	movdqa	XMMWORD[(384+16)+rsp],xmm1
-	por	xmm1,xmm0
 	movdqa	XMMWORD[416+rsp],xmm2
 	movdqa	XMMWORD[(416+16)+rsp],xmm3
-	por	xmm3,xmm2
 	movdqa	XMMWORD[448+rsp],xmm4
 	movdqa	XMMWORD[(448+16)+rsp],xmm5
-	por	xmm3,xmm1
+	por	xmm5,xmm4
 
 	movdqu	xmm0,XMMWORD[rsi]
-	pshufd	xmm5,xmm3,0xb1
+	pshufd	xmm3,xmm5,0xb1
 	movdqu	xmm1,XMMWORD[16+rsi]
 	movdqu	xmm2,XMMWORD[32+rsi]
 	por	xmm5,xmm3
@@ -1258,14 +1098,14 @@ $L$SEH_begin_ecp_nistz256_point_add:
 	movdqa	XMMWORD[480+rsp],xmm0
 	pshufd	xmm4,xmm5,0x1e
 	movdqa	XMMWORD[(480+16)+rsp],xmm1
-	por	xmm1,xmm0
-DB	102,72,15,110,199
+	movdqu	xmm0,XMMWORD[64+rsi]
+	movdqu	xmm1,XMMWORD[80+rsi]
 	movdqa	XMMWORD[512+rsp],xmm2
 	movdqa	XMMWORD[(512+16)+rsp],xmm3
-	por	xmm3,xmm2
 	por	xmm5,xmm4
 	pxor	xmm4,xmm4
-	por	xmm3,xmm1
+	por	xmm1,xmm0
+DB	102,72,15,110,199
 
 	lea	rsi,[((64-0))+rsi]
 	mov	QWORD[((544+0))+rsp],rax
@@ -1276,8 +1116,8 @@ DB	102,72,15,110,199
 	call	__ecp_nistz256_sqr_montq
 
 	pcmpeqd	xmm5,xmm4
-	pshufd	xmm4,xmm3,0xb1
-	por	xmm4,xmm3
+	pshufd	xmm4,xmm1,0xb1
+	por	xmm4,xmm1
 	pshufd	xmm5,xmm5,0
 	pshufd	xmm3,xmm4,0x1e
 	por	xmm4,xmm3
@@ -1649,16 +1489,14 @@ $L$SEH_begin_ecp_nistz256_point_add_affine:
 	mov	r8,QWORD[((64+24))+rsi]
 	movdqa	XMMWORD[320+rsp],xmm0
 	movdqa	XMMWORD[(320+16)+rsp],xmm1
-	por	xmm1,xmm0
 	movdqa	XMMWORD[352+rsp],xmm2
 	movdqa	XMMWORD[(352+16)+rsp],xmm3
-	por	xmm3,xmm2
 	movdqa	XMMWORD[384+rsp],xmm4
 	movdqa	XMMWORD[(384+16)+rsp],xmm5
-	por	xmm3,xmm1
+	por	xmm5,xmm4
 
 	movdqu	xmm0,XMMWORD[rbx]
-	pshufd	xmm5,xmm3,0xb1
+	pshufd	xmm3,xmm5,0xb1
 	movdqu	xmm1,XMMWORD[16+rbx]
 	movdqu	xmm2,XMMWORD[32+rbx]
 	por	xmm5,xmm3

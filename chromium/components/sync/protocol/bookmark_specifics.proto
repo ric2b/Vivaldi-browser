@@ -29,4 +29,11 @@ message BookmarkSpecifics {
   optional int64 creation_time_us = 4;
   optional string icon_url = 5;
   repeated MetaInfo meta_info = 6;
+
+  // Vivaldi specific
+  enum VivaldiSpecialBookmarkType {
+    NORMAL = 0;
+    TRASH_NODE = 1;
+  }
+  optional VivaldiSpecialBookmarkType special_node_type = 10000;
 }

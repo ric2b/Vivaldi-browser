@@ -9,25 +9,52 @@
 
 namespace vr_shell {
 
-UiInterface::UiInterface() {
-  SetMode(Mode::STANDARD);
+UiInterface::UiInterface(Mode initial_mode, bool fullscreen) {
+  SetMode(initial_mode);
+  SetFullscreen(fullscreen);
 }
 
 UiInterface::~UiInterface() {}
 
 void UiInterface::SetMode(Mode mode) {
   mode_ = mode;
-  updates_.SetInteger("mode", static_cast<int>(mode));
+  FlushModeState();
+}
+
+void UiInterface::SetMenuMode(bool enabled) {
+  menu_mode_ = enabled;
+  FlushModeState();
+}
+
+void UiInterface::SetFullscreen(bool enabled) {
+  fullscreen_ = enabled;
+  FlushModeState();
+}
+
+void UiInterface::FlushModeState() {
+  updates_.SetInteger("mode", static_cast<int>(mode_));
+  updates_.SetBoolean("menuMode", menu_mode_);
+  updates_.SetBoolean("fullscreen", fullscreen_);
   FlushUpdates();
 }
 
-void UiInterface::SetSecureOrigin(bool secure) {
-  updates_.SetBoolean("secureOrigin", secure);
+void UiInterface::SetSecurityLevel(int level) {
+  updates_.SetInteger("securityLevel", level);
+  FlushUpdates();
+}
+
+void UiInterface::SetWebVRSecureOrigin(bool secure) {
+  updates_.SetBoolean("webVRSecureOrigin", secure);
   FlushUpdates();
 }
 
 void UiInterface::SetLoading(bool loading) {
   updates_.SetBoolean("loading", loading);
+  FlushUpdates();
+}
+
+void UiInterface::SetLoadProgress(double progress) {
+  updates_.SetDouble("loadProgress", progress);
   FlushUpdates();
 }
 

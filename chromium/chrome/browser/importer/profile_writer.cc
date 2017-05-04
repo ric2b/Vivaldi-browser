@@ -13,7 +13,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
@@ -43,7 +42,7 @@
 #endif
 
 #include "app/vivaldi_resources.h"
-#include "grit/generated_resources.h"
+#include "grit/components_strings.h"
 #include "importer/imported_notes_entry.h"
 #include "importer/imported_speeddial_entry.h"
 #include "notes/notesnode.h"
@@ -318,8 +317,10 @@ void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry> &notes,
     if (!top_level_folder) {
       base::string16 name;
       name = l10n_util::GetStringUTF16(IDS_NOTES_GROUP_FROM_OPERA);
-      top_level_folder =
-          model->AddFolder(model->root(), model->root()->child_count(), name);
+      top_level_folder = model->AddFolder(
+          model->main_node(),
+          model->main_node()->child_count(),
+          name);
     }
     parent = top_level_folder;
 
@@ -404,14 +405,14 @@ static void BuildHostPathMap(TemplateURLService* model,
         template_urls[i], model->search_terms_data(), false);
     if (!host_path.empty()) {
       const TemplateURL* existing_turl = (*host_path_map)[host_path];
-      if (!existing_turl ||
-          (template_urls[i]->show_in_default_list() &&
-           !existing_turl->show_in_default_list())) {
+      TemplateURL* t_url = template_urls[i];
+      if (!existing_turl || (model->ShowInDefaultList(t_url) &&
+                             !model->ShowInDefaultList(existing_turl))) {
         // If there are multiple TemplateURLs with the same host+path, favor
         // those shown in the default list.  If there are multiple potential
         // defaults, favor the first one, which should be the more commonly used
         // one.
-        (*host_path_map)[host_path] = template_urls[i];
+        (*host_path_map)[host_path] = t_url;
       }
     }  // else case, TemplateURL doesn't have a search url, doesn't support
        // replacement, or doesn't have valid GURL. Ignore it.

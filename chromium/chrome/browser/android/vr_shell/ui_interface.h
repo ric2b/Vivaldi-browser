@@ -23,17 +23,22 @@ class UiInterface {
  public:
   enum Mode {
     STANDARD,
-    WEB_VR,
-    MENU,
+    WEB_VR
   };
 
-  UiInterface();
+  explicit UiInterface(Mode initial_mode, bool fullscreen);
   virtual ~UiInterface();
 
   void SetMode(Mode mode);
   Mode GetMode() { return mode_; }
-  void SetSecureOrigin(bool secure);
+  void SetMenuMode(bool enabled);
+  bool GetMenuMode() { return menu_mode_; }
+  void SetFullscreen(bool enabled);
+  bool GetFullscreen() { return fullscreen_; }
+  void SetSecurityLevel(int level);
+  void SetWebVRSecureOrigin(bool secure);
   void SetLoading(bool loading);
+  void SetLoadProgress(double progress);
   void SetURL(const GURL& url);
 
   // Called by WebUI when starting VR.
@@ -42,8 +47,11 @@ class UiInterface {
 
  private:
   void FlushUpdates();
+  void FlushModeState();
 
   Mode mode_;
+  bool menu_mode_ = false;
+  bool fullscreen_ = false;
   UiCommandHandler* handler_;
   bool loaded_ = false;
   base::DictionaryValue updates_;

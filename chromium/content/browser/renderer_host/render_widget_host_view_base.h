@@ -67,7 +67,6 @@ class BrowserAccessibilityDelegate;
 class BrowserAccessibilityManager;
 class RenderWidgetHostImpl;
 class RenderWidgetHostViewBaseObserver;
-class SyntheticGesture;
 class SyntheticGestureTarget;
 class TextInputManager;
 class WebCursor;
@@ -100,6 +99,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   void WasOccluded() override {}
   bool IsShowingContextMenu() const override;
   void SetShowingContextMenu(bool showing_menu) override;
+  void SetIsInVR(bool is_in_vr) override;
   base::string16 GetSelectedText() override;
   bool IsMouseLocked() override;
   gfx::Size GetVisibleViewportSize() const override;
@@ -288,6 +288,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // a more generic term -- in which case, static casts to RWHVChildFrame will
   // need to also be resolved.
   virtual bool IsRenderWidgetHostViewChildFrame();
+
+  // Returns true if the current view is in virtual reality mode.
+  virtual bool IsInVR() const;
 
   //----------------------------------------------------------------------------
   // The following methods are related to IME.

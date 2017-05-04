@@ -22,6 +22,7 @@ import android.widget.ListView;
 
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ContentSettingsType;
 import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
@@ -73,7 +74,6 @@ public class SingleWebsitePreferences extends PreferenceFragment
     public static final String PREF_CAMERA_CAPTURE_PERMISSION = "camera_permission_list";
     public static final String PREF_COOKIES_PERMISSION = "cookies_permission_list";
     public static final String PREF_JAVASCRIPT_PERMISSION = "javascript_permission_list";
-    public static final String PREF_KEYGEN_PERMISSION = "keygen_permission_list";
     public static final String PREF_LOCATION_ACCESS = "location_access_list";
     public static final String PREF_MIC_CAPTURE_PERMISSION = "microphone_permission_list";
     public static final String PREF_MIDI_SYSEX_PERMISSION = "midi_sysex_permission_list";
@@ -90,7 +90,6 @@ public class SingleWebsitePreferences extends PreferenceFragment
             PREF_CAMERA_CAPTURE_PERMISSION,
             PREF_COOKIES_PERMISSION,
             PREF_JAVASCRIPT_PERMISSION,
-            PREF_KEYGEN_PERMISSION,
             PREF_LOCATION_ACCESS,
             PREF_MIC_CAPTURE_PERMISSION,
             PREF_MIDI_SYSEX_PERMISSION,
@@ -124,13 +123,6 @@ public class SingleWebsitePreferences extends PreferenceFragment
 
             // TODO(mvanouwerkerk): Avoid modifying the outer class from this inner class.
             mSite = mergePermissionInfoForTopLevelOrigin(mSiteAddress, sites);
-
-            // Display Keygen Content Setting if Keygen is blocked.
-            if (mSite.getKeygenInfo() == null && mWebContents != null
-                    && WebsitePreferenceBridge.getKeygenBlocked(mWebContents)) {
-                String origin = mSiteAddress.getOrigin();
-                mSite.setKeygenInfo(new KeygenInfo(origin, origin, false));
-            }
 
             displaySitePermissions();
         }
@@ -203,10 +195,6 @@ public class SingleWebsitePreferences extends PreferenceFragment
             if (merged.getGeolocationInfo() == null && other.getGeolocationInfo() != null
                     && permissionInfoIsForTopLevelOrigin(other.getGeolocationInfo(), origin)) {
                 merged.setGeolocationInfo(other.getGeolocationInfo());
-            }
-            if (merged.getKeygenInfo() == null && other.getKeygenInfo() != null
-                    && permissionInfoIsForTopLevelOrigin(other.getKeygenInfo(), origin)) {
-                merged.setKeygenInfo(other.getKeygenInfo());
             }
             if (merged.getMidiInfo() == null && other.getMidiInfo() != null
                     && permissionInfoIsForTopLevelOrigin(other.getMidiInfo(), origin)) {
@@ -304,8 +292,6 @@ public class SingleWebsitePreferences extends PreferenceFragment
                 setUpListPreference(preference, mSite.getCookiePermission());
             } else if (PREF_JAVASCRIPT_PERMISSION.equals(preference.getKey())) {
                 setUpListPreference(preference, mSite.getJavaScriptPermission());
-            } else if (PREF_KEYGEN_PERMISSION.equals(preference.getKey())) {
-                setUpListPreference(preference, mSite.getKeygenPermission());
             } else if (PREF_LOCATION_ACCESS.equals(preference.getKey())) {
                 setUpLocationPreference(preference);
             } else if (PREF_MIC_CAPTURE_PERMISSION.equals(preference.getKey())) {
@@ -480,7 +466,12 @@ public class SingleWebsitePreferences extends PreferenceFragment
         ContentSetting permission = mSite.getGeolocationPermission();
         Context context = preference.getContext();
         Object locationAllowed = getArguments().getSerializable(EXTRA_LOCATION);
-        if (permission == null && hasXGeoLocationPermission(context)) {
+        if (shouldUseDSEGeolocationSetting()) {
+            String origin = mSite.getAddress().getOrigin();
+            mSite.setGeolocationInfo(new GeolocationInfo(origin, origin, false));
+            setUpListPreference(preference, ContentSetting.ALLOW);
+            updateLocationPreferenceForDSESetting(preference);
+        } else if (permission == null && hasXGeoLocationPermission(context)) {
             String origin = mSite.getAddress().getOrigin();
             mSite.setGeolocationInfo(new GeolocationInfo(origin, origin, false));
             setUpListPreference(preference, ContentSetting.ALLOW);
@@ -501,9 +492,23 @@ public class SingleWebsitePreferences extends PreferenceFragment
      * @param context The current context.
      */
     private boolean hasXGeoLocationPermission(Context context) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CONSISTENT_OMNIBOX_GEOLOCATION)) {
+            return false;
+        }
+
         String searchUrl = TemplateUrlService.getInstance().getUrlForSearchQuery("foo");
         return mSite.getAddress().matches(searchUrl)
-                && GeolocationHeader.isGeoHeaderEnabledForUrl(context, searchUrl, false);
+                && GeolocationHeader.isGeoHeaderEnabledForUrl(searchUrl, false);
+    }
+
+    /**
+     * Returns true if the DSE (default search engine) geolocation setting should be used for the
+     * current host. This will be the case when the host is the CCTLD (Country Code Top Level
+     * Domain) of the DSE, and the DSE supports the X-Geo header.
+     */
+    private boolean shouldUseDSEGeolocationSetting() {
+        return WebsitePreferenceBridge.shouldUseDSEGeolocationSetting(
+                mSite.getAddress().getOrigin(), false);
     }
 
     /**
@@ -515,7 +520,7 @@ public class SingleWebsitePreferences extends PreferenceFragment
         ListPreference listPreference = (ListPreference) preference;
         Resources res = getResources();
         listPreference.setEntries(new String[] {
-                res.getString(R.string.website_settings_permissions_allow_dse),
+                res.getString(R.string.website_settings_permissions_allow_dse_address_bar),
                 res.getString(ContentSettingsResources.getSiteSummary(ContentSetting.BLOCK)),
         });
         listPreference.setEntryValues(new String[] {
@@ -523,6 +528,22 @@ public class SingleWebsitePreferences extends PreferenceFragment
                 ContentSetting.BLOCK.toString(),
         });
         listPreference.setValueIndex(0);
+    }
+
+    /**
+     * Updates the location preference to indicate that the site has access to location (via X-Geo)
+     * for searches that happen from the omnibox.
+     * @param preference The Location preference to modify.
+     */
+    private void updateLocationPreferenceForDSESetting(Preference preference) {
+        ListPreference listPreference = (ListPreference) preference;
+        Resources res = getResources();
+        listPreference.setEntries(new String[] {
+                res.getString(R.string.website_settings_permissions_allow_dse),
+                res.getString(R.string.website_settings_permissions_block_dse),
+        });
+        listPreference.setValueIndex(
+                WebsitePreferenceBridge.getDSEGeolocationSetting() ? 0 : 1);
     }
 
     private int getContentSettingsTypeFromPreferenceKey(String preferenceKey) {
@@ -537,8 +558,6 @@ public class SingleWebsitePreferences extends PreferenceFragment
                 return ContentSettingsType.CONTENT_SETTINGS_TYPE_COOKIES;
             case PREF_JAVASCRIPT_PERMISSION:
                 return ContentSettingsType.CONTENT_SETTINGS_TYPE_JAVASCRIPT;
-            case PREF_KEYGEN_PERMISSION:
-                return ContentSettingsType.CONTENT_SETTINGS_TYPE_KEYGEN;
             case PREF_LOCATION_ACCESS:
                 return ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION;
             case PREF_MIC_CAPTURE_PERMISSION:
@@ -599,8 +618,6 @@ public class SingleWebsitePreferences extends PreferenceFragment
             mSite.setCookiePermission(permission);
         } else if (PREF_JAVASCRIPT_PERMISSION.equals(preference.getKey())) {
             mSite.setJavaScriptPermission(permission);
-        } else if (PREF_KEYGEN_PERMISSION.equals(preference.getKey())) {
-            mSite.setKeygenPermission(permission);
         } else if (PREF_LOCATION_ACCESS.equals(preference.getKey())) {
             mSite.setGeolocationPermission(permission);
         } else if (PREF_MIC_CAPTURE_PERMISSION.equals(preference.getKey())) {
@@ -679,7 +696,6 @@ public class SingleWebsitePreferences extends PreferenceFragment
         mSite.setCookiePermission(ContentSetting.DEFAULT);
         mSite.setGeolocationPermission(ContentSetting.DEFAULT);
         mSite.setJavaScriptPermission(ContentSetting.DEFAULT);
-        mSite.setKeygenPermission(ContentSetting.DEFAULT);
         mSite.setMicrophonePermission(ContentSetting.DEFAULT);
         mSite.setMidiPermission(ContentSetting.DEFAULT);
         mSite.setNotificationPermission(ContentSetting.DEFAULT);

@@ -276,7 +276,8 @@ NavigationEntryImpl::NavigationEntryImpl(
       can_load_local_resources_(false),
       frame_tree_node_id_(-1),
       reload_type_(ReloadType::NONE),
-      started_from_context_menu_(false) {
+      started_from_context_menu_(false),
+      ssl_error_(false) {
 #if defined(OS_ANDROID)
   has_user_gesture_ = false;
 #endif
@@ -673,7 +674,7 @@ CommonNavigationParams NavigationEntryImpl::ConstructCommonNavigationParams(
     const GURL& dest_url,
     const Referrer& dest_referrer,
     FrameMsg_Navigate_Type::Value navigation_type,
-    LoFiState lofi_state,
+    PreviewsState previews_state,
     const base::TimeTicks& navigation_start) const {
   FrameMsg_UILoadMetricsReportType::Value report_type =
       FrameMsg_UILoadMetricsReportType::NO_REPORT;
@@ -696,7 +697,7 @@ CommonNavigationParams NavigationEntryImpl::ConstructCommonNavigationParams(
   return CommonNavigationParams(
       dest_url, dest_referrer, GetTransitionType(), navigation_type,
       !IsViewSourceMode(), should_replace_entry(), ui_timestamp, report_type,
-      GetBaseURLForDataURL(), GetHistoryURLForDataURL(), lofi_state,
+      GetBaseURLForDataURL(), GetHistoryURLForDataURL(), previews_state,
       navigation_start, method, post_body ? post_body : post_data_);
 }
 
@@ -878,10 +879,10 @@ std::map<std::string, bool> NavigationEntryImpl::GetSubframeUniqueNames(
       // that was the default URL.  PageState doesn't matter there, because
       // content injected into about:blank frames doesn't use it.
       //
-      // Be careful not to include iframe srcdoc URLs in this check, which do
-      // need their PageState.  The committed URL in that case gets rewritten to
-      // about:blank, but we can detect it via the PageState's URL.
-      //
+      // Be careful not to rely on FrameNavigationEntry's URLs in this check,
+      // because the committed URL in the browser could be rewritten to
+      // about:blank.
+      // See RenderProcessHostImpl::FilterURL to know which URLs are rewritten.
       // See https://crbug.com/657896 for details.
       bool is_about_blank = false;
       ExplodedPageState exploded_page_state;

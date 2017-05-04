@@ -13,21 +13,24 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/synchronization/lock.h"
+#include "base/timer/timer.h"
 #include "media/base/buffering_state.h"
 #include "media/base/pipeline_status.h"
 #include "media/base/renderer.h"
 #include "media/base/renderer_client.h"
 #include "media/mojo/interfaces/remoting.mojom.h"
+#include "media/remoting/metrics.h"
 #include "media/remoting/remoting_interstitial_ui.h"
 #include "media/remoting/rpc/rpc_broker.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 
 namespace media {
 
-class BalancedMediaTaskRunnerFactory;
 class RemotingRendererController;
 class Renderer;
+class VideoRendererSink;
 
 namespace remoting {
 class RemoteDemuxerStreamAdapter;
@@ -54,6 +57,7 @@ class RemoteRendererImpl : public Renderer {
   static void OnDataPipeCreatedOnMainThread(
       scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
       base::WeakPtr<RemoteRendererImpl> self,
+      base::WeakPtr<remoting::RpcBroker> rpc_broker,
       mojom::RemotingDataStreamSenderPtrInfo audio,
       mojom::RemotingDataStreamSenderPtrInfo video,
       mojo::ScopedDataPipeProducerHandle audio_handle,
@@ -67,6 +71,16 @@ class RemoteRendererImpl : public Renderer {
       base::WeakPtr<RemoteRendererImpl> self,
       std::unique_ptr<remoting::pb::RpcMessage> message);
 
+  // Called to render the interstitial on the main thread. Then, trampoline to
+  // the media thread to have the RemoteRendererImpl pass the resulting
+  // VideoFrame to the VideoRendererSink.
+  static void RenderInterstitialAndShow(
+      scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
+      base::WeakPtr<RemoteRendererImpl> self,
+      const SkBitmap& background,
+      const gfx::Size& natural_size,
+      RemotingInterstitialType type);
+
  public:
   // media::Renderer implementation.
   void Initialize(DemuxerStreamProvider* demuxer_stream_provider,
@@ -79,8 +93,6 @@ class RemoteRendererImpl : public Renderer {
   void SetPlaybackRate(double playback_rate) final;
   void SetVolume(float volume) final;
   base::TimeDelta GetMediaTime() final;
-  bool HasAudio() final;
-  bool HasVideo() final;
 
  private:
   friend class RemoteRendererImplTest;
@@ -99,7 +111,9 @@ class RemoteRendererImpl : public Renderer {
   void OnDataPipeCreated(mojom::RemotingDataStreamSenderPtrInfo audio,
                          mojom::RemotingDataStreamSenderPtrInfo video,
                          mojo::ScopedDataPipeProducerHandle audio_handle,
-                         mojo::ScopedDataPipeProducerHandle video_handle);
+                         mojo::ScopedDataPipeProducerHandle video_handle,
+                         int audio_rpc_handle,
+                         int video_rpc_handle);
 
   // Callback function when RPC message is received. Runs on media thread only.
   void OnReceivedRpc(std::unique_ptr<remoting::pb::RpcMessage> message);
@@ -121,11 +135,29 @@ class RemoteRendererImpl : public Renderer {
   void OnStatisticsUpdate(std::unique_ptr<remoting::pb::RpcMessage> message);
   void OnDurationChange(std::unique_ptr<remoting::pb::RpcMessage> message);
 
-  // Shut down remoting session.
-  void OnFatalError(PipelineStatus status);
+  // Called to pass the newly-rendered interstitial VideoFrame to the
+  // VideoRendererSink.
+  void PaintInterstitial(scoped_refptr<VideoFrame> frame,
+                         RemotingInterstitialType type);
 
-  // Show interstial accordingly.
-  void UpdateInterstitial();
+  // Called when |current_media_time_| is updated.
+  void OnMediaTimeUpdated();
+
+  // Called to update the |video_stats_queue_|.
+  void UpdateVideoStatsQueue(int video_frames_decoded,
+                             int video_frames_dropped);
+
+  // Called to clear all recent measurements history and schedule resuming after
+  // a stabilization period elapses.
+  void ResetMeasurements();
+
+  // Called when a fatal runtime error occurs. |stop_trigger| is the error code
+  // handed to the RemotingRendererController.
+  void OnFatalError(remoting::StopTrigger stop_trigger);
+
+  // Called periodically to measure the data flows from the
+  // DemuxerStreamAdapters and record this information in the metrics.
+  void MeasureAndRecordDataRates();
 
   State state_;
   const scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
@@ -160,7 +192,44 @@ class RemoteRendererImpl : public Renderer {
   CdmAttachedCB cdm_attached_cb_;
   base::Closure flush_cb_;
 
-  RemotingInterstitialUI interstitial_ui_;
+  VideoRendererSink* const video_renderer_sink_;  // Outlives this class.
+
+  // Current playback rate.
+  double playback_rate_ = 0;
+
+  // Ignores updates until this time.
+  base::TimeTicks ignore_updates_until_time_;
+
+  // Indicates whether stats has been updated.
+  bool stats_updated_ = false;
+
+  // Stores all |current_media_time_| and the local time when updated in the
+  // moving time window. This is used to check whether the playback duration
+  // matches the update duration in the window.
+  std::deque<std::pair<base::TimeTicks, base::TimeDelta>> media_time_queue_;
+
+  // Stores all updates on the number of video frames decoded/dropped, and the
+  // local time when updated in the moving time window. This is used to check
+  // whether too many video frames were dropped.
+  std::deque<std::tuple<base::TimeTicks, int, int>> video_stats_queue_;
+
+  // The total number of frames decoded/dropped in the time window.
+  int sum_video_frames_decoded_ = 0;
+  int sum_video_frames_dropped_ = 0;
+
+  // Records the number of consecutive times that remoting playback was delayed.
+  int times_playback_delayed_ = 0;
+
+  // Records events and measurements of interest.
+  remoting::RendererMetricsRecorder metrics_recorder_;
+
+  // A timer that polls the RemoteDemuxerStreamAdapters periodically to measure
+  // the data flow rates for metrics.
+  base::RepeatingTimer data_flow_poll_timer_;
+
+  // Current type of the interstitial frame.
+  RemotingInterstitialType interstitial_type_ =
+      RemotingInterstitialType::BETWEEN_SESSIONS;
 
   base::WeakPtrFactory<RemoteRendererImpl> weak_factory_;
 

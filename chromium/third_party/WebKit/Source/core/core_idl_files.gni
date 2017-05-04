@@ -100,6 +100,7 @@ core_idl_files = get_path_info([
                                  "dom/DOMMatrixReadOnly.idl",
                                  "dom/DOMPoint.idl",
                                  "dom/DOMPointReadOnly.idl",
+                                 "dom/DOMQuad.idl",
                                  "dom/DOMRect.idl",
                                  "dom/DOMRectReadOnly.idl",
                                  "dom/DOMStringList.idl",
@@ -191,6 +192,7 @@ core_idl_files = get_path_info([
                                  "frame/ImageBitmap.idl",
                                  "frame/Location.idl",
                                  "frame/VisualViewport.idl",
+                                 "html/Float32ImageData.idl",
                                  "html/FormData.idl",
                                  "html/HTMLAllCollection.idl",
                                  "html/HTMLAnchorElement.idl",
@@ -222,7 +224,6 @@ core_idl_files = get_path_info([
                                  "html/HTMLHeadingElement.idl",
                                  "html/HTMLHtmlElement.idl",
                                  "html/HTMLImageElement.idl",
-                                 "html/HTMLKeygenElement.idl",
                                  "html/HTMLLIElement.idl",
                                  "html/HTMLLabelElement.idl",
                                  "html/HTMLLegendElement.idl",
@@ -313,7 +314,6 @@ core_idl_files = get_path_info([
                                  "svg/SVGCircleElement.idl",
                                  "svg/SVGClipPathElement.idl",
                                  "svg/SVGComponentTransferFunctionElement.idl",
-                                 "svg/SVGCursorElement.idl",
                                  "svg/SVGDefsElement.idl",
                                  "svg/SVGDescElement.idl",
                                  "svg/SVGDiscardElement.idl",
@@ -398,10 +398,13 @@ core_idl_files = get_path_info([
                                  "timing/PerformanceMark.idl",
                                  "timing/PerformanceMeasure.idl",
                                  "timing/PerformanceNavigation.idl",
+                                 "timing/PerformanceNavigationTiming.idl",
                                  "timing/PerformanceObserver.idl",
                                  "timing/PerformanceObserverEntryList.idl",
+                                 "timing/PerformancePaintTiming.idl",
                                  "timing/PerformanceResourceTiming.idl",
                                  "timing/PerformanceTiming.idl",
+                                 "timing/TaskAttributionTiming.idl",
                                  "timing/WorkerPerformance.idl",
                                  "workers/SharedWorker.idl",
                                  "workers/Worker.idl",
@@ -486,7 +489,6 @@ core_dependency_idl_files =
                     "timing/WindowPerformance.idl",
                     "timing/WorkerGlobalScopePerformance.idl",
                     "workers/AbstractWorker.idl",
-                    "xml/DocumentXMLTreeViewer.idl",
                     "xml/DocumentXPathEvaluator.idl",
                   ],
                   "abspath")
@@ -510,8 +512,10 @@ core_dictionary_idl_files =
                     "css/MediaQueryListEventInit.idl",
                     "css/PropertyDescriptor.idl",
                     "css/cssom/CSSCalcDictionary.idl",
-                    "dom/DOMPointInit.idl",
                     "dom/DOMMatrixInit.idl",
+                    "dom/DOMPointInit.idl",
+                    "dom/DOMQuadInit.idl",
+                    "dom/DOMRectInit.idl",
                     "dom/ElementCreationOptions.idl",
                     "dom/ElementDefinitionOptions.idl",
                     "dom/ElementRegistrationOptions.idl",
@@ -583,23 +587,21 @@ webcore_testing_idl_files =
                     "testing/LayerRect.idl",
                     "testing/LayerRectList.idl",
                     "testing/OriginTrialsTest.idl",
-                    "testing/PrivateScriptTest.idl",
                     "testing/TypeConversions.idl",
                     "testing/UnionTypesTest.idl",
-                    "testing/WorkerInternals.idl",
                   ],
                   "abspath")
 
 # Testing IDL files that have partial interfaces in modules.
 webcore_testing_idl_with_modules_dependency_files =
-    get_path_info([ "testing/Internals.idl" ], "abspath")
-
-webcore_testing_dependency_idl_files =
     get_path_info([
-                    "testing/OriginTrialsTestPartial.idl",
-                    "testing/PartialPrivateScriptTest.idl",
+                    "testing/Internals.idl",
+                    "testing/WorkerInternals.idl",
                   ],
                   "abspath")
+
+webcore_testing_dependency_idl_files =
+    get_path_info([ "testing/OriginTrialsTestPartial.idl" ], "abspath")
 
 generated_webcore_testing_idl_files =
     get_path_info(

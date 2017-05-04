@@ -16,6 +16,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/background/background_trigger.h"
+#include "chrome/browser/push_messaging/push_messaging_notification_manager.h"
 #include "chrome/common/features.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -30,10 +31,6 @@
 #include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
 #include "third_party/WebKit/public/platform/modules/push_messaging/WebPushPermissionStatus.h"
 
-#if defined(ENABLE_NOTIFICATIONS)
-#include "chrome/browser/push_messaging/push_messaging_notification_manager.h"
-#endif
-
 class Profile;
 class PushMessagingAppIdentifier;
 class PushMessagingServiceObserver;
@@ -46,10 +43,6 @@ class GCMDriver;
 }
 namespace instance_id {
 class InstanceIDDriver;
-}
-
-namespace user_prefs {
-class PrefRegistrySyncable;
 }
 
 class PushMessagingServiceImpl : public content::PushMessagingService,
@@ -101,6 +94,9 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
       const GURL& origin,
       bool user_visible) override;
   bool SupportNonVisibleMessages() override;
+  void DidDeleteServiceWorkerRegistration(
+      const GURL& origin,
+      int64_t service_worker_registration_id) override;
 
   // content_settings::Observer implementation.
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
@@ -118,6 +114,8 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
 
   void SetMessageCallbackForTesting(const base::Closure& callback);
   void SetContentSettingChangedCallbackForTesting(
+      const base::Closure& callback);
+  void SetServiceWorkerUnregisteredCallbackForTesting(
       const base::Closure& callback);
 
  private:
@@ -255,10 +253,9 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
 
   base::Closure message_callback_for_testing_;
   base::Closure content_setting_changed_callback_for_testing_;
+  base::Closure service_worker_unregistered_callback_for_testing_;
 
-#if defined(ENABLE_NOTIFICATIONS)
   PushMessagingNotificationManager notification_manager_;
-#endif
 
   // A multiset containing one entry for each in-flight push message delivery,
   // keyed by the receiver's app id.

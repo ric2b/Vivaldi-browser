@@ -558,6 +558,13 @@ void BridgedNativeWidget::SetVisibilityState(WindowVisibilityState new_state) {
   wants_to_be_visible_ = new_state != HIDE_WINDOW;
 
   if (new_state == HIDE_WINDOW) {
+    // Calling -orderOut: on a window with an attached sheet encounters broken
+    // AppKit behavior. The sheet effectively becomes "lost".
+    // See http://crbug.com/667602. Alternatives: call -setAlphaValue:0 and
+    // -setIgnoresMouseEvents:YES on the NSWindow, or dismiss the sheet before
+    // hiding.
+    DCHECK(![window_ attachedSheet]);
+
     [window_ orderOut:nil];
     DCHECK(!window_visible_);
     return;
@@ -827,7 +834,9 @@ void BridgedNativeWidget::OnVisibilityChanged() {
   if (window_visible_) {
     wants_to_be_visible_ = true;
 
-    if (parent_)
+    // Sheets don't need a parentWindow set, and setting one causes graphical
+    // glitches (http://crbug.com/605098).
+    if (parent_ && ![window_ isSheet])
       [parent_->GetNSWindow() addChildWindow:window_ ordered:NSWindowAbove];
   } else {
     ReleaseCapture();  // Capture on hidden windows is not permitted.
@@ -869,7 +878,7 @@ void BridgedNativeWidget::OnVisibilityChanged() {
 }
 
 void BridgedNativeWidget::OnSystemControlTintChanged() {
-  ui::NativeThemeMac::instance()->NotifyObservers();
+  ui::NativeTheme::GetInstanceForNativeUi()->NotifyObservers();
 }
 
 void BridgedNativeWidget::OnBackingPropertiesChanged() {
@@ -1037,6 +1046,11 @@ void BridgedNativeWidget::ClearAssociationForView(const views::View* view) {
 }
 
 void BridgedNativeWidget::ReorderChildViews() {
+  // Ignore layer manipulation during a Close(). This can be reached during the
+  // orderOut: in Close(), which notifies visibility changes to Views.
+  if (!bridged_view_)
+    return;
+
   RankMap rank;
   Widget* widget = native_widget_mac_->GetWidget();
   RankNSViews(widget->GetRootView(), associated_views_, &rank);
@@ -1250,12 +1264,15 @@ void BridgedNativeWidget::CreateCompositor() {
   ui::ContextFactory* context_factory =
       ViewsDelegate::GetInstance()->GetContextFactory();
   DCHECK(context_factory);
+  ui::ContextFactoryPrivate* context_factory_private =
+      ViewsDelegate::GetInstance()->GetContextFactoryPrivate();
 
   AddCompositorSuperview();
 
   compositor_widget_.reset(new ui::AcceleratedWidgetMac());
-  compositor_.reset(
-      new ui::Compositor(context_factory, GetCompositorTaskRunner()));
+  compositor_.reset(new ui::Compositor(
+      context_factory_private->AllocateFrameSinkId(), context_factory,
+      context_factory_private, GetCompositorTaskRunner()));
   compositor_->SetAcceleratedWidget(compositor_widget_->accelerated_widget());
   compositor_widget_->SetNSView(this);
 }

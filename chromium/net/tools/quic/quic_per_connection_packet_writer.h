@@ -20,19 +20,18 @@ class QuicPerConnectionPacketWriter : public QuicPacketWriter {
   explicit QuicPerConnectionPacketWriter(QuicPacketWriter* shared_writer);
   ~QuicPerConnectionPacketWriter() override;
 
-  QuicPacketWriter* shared_writer() const { return shared_writer_; }
-
   // Default implementation of the QuicPacketWriter interface: Passes everything
   // to |shared_writer_|.
   WriteResult WritePacket(const char* buffer,
                           size_t buf_len,
-                          const IPAddress& self_address,
-                          const IPEndPoint& peer_address,
+                          const QuicIpAddress& self_address,
+                          const QuicSocketAddress& peer_address,
                           PerPacketOptions* options) override;
   bool IsWriteBlockedDataBuffered() const override;
   bool IsWriteBlocked() const override;
   void SetWritable() override;
-  QuicByteCount GetMaxPacketSize(const IPEndPoint& peer_address) const override;
+  QuicByteCount GetMaxPacketSize(
+      const QuicSocketAddress& peer_address) const override;
 
  private:
   QuicPacketWriter* shared_writer_;  // Not owned.

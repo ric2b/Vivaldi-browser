@@ -11,8 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
-#include "base/time/time.h"
-#include "cc/base/cc_export.h"
+#include "cc/animation/animation_export.h"
 #include "cc/trees/element_id.h"
 #include "cc/trees/property_animation_state.h"
 #include "cc/trees/target_property.h"
@@ -25,18 +24,20 @@ class BoxF;
 
 namespace cc {
 
-class AnimationEvents;
 class AnimationHost;
 class AnimationPlayer;
 class FilterOperations;
 enum class ElementListType;
 struct AnimationEvent;
 
+enum class UpdateTickingType { NORMAL, FORCE };
+
 // An ElementAnimations owns a list of all AnimationPlayers, attached to
 // the element.
 // This is a CC counterpart for blink::ElementAnimations (in 1:1 relationship).
 // No pointer to/from respective blink::ElementAnimations object for now.
-class CC_EXPORT ElementAnimations : public base::RefCounted<ElementAnimations> {
+class CC_ANIMATION_EXPORT ElementAnimations
+    : public base::RefCounted<ElementAnimations> {
  public:
   static scoped_refptr<ElementAnimations> Create();
 
@@ -65,20 +66,11 @@ class CC_EXPORT ElementAnimations : public base::RefCounted<ElementAnimations> {
   // thread are kept in sync. This function does not take ownership of the impl
   // thread ElementAnimations.
   void PushPropertiesTo(
-      scoped_refptr<ElementAnimations> element_animations_impl);
-
-  void Animate(base::TimeTicks monotonic_time);
-
-  void UpdateState(bool start_ready_animations, AnimationEvents* events);
-
-  // Make animations affect active elements if and only if they affect
-  // pending elements. Any animations that no longer affect any elements
-  // are deleted.
-  void ActivateAnimations();
+      scoped_refptr<ElementAnimations> element_animations_impl) const;
 
   // Returns true if there are any animations that have neither finished nor
   // aborted.
-  bool HasActiveAnimation() const;
+  bool HasTickingAnimation() const;
 
   // Returns true if there are any animations at all to process.
   bool HasAnyAnimation() const;
@@ -145,25 +137,13 @@ class CC_EXPORT ElementAnimations : public base::RefCounted<ElementAnimations> {
   // be computed.
   bool MaximumTargetScale(ElementListType list_type, float* max_scale) const;
 
-  // When a scroll animation is removed on the main thread, its compositor
-  // thread counterpart continues producing scroll deltas until activation.
-  // These scroll deltas need to be cleared at activation, so that the active
-  // element's scroll offset matches the offset provided by the main thread
-  // rather than a combination of this offset and scroll deltas produced by
-  // the removed animation. This is to provide the illusion of synchronicity to
-  // JS that simultaneously removes an animation and sets the scroll offset.
-  bool scroll_offset_animation_was_interrupted() const {
-    return scroll_offset_animation_was_interrupted_;
-  }
-  void SetScrollOffsetAnimationWasInterrupted();
+  bool ScrollOffsetAnimationWasInterrupted() const;
 
   void SetNeedsPushProperties();
   bool needs_push_properties() const { return needs_push_properties_; }
 
   void UpdateClientAnimationState();
   void SetNeedsUpdateImplClientState();
-
-  void UpdateActivationNormal();
 
   void NotifyClientOpacityAnimated(float opacity,
                                    bool notify_active_elements,
@@ -185,9 +165,6 @@ class CC_EXPORT ElementAnimations : public base::RefCounted<ElementAnimations> {
   ElementAnimations();
   ~ElementAnimations();
 
-  enum class ActivationType { NORMAL, FORCE };
-  void UpdateActivation(ActivationType type);
-
   void OnFilterAnimated(ElementListType list_type,
                         const FilterOperations& filters);
   void OnOpacityAnimated(ElementListType list_type, float opacity);
@@ -198,26 +175,22 @@ class CC_EXPORT ElementAnimations : public base::RefCounted<ElementAnimations> {
 
   static TargetProperties GetPropertiesMaskForAnimationState();
 
+  void UpdatePlayersTickingState(UpdateTickingType update_ticking_type) const;
+  void RemovePlayersFromTicking() const;
+
   PlayersList players_list_;
   AnimationHost* animation_host_;
   ElementId element_id_;
 
-  // This is used to ensure that we don't spam the animation host.
-  bool is_active_;
-
-  base::TimeTicks last_tick_time_;
-
   bool has_element_in_active_list_;
   bool has_element_in_pending_list_;
 
-  bool scroll_offset_animation_was_interrupted_;
-
-  bool needs_push_properties_;
+  mutable bool needs_push_properties_;
 
   PropertyAnimationState active_state_;
   PropertyAnimationState pending_state_;
 
-  bool needs_update_impl_client_state_;
+  mutable bool needs_update_impl_client_state_;
 
   DISALLOW_COPY_AND_ASSIGN(ElementAnimations);
 };

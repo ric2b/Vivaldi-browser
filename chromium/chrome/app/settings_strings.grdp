@@ -2,6 +2,9 @@
 <!-- Settings-specific strings (included from generated_resources.grd). -->
 <grit-part>
   <!-- About Page -->
+  <message name="IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION" desc="The text label describing the version of the browser, example: Version 57.0.2937.0 (Developer Build) unknown (64-bit)">
+    Version <ph name="PRODUCT_VERSION">$1<ex>15.0.865.0</ex></ph> (<ph name="PRODUCT_CHANNEL">$2<ex>Developer Build</ex></ph>) <ph name="PRODUCT_MODIFIER">$3</ph> <ph name="PRODUCT_VERSION_BITS">$4</ph>
+  </message>
   <if expr="chromeos">
     <message name="IDS_SETTINGS_ABOUT_PAGE_DETAILED_BUILD_INFO" desc="Label describing the section that shows detailed information about the current Chrome build.">
       Detailed build information
@@ -83,6 +86,15 @@
     <message name="IDS_SETTINGS_ABOUT_PAGE_UNSTABLE_WARNING_TITLE" desc="The title of the warning about switching to developer (unstable) channel.">
       Warning: you are switching to developer channel
     </message>
+    <message name="IDS_SETTINGS_ABOUT_PAGE_DIALOG_CHANNEL_STABLE" desc="The stable option in the channel select.">
+      Stable
+    </message>
+    <message name="IDS_SETTINGS_ABOUT_PAGE_DIALOG_CHANNEL_BETA" desc="The beta option in the channel select.">
+      Beta
+    </message>
+    <message name="IDS_SETTINGS_ABOUT_PAGE_DIALOG_CHANNEL_DEV" desc="The development option in the channel select.">
+      Developer - unstable
+    </message>
   </if>
   <if expr="not chromeos">
     <message name="IDS_SETTINGS_ABOUT_PAGE_RELAUNCH" desc="The label for the relaunch button that relaunches the browser once update is complete">
@@ -97,6 +109,14 @@
   <message name="IDS_SETTINGS_ABOUT_UPGRADE_CHECK_STARTED" desc="Status label: About to start checking for updates">
     Checking for updates
   </message>
+  <if expr="is_macosx">
+    <message name="IDS_ABOUT_CHROME_AUTOUPDATE_ALL" desc="The 'Automatically update Chrome for all users.' button in the About window.  Mac-only.">
+      Automatically update Chrome for all users.
+    </message>
+    <message name="IDS_ABOUT_CHROME_AUTOUPDATE_ALL_IS_ON" desc="The text in About Page to indicate automatic update is turned on.  Mac-only.">
+      Automatic updates are turned on.
+    </message>
+  </if>
 
   <!-- Accessibility Page -->
   <message name="IDS_SETTINGS_ACCESSIBILITY" desc="Name of the settings page which displays accessibility preferences.">
@@ -165,6 +185,33 @@
     </message>
   </if>
 
+  <if expr="chromeos">
+    <!-- Android Apps Page -->
+    <message name="IDS_SETTINGS_ANDROID_APPS_TITLE" desc="The title of Google Play Store (Arc++ / Android Apps) section.">
+      Google Play Store (beta)
+    </message>
+    <message name="IDS_SETTINGS_ANDROID_APPS_ENABLE" desc="Label for the checkbox that enables Google Play Store (Arc++) apps.">
+      Enable Google Play Store on your Chromebook.
+    </message>
+    <message name="IDS_SETTINGS_ANDROID_APPS_MANAGE_APPS" desc="Label for launching Android apps settings.">
+      Manage your Android preferences
+    </message>
+    <message name="IDS_SETTINGS_ANDROID_APPS_LEARN_MORE" desc="Link for more informaiton about installing Android apps on Chrome OS.">
+      Learn more.
+    </message>
+
+    <message name="IDS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_TITLE" desc="Title of the confirmation dialog for disabling android apps.">
+      Remove Android apps?
+    </message>
+    <message name="IDS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_MESSAGE" desc="Describes what will happen if the user opts out of android apps.">
+      Apps you’ve downloaded from Google Play will be deleted from this Chromebook.
+      <ph name="LINE_BREAKS1">&lt;br&gt;&lt;br&gt;</ph>
+      Content you’ve purchased such as movies, TV shows, music, books, or other in-app purchases may also be deleted.
+      <ph name="LINE_BREAKS2">&lt;br&gt;&lt;br&gt;</ph>
+      This doesn’t affect apps or content on other devices.
+    </message>
+  </if>
+
   <!-- Appearance Page -->
   <message name="IDS_SETTINGS_APPEARANCE" desc="Name of the settings page which displays appearance preferences.">
     Appearance
@@ -201,7 +248,7 @@
     Show home button
   </message>
   <message name="IDS_SETTINGS_SHOW_BOOKMARKS_BAR" desc="Label for the checkbox which enables or disables showing the bookmarks bar in the toolbar.">
-    Always show the bookmarks bar
+    Show bookmarks bar
   </message>
   <message name="IDS_SETTINGS_HOME_PAGE_NTP" desc="Description of the New Tab Page when set as the home page.">
     Use the New Tab Page
@@ -425,22 +472,34 @@
 
   <!-- Bluetooth Page -->
   <if expr="chromeos">
-    <message name="IDS_SETTINGS_BLUETOOTH" desc="Name of the settings page which displays bluetooth device settings.">
+    <message name="IDS_SETTINGS_BLUETOOTH" desc="Name of the settings page which displays Bluetooth device settings.">
       Bluetooth
     </message>
-    <message name="IDS_SETTINGS_BLUETOOTH_ADD_DEVICE" desc="Name of the settings page for adding bluetooth devices.">
-      Add a Device
+    <message name="IDS_SETTINGS_BLUETOOTH_PAIR" desc="Label for the settings button to pair a previously paired Bluetooth device.">
+      Pair
     </message>
-    <message name="IDS_SETTINGS_BLUETOOTH_PAIR_DEVICE" desc="Name of the settings page for pairing bluetooth devices.">
-      Pair Bluetooth Device
+    <message name="IDS_SETTINGS_BLUETOOTH_PAIR_DEVICE" desc="Label for the settings button to add and pair a new Bluetooth device.">
+      Pair device
     </message>
-    <message name="IDS_SETTINGS_BLUETOOTH_ENABLE" desc="Label for control to enable or disable bluetooth.">
-      Enable Bluetooth
+    <message name="IDS_SETTINGS_BLUETOOTH_PAIR_DEVICE_TITLE" desc="Title of the settings dialog for adding or pairing Bluetooth a device.">
+      Pair Bluetooth device
     </message>
-    <message name="IDS_SETTINGS_BLUETOOTH_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing available bluetooth devices. Only visible by screen reader software.">
-      Show available bluetooth devices
+    <message name="IDS_SETTINGS_BLUETOOTH_SCANNING" desc="Message displayed while scanning for Bluetooth devices.">
+      Scanning for devices...
     </message>
-    <message name="IDS_SETTINGS_BLUETOOTH_REMOVE" desc="Label for removing (unpairing) a paired bluetooth device">
+    <message name="IDS_SETTINGS_BLUETOOTH_NO_DEVICES" desc="Message displayed when no Bluetooth devices are found after a scan.">
+      No Bluetooth devices found.
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_ENABLED" desc="Label for Bluetooth section when enabled.">
+      Bluetooth enabled
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_DISABLED" desc="Label for Bluetooth section when disabled.">
+      Bluetooth disabled
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing available Bluetooth devices. Only visible by screen reader software.">
+      Show available Bluetooth devices
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_REMOVE" desc="Label for removing (unpairing) a paired Bluetooth device">
       Remove from list
     </message>
     <message name="IDS_SETTINGS_BLUETOOTH_REQUEST_PINCODE" desc="Bluetooth pairing message typically displayed when the external Bluetooth 2.0 and older device has no display or means of input.">
@@ -457,6 +516,12 @@
     </message>
     <message name="IDS_SETTINGS_BLUETOOTH_CONFIRM_PASSKEY" desc="Bluetooth pairing message typically shown when pairing with a device that has a display.">
       Please confirm this passkey is shown on "<ph name="DEVICE_NAME">$1<ex>Nexus S</ex></ph>":
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECTED" desc="In Bluetooth device list, this label is shown below a device which is already connected.">
+      Connected
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_NOT_CONNECTED" desc="In Bluetooth device list, this label is shown below a device which is not connected.">
+      Not connected
     </message>
     <message name="IDS_SETTINGS_BLUETOOTH_CONNECTING">
       Connecting...
@@ -786,10 +851,10 @@
       printer name
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTERS_NEARBY_TITLE" desc="Text for the title of the dialog that is used to add nearby printers.">
-      Add printers nearby
+      Add a nearby printer
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTERS_MANUALLY_TITLE" desc="Text for the title of the dialog that is used to manually add a printer instead of automatically finding ones nearby.">
-      Add printers manually
+      Add a printer manually
     </message>
     <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_TITLE" desc="Text for the title of the Printer Details subpage.">
       Printer details
@@ -895,7 +960,7 @@
     Google Cloud Print
   </message>
   <message name="IDS_SETTINGS_PRINTING_CLOUD_PRINTERS_DESCRIPTION" desc="In Printing Settings, the title description of the google cloud printers setting section.">
-    Setup cloud printing devices
+    Set up cloud printing devices
   </message>
 
   <!-- Downloads Page -->
@@ -990,6 +1055,9 @@
     <message name="IDS_SETTINGS_INTERNET_ADD_CONNECTION_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the options for a new connection. Only visible by screen reader software.">
       Add network connection
     </message>
+    <message name="IDS_SETTINGS_INTERNET_ADD_CONNECTION_NOT_ALLOWED" desc="Settings > Internet > Message when Add connection is not allowed.">
+      Add connection is disabled by your administrator.
+    </message>
     <message name="IDS_SETTINGS_INTERNET_ADD_WIFI" desc="Settings > Internet > Add Wi-Fi label.">
       Add Wi-Fi...
     </message>
@@ -1008,8 +1076,8 @@
     <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the advanced network options. Only visible by screen reader software.">
       Show advanced network options
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_NAMESERVERS" desc="Settings > Internet > Network details: Nameservers section label.">
-      Nameservers
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_NAMESERVERS" desc="Settings > Internet > Network details: Name servers section label.">
+      Name servers
     </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_SECTION_NETWORK" desc="Settings > Internet > Network details: Network section label.">
       Network
@@ -1023,8 +1091,8 @@
     <message name="IDS_SETTINGS_INTERNET_NETWORK_SHARED" desc="Settings > Internet > Network details: Text to show when a network is shared.">
       This network is shared with other users.
     </message>
-    <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_CONTROLLED_EXTENSION" desc="Settings > Internet > Network details: Text to show when a network proxy is controlled by an extension.">
-      The network proxy is controlled by an extension.
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_PRIMARY_USER_CONTROLLED" desc="Settings > Internet > Network details: Text to show when a network configuration is controlled by the primary user.">
+      Network configuration is controlled by <ph name="USER_EMAIL">$1<ex>joe@gmail.com</ex></ph>.
     </message>
     <message name="IDS_SETTINGS_INTERNET_NETWORK_PROXY_ENFORCED_POLICY" desc="Settings > Internet > Network details: Text to show when a network proxy is policy enforced.">
       This proxy is enforced by your administrator.
@@ -1162,23 +1230,8 @@
     <message name="IDS_SETTINGS_INTERNET_BUTTON_DISCONNECT" desc="Settings > Internet > Network details: The label for the button to disconnect from a network.">
       Disconnect
     </message>
-    <message name="IDS_SETTINGS_INTERNET_BUTTON_SAVE_APN" desc="Settings > Internet > Network details: The label for the button to save an APN configuration.">
-      Save
-    </message>
-    <message name="IDS_SETTINGS_NETWORK_TYPE_ETHERNET" desc="The ethernet network type.">
-      Ethernet
-    </message>
-    <message name="IDS_SETTINGS_NETWORK_TYPE_WIFI" desc="The wifi network type.">
-      Wi-Fi
-    </message>
-    <message name="IDS_SETTINGS_NETWORK_TYPE_WIMAX" desc="The wimax network type.">
-      WiMAX
-    </message>
-    <message name="IDS_SETTINGS_NETWORK_TYPE_CELLULAR" desc="The cellular network type.">
-      Cellular
-    </message>
-    <message name="IDS_SETTINGS_NETWORK_TYPE_VPN" desc="The vpn network type.">
-      VPN
+    <message name="IDS_SETTINGS_INTERNET_CONNECT_NOT_ALLOWED" desc="Settings > Internet > Message when connecting to a non policy network is not allowed.">
+      Connecting to this network is disabled by your administrator.
     </message>
     <message name="IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_BUTTON" desc="Text for button that opens the known networks subpage.">
       Known networks
@@ -1194,26 +1247,6 @@
     </message>
     <message name="IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_ALL" desc="Title for list of all other (non preferred) networks.">
       All networks
-    </message>
-
-    <!-- Strings used in <cr-network-list>, used in Settings and OOBE -->
-    <message name="IDS_NETWORK_LIST_DISABLED" desc="Settings > Internet, text in network summary when the network type is connected">
-      Disabled
-    </message>
-    <message name="IDS_NETWORK_LIST_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button that toggles showing the list of available network connections. Only visible by screen reader software.">
-      Show available network connections
-    </message>
-    <message name="IDS_NETWORK_LIST_NOT_CONNECTED" desc="Settings > Internet, text in network summary when there is no network for the type.">
-      No network
-    </message>
-    <message name="IDS_NETWORK_LIST_CONNECTED" desc="Settings > Internet, text to show in a network list item that is connected.">
-      connected
-    </message>
-    <message name="IDS_NETWORK_LIST_CONNECTING" desc="Settings > Internet, text in network summary when the primary network is connecting.">
-      Connecting to <ph name="NAME">$1<ex>GoogleGuest</ex></ph>
-    </message>
-    <message name="IDS_NETWORK_LIST_THIRD_PARTY_VPN_NAME_TEMPLATE" desc="Template for constructing the name of a VPN network that is handled by a third-party VPN provider from the provider name and the network name.">
-      <ph name="PROVIDER_NAME">$1<ex>OpenVPN</ex></ph>: <ph name="NETWORK_NAME">$2<ex>Work Network</ex></ph>
     </message>
 
      <!-- Strings translating ONC (Open Network Configuration) properties -->
@@ -1529,13 +1562,13 @@
     Keep Wi-Fi on during sleep
   </message>
   <message name="IDS_SETTINGS_MANAGE_CERTIFICATES" desc="Text for manage certificates button in Privacy options">
-    Manage Certificates
+    Manage certificates
   </message>
   <message name="IDS_SETTINGS_MANAGE_CERTIFICATES_DESCRIPTION" desc="Secondary, continued explanation of how to manage SSL certificates and settings in Privacy options">
     Manage HTTPS/SSL certificates and settings
   </message>
   <message name="IDS_SETTINGS_CONTENT_SETTINGS" desc="Text of the button that takes a user to settings page thats allows users to modify site settings. Also the title of that settings page.">
-    Content Settings
+    Content settings
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS" desc="Text of the button that takes a user to the enhanced settings page thats allows users to modify site settings. Also the title of that settings page.">
     Site Settings
@@ -1577,11 +1610,33 @@
   <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_LABEL" desc="Label for the checkbox which enables the OK Google hotword.">
     Enable "Ok Google" to start a voice search.
   </message>
-  <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_LEARN_MORE_LINK" desc="Link which opens page to learn more about the OK Google hotword.">
-    Learn more
+  <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_SUBTEXT_ALWAYS_ON" desc="Subtext describing when the OK Google hotword may be used.">
+    Say "Ok Google" when the screen is on and unlocked.
   </message>
-  <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_DESCRIPTION_LABEL" desc="Label describing when the OK Google hotword may be used.">
-    Say "Ok Google" in a new tab and google.com
+  <if expr="chromeos">
+    <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_SUBTEXT_NO_HARDWARE" desc="Subtext describing when the OK Google hotword may be used for devices without hardware support.">
+      Say "Ok Google" in a new tab, google.com, and the App Launcher
+    </message>
+  </if>
+  <if expr="not chromeos">
+    <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_SUBTEXT_NO_HARDWARE" desc="Subtext describing when the OK Google hotword may be used for devices with no hardware support.">
+      Say "Ok Google" in a new tab and google.com
+    </message>
+  </if>
+  <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_LEARN_MORE" desc="In Search Settings, the text for the 'learn more' link next to the OK Google hotword enable checkbox.">
+    Learn more.
+  </message>
+  <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_AUDIO_HISTORY_LABEL" desc="Text to display when the user has audio history enabled.">
+    Voice and Audio Activity for <ph name="USER_EMAIL">$1<ex>joe@gmail.com</ex></ph>.
+  </message>
+  <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_AUDIO_HISTORY_SUBTEXT" desc="Subtext describing why audio history is enabled.">
+    Enabled (required to use "Ok Google")
+  </message>
+  <message name="IDS_SETTINGS_SEARCH_OK_GOOGLE_RETRAIN" desc="Text for button to retrain the OK Google hotword voice model.">
+    Retrain
+  </message>
+  <message name="IDS_SETTINGS_SEARCH_ENABLE_GOOGLE_NOW" desc="Label for the checkbox which enables the Google Now in the launcher.">
+    Show Google Now cards in the launcher
   </message>
 
   <!-- Search Engines Page -->
@@ -1655,9 +1710,6 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_LOCATION" desc="Label for the location site settings.">
     Location
-  </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_KEYGEN" desc="Label for the key generation site settings.">
-    Key generation
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_MIC" desc="Label for the microphone site settings.">
     Microphone
@@ -1764,15 +1816,6 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_HANDLERS_BLOCKED" desc="The block label for protocol handlers in site settings.">
     Do not allow any site to handle protocols
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_KEYGEN_ALLOW" desc="The allow label for keygen in site settings.">
-    Allow all sites to use key generation in forms
-  </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_KEYGEN_BLOCK" desc="The block label for key generation in site settings.">
-    Do not allow any site to use key generation in forms
-  </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_KEYGEN_BLOCK_RECOMMENDED" desc="The block label for key generation in site settings (with the 'recommended' suffix).">
-    Do not allow any site to use key generation in forms (recommended)
-  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_AUTOMATIC_DOWNLOAD_ASK" desc="The allow label for automatic download in site settings.">
     Ask when a site tries to download files automatically after the first file
   </message>
@@ -1876,10 +1919,10 @@
     Search cookies
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE" desc="Label for the Block 3rd-party cookie checkbox on the Cookies category.">
-    Block third-party cookies.
+    Block third-party cookies
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE_SUBLABEL" desc="A sub-label below the Block 3rd-party cookie checkbox.">
-    Prevent third-party websites from saving and reading cookie data.
+    Prevent third-party websites from saving and reading cookie data
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_DELETE_DATA_POST_SESSION" desc="Label for the checkbox that allows the user to automatically delete their data at the end of the browser session.">
     Keep local data only until you quit your browser
@@ -2054,8 +2097,11 @@
     <message name="IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_WEAK_PIN" desc="Message shown below the title that warns the user they have entered a PIN that is easy to guess.">
       PIN may be easy to guess
     </message>
-    <message name="IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_TOO_SHORT" desc="Message shown below the title that tells the user that the PIN they entered needs to be at least four digits long.">
-      PIN must be at least 4 digits
+    <message name="IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_TOO_SHORT" desc="Message shown below the title that tells the user that the PIN they entered needs to be at least minimum digits long.">
+      PIN must be at least <ph name="MINIMUM">$1<ex>4</ex></ph> digits
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_TOO_LONG" desc="Message shown below the title that tells the user that the PIN they entered needs to be less than maximum digits long.">
+      PIN must be less than <ph name="MAXIMUM">$1<ex>0</ex></ph> digits
     </message>
     <message name="IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_MISMATCHED" desc="Message shown below the title that tells the user they have entered two different PIN values.">
       PINs do not match
@@ -2108,9 +2154,6 @@
     <message name="IDS_SETTINGS_CHANGE_PICTURE_TAKE_PHOTO" desc="The text on the button to take photo of the current user.">
       Take photo
     </message>
-    <message name="IDS_SETTINGS_CHANGE_PICTURE_PHOTO_FROM_CAMERA" desc="The accessible text on the icon in the user image grid for a camera photo, when a photo has been captured.">
-      Photo from internal camera
-    </message>
     <message name="IDS_SETTINGS_CHANGE_PICTURE_DISCARD_PHOTO" desc="The text on the button to discard the captured photo of the current user.">
       Discard photo
     </message>
@@ -2159,13 +2202,16 @@
   </if>
 
   <message name="IDS_SETTINGS_SYNC_OVERVIEW" desc="The message that appears in the options dialog when sync has not been set up by the user.">
-    Sign in to get your bookmarks, history, passwords and other settings on all your devices. You'll also automatically be signed in to your Google services.
+    Sign in to get your bookmarks, history, passwords, and other settings on all your devices. You'll also automatically be signed in to your Google services.
   </message>
   <message name="IDS_SETTINGS_SYNC_DISCONNECT" desc="The text to display on the button to indicate stop syncing functionality.">
     Sign Out
   </message>
   <message name="IDS_SETTINGS_SYNC_DISCONNECT_EXPLANATION" desc="The text to display in the Sign out of Chrome dialog to stop syncing for non-managed profiles.">
     Changes to your bookmarks, history, passwords, and other settings will no longer be synced to your Google Account. However, your existing data will remain stored in your Google Account and can be managed on <ph name="BEGIN_LINK">&lt;a href="$1" target=&quot;_blank&quot;&gt;<ex>&lt;a href="$1" target=&quot;_blank&quot;&gt;</ex></ph>Google Dashboard<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>.
+  </message>
+  <message name="IDS_SETTINGS_SYNC_DISCONNECT_EXPAND_ACCESSIBILITY_LABEL" desc="Label for the button in the Sign out of Chrome dialog that toggles showing the profile stats. Only visible by screen reader software.">
+    Show profile stats
   </message>
   <message name="IDS_SETTINGS_SYNC_DISCONNECT_DELETE_PROFILE" desc="The text to display by the checkbox asking user whether to also delete profile when stopping sync.">
     Also remove your existing data from this device.
@@ -2589,14 +2635,17 @@
     <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_TEXT" desc="Text explaining that this setting is used to adjust the boundaries of the selected display.">
       Adjust the boundaries of your desktop within the display
     </message>
-    <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_TITLE" desc="Name of the settings subpage which adjusts display overscan.">
+    <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_TITLE" desc="Title of the settings subpage which adjusts display overscan.">
       Overscan
     </message>
-    <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_INSTRUCTIONS" desc="Instructions for changing the overscan calibration.">
-      Use arrow keys to adjust picture size and alignment.
+    <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_SUBTITLE" desc="Subtitle for the display overscan settings subpage.">
+      Adjust the boundaries of your display.
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_INSTRUCTIONS" desc="Instructions for changing the display overscan calibration.">
+      Tap the following keys to adjust or move the cropping area.
     </message>
     <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_RESIZE" desc="Label for resizing overscan calibration.">
-      Shrink/expand
+      Shrink / Expand
     </message>
     <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_POSITION" desc="Label for positioning overscan calibration.">
       Move
@@ -2604,14 +2653,17 @@
     <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_RESET" desc="Label for resetting overscan calibration.">
       Reset
     </message>
-    <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_SAVE" desc="Label for saving overscan calibration.">
-      Save
-    </message>
     <message name="IDS_SETTINGS_DISPLAY_MIRRORING_ON" desc="Label indicating that the displays are currently mirrored">
       On
     </message>
     <message name="IDS_SETTINGS_DISPLAY_MIRRORING_OFF" desc="Label indicating that the displays are currently not mirrored">
       Off
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_TOUCH_CALIBRATION_TITLE" desc="In Device Settings > Displays, the label for initiating touch calibration.">
+      Calibrate
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_TOUCH_CALIBRATION_TEXT" desc="In Device Settings > Displays, the sublabel for initiating touch calibration.">
+      Define the boundaries of your touchscreen over the display
     </message>
 
     <!-- Storage -->
@@ -2671,6 +2723,23 @@
     </message>
     <message name="IDS_SETTINGS_STORAGE_DELETE_ALL_BUTTON_TITLE" desc="In storage manager confirmation dialog, label for the button to delete offline files.">
       Delete files
+    </message>
+
+    <!-- Power -->
+    <message name="IDS_SETTINGS_POWER_SOURCE_LABEL" desc="The label for the power source dropdown in the Power overlay.">
+      Power source
+    </message>
+    <message name="IDS_SETTINGS_POWER_SOURCE_BATTERY" desc="The text referring to the battery as the power source.">
+      Battery
+    </message>
+    <message name="IDS_SETTINGS_POWER_SOURCE_AC_ADAPTER" desc="The text referring to a dedicated charger like an AC adapter as the power source.">
+      AC adapter
+    </message>
+    <message name="IDS_SETTINGS_POWER_SOURCE_LOW_POWER_CHARGER" desc="The text referring to a low-power charger like a USB charger as the power source.">
+      Low-power charger
+    </message>
+    <message name="IDS_SETTINGS_POWER_SOURCE_CALCULATING" desc="The description in the 'Power' overlay when the power status is being determined.">
+      Checking...
     </message>
   </if>
 

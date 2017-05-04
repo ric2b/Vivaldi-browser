@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -68,7 +69,7 @@ void RenderAccessibilityImpl::SnapshotAccessibilityTree(
   WebAXObject root = context.root();
   if (!root.updateLayoutAndCheckValidity())
     return;
-  BlinkAXTreeSource tree_source(render_frame);
+  BlinkAXTreeSource tree_source(render_frame, ACCESSIBILITY_MODE_COMPLETE);
   tree_source.SetRoot(root);
   ScopedFreezeBlinkAXTreeSource freeze(&tree_source);
   BlinkAXTreeSerializer serializer(&tree_source);
@@ -76,10 +77,11 @@ void RenderAccessibilityImpl::SnapshotAccessibilityTree(
   serializer.SerializeChanges(context.root(), response);
 }
 
-RenderAccessibilityImpl::RenderAccessibilityImpl(RenderFrameImpl* render_frame)
+RenderAccessibilityImpl::RenderAccessibilityImpl(RenderFrameImpl* render_frame,
+                                                 AccessibilityMode mode)
     : RenderFrameObserver(render_frame),
       render_frame_(render_frame),
-      tree_source_(render_frame),
+      tree_source_(render_frame, mode),
       serializer_(&tree_source_),
       plugin_tree_source_(nullptr),
       last_scroll_offset_(gfx::Size()),
@@ -98,8 +100,10 @@ RenderAccessibilityImpl::RenderAccessibilityImpl(RenderFrameImpl* render_frame)
 #endif
 
 #if !defined(OS_ANDROID)
-  // Inline text boxes are enabled for all nodes on all except Android.
-  settings->setInlineTextBoxAccessibilityEnabled(true);
+  // Inline text boxes can be enabled globally on all except Android.
+  // On Android they can be requested for just a specific node.
+  if (mode & ACCESSIBILITY_MODE_FLAG_INLINE_TEXT_BOXES)
+    settings->setInlineTextBoxAccessibilityEnabled(true);
 #endif
 
   const WebDocument& document = GetMainDocument();
@@ -187,7 +191,7 @@ void RenderAccessibilityImpl::HandleAXEvent(
     return;
 
   if (document.frame()) {
-    gfx::Size scroll_offset = document.frame()->scrollOffset();
+    gfx::Size scroll_offset = document.frame()->getScrollOffset();
     if (scroll_offset != last_scroll_offset_) {
       // Make sure the browser is always aware of the scroll position of
       // the root document element by posting a generic notification that
@@ -450,11 +454,17 @@ void RenderAccessibilityImpl::OnPerformAction(
   WebAXObject focus = document.accessibilityObjectFromID(data.focus_node_id);
 
   switch (data.action) {
+    case ui::AX_ACTION_BLUR:
+      target.setFocused(false);
+      break;
     case ui::AX_ACTION_DECREMENT:
       target.decrement();
       break;
     case ui::AX_ACTION_DO_DEFAULT:
       target.performDefaultAction();
+      break;
+    case ui::AX_ACTION_GET_IMAGE_DATA:
+      OnGetImageData(target, data.target_rect.size());
       break;
     case ui::AX_ACTION_HIT_TEST:
       OnHitTest(data.target_point);
@@ -474,7 +484,7 @@ void RenderAccessibilityImpl::OnPerformAction(
     case ui::AX_ACTION_SET_ACCESSIBILITY_FOCUS:
       OnSetAccessibilityFocus(target);
       break;
-    case ui::AX_ACTION_SET_FOCUS:
+    case ui::AX_ACTION_FOCUS:
       // By convention, calling SetFocus on the root of the tree should
       // clear the current focus. Otherwise set the focus to the new node.
       if (data.target_node_id == root.axID())
@@ -569,6 +579,23 @@ void RenderAccessibilityImpl::OnSetAccessibilityFocus(
 
   // Explicitly send a tree change update event now.
   HandleAXEvent(obj, ui::AX_EVENT_TREE_CHANGED);
+}
+
+void RenderAccessibilityImpl::OnGetImageData(
+    const blink::WebAXObject& obj, const gfx::Size& max_size) {
+  ScopedFreezeBlinkAXTreeSource freeze(&tree_source_);
+  if (tree_source_.image_data_node_id() == obj.axID())
+    return;
+
+  tree_source_.set_image_data_node_id(obj.axID());
+  tree_source_.set_max_image_data_size(max_size);
+
+  const WebDocument& document = GetMainDocument();
+  if (document.isNull())
+    return;
+
+  serializer_.DeleteClientSubtree(obj);
+  HandleAXEvent(obj, ui::AX_EVENT_IMAGE_FRAME_UPDATED);
 }
 
 void RenderAccessibilityImpl::OnReset(int reset_token) {

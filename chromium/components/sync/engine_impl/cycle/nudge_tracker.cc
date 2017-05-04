@@ -28,6 +28,7 @@ base::TimeDelta GetDefaultDelayForType(ModelType model_type,
       return base::TimeDelta::FromSeconds(kDefaultShortPollIntervalSeconds);
     case BOOKMARKS:
     case PREFERENCES:
+    case NOTES:
     case SESSIONS:
     case FAVICON_IMAGES:
     case FAVICON_TRACKING:

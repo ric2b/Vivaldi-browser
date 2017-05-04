@@ -78,9 +78,11 @@ static_library("hit_report") {
     "hit_report.cc",
     "hit_report.h",
   ]
+  public_deps = [
+    ":util",
+  ]
   deps = [
     ":safe_browsing_prefs",
-    ":util",
     "//components/metrics",
     "//url",
   ]
@@ -116,14 +118,26 @@ static_library("remote_database_manager") {
 
 source_set("safe_browsing_api_handler") {
   sources = [
+    "android/jni_registrar.cc",
+    "android/jni_registrar.h",
     "safe_browsing_api_handler.cc",
     "safe_browsing_api_handler.h",
   ]
   deps = [
+    ":safe_browsing_api_handler_util",
     ":util",
     "//base",
+    "//content/public/browser:browser",
     "//url",
   ]
+
+  if (is_android) {
+    deps += [ "//components/safe_browsing_db/android:jni_headers" ]
+    sources += [
+      "android/safe_browsing_api_handler_bridge.cc",
+      "android/safe_browsing_api_handler_bridge.h",
+    ]
+  }
 }
 
 static_library("safe_browsing_api_handler_util") {
@@ -307,6 +321,7 @@ static_library("v4_update_protocol_manager") {
     "v4_update_protocol_manager.h",
   ]
   deps = [
+    ":safe_browsing_prefs",
     ":safebrowsing_proto",
     ":util",
     ":v4_protocol_manager_util",

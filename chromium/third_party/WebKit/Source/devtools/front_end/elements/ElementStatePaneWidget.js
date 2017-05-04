@@ -30,7 +30,7 @@ Elements.ElementStatePaneWidget = class extends UI.Widget {
      */
     function createCheckbox(state) {
       var td = createElement('td');
-      var label = createCheckboxLabel(':' + state);
+      var label = UI.createCheckboxLabel(':' + state);
       var input = label.checkboxElement;
       input.state = state;
       input.addEventListener('click', clickListener, false);
@@ -108,7 +108,7 @@ Elements.ElementStatePaneWidget.ButtonProvider = class {
   constructor() {
     this._button = new UI.ToolbarToggle(Common.UIString('Toggle Element State'), '');
     this._button.setText(Common.UIString(':hov'));
-    this._button.addEventListener('click', this._clicked, this);
+    this._button.addEventListener(UI.ToolbarButton.Events.Click, this._clicked, this);
     this._button.element.classList.add('monospace');
     this._view = new Elements.ElementStatePaneWidget();
   }

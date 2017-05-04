@@ -5,21 +5,18 @@
 #ifndef NavigatorBeacon_h
 #define NavigatorBeacon_h
 
-#include "core/frame/DOMWindowProperty.h"
 #include "core/frame/Navigator.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
-class Blob;
+class ScriptState;
 class ExceptionState;
-class ExecutionContext;
 class KURL;
 class ArrayBufferViewOrBlobOrStringOrFormData;
 
 class NavigatorBeacon final : public GarbageCollectedFinalized<NavigatorBeacon>,
-                              public DOMWindowProperty,
                               public Supplement<Navigator> {
   USING_GARBAGE_COLLECTED_MIXIN(NavigatorBeacon);
 
@@ -27,7 +24,7 @@ class NavigatorBeacon final : public GarbageCollectedFinalized<NavigatorBeacon>,
   static NavigatorBeacon& from(Navigator&);
   virtual ~NavigatorBeacon();
 
-  static bool sendBeacon(ExecutionContext*,
+  static bool sendBeacon(ScriptState*,
                          Navigator&,
                          const String&,
                          const ArrayBufferViewOrBlobOrStringOrFormData&,
@@ -40,6 +37,10 @@ class NavigatorBeacon final : public GarbageCollectedFinalized<NavigatorBeacon>,
 
   static const char* supplementName();
 
+  bool sendBeaconImpl(ScriptState*,
+                      const String&,
+                      const ArrayBufferViewOrBlobOrStringOrFormData&,
+                      ExceptionState&);
   bool canSendBeacon(ExecutionContext*, const KURL&, ExceptionState&);
   int maxAllowance() const;
   void addTransmittedBytes(int sentBytes);

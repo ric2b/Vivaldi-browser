@@ -15,6 +15,7 @@
 #include <utility>
 
 #include "base/base_export.h"
+#include "base/compiler_specific.h"
 #include "base/debug/debugger.h"
 #include "base/macros.h"
 #include "base/template_util.h"
@@ -426,9 +427,23 @@ const LogSeverity LOG_0 = LOG_ERROR;
 #define PLOG_IF(severity, condition) \
   LAZY_STREAM(PLOG_STREAM(severity), LOG_IS_ON(severity) && (condition))
 
-// The actual stream used isn't important.
-#define EAT_STREAM_PARAMETERS                                           \
-  true ? (void) 0 : ::logging::LogMessageVoidify() & LOG_STREAM(FATAL)
+BASE_EXPORT extern std::ostream* g_swallow_stream;
+
+// Note that g_swallow_stream is used instead of an arbitrary LOG() stream to
+// avoid the creation of an object with a non-trivial destructor (LogMessage).
+// On MSVC x86 (checked on 2015 Update 3), this causes a few additional
+// pointless instructions to be emitted even at full optimization level, even
+// though the : arm of the ternary operator is clearly never executed. Using a
+// simpler object to be &'d with Voidify() avoids these extra instructions.
+// Using a simpler POD object with a templated operator<< also works to avoid
+// these instructions. However, this causes warnings on statically defined
+// implementations of operator<<(std::ostream, ...) in some .cc files, because
+// they become defined-but-unreferenced functions. A reinterpret_cast of 0 to an
+// ostream* also is not suitable, because some compilers warn of undefined
+// behavior.
+#define EAT_STREAM_PARAMETERS \
+  true ? (void)0              \
+       : ::logging::LogMessageVoidify() & (*::logging::g_swallow_stream)
 
 // Captures the result of a CHECK_EQ (for example) and facilitates testing as a
 // boolean.
@@ -445,6 +460,15 @@ class CheckOpResult {
   std::string* message_;
 };
 
+// Crashes in the fastest, simplest possible way with no attempt at logging.
+#if defined(COMPILER_GCC)
+#define IMMEDIATE_CRASH() __builtin_trap()
+#elif defined(COMPILER_MSVC)
+#define IMMEDIATE_CRASH() __debugbreak()
+#else
+#error Port
+#endif
+
 // CHECK dies with a fatal error if condition is not true.  It is *not*
 // controlled by NDEBUG, so the check will be executed regardless of
 // compilation mode.
@@ -454,20 +478,14 @@ class CheckOpResult {
 
 #if defined(OFFICIAL_BUILD) && defined(NDEBUG)
 
-// Make all CHECK functions discard their log strings to reduce code
-// bloat, and improve performance, for official release builds.
-
-#if defined(COMPILER_GCC) || __clang__
-#define LOGGING_CRASH() __builtin_trap()
-#else
-#define LOGGING_CRASH() ((void)(*(volatile char*)0 = 0))
-#endif
-
+// Make all CHECK functions discard their log strings to reduce code bloat, and
+// improve performance, for official release builds.
+//
 // This is not calling BreakDebugger since this is called frequently, and
 // calling an out-of-line function instead of a noreturn inline macro prevents
 // compiler optimizations.
-#define CHECK(condition)                                                \
-  !(condition) ? LOGGING_CRASH() : EAT_STREAM_PARAMETERS
+#define CHECK(condition) \
+  UNLIKELY(!(condition)) ? IMMEDIATE_CRASH() : EAT_STREAM_PARAMETERS
 
 #define PCHECK(condition) CHECK(condition)
 
@@ -527,10 +545,24 @@ class CheckOpResult {
 // it uses the definition for operator<<, with a few special cases below.
 template <typename T>
 inline typename std::enable_if<
-    base::internal::SupportsOstreamOperator<const T&>::value,
+    base::internal::SupportsOstreamOperator<const T&>::value &&
+        !std::is_function<typename std::remove_pointer<T>::type>::value,
     void>::type
 MakeCheckOpValueString(std::ostream* os, const T& v) {
   (*os) << v;
+}
+
+// Provide an overload for functions and function pointers. Function pointers
+// don't implicitly convert to void* but do implicitly convert to bool, so
+// without this function pointers are always printed as 1 or 0. (MSVC isn't
+// standards-conforming here and converts function pointers to regular
+// pointers, so this is a no-op for MSVC.)
+template <typename T>
+inline typename std::enable_if<
+    std::is_function<typename std::remove_pointer<T>::type>::value,
+    void>::type
+MakeCheckOpValueString(std::ostream* os, const T& v) {
+  (*os) << reinterpret_cast<const void*>(v);
 }
 
 // We need overloads for enums that don't support operator<<.
@@ -682,6 +714,10 @@ const LogSeverity LOG_DCHECK = LOG_INFO;
 // whether DCHECKs are enabled; this is so that we don't get unused
 // variable warnings if the only use of a variable is in a DCHECK.
 // This behavior is different from DLOG_IF et al.
+//
+// Note that the definition of the DCHECK macros depends on whether or not
+// DCHECK_IS_ON() is true. When DCHECK_IS_ON() is false, the macros use
+// EAT_STREAM_PARAMETERS to avoid expressions that would create temporaries.
 
 #if defined(_PREFAST_) && defined(OS_WIN)
 // See comments on the previous use of __analysis_assume.
@@ -698,13 +734,21 @@ const LogSeverity LOG_DCHECK = LOG_INFO;
 
 #else  // _PREFAST_
 
-#define DCHECK(condition)                                                \
-  LAZY_STREAM(LOG_STREAM(DCHECK), DCHECK_IS_ON() ? !(condition) : false) \
+#if DCHECK_IS_ON()
+
+#define DCHECK(condition)                       \
+  LAZY_STREAM(LOG_STREAM(DCHECK), !(condition)) \
+      << "Check failed: " #condition ". "
+#define DPCHECK(condition)                       \
+  LAZY_STREAM(PLOG_STREAM(DCHECK), !(condition)) \
       << "Check failed: " #condition ". "
 
-#define DPCHECK(condition)                                                \
-  LAZY_STREAM(PLOG_STREAM(DCHECK), DCHECK_IS_ON() ? !(condition) : false) \
-      << "Check failed: " #condition ". "
+#else  // DCHECK_IS_ON()
+
+#define DCHECK(condition) EAT_STREAM_PARAMETERS << !(condition)
+#define DPCHECK(condition) EAT_STREAM_PARAMETERS << !(condition)
+
+#endif  // DCHECK_IS_ON()
 
 #endif  // _PREFAST_
 
@@ -714,6 +758,8 @@ const LogSeverity LOG_DCHECK = LOG_INFO;
 // macro is used in an 'if' clause such as:
 // if (a == 1)
 //   DCHECK_EQ(2, a);
+#if DCHECK_IS_ON()
+
 #define DCHECK_OP(name, op, val1, val2)                                \
   switch (0) case 0: default:                                          \
   if (::logging::CheckOpResult true_if_passed =                        \
@@ -724,6 +770,25 @@ const LogSeverity LOG_DCHECK = LOG_INFO;
   else                                                                 \
     ::logging::LogMessage(__FILE__, __LINE__, ::logging::LOG_DCHECK,   \
                           true_if_passed.message()).stream()
+
+#else  // DCHECK_IS_ON()
+
+// When DCHECKs aren't enabled, DCHECK_OP still needs to reference operator<<
+// overloads for |val1| and |val2| to avoid potential compiler warnings about
+// unused functions. For the same reason, it also compares |val1| and |val2|
+// using |op|.
+//
+// Note that the contract of DCHECK_EQ, etc is that arguments are only evaluated
+// once. Even though |val1| and |val2| appear twice in this version of the macro
+// expansion, this is OK, since the expression is never actually evaluated.
+#define DCHECK_OP(name, op, val1, val2)                             \
+  EAT_STREAM_PARAMETERS << (::logging::MakeCheckOpValueString(      \
+                                ::logging::g_swallow_stream, val1), \
+                            ::logging::MakeCheckOpValueString(      \
+                                ::logging::g_swallow_stream, val2), \
+                            (val1)op(val2))
+
+#endif  // DCHECK_IS_ON()
 
 // Equality/Inequality checks - compare two values, and log a
 // LOG_DCHECK message including the two values when the result is not

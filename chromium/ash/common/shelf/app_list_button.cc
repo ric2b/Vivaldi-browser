@@ -12,9 +12,11 @@
 #include "ash/common/shelf/shelf_view.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
+#include "ash/common/system/tray/tray_popup_utils.h"
 #include "ash/common/wm_shell.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -22,6 +24,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/scoped_canvas.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_mask.h"
@@ -33,6 +36,7 @@ AppListButton::AppListButton(InkDropButtonListener* listener,
                              ShelfView* shelf_view,
                              WmShelf* wm_shelf)
     : views::ImageButton(nullptr),
+      is_showing_app_list_(false),
       draw_background_as_active_(false),
       background_alpha_(0),
       listener_(listener),
@@ -50,8 +54,7 @@ AppListButton::AppListButton(InkDropButtonListener* listener,
       l10n_util::GetStringUTF16(IDS_ASH_SHELF_APP_LIST_LAUNCHER_TITLE));
   SetSize(
       gfx::Size(GetShelfConstant(SHELF_SIZE), GetShelfConstant(SHELF_SIZE)));
-  SetFocusPainter(views::Painter::CreateSolidFocusPainter(
-      kFocusBorderColor, gfx::Insets(1, 1, 1, 1)));
+  SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
   set_notify_action(CustomButton::NOTIFY_ON_PRESS);
 }
 
@@ -62,6 +65,8 @@ void AppListButton::OnAppListShown() {
     AnimateInkDrop(views::InkDropState::ACTIVATED, nullptr);
   else
     SchedulePaint();
+  is_showing_app_list_ = true;
+  wm_shelf_->UpdateAutoHideState();
 }
 
 void AppListButton::OnAppListDismissed() {
@@ -69,6 +74,8 @@ void AppListButton::OnAppListDismissed() {
     AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr);
   else
     SchedulePaint();
+  is_showing_app_list_ = false;
+  wm_shelf_->UpdateAutoHideState();
 }
 
 void AppListButton::SetBackgroundAlpha(int alpha) {
@@ -167,6 +174,7 @@ void AppListButton::PaintMd(gfx::Canvas* canvas) {
   // ring draws sharply and is centered at all scale factors.
   const float kRingOuterRadiusDp = 7.f;
   const float kRingThicknessDp = 1.5f;
+  gfx::ScopedCanvas scoped_canvas(canvas);
   const float dsf = canvas->UndoDeviceScaleFactor();
   circle_center.Scale(dsf);
 
@@ -188,8 +196,6 @@ void AppListButton::PaintAppListButton(gfx::Canvas* canvas,
   if (WmShell::Get()->GetAppListTargetVisibility() ||
       draw_background_as_active_) {
     background_image_id = IDR_AURA_LAUNCHER_BACKGROUND_PRESSED;
-  } else if (wm_shelf_->IsDimmed()) {
-    background_image_id = IDR_AURA_LAUNCHER_BACKGROUND_ON_BLACK;
   } else {
     background_image_id = IDR_AURA_LAUNCHER_BACKGROUND_NORMAL;
   }

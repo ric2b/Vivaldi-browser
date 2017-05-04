@@ -31,6 +31,7 @@ generate_event_interfaces("modules_bindings_generated_event_interfaces") {
     "//third_party/WebKit/Source/modules/mediastream/MediaStreamEvent.idl",
     "//third_party/WebKit/Source/modules/mediastream/MediaStreamTrackEvent.idl",
     "//third_party/WebKit/Source/modules/notifications/NotificationEvent.idl",
+    "//third_party/WebKit/Source/modules/payments/PaymentRequestEvent.idl",
     "//third_party/WebKit/Source/modules/payments/PaymentRequestUpdateEvent.idl",
     "//third_party/WebKit/Source/modules/peerconnection/RTCDTMFToneChangeEvent.idl",
     "//third_party/WebKit/Source/modules/peerconnection/RTCDataChannelEvent.idl",
@@ -44,7 +45,6 @@ generate_event_interfaces("modules_bindings_generated_event_interfaces") {
     "//third_party/WebKit/Source/modules/serviceworkers/FetchEvent.idl",
     "//third_party/WebKit/Source/modules/serviceworkers/ForeignFetchEvent.idl",
     "//third_party/WebKit/Source/modules/serviceworkers/InstallEvent.idl",
-    "//third_party/WebKit/Source/modules/serviceworkers/ServiceWorkerMessageEvent.idl",
     "//third_party/WebKit/Source/modules/speech/SpeechRecognitionError.idl",
     "//third_party/WebKit/Source/modules/speech/SpeechRecognitionEvent.idl",
     "//third_party/WebKit/Source/modules/speech/SpeechSynthesisEvent.idl",
@@ -70,7 +70,6 @@ make_event_factory("event_modules") {
   ]
   deps = make_core_generated_deps + [ "//third_party/WebKit/Source/bindings/modules:modules_bindings_generated_event_interfaces" ]
   deps += [
-    "//device/generic_sensor/public/interfaces",
     "//device/generic_sensor/public/interfaces:interfaces_blink",
     "//device/vr:mojo_bindings_blink",
     "//media/midi:mojo_blink",

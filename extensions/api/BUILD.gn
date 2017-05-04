@@ -26,7 +26,9 @@ static_library("apis") {
     "//vivaldi/extensions/schema:api_registration",
   ]
   sources = [
-    "auto_update/auto_update_api.cc",
+    "auto_update/auto_update_api_linux.cc",
+    "auto_update/auto_update_api_mac.cc",
+    "auto_update/auto_update_api_win.cc",
     "auto_update/auto_update_api.h",
     "bookmarks/bookmarks_private_api.cc",
     "bookmarks/bookmarks_private_api.h",
@@ -54,6 +56,8 @@ static_library("apis") {
     "settings/settings_api.h",
     "show_menu/show_menu_api.cc",
     "show_menu/show_menu_api.h",
+    "sync/sync_api.cc",
+    "sync/sync_api.h",
     "tabs/tabs_private_api.cc",
     "tabs/tabs_private_api.h",
     "thumbnails/thumbnails_api.cc",

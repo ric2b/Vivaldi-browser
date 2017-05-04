@@ -18,8 +18,8 @@ var parseHtmlSubset = (function() {
   var allowedAttributes = {
     'href': function(node, value) {
       // Only allow a[href] starting with chrome:// and https://
-      return node.tagName == 'A' && (value.startsWith('chrome://') ||
-          value.startsWith('https://'));
+      return node.tagName == 'A' &&
+          (value.startsWith('chrome://') || value.startsWith('https://'));
     },
     'target': function(node, value) {
       // Only allow a[target='_blank'].
@@ -69,8 +69,9 @@ var parseHtmlSubset = (function() {
   }
 
   return function(s, opt_extraTags, opt_extraAttrs) {
-    var extraTags =
-        (opt_extraTags || []).map(function(str) { return str.toUpperCase(); });
+    var extraTags = (opt_extraTags || []).map(function(str) {
+      return str.toUpperCase();
+    });
     var tags = allowedTags.concat(extraTags);
     var attrs = merge(allowedAttributes, opt_extraAttrs || {});
 

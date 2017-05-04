@@ -22,7 +22,7 @@ fi
 lsb_release=$(lsb_release --codename --short)
 
 case $lsb_release in
-  xenial)
+  xenial|yakkety)
     java_alternative="java-1.8.0-openjdk-amd64"
     java_pkgs="openjdk-8-jre openjdk-8-jdk"
   ;;
@@ -55,7 +55,7 @@ sudo apt-get -f install
 # be installed manually on late-model versions.
 
 # common
-sudo apt-get -y install lighttpd python-pexpect xvfb x11-utils
+sudo apt-get -y install lib32z1 lighttpd python-pexpect xvfb x11-utils
 
 # Some binaries in the Android SDK require 32-bit libraries on the host.
 # See https://developer.android.com/sdk/installing/index.html?pkg=tools

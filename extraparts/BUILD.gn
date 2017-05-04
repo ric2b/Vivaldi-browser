@@ -14,6 +14,7 @@ source_set("extraparts") {
   }
   deps = [
     "//base:base",
+    "//chrome/browser",
     "//chrome/common:constants",
     "//skia",
     "//third_party/WebKit/public:blink_headers",

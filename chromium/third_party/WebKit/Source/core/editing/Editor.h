@@ -45,7 +45,6 @@ namespace blink {
 
 class CompositeEditCommand;
 class DragData;
-class EditCommandComposition;
 class EditorClient;
 class EditorInternalCommand;
 class LocalFrame;
@@ -56,6 +55,7 @@ class SpellChecker;
 class StylePropertySet;
 class TextEvent;
 class UndoStack;
+class UndoStep;
 
 enum class DeleteDirection;
 enum class DeleteMode { Simple, Smart };
@@ -131,8 +131,8 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   void applyParagraphStyleToSelection(StylePropertySet*, InputEvent::InputType);
 
   void appliedEditing(CompositeEditCommand*);
-  void unappliedEditing(EditCommandComposition*);
-  void reappliedEditing(EditCommandComposition*);
+  void unappliedEditing(UndoStep*);
+  void reappliedEditing(UndoStep*);
 
   void setShouldStyleWithCSS(bool flag) { m_shouldStyleWithCSS = flag; }
   bool shouldStyleWithCSS() const { return m_shouldStyleWithCSS; }
@@ -254,12 +254,16 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   void replaceSelectionWithFragment(DocumentFragment*,
                                     bool selectReplacement,
                                     bool smartReplace,
-                                    bool matchStyle);
+                                    bool matchStyle,
+                                    InputEvent::InputType);
   void replaceSelectionWithText(const String&,
                                 bool selectReplacement,
-                                bool smartReplace);
+                                bool smartReplace,
+                                InputEvent::InputType);
 
-  // TODO(xiaochengh): Replace |bool| parameters by |enum|.
+  // Implementation of WebLocalFrameImpl::replaceSelection.
+  void replaceSelection(const String&);
+
   void replaceSelectionAfterDragging(DocumentFragment*,
                                      InsertMode,
                                      DragSourceType);

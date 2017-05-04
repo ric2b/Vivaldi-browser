@@ -6,9 +6,11 @@
 
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/config/gpu_switches.h"
+#include "media/media_features.h"
 #include "ui/gl/gl_switches.h"
 
 namespace {
@@ -43,11 +45,11 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
   gpu_preferences.disable_vaapi_accelerated_video_encode =
       command_line->HasSwitch(switches::kDisableVaapiAcceleratedVideoEncode);
 #endif
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   gpu_preferences.disable_web_rtc_hw_encoding =
-      command_line->HasSwitch(switches::kDisableWebRtcHWEncoding) &&
-      command_line->GetSwitchValueASCII(switches::kDisableWebRtcHWEncoding)
-          .empty();
+      command_line->HasSwitch(switches::kDisableWebRtcHWEncoding) ||
+      (command_line->HasSwitch(switches::kDisableWebRtcHWVP8Encoding) &&
+       !base::FeatureList::IsEnabled(features::kWebRtcHWH264Encoding));
 #endif
 #if defined(OS_WIN)
   uint32_t enable_accelerated_vpx_decode_val =

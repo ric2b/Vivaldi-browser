@@ -28,10 +28,8 @@ class DeviceDisabledScreen : public BaseScreen,
   ~DeviceDisabledScreen() override;
 
   // BaseScreen:
-  void PrepareToShow() override;
   void Show() override;
   void Hide() override;
-  std::string GetName() const override;
 
   // DeviceDisabledScreenActor::Delegate:
   void OnActorDestroyed(DeviceDisabledScreenActor* actor) override;

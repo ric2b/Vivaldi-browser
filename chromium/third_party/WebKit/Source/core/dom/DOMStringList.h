@@ -34,8 +34,6 @@
 
 namespace blink {
 
-class ExecutionContext;
-
 // FIXME: Some consumers of this class may benefit from lazily fetching items
 // rather than creating the list statically as is currently the only option.
 class CORE_EXPORT DOMStringList final
@@ -44,37 +42,27 @@ class CORE_EXPORT DOMStringList final
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  // We would like to remove DOMStringList from the platform if possible.
-  // Track the source of each instance so we can measure the use of methods
-  // not present on Arrays and determine the feasibility of removal and
-  // what path it should take. http://crbug.com/460726
-  enum Source { IndexedDB, Location };
-
-  static DOMStringList* create(Source source) {
-    return new DOMStringList(source);
-  }
+  static DOMStringList* create() { return new DOMStringList(); }
 
   bool isEmpty() const { return m_strings.isEmpty(); }
   void clear() { m_strings.clear(); }
-  void append(const String& string) { m_strings.append(string); }
+  void append(const String& string) { m_strings.push_back(string); }
   void sort();
 
   // Implements the IDL.
   size_t length() const { return m_strings.size(); }
-  String anonymousIndexedGetter(unsigned index) const;
 
-  String item(ExecutionContext*, unsigned index) const;
-  bool contains(ExecutionContext*, const String&) const;
+  String item(unsigned index) const;
+  bool contains(const String&) const;
 
   operator const Vector<String>&() const { return m_strings; }
 
   DEFINE_INLINE_TRACE() {}
 
  private:
-  explicit DOMStringList(Source source) : m_source(source) {}
+  explicit DOMStringList() {}
 
   Vector<String> m_strings;
-  Source m_source;
 };
 
 }  // namespace blink

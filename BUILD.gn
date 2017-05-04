@@ -52,6 +52,7 @@ group("All") {
     "//third_party/cacheinvalidation:cacheinvalidation_unittests",
     "//ui/gfx:gfx_unittests",
     "//url:url_unittests",
+    "//vivaldi/app:write_translation_xml_generation_script",
   ]
   if (is_win) {
     deps += [
@@ -61,6 +62,7 @@ group("All") {
       "//sandbox/win:sbox_integration_tests",
       "//sandbox/win:sbox_unittests",
       "//sandbox/win:sbox_validation_tests",
+      "//vivaldi/update_notifier",
     ]
   } else if (!is_linux || !is_component_build) {
     deps += [ "//chrome/installer" ]
@@ -68,7 +70,6 @@ group("All") {
   if (is_mac) {
     deps += [
       "//third_party/ocmock",
-      "//ui/app_list:app_list_unittests",
       "//ui/message_center:message_center_unittests",
       "//vivaldi/installer/mac",
     ]
@@ -97,7 +98,6 @@ group("All") {
   }
   if (use_aura) {
     deps += [
-      "//ash:ash_unittests",
       "//ui/aura:aura_unittests",
       "//ui/compositor:compositor_unittests",
     ]

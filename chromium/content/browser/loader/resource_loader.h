@@ -11,11 +11,12 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "content/browser/loader/resource_controller.h"
 #include "content/browser/ssl/ssl_client_auth_handler.h"
 #include "content/browser/ssl/ssl_error_handler.h"
 #include "content/common/content_export.h"
-#include "content/public/browser/resource_controller.h"
 #include "net/url_request/url_request.h"
+#include "url/gurl.h"
 
 namespace net {
 class X509Certificate;
@@ -83,10 +84,10 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
 
   void StartRequestInternal();
   void CancelRequestInternal(int error, bool from_renderer);
+  void FollowDeferredRedirectInternal();
   void CompleteResponseStarted();
-  void StartReading(bool is_continuation);
+  void ReadMore(bool is_continuation);
   void ResumeReading();
-  void ReadMore(int* bytes_read);
   // Passes a read result to the handler.
   void CompleteRead(int bytes_read);
   void ResponseCompleted();
@@ -103,6 +104,7 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
     STATUS_SUCCESS_FROM_CACHE,
     STATUS_SUCCESS_FROM_NETWORK,
     STATUS_CANCELED,
+    STATUS_SUCCESS_ALREADY_PREFETCHED,
     STATUS_MAX,
   };
 
@@ -138,6 +140,9 @@ class CONTENT_EXPORT ResourceLoader : public net::URLRequest::Delegate,
   int times_cancelled_before_request_start_;
   bool started_request_;
   int times_cancelled_after_request_start_;
+
+  // Stores the URL from a deferred redirect.
+  GURL deferred_redirect_url_;
 
   base::WeakPtrFactory<ResourceLoader> weak_ptr_factory_;
 

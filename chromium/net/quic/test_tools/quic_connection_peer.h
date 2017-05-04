@@ -9,11 +9,11 @@
 #include "net/base/ip_endpoint.h"
 #include "net/quic/core/quic_connection.h"
 #include "net/quic/core/quic_connection_stats.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
+#include "net/quic/platform/api/quic_socket_address.h"
 
 namespace net {
 
-struct QuicAckFrame;
 struct QuicPacketHeader;
 class QuicAlarm;
 class QuicConnectionHelperInterface;
@@ -23,8 +23,6 @@ class QuicFramer;
 class QuicPacketCreator;
 class QuicPacketGenerator;
 class QuicPacketWriter;
-class QuicReceivedPacketManager;
-class QuicSentEntropyManager;
 class QuicSentPacketManager;
 class SendAlgorithmInterface;
 
@@ -35,14 +33,10 @@ class QuicConnectionPeer {
  public:
   static void SendAck(QuicConnection* connection);
 
-  // Sets send algorithm of |path_id|.
   static void SetSendAlgorithm(QuicConnection* connection,
-                               QuicPathId path_id,
                                SendAlgorithmInterface* send_algorithm);
 
-  // Sets loss algorithm of |path_id|.
   static void SetLossAlgorithm(QuicConnection* connection,
-                               QuicPathId path_id,
                                LossDetectionInterface* loss_algorithm);
 
   static const QuicFrame GetUpdatedAckFrame(QuicConnection* connection);
@@ -56,34 +50,19 @@ class QuicConnectionPeer {
 
   static QuicPacketGenerator* GetPacketGenerator(QuicConnection* connection);
 
-  // Returns sent packet manager of |path_id|.
-  static QuicSentPacketManager* GetSentPacketManager(QuicConnection* connection,
-                                                     QuicPathId path_id);
-
-  static QuicTime::Delta GetNetworkTimeout(QuicConnection* connection);
-
-  static QuicSentEntropyManager* GetSentEntropyManager(
+  static QuicSentPacketManager* GetSentPacketManager(
       QuicConnection* connection);
 
-  static QuicPacketEntropyHash GetSentEntropyHash(
-      QuicConnection* connection,
-      QuicPacketNumber packet_number);
-
-  static QuicPacketEntropyHash PacketEntropy(QuicConnection* connection,
-                                             QuicPacketNumber packet_number);
-
-  static QuicPacketEntropyHash ReceivedEntropyHash(
-      QuicConnection* connection,
-      QuicPacketNumber packet_number);
+  static QuicTime::Delta GetNetworkTimeout(QuicConnection* connection);
 
   static void SetPerspective(QuicConnection* connection,
                              Perspective perspective);
 
   static void SetSelfAddress(QuicConnection* connection,
-                             const IPEndPoint& self_address);
+                             const QuicSocketAddress& self_address);
 
   static void SetPeerAddress(QuicConnection* connection,
-                             const IPEndPoint& peer_address);
+                             const QuicSocketAddress& peer_address);
 
   static bool IsSilentCloseEnabled(QuicConnection* connection);
 

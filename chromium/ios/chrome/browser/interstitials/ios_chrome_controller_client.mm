@@ -13,6 +13,10 @@
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/web_state/web_state.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 IOSChromeControllerClient::IOSChromeControllerClient(
     web::WebState* web_state,
     std::unique_ptr<security_interstitials::MetricsHelper> metrics_helper)
@@ -40,6 +44,10 @@ void IOSChromeControllerClient::GoBack() {
   web_interstitial_->DontProceed();
 }
 
+void IOSChromeControllerClient::GoBackAfterNavigationCommitted() {
+  NOTREACHED();
+}
+
 void IOSChromeControllerClient::Proceed() {
   DCHECK(web_interstitial_);
   web_interstitial_->Proceed();
@@ -55,7 +63,7 @@ void IOSChromeControllerClient::OpenUrlInCurrentTab(const GURL& url) {
       ui::PAGE_TRANSITION_LINK, false));
 }
 
-const std::string& IOSChromeControllerClient::GetApplicationLocale() {
+const std::string& IOSChromeControllerClient::GetApplicationLocale() const {
   return GetApplicationContext()->GetApplicationLocale();
 }
 
@@ -65,6 +73,7 @@ PrefService* IOSChromeControllerClient::GetPrefService() {
       ->GetPrefs();
 }
 
-const std::string IOSChromeControllerClient::GetExtendedReportingPrefName() {
+const std::string IOSChromeControllerClient::GetExtendedReportingPrefName()
+    const {
   return std::string();
 }

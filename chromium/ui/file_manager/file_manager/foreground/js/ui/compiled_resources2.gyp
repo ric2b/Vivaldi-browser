@@ -8,10 +8,6 @@
 #      'includes': ['../../../../compile_js2.gypi'],
 #    },
 #    {
-#      'target_name': 'actions_submenu_unittest',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
-#    {
 #      'target_name': 'banners',
 #      'includes': ['../../../../compile_js2.gypi'],
 #    },
@@ -28,19 +24,11 @@
 #      'includes': ['../../../../compile_js2.gypi'],
 #    },
 #    {
-#      'target_name': 'details_container',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
-#    {
 #      'target_name': 'dialog_footer',
 #      'includes': ['../../../../compile_js2.gypi'],
 #    },
 #    {
 #      'target_name': 'directory_tree',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'directory_tree_unittest',
 #      'includes': ['../../../../compile_js2.gypi'],
 #    },
 #    {
@@ -84,10 +72,6 @@
 #      'includes': ['../../../../compile_js2.gypi'],
 #    },
 #    {
-#      'target_name': 'file_table_unittest',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
-#    {
 #      'target_name': 'files_alert_dialog',
 #      'includes': ['../../../../compile_js2.gypi'],
 #    },
@@ -112,10 +96,6 @@
 #      'includes': ['../../../../compile_js2.gypi'],
 #    },
 #    {
-#      'target_name': 'multi_file_details',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
-#    {
 #      'target_name': 'multi_profile_share_dialog',
 #      'includes': ['../../../../compile_js2.gypi'],
 #    },
@@ -137,10 +117,6 @@
 #    },
 #    {
 #      'target_name': 'share_dialog',
-#      'includes': ['../../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'single_file_details',
 #      'includes': ['../../../../compile_js2.gypi'],
 #    },
 #    {

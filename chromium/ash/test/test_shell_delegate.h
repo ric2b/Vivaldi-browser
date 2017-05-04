@@ -8,15 +8,9 @@
 #include <memory>
 #include <string>
 
-#include "ash/common/media_delegate.h"
 #include "ash/common/shell_delegate.h"
 #include "ash/common/test/test_session_state_delegate.h"
 #include "base/macros.h"
-
-namespace app_list {
-class AppListPresenterDelegateFactory;
-class AppListPresenterImpl;
-}
 
 namespace keyboard {
 class KeyboardUI;
@@ -46,13 +40,11 @@ class TestShellDelegate : public ShellDelegate {
   void Exit() override;
   keyboard::KeyboardUI* CreateKeyboardUI() override;
   void OpenUrlFromArc(const GURL& url) override;
-  app_list::AppListPresenter* GetAppListPresenter() override;
   ShelfDelegate* CreateShelfDelegate(ShelfModel* model) override;
   SystemTrayDelegate* CreateSystemTrayDelegate() override;
   std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() override;
   TestSessionStateDelegate* CreateSessionStateDelegate() override;
   AccessibilityDelegate* CreateAccessibilityDelegate() override;
-  MediaDelegate* CreateMediaDelegate() override;
   std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() override;
   ui::MenuModel* CreateContextMenu(WmShelf* wm_shelf,
                                    const ShelfItem* item) override;
@@ -60,13 +52,13 @@ class TestShellDelegate : public ShellDelegate {
   base::string16 GetProductName() const override;
   gfx::Image GetDeprecatedAcceleratorImage() const override;
 
+  bool IsTouchscreenEnabledInPrefs(bool use_local_state) const override;
+  void SetTouchscreenEnabledInPrefs(bool enabled,
+                                    bool use_local_state) override;
+  void UpdateTouchscreenStatusFromPrefs() override;
+
   int num_exit_requests() const { return num_exit_requests_; }
 
-  app_list::AppListPresenterImpl* app_list_presenter() {
-    return app_list_presenter_.get();
-  }
-
-  void SetMediaCaptureState(MediaCaptureState state);
   void SetForceMaximizeOnFirstRun(bool maximize) {
     force_maximize_on_first_run_ = maximize;
   }
@@ -75,10 +67,7 @@ class TestShellDelegate : public ShellDelegate {
   int num_exit_requests_;
   bool multi_profiles_enabled_;
   bool force_maximize_on_first_run_;
-
-  std::unique_ptr<app_list::AppListPresenterDelegateFactory>
-      app_list_presenter_delegate_factory_;
-  std::unique_ptr<app_list::AppListPresenterImpl> app_list_presenter_;
+  bool touchscreen_enabled_in_local_pref_;
 
   DISALLOW_COPY_AND_ASSIGN(TestShellDelegate);
 };

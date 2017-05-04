@@ -23,7 +23,7 @@
 
 #include "core/html/HTMLScriptElement.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
@@ -33,6 +33,7 @@
 #include "core/dom/Text.h"
 #include "core/events/Event.h"
 #include "core/frame/UseCounter.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 
 namespace blink {
 
@@ -79,17 +80,23 @@ void HTMLScriptElement::didMoveToNewDocument(Document& oldDocument) {
   HTMLElement::didMoveToNewDocument(oldDocument);
 }
 
-void HTMLScriptElement::parseAttribute(const QualifiedName& name,
-                                       const AtomicString& oldValue,
-                                       const AtomicString& value) {
-  if (name == srcAttr) {
-    m_loader->handleSourceAttribute(value);
-    logUpdateAttributeIfIsolatedWorldAndInDocument("script", srcAttr, oldValue,
-                                                   value);
-  } else if (name == asyncAttr) {
+void HTMLScriptElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  if (params.name == srcAttr) {
+    m_loader->handleSourceAttribute(params.newValue);
+    logUpdateAttributeIfIsolatedWorldAndInDocument("script", params);
+  } else if (params.name == asyncAttr) {
     m_loader->handleAsyncAttribute();
+  } else if (params.name == nonceAttr) {
+    if (params.newValue == ContentSecurityPolicy::getNonceReplacementString())
+      return;
+    m_nonce = params.newValue;
+    if (RuntimeEnabledFeatures::hideNonceContentAttributeEnabled()) {
+      setAttribute(nonceAttr,
+                   ContentSecurityPolicy::getNonceReplacementString());
+    }
   } else {
-    HTMLElement::parseAttribute(name, oldValue, value);
+    HTMLElement::parseAttribute(params);
   }
 }
 

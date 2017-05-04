@@ -7,7 +7,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <map>
 #include <set>
 #include <string>
 #include <utility>
@@ -28,16 +27,14 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/profiler/scoped_tracker.h"
+#include "base/profiler/stack_sampling_profiler.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
-#include "base/task_scheduler/switches.h"
-#include "base/task_scheduler/task_scheduler.h"
 #include "base/threading/platform_thread.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -75,7 +72,6 @@
 #include "chrome/browser/net/crl_set_fetcher.h"
 #include "chrome/browser/performance_monitor/performance_monitor.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
-#include "chrome/browser/power/process_power_collector.h"
 #include "chrome/browser/prefs/chrome_command_line_pref_store.h"
 #include "chrome/browser/prefs/chrome_pref_service_factory.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
@@ -135,10 +131,9 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_value_store.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/rappor/rappor_service.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
-#include "components/task_scheduler_util/initialization_util.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/variations/field_trial_config/field_trial_util.h"
@@ -162,12 +157,14 @@
 #include "device/geolocation/geolocation_provider.h"
 #include "extensions/features/features.h"
 #include "media/base/media_resources.h"
+#include "media/media_features.h"
 #include "net/base/net_module.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/http/http_network_layer.h"
 #include "net/http/http_stream_factory.h"
 #include "net/url_request/url_request.h"
 #include "printing/features/features.h"
+#include "rlz/features/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/layout.h"
 #include "ui/base/material_design/material_design_controller.h"
@@ -178,7 +175,9 @@
 #include "chrome/browser/metrics/thread_watcher_android.h"
 #include "ui/base/resource/resource_bundle_android.h"
 #else
+#include "chrome/browser/features.h"
 #include "chrome/browser/feedback/feedback_profile_observer.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -249,14 +248,14 @@
 #include "printing/printed_document.h"
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
 
-#if defined(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ)
 #include "chrome/browser/rlz/chrome_rlz_tracker_delegate.h"
 #include "components/rlz/rlz_tracker.h"
-#endif  // defined(ENABLE_RLZ)
+#endif  // BUILDFLAG(ENABLE_RLZ)
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 #include "chrome/browser/media/webrtc/webrtc_log_util.h"
-#endif  // defined(ENABLE_WEBRTC)
+#endif  // BUILDFLAG(ENABLE_WEBRTC)
 
 #if defined(USE_AURA)
 #include "ui/aura/env.h"
@@ -316,31 +315,6 @@ void AddFirstRunNewTabs(StartupBrowserCreator* browser_creator,
   }
 }
 #endif  // !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
-
-void MaybeInitializeTaskScheduler() {
-  static constexpr char kFieldTrialName[] = "BrowserScheduler";
-  std::map<std::string, std::string> variation_params;
-  if (!variations::GetVariationParams(kFieldTrialName, &variation_params)) {
-    DCHECK(!base::CommandLine::ForCurrentProcess()->HasSwitch(
-        switches::kEnableBrowserTaskScheduler))
-        << "The Browser Task Scheduler remains disabled with "
-        << switches::kEnableBrowserTaskScheduler
-        << " because there is no available variation param for this build or "
-           " the task scheduler is disabled in chrome://flags.";
-    return;
-  }
-
-  if (!task_scheduler_util::InitializeDefaultTaskScheduler(variation_params))
-    return;
-
-  // TODO(gab): Remove this when http://crbug.com/622400 concludes.
-  const auto sequenced_worker_pool_param =
-      variation_params.find("RedirectSequencedWorkerPools");
-  if (sequenced_worker_pool_param != variation_params.end() &&
-      sequenced_worker_pool_param->second == "true") {
-    base::SequencedWorkerPool::RedirectToTaskSchedulerForProcess();
-  }
-}
 
 // Returns the new local state object, guaranteed non-NULL.
 // |local_state_task_runner| must be a shutdown-blocking task runner.
@@ -652,7 +626,6 @@ ChromeBrowserMainParts::ChromeBrowserMainParts(
       result_code_(content::RESULT_CODE_NORMAL_EXIT),
       startup_watcher_(new StartupTimeBomb()),
       shutdown_watcher_(new ShutdownWatcherHelper()),
-      browser_field_trials_(parameters.command_line),
       sampling_profiler_(
           base::PlatformThread::CurrentId(),
           StackSamplingConfiguration::Get()->
@@ -958,6 +931,11 @@ void ChromeBrowserMainParts::PostMainMessageLoopStart() {
 }
 
 int ChromeBrowserMainParts::PreCreateThreads() {
+  // IMPORTANT
+  // Calls in this function should not post tasks or create threads as
+  // components used to handle those tasks are not yet available. This work
+  // should be deferred to PreMainMessageLoopRunImpl.
+
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PreCreateThreads");
   result_code_ = PreCreateThreadsImpl();
 
@@ -1240,29 +1218,12 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   device::GeolocationProvider::SetGeolocationDelegate(
       new ChromeGeolocationDelegate());
 
-  // IMPORTANT
-  // Do not add anything below this line until you've verified your new code
-  // does not interfere with the critical initialization order below. Some of
-  // the calls below end up implicitly creating threads and as such new calls
-  // typically either belong before them or in a later startup phase.
-
   // Now that the command line has been mutated based on about:flags, we can
-  // initialize field trials and setup metrics. The field trials are needed by
-  // IOThread's initialization which happens in BrowserProcess:PreCreateThreads.
+  // initialize field trials. The field trials are needed by IOThread's
+  // initialization which happens in BrowserProcess:PreCreateThreads. Metrics
+  // initialization is handled in PreMainMessageLoopRunImpl since it posts
+  // tasks.
   SetupFieldTrials();
-
-  // Task Scheduler initialization needs to be here for the following reasons:
-  //   * After |SetupFieldTrials()|: Initialization uses variations.
-  //   * Before |SetupMetrics()|: |SetupMetrics()| uses the blocking pool. The
-  //         Task Scheduler must do any necessary redirection before then.
-  //   * Near the end of |PreCreateThreads()|: The TaskScheduler needs to be
-  //         created before any other threads are (by contract) but it creates
-  //         threads itself so instantiating it earlier is also incorrect.
-  // To maintain scoping symmetry, if this line is moved, the corresponding
-  // shutdown call may also need to be moved.
-  MaybeInitializeTaskScheduler();
-
-  SetupMetrics();
 
   // ChromeOS needs ResourceBundle::InitSharedInstance to be called before this.
   // This also instantiates the IOThread which requests the metrics service and
@@ -1318,6 +1279,8 @@ void ChromeBrowserMainParts::PreProfileInit() {
 
   // Ephemeral profiles may have been left behind if the browser crashed.
   g_browser_process->profile_manager()->CleanUpEphemeralProfiles();
+  // Files of deleted profiles can also be left behind after a crash.
+  g_browser_process->profile_manager()->CleanUpDeletedProfiles();
 #endif  // !defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -1425,7 +1388,7 @@ void ChromeBrowserMainParts::PostBrowserStart() {
   // Allow ProcessSingleton to process messages.
   process_singleton_->Unlock();
 #endif  // !defined(OS_ANDROID)
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   // Set up a task to delete old WebRTC log files for all profiles. Use a delay
   // to reduce the impact on startup time.
   BrowserThread::PostDelayedTask(
@@ -1433,7 +1396,7 @@ void ChromeBrowserMainParts::PostBrowserStart() {
       FROM_HERE,
       base::Bind(&WebRtcLogUtil::DeleteOldWebRtcLogFilesForAllProfiles),
       base::TimeDelta::FromMinutes(1));
-#endif  // defined(ENABLE_WEBRTC)
+#endif  // BUILDFLAG(ENABLE_WEBRTC)
 
 #if !defined(OS_ANDROID)
   if (base::FeatureList::IsEnabled(features::kWebUsb)) {
@@ -1458,6 +1421,10 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
 
   SCOPED_UMA_HISTOGRAM_LONG_TIMER("Startup.PreMainMessageLoopRunImplLongTime");
   const base::TimeTicks start_time_step1 = base::TimeTicks::Now();
+
+  // This must occur at PreMainMessageLoopRun because |SetupMetrics()| uses the
+  // blocking pool, which is disabled until the CreateThreads phase of startup.
+  SetupMetrics();
 
 #if defined(OS_WIN)
   // Windows parental controls calls can be slow, so we do an early init here
@@ -1763,7 +1730,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   }
 #endif  // defined(OS_WIN)
 
-#if defined(ENABLE_RLZ) && !defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_RLZ) && !defined(OS_CHROMEOS)
   // Init the RLZ library. This just binds the dll and schedules a task on the
   // file thread to be run sometime later. If this is the first run we record
   // the installation event.
@@ -1780,7 +1747,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
       ChromeRLZTrackerDelegate::IsGoogleDefaultSearch(profile_),
       ChromeRLZTrackerDelegate::IsGoogleHomepage(profile_),
       ChromeRLZTrackerDelegate::IsGoogleInStartpages(profile_));
-#endif  // defined(ENABLE_RLZ) && !defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(ENABLE_RLZ) && !defined(OS_CHROMEOS)
 
   // Configure modules that need access to resources.
   net::NetModule::SetResourceProvider(chrome_common_net::NetResourceProvider);
@@ -1957,13 +1924,13 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   run_message_loop_ = started;
   browser_creator_.reset();
 
-#if !defined(OS_LINUX) || defined(OS_CHROMEOS)  // http://crbug.com/426393
+#if !defined(OS_LINUX) || defined(OS_CHROMEOS)
+  // Collects power-related UMA stats for Windows, Mac, and ChromeOS.
+  // Linux is not supported (crbug.com/426393).
   power_usage_monitor_.reset(new PowerUsageMonitor());
   power_usage_monitor_->Start();
 #endif  // !defined(OS_LINUX) || defined(OS_CHROMEOS)
 
-  process_power_collector_.reset(new ProcessPowerCollector);
-  process_power_collector_->Initialize();
 #endif  // !defined(OS_ANDROID)
 
   PostBrowserStart();
@@ -2027,6 +1994,12 @@ bool ChromeBrowserMainParts::MainMessageLoopRun(int* result_code) {
       g_browser_process->local_state());
   run_loop.Run();
 
+  if (base::FeatureList::IsEnabled(features::kDesktopFastShutdown)) {
+    // Experiment to determine the impact of always taking the quick exit path.
+    // There is no returning from this call as it terminates the process.
+    chrome::SessionEnding();
+  }
+
   return true;
 #endif  // defined(OS_ANDROID)
 }
@@ -2047,10 +2020,6 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
 
   // Disarm the startup hang detector time bomb if it is still Arm'ed.
   startup_watcher_->Disarm();
-
-  // Remove observers attached to D-Bus clients before DbusThreadManager is
-  // shut down.
-  process_power_collector_.reset();
 
   web_usb_detector_.reset();
 
@@ -2092,6 +2061,11 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
 #endif  // defined(OS_ANDROID)
 }
 
+void ChromeBrowserMainParts::PreShutdown() {
+  base::StackSamplingProfiler::SetProcessMilestone(
+      metrics::CallStackProfileMetricsProvider::SHUTDOWN_START);
+}
+
 void ChromeBrowserMainParts::PostDestroyThreads() {
 #if defined(OS_ANDROID)
   // On Android, there is no quit/exit. So the browser's main message loop will
@@ -2114,13 +2088,6 @@ void ChromeBrowserMainParts::PostDestroyThreads() {
   // browser_shutdown takes care of deleting browser_process, so we need to
   // release it.
   ignore_result(browser_process_.release());
-
-  // The TaskScheduler was initialized before invoking
-  // |browser_process_->PreCreateThreads()|. To maintain scoping symmetry,
-  // perform the shutdown after |browser_process_->PostDestroyThreads()|.
-  base::TaskScheduler* task_scheduler = base::TaskScheduler::GetInstance();
-  if (task_scheduler)
-    task_scheduler->Shutdown();
 
   browser_shutdown::ShutdownPostThreadsStop(restart_flags);
   master_prefs_.reset();

@@ -79,43 +79,43 @@ class GLRendererTest : public testing::Test {
     EXPECT_TRUE((program_binding)->initialized()); \
   } while (false)
 
-static inline SkXfermode::Mode BlendModeToSkXfermode(BlendMode blend_mode) {
+static inline SkBlendMode BlendModeToSkXfermode(BlendMode blend_mode) {
   switch (blend_mode) {
     case BLEND_MODE_NONE:
     case BLEND_MODE_NORMAL:
-      return SkXfermode::kSrcOver_Mode;
+      return SkBlendMode::kSrcOver;
     case BLEND_MODE_SCREEN:
-      return SkXfermode::kScreen_Mode;
+      return SkBlendMode::kScreen;
     case BLEND_MODE_OVERLAY:
-      return SkXfermode::kOverlay_Mode;
+      return SkBlendMode::kOverlay;
     case BLEND_MODE_DARKEN:
-      return SkXfermode::kDarken_Mode;
+      return SkBlendMode::kDarken;
     case BLEND_MODE_LIGHTEN:
-      return SkXfermode::kLighten_Mode;
+      return SkBlendMode::kLighten;
     case BLEND_MODE_COLOR_DODGE:
-      return SkXfermode::kColorDodge_Mode;
+      return SkBlendMode::kColorDodge;
     case BLEND_MODE_COLOR_BURN:
-      return SkXfermode::kColorBurn_Mode;
+      return SkBlendMode::kColorBurn;
     case BLEND_MODE_HARD_LIGHT:
-      return SkXfermode::kHardLight_Mode;
+      return SkBlendMode::kHardLight;
     case BLEND_MODE_SOFT_LIGHT:
-      return SkXfermode::kSoftLight_Mode;
+      return SkBlendMode::kSoftLight;
     case BLEND_MODE_DIFFERENCE:
-      return SkXfermode::kDifference_Mode;
+      return SkBlendMode::kDifference;
     case BLEND_MODE_EXCLUSION:
-      return SkXfermode::kExclusion_Mode;
+      return SkBlendMode::kExclusion;
     case BLEND_MODE_MULTIPLY:
-      return SkXfermode::kMultiply_Mode;
+      return SkBlendMode::kMultiply;
     case BLEND_MODE_HUE:
-      return SkXfermode::kHue_Mode;
+      return SkBlendMode::kHue;
     case BLEND_MODE_SATURATION:
-      return SkXfermode::kSaturation_Mode;
+      return SkBlendMode::kSaturation;
     case BLEND_MODE_COLOR:
-      return SkXfermode::kColor_Mode;
+      return SkBlendMode::kColor;
     case BLEND_MODE_LUMINOSITY:
-      return SkXfermode::kLuminosity_Mode;
+      return SkBlendMode::kLuminosity;
   }
-  return SkXfermode::kSrcOver_Mode;
+  return SkBlendMode::kSrcOver;
 }
 
 // Explicitly named to be a friend in GLRenderer for shader access.
@@ -132,24 +132,27 @@ class GLRendererShaderPixelTest : public GLRendererPixelTest {
   }
 
   void TestBasicShaders() {
-    EXPECT_PROGRAM_VALID(renderer()->GetDebugBorderProgram());
-    EXPECT_PROGRAM_VALID(renderer()->GetSolidColorProgram());
-    EXPECT_PROGRAM_VALID(renderer()->GetSolidColorProgramAA());
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(ProgramKey::DebugBorder()));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(ProgramKey::SolidColor(NO_AA)));
+    EXPECT_PROGRAM_VALID(
+        renderer()->GetProgram(ProgramKey::SolidColor(USE_AA)));
   }
 
   void TestShadersWithPrecision(TexCoordPrecision precision) {
     // This program uses external textures and sampler, so it won't compile
     // everywhere.
     if (context_provider()->ContextCapabilities().egl_image_external)
-      EXPECT_PROGRAM_VALID(renderer()->GetVideoStreamTextureProgram(precision));
+      EXPECT_PROGRAM_VALID(
+          renderer()->GetProgram(ProgramKey::VideoStream(precision)));
   }
 
   void TestShadersWithPrecisionAndBlend(TexCoordPrecision precision,
                                         BlendMode blend_mode) {
-    EXPECT_PROGRAM_VALID(
-        renderer()->GetRenderPassProgram(precision, blend_mode));
-    EXPECT_PROGRAM_VALID(
-        renderer()->GetRenderPassProgramAA(precision, blend_mode));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(ProgramKey::RenderPass(
+        precision, SAMPLER_TYPE_2D, blend_mode, NO_AA, NO_MASK, false, false)));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
+        ProgramKey::RenderPass(precision, SAMPLER_TYPE_2D, blend_mode, USE_AA,
+                               NO_MASK, false, false)));
   }
 
   void TestShadersWithPrecisionAndSampler(TexCoordPrecision precision,
@@ -160,28 +163,40 @@ class GLRendererShaderPixelTest : public GLRendererPixelTest {
       return;
     }
 
-    EXPECT_PROGRAM_VALID(renderer()->GetTextureProgram(precision, sampler));
-    EXPECT_PROGRAM_VALID(
-        renderer()->GetNonPremultipliedTextureProgram(precision, sampler));
-    EXPECT_PROGRAM_VALID(
-        renderer()->GetTextureBackgroundProgram(precision, sampler));
-    EXPECT_PROGRAM_VALID(
-        renderer()->GetNonPremultipliedTextureBackgroundProgram(precision,
-                                                                sampler));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
+        ProgramKey::Texture(precision, sampler, PREMULTIPLIED_ALPHA, false)));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
+        ProgramKey::Texture(precision, sampler, PREMULTIPLIED_ALPHA, true)));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(ProgramKey::Texture(
+        precision, sampler, NON_PREMULTIPLIED_ALPHA, false)));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(ProgramKey::Texture(
+        precision, sampler, NON_PREMULTIPLIED_ALPHA, true)));
 
-    EXPECT_PROGRAM_VALID(renderer()->GetTileProgram(precision, sampler));
-    EXPECT_PROGRAM_VALID(renderer()->GetTileProgramOpaque(precision, sampler));
-    EXPECT_PROGRAM_VALID(renderer()->GetTileProgramAA(precision, sampler));
-    EXPECT_PROGRAM_VALID(renderer()->GetTileProgramSwizzle(precision, sampler));
-    EXPECT_PROGRAM_VALID(
-        renderer()->GetTileProgramSwizzleOpaque(precision, sampler));
-    EXPECT_PROGRAM_VALID(
-        renderer()->GetTileProgramSwizzleAA(precision, sampler));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
+        ProgramKey::Tile(precision, sampler, NO_AA, NO_SWIZZLE, false)));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
+        ProgramKey::Tile(precision, sampler, NO_AA, DO_SWIZZLE, false)));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
+        ProgramKey::Tile(precision, sampler, USE_AA, NO_SWIZZLE, false)));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
+        ProgramKey::Tile(precision, sampler, USE_AA, DO_SWIZZLE, false)));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
+        ProgramKey::Tile(precision, sampler, NO_AA, NO_SWIZZLE, true)));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
+        ProgramKey::Tile(precision, sampler, NO_AA, DO_SWIZZLE, true)));
+
+    // Iterate over alpha plane, nv12, and color_lut parameters.
+    UVTextureMode uv_modes[2] = {UV_TEXTURE_MODE_UV, UV_TEXTURE_MODE_U_V};
+    YUVAlphaTextureMode a_modes[2] = {YUV_NO_ALPHA_TEXTURE,
+                                      YUV_HAS_ALPHA_TEXTURE};
+    ColorConversionMode c_modes[2] = {COLOR_CONVERSION_MODE_NONE,
+                                      COLOR_CONVERSION_MODE_LUT_FROM_YUV};
     for (int j = 0; j < 2; j++) {
       for (int k = 0; k < 2; k++) {
         for (int l = 0; l < 2; l++) {
-          EXPECT_PROGRAM_VALID(
-              renderer()->GetVideoYUVProgram(precision, sampler, j, k, l));
+          const Program* program = renderer()->GetProgram(ProgramKey::YUVVideo(
+              precision, sampler, a_modes[j], uv_modes[k], c_modes[l]));
+          EXPECT_PROGRAM_VALID(program);
         }
       }
     }
@@ -197,14 +212,18 @@ class GLRendererShaderPixelTest : public GLRendererPixelTest {
       return;
     }
 
-    EXPECT_PROGRAM_VALID(renderer()->GetRenderPassMaskProgram(
-        precision, sampler, blend_mode, mask_for_background));
-    EXPECT_PROGRAM_VALID(renderer()->GetRenderPassMaskProgramAA(
-        precision, sampler, blend_mode, mask_for_background));
-    EXPECT_PROGRAM_VALID(renderer()->GetRenderPassMaskColorMatrixProgramAA(
-        precision, sampler, blend_mode, mask_for_background));
-    EXPECT_PROGRAM_VALID(renderer()->GetRenderPassMaskColorMatrixProgram(
-        precision, sampler, blend_mode, mask_for_background));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
+        ProgramKey::RenderPass(precision, sampler, blend_mode, NO_AA, HAS_MASK,
+                               mask_for_background, false)));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
+        ProgramKey::RenderPass(precision, sampler, blend_mode, NO_AA, HAS_MASK,
+                               mask_for_background, true)));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
+        ProgramKey::RenderPass(precision, sampler, blend_mode, USE_AA, HAS_MASK,
+                               mask_for_background, false)));
+    EXPECT_PROGRAM_VALID(renderer()->GetProgram(
+        ProgramKey::RenderPass(precision, sampler, blend_mode, USE_AA, HAS_MASK,
+                               mask_for_background, true)));
   }
 };
 
@@ -384,95 +403,85 @@ class GLRendererShaderTest : public GLRendererTest {
 
   void TestRenderPassProgram(TexCoordPrecision precision,
                              BlendMode blend_mode) {
-    EXPECT_PROGRAM_VALID(
-        &renderer_->render_pass_program_[precision][blend_mode]);
-    EXPECT_EQ(renderer_->render_pass_program_[precision][blend_mode].program(),
-              renderer_->program_shadow_);
+    const Program* program = renderer_->GetProgramIfInitialized(
+        ProgramKey::RenderPass(precision, SAMPLER_TYPE_2D, blend_mode, NO_AA,
+                               NO_MASK, false, false));
+    EXPECT_PROGRAM_VALID(program);
+    EXPECT_EQ(program->program(), renderer_->program_shadow_);
   }
 
   void TestRenderPassColorMatrixProgram(TexCoordPrecision precision,
                                         BlendMode blend_mode) {
-    EXPECT_PROGRAM_VALID(
-        &renderer_->render_pass_color_matrix_program_[precision][blend_mode]);
-    EXPECT_EQ(
-        renderer_->render_pass_color_matrix_program_[precision][blend_mode]
-            .program(),
-        renderer_->program_shadow_);
+    const Program* program = renderer_->GetProgramIfInitialized(
+        ProgramKey::RenderPass(precision, SAMPLER_TYPE_2D, blend_mode, NO_AA,
+                               NO_MASK, false, true));
+    EXPECT_PROGRAM_VALID(program);
+    EXPECT_EQ(program->program(), renderer_->program_shadow_);
   }
 
   void TestRenderPassMaskProgram(TexCoordPrecision precision,
                                  SamplerType sampler,
                                  BlendMode blend_mode) {
-    EXPECT_PROGRAM_VALID(
-        &renderer_->render_pass_mask_program_[precision]
-                                             [sampler]
-                                             [blend_mode]
-                                             [NO_MASK]);
-    EXPECT_EQ(
-        renderer_->render_pass_mask_program_[precision]
-                                            [sampler]
-                                            [blend_mode]
-                                            [NO_MASK].program(),
-        renderer_->program_shadow_);
+    const Program* program =
+        renderer_->GetProgramIfInitialized(ProgramKey::RenderPass(
+            precision, sampler, blend_mode, NO_AA, HAS_MASK, false, false));
+    EXPECT_PROGRAM_VALID(program);
+    EXPECT_EQ(program->program(), renderer_->program_shadow_);
   }
 
   void TestRenderPassMaskColorMatrixProgram(TexCoordPrecision precision,
                                             SamplerType sampler,
                                             BlendMode blend_mode) {
-    EXPECT_PROGRAM_VALID(&renderer_->render_pass_mask_color_matrix_program_
-                              [precision][sampler][blend_mode][NO_MASK]);
-    EXPECT_EQ(renderer_->render_pass_mask_color_matrix_program_
-                  [precision][sampler][blend_mode][NO_MASK].program(),
-              renderer_->program_shadow_);
+    const Program* program =
+        renderer_->GetProgramIfInitialized(ProgramKey::RenderPass(
+            precision, sampler, blend_mode, NO_AA, HAS_MASK, false, true));
+    EXPECT_PROGRAM_VALID(program);
+    EXPECT_EQ(program->program(), renderer_->program_shadow_);
   }
 
   void TestRenderPassProgramAA(TexCoordPrecision precision,
                                BlendMode blend_mode) {
-    EXPECT_PROGRAM_VALID(
-        &renderer_->render_pass_program_aa_[precision][blend_mode]);
-    EXPECT_EQ(
-        renderer_->render_pass_program_aa_[precision][blend_mode].program(),
-        renderer_->program_shadow_);
+    const Program* program = renderer_->GetProgramIfInitialized(
+        ProgramKey::RenderPass(precision, SAMPLER_TYPE_2D, blend_mode, USE_AA,
+                               NO_MASK, false, false));
+    EXPECT_PROGRAM_VALID(program);
+    EXPECT_EQ(program->program(), renderer_->program_shadow_);
   }
 
   void TestRenderPassColorMatrixProgramAA(TexCoordPrecision precision,
                                           BlendMode blend_mode) {
-    EXPECT_PROGRAM_VALID(
-        &renderer_
-             ->render_pass_color_matrix_program_aa_[precision][blend_mode]);
-    EXPECT_EQ(
-        renderer_->render_pass_color_matrix_program_aa_[precision][blend_mode]
-            .program(),
-        renderer_->program_shadow_);
+    const Program* program = renderer_->GetProgramIfInitialized(
+        ProgramKey::RenderPass(precision, SAMPLER_TYPE_2D, blend_mode, USE_AA,
+                               NO_MASK, false, true));
+    EXPECT_PROGRAM_VALID(program);
+    EXPECT_EQ(program->program(), renderer_->program_shadow_);
   }
 
   void TestRenderPassMaskProgramAA(TexCoordPrecision precision,
                                    SamplerType sampler,
                                    BlendMode blend_mode) {
-    EXPECT_PROGRAM_VALID(
-        &renderer_
-             ->render_pass_mask_program_aa_
-                 [precision][sampler][blend_mode][NO_MASK]);
-    EXPECT_EQ(
-        renderer_->render_pass_mask_program_aa_[precision][sampler][blend_mode]
-            [NO_MASK].program(),
-        renderer_->program_shadow_);
+    const Program* program =
+        renderer_->GetProgramIfInitialized(ProgramKey::RenderPass(
+            precision, sampler, blend_mode, USE_AA, HAS_MASK, false, false));
+    EXPECT_PROGRAM_VALID(program);
+    EXPECT_EQ(program->program(), renderer_->program_shadow_);
   }
 
   void TestRenderPassMaskColorMatrixProgramAA(TexCoordPrecision precision,
                                               SamplerType sampler,
                                               BlendMode blend_mode) {
-    EXPECT_PROGRAM_VALID(&renderer_->render_pass_mask_color_matrix_program_aa_
-                              [precision][sampler][blend_mode][NO_MASK]);
-    EXPECT_EQ(renderer_->render_pass_mask_color_matrix_program_aa_
-                  [precision][sampler][blend_mode][NO_MASK].program(),
-              renderer_->program_shadow_);
+    const Program* program =
+        renderer_->GetProgramIfInitialized(ProgramKey::RenderPass(
+            precision, sampler, blend_mode, USE_AA, HAS_MASK, false, true));
+    EXPECT_PROGRAM_VALID(program);
+    EXPECT_EQ(program->program(), renderer_->program_shadow_);
   }
 
   void TestSolidColorProgramAA() {
-    EXPECT_PROGRAM_VALID(&renderer_->solid_color_program_aa_);
-    EXPECT_EQ(renderer_->solid_color_program_aa_.program(),
-              renderer_->program_shadow_);
+    const Program* program =
+        renderer_->GetProgramIfInitialized(ProgramKey::SolidColor(USE_AA));
+    EXPECT_PROGRAM_VALID(program);
+    EXPECT_EQ(program->program(), renderer_->program_shadow_);
   }
 
   RendererSettings settings_;
@@ -492,8 +501,8 @@ TEST_F(GLRendererWithDefaultHarnessTest, ExternalStencil) {
   output_surface_->set_has_external_stencil_test(true);
 
   RenderPass* root_pass =
-      AddRenderPass(&render_passes_in_draw_order_, RenderPassId(1, 0),
-                    gfx::Rect(viewport_size), gfx::Transform());
+      AddRenderPass(&render_passes_in_draw_order_, 1, gfx::Rect(viewport_size),
+                    gfx::Transform(), FilterOperations());
   root_pass->has_transparent_background = false;
 
   DrawFrame(renderer_.get(), viewport_size);
@@ -691,8 +700,8 @@ TEST_F(GLRendererTest, OpaqueBackground) {
 
   gfx::Size viewport_size(1, 1);
   RenderPass* root_pass =
-      AddRenderPass(&render_passes_in_draw_order_, RenderPassId(1, 0),
-                    gfx::Rect(viewport_size), gfx::Transform());
+      AddRenderPass(&render_passes_in_draw_order_, 1, gfx::Rect(viewport_size),
+                    gfx::Transform(), FilterOperations());
   root_pass->has_transparent_background = false;
 
   // On DEBUG builds, render passes with opaque background clear to blue to
@@ -735,8 +744,8 @@ TEST_F(GLRendererTest, TransparentBackground) {
 
   gfx::Size viewport_size(1, 1);
   RenderPass* root_pass =
-      AddRenderPass(&render_passes_in_draw_order_, RenderPassId(1, 0),
-                    gfx::Rect(viewport_size), gfx::Transform());
+      AddRenderPass(&render_passes_in_draw_order_, 1, gfx::Rect(viewport_size),
+                    gfx::Transform(), FilterOperations());
   root_pass->has_transparent_background = true;
 
   EXPECT_CALL(*context, discardFramebufferEXT(GL_FRAMEBUFFER, 1, _)).Times(1);
@@ -771,8 +780,8 @@ TEST_F(GLRendererTest, OffscreenOutputSurface) {
   renderer.SetVisible(true);
 
   gfx::Size viewport_size(1, 1);
-  AddRenderPass(&render_passes_in_draw_order_, RenderPassId(1, 0),
-                gfx::Rect(viewport_size), gfx::Transform());
+  AddRenderPass(&render_passes_in_draw_order_, 1, gfx::Rect(viewport_size),
+                gfx::Transform(), FilterOperations());
 
   EXPECT_CALL(*context, discardFramebufferEXT(GL_FRAMEBUFFER, _, _))
       .With(Args<2, 1>(ElementsAre(GL_COLOR_ATTACHMENT0)))
@@ -833,10 +842,10 @@ TEST_F(GLRendererTest, ActiveTextureState) {
   EXPECT_CALL(*context, texParameteri(_, _, _)).Times(AnyNumber());
 
   RenderPass* root_pass =
-      AddRenderPass(&render_passes_in_draw_order_, RenderPassId(1, 1),
-                    gfx::Rect(100, 100), gfx::Transform());
+      AddRenderPass(&render_passes_in_draw_order_, 1, gfx::Rect(100, 100),
+                    gfx::Transform(), FilterOperations());
   gpu::SyncToken mailbox_sync_token;
-  AddOneOfEveryQuadType(root_pass, resource_provider.get(), RenderPassId(0, 0),
+  AddOneOfEveryQuadType(root_pass, resource_provider.get(), 0,
                         &mailbox_sync_token);
 
   renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
@@ -917,16 +926,16 @@ TEST_F(GLRendererTest, ShouldClearRootRenderPass) {
 
   gfx::Size viewport_size(10, 10);
 
-  RenderPassId child_pass_id(2, 0);
-  RenderPass* child_pass =
-      AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
-                    gfx::Rect(viewport_size), gfx::Transform());
+  int child_pass_id = 2;
+  RenderPass* child_pass = AddRenderPass(
+      &render_passes_in_draw_order_, child_pass_id, gfx::Rect(viewport_size),
+      gfx::Transform(), FilterOperations());
   AddQuad(child_pass, gfx::Rect(viewport_size), SK_ColorBLUE);
 
-  RenderPassId root_pass_id(1, 0);
-  RenderPass* root_pass =
-      AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                    gfx::Rect(viewport_size), gfx::Transform());
+  int root_pass_id = 1;
+  RenderPass* root_pass = AddRenderPass(&render_passes_in_draw_order_,
+                                        root_pass_id, gfx::Rect(viewport_size),
+                                        gfx::Transform(), FilterOperations());
   AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
 
   AddRenderPassQuad(root_pass, child_pass);
@@ -1005,23 +1014,23 @@ TEST_F(GLRendererTest, ScissorTestWhenClearing) {
   gfx::Size viewport_size(1, 1);
 
   gfx::Rect grand_child_rect(25, 25);
-  RenderPassId grand_child_pass_id(3, 0);
+  int grand_child_pass_id = 3;
   RenderPass* grand_child_pass =
       AddRenderPass(&render_passes_in_draw_order_, grand_child_pass_id,
-                    grand_child_rect, gfx::Transform());
+                    grand_child_rect, gfx::Transform(), FilterOperations());
   AddClippedQuad(grand_child_pass, grand_child_rect, SK_ColorYELLOW);
 
   gfx::Rect child_rect(50, 50);
-  RenderPassId child_pass_id(2, 0);
+  int child_pass_id = 2;
   RenderPass* child_pass =
       AddRenderPass(&render_passes_in_draw_order_, child_pass_id, child_rect,
-                    gfx::Transform());
+                    gfx::Transform(), FilterOperations());
   AddQuad(child_pass, child_rect, SK_ColorBLUE);
 
-  RenderPassId root_pass_id(1, 0);
-  RenderPass* root_pass =
-      AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                    gfx::Rect(viewport_size), gfx::Transform());
+  int root_pass_id = 1;
+  RenderPass* root_pass = AddRenderPass(&render_passes_in_draw_order_,
+                                        root_pass_id, gfx::Rect(viewport_size),
+                                        gfx::Transform(), FilterOperations());
   AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
 
   AddRenderPassQuad(root_pass, child_pass);
@@ -1082,10 +1091,10 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
 
   {
     // Partial frame, should not discard.
-    RenderPassId root_pass_id(1, 0);
-    RenderPass* root_pass =
-        AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                      gfx::Rect(viewport_size), gfx::Transform());
+    int root_pass_id = 1;
+    RenderPass* root_pass = AddRenderPass(
+        &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
+        gfx::Transform(), FilterOperations());
     AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
     root_pass->damage_rect = gfx::Rect(2, 2, 3, 3);
 
@@ -1096,10 +1105,10 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
   }
   {
     // Full frame, should discard.
-    RenderPassId root_pass_id(1, 0);
-    RenderPass* root_pass =
-        AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                      gfx::Rect(viewport_size), gfx::Transform());
+    int root_pass_id = 1;
+    RenderPass* root_pass = AddRenderPass(
+        &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
+        gfx::Transform(), FilterOperations());
     AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
     root_pass->damage_rect = root_pass->output_rect;
 
@@ -1111,10 +1120,10 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
   {
     // Full frame, external scissor is set, should not discard.
     output_surface->set_has_external_stencil_test(true);
-    RenderPassId root_pass_id(1, 0);
-    RenderPass* root_pass =
-        AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                      gfx::Rect(viewport_size), gfx::Transform());
+    int root_pass_id = 1;
+    RenderPass* root_pass = AddRenderPass(
+        &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
+        gfx::Transform(), FilterOperations());
     AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
     root_pass->damage_rect = root_pass->output_rect;
     root_pass->has_transparent_background = false;
@@ -1160,10 +1169,10 @@ TEST_F(GLRendererTest, DrawFramePreservesFramebuffer) {
   gfx::Size viewport_size(100, 100);
   gfx::Rect quad_rect = gfx::Rect(20, 20, 20, 20);
 
-  RenderPassId root_pass_id(1, 0);
-  RenderPass* root_pass =
-      AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                    gfx::Rect(viewport_size), gfx::Transform());
+  int root_pass_id = 1;
+  RenderPass* root_pass = AddRenderPass(&render_passes_in_draw_order_,
+                                        root_pass_id, gfx::Rect(viewport_size),
+                                        gfx::Transform(), FilterOperations());
   AddClippedQuad(root_pass, quad_rect, SK_ColorGREEN);
 
   unsigned fbo;
@@ -1184,10 +1193,10 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
   gfx::Size viewport_size(1, 1);
 
   gfx::Rect child_rect(50, 50);
-  RenderPassId child_pass_id(2, 0);
+  int child_pass_id = 2;
   RenderPass* child_pass;
 
-  RenderPassId root_pass_id(1, 0);
+  int root_pass_id = 1;
   RenderPass* root_pass;
 
   ResourceId mask = resource_provider_->CreateResource(
@@ -1221,22 +1230,21 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
 
   for (int i = 0; i <= LAST_BLEND_MODE; ++i) {
     BlendMode blend_mode = static_cast<BlendMode>(i);
-    SkXfermode::Mode xfer_mode = BlendModeToSkXfermode(blend_mode);
+    SkBlendMode xfer_mode = BlendModeToSkXfermode(blend_mode);
     settings_.force_blending_with_shaders = (blend_mode != BLEND_MODE_NONE);
     // RenderPassProgram
     render_passes_in_draw_order_.clear();
-    child_pass = AddRenderPass(&render_passes_in_draw_order_,
-                               child_pass_id,
-                               child_rect,
-                               gfx::Transform());
+    child_pass =
+        AddRenderPass(&render_passes_in_draw_order_, child_pass_id, child_rect,
+                      gfx::Transform(), FilterOperations());
 
     root_pass = AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                              gfx::Rect(viewport_size), gfx::Transform());
+                              gfx::Rect(viewport_size), gfx::Transform(),
+                              FilterOperations());
 
     AddRenderPassQuad(root_pass,
                       child_pass,
                       0,
-                      FilterOperations(),
                       gfx::Transform(),
                       xfer_mode);
 
@@ -1248,16 +1256,14 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
     // RenderPassColorMatrixProgram
     render_passes_in_draw_order_.clear();
 
-    child_pass = AddRenderPass(&render_passes_in_draw_order_,
-                               child_pass_id,
-                               child_rect,
-                               transform_causing_aa);
+    child_pass = AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
+                               child_rect, transform_causing_aa, filters);
 
     root_pass = AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                              gfx::Rect(viewport_size), gfx::Transform());
+                              gfx::Rect(viewport_size), gfx::Transform(),
+                              FilterOperations());
 
-    AddRenderPassQuad(
-        root_pass, child_pass, 0, filters, gfx::Transform(), xfer_mode);
+    AddRenderPassQuad(root_pass, child_pass, 0, gfx::Transform(), xfer_mode);
 
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
@@ -1267,18 +1273,17 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
     // RenderPassMaskProgram
     render_passes_in_draw_order_.clear();
 
-    child_pass = AddRenderPass(&render_passes_in_draw_order_,
-                               child_pass_id,
-                               child_rect,
-                               gfx::Transform());
+    child_pass =
+        AddRenderPass(&render_passes_in_draw_order_, child_pass_id, child_rect,
+                      gfx::Transform(), FilterOperations());
 
     root_pass = AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                              gfx::Rect(viewport_size), gfx::Transform());
+                              gfx::Rect(viewport_size), gfx::Transform(),
+                              FilterOperations());
 
     AddRenderPassQuad(root_pass,
                       child_pass,
                       mask,
-                      FilterOperations(),
                       gfx::Transform(),
                       xfer_mode);
 
@@ -1291,16 +1296,14 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
     // RenderPassMaskColorMatrixProgram
     render_passes_in_draw_order_.clear();
 
-    child_pass = AddRenderPass(&render_passes_in_draw_order_,
-                               child_pass_id,
-                               child_rect,
-                               gfx::Transform());
+    child_pass = AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
+                               child_rect, gfx::Transform(), filters);
 
     root_pass = AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                              gfx::Rect(viewport_size), gfx::Transform());
+                              gfx::Rect(viewport_size), gfx::Transform(),
+                              FilterOperations());
 
-    AddRenderPassQuad(
-        root_pass, child_pass, mask, filters, gfx::Transform(), xfer_mode);
+    AddRenderPassQuad(root_pass, child_pass, mask, gfx::Transform(), xfer_mode);
 
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
@@ -1311,18 +1314,17 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
     // RenderPassProgramAA
     render_passes_in_draw_order_.clear();
 
-    child_pass = AddRenderPass(&render_passes_in_draw_order_,
-                               child_pass_id,
-                               child_rect,
-                               transform_causing_aa);
+    child_pass =
+        AddRenderPass(&render_passes_in_draw_order_, child_pass_id, child_rect,
+                      transform_causing_aa, FilterOperations());
 
     root_pass = AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                              gfx::Rect(viewport_size), gfx::Transform());
+                              gfx::Rect(viewport_size), gfx::Transform(),
+                              FilterOperations());
 
     AddRenderPassQuad(root_pass,
                       child_pass,
                       0,
-                      FilterOperations(),
                       transform_causing_aa,
                       xfer_mode);
 
@@ -1334,16 +1336,15 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
     // RenderPassColorMatrixProgramAA
     render_passes_in_draw_order_.clear();
 
-    child_pass = AddRenderPass(&render_passes_in_draw_order_,
-                               child_pass_id,
-                               child_rect,
-                               transform_causing_aa);
+    child_pass = AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
+                               child_rect, transform_causing_aa, filters);
 
     root_pass = AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                              gfx::Rect(viewport_size), gfx::Transform());
+                              gfx::Rect(viewport_size), gfx::Transform(),
+                              FilterOperations());
 
-    AddRenderPassQuad(
-        root_pass, child_pass, 0, filters, transform_causing_aa, xfer_mode);
+    AddRenderPassQuad(root_pass, child_pass, 0, transform_causing_aa,
+                      xfer_mode);
 
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
@@ -1353,18 +1354,17 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
     // RenderPassMaskProgramAA
     render_passes_in_draw_order_.clear();
 
-    child_pass = AddRenderPass(&render_passes_in_draw_order_,
-                               child_pass_id,
-                               child_rect,
-                               transform_causing_aa);
+    child_pass =
+        AddRenderPass(&render_passes_in_draw_order_, child_pass_id, child_rect,
+                      transform_causing_aa, FilterOperations());
 
     root_pass = AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                              gfx::Rect(viewport_size), gfx::Transform());
+                              gfx::Rect(viewport_size), gfx::Transform(),
+                              FilterOperations());
 
     AddRenderPassQuad(root_pass,
                       child_pass,
                       mask,
-                      FilterOperations(),
                       transform_causing_aa,
                       xfer_mode);
 
@@ -1377,16 +1377,15 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
     // RenderPassMaskColorMatrixProgramAA
     render_passes_in_draw_order_.clear();
 
-    child_pass = AddRenderPass(&render_passes_in_draw_order_,
-                               child_pass_id,
-                               child_rect,
-                               transform_causing_aa);
+    child_pass = AddRenderPass(&render_passes_in_draw_order_, child_pass_id,
+                               child_rect, transform_causing_aa, filters);
 
     root_pass = AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                              gfx::Rect(viewport_size), transform_causing_aa);
+                              gfx::Rect(viewport_size), transform_causing_aa,
+                              FilterOperations());
 
-    AddRenderPassQuad(
-        root_pass, child_pass, mask, filters, transform_causing_aa, xfer_mode);
+    AddRenderPassQuad(root_pass, child_pass, mask, transform_causing_aa,
+                      xfer_mode);
 
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
@@ -1400,11 +1399,11 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
 // project incorrectly by the given transform, because of w<0 clipping.
 TEST_F(GLRendererShaderTest, DrawRenderPassQuadSkipsAAForClippingTransform) {
   gfx::Rect child_rect(50, 50);
-  RenderPassId child_pass_id(2, 0);
+  int child_pass_id = 2;
   RenderPass* child_pass;
 
   gfx::Size viewport_size(1, 1);
-  RenderPassId root_pass_id(1, 0);
+  int root_pass_id = 1;
   RenderPass* root_pass;
 
   gfx::Transform transform_preventing_aa;
@@ -1419,20 +1418,16 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadSkipsAAForClippingTransform) {
                     &clipped);
   ASSERT_TRUE(clipped);
 
-  child_pass = AddRenderPass(&render_passes_in_draw_order_,
-                             child_pass_id,
-                             child_rect,
-                             transform_preventing_aa);
+  child_pass =
+      AddRenderPass(&render_passes_in_draw_order_, child_pass_id, child_rect,
+                    transform_preventing_aa, FilterOperations());
 
   root_pass = AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                            gfx::Rect(viewport_size), gfx::Transform());
+                            gfx::Rect(viewport_size), gfx::Transform(),
+                            FilterOperations());
 
-  AddRenderPassQuad(root_pass,
-                    child_pass,
-                    0,
-                    FilterOperations(),
-                    transform_preventing_aa,
-                    SkXfermode::kSrcOver_Mode);
+  AddRenderPassQuad(root_pass, child_pass, 0, transform_preventing_aa,
+                    SkBlendMode::kSrcOver);
 
   renderer_->DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
   DrawFrame(renderer_.get(), viewport_size);
@@ -1444,7 +1439,7 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadSkipsAAForClippingTransform) {
 
 TEST_F(GLRendererShaderTest, DrawSolidColorShader) {
   gfx::Size viewport_size(1, 1);
-  RenderPassId root_pass_id(1, 0);
+  int root_pass_id = 1;
   RenderPass* root_pass;
 
   gfx::Transform pixel_aligned_transform_causing_aa;
@@ -1452,7 +1447,8 @@ TEST_F(GLRendererShaderTest, DrawSolidColorShader) {
   pixel_aligned_transform_causing_aa.Scale(0.5f, 0.5f);
 
   root_pass = AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                            gfx::Rect(viewport_size), gfx::Transform());
+                            gfx::Rect(viewport_size), gfx::Transform(),
+                            FilterOperations());
   AddTransformedQuad(root_pass, gfx::Rect(viewport_size), SK_ColorYELLOW,
                      pixel_aligned_transform_causing_aa);
 
@@ -1487,11 +1483,12 @@ class MockOutputSurface : public OutputSurface {
 
   MOCK_METHOD0(EnsureBackbuffer, void());
   MOCK_METHOD0(DiscardBackbuffer, void());
-  MOCK_METHOD4(Reshape,
+  MOCK_METHOD5(Reshape,
                void(const gfx::Size& size,
                     float scale_factor,
                     const gfx::ColorSpace& color_space,
-                    bool has_alpha));
+                    bool has_alpha,
+                    bool use_stencil));
   MOCK_METHOD0(BindFramebuffer, void());
   MOCK_METHOD0(GetFramebufferCopyTextureFormat, GLenum());
   MOCK_METHOD1(SwapBuffers_, void(OutputSurfaceFrame& frame));  // NOLINT
@@ -1537,17 +1534,17 @@ class MockOutputSurfaceTest : public GLRendererTest {
   void DrawFrame(float device_scale_factor,
                  const gfx::Size& viewport_size,
                  bool transparent) {
-    RenderPassId render_pass_id(1, 0);
-    RenderPass* render_pass =
-        AddRenderPass(&render_passes_in_draw_order_, render_pass_id,
-                      gfx::Rect(viewport_size), gfx::Transform());
+    int render_pass_id = 1;
+    RenderPass* render_pass = AddRenderPass(
+        &render_passes_in_draw_order_, render_pass_id, gfx::Rect(viewport_size),
+        gfx::Transform(), FilterOperations());
     AddQuad(render_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
     render_pass->has_transparent_background = transparent;
 
     EXPECT_CALL(*output_surface_, EnsureBackbuffer()).WillRepeatedly(Return());
 
     EXPECT_CALL(*output_surface_,
-                Reshape(viewport_size, device_scale_factor, _, transparent))
+                Reshape(viewport_size, device_scale_factor, _, transparent, _))
         .Times(1);
 
     EXPECT_CALL(*output_surface_, BindFramebuffer()).Times(1);
@@ -1656,8 +1653,8 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
 
   gfx::Size viewport_size(1, 1);
   RenderPass* root_pass =
-      AddRenderPass(&render_passes_in_draw_order_, RenderPassId(1, 0),
-                    gfx::Rect(viewport_size), gfx::Transform());
+      AddRenderPass(&render_passes_in_draw_order_, 1, gfx::Rect(viewport_size),
+                    gfx::Transform(), FilterOperations());
   root_pass->has_transparent_background = false;
   root_pass->copy_requests.push_back(
       CopyOutputRequest::CreateRequest(base::Bind(&IgnoreCopyResult)));
@@ -1694,8 +1691,9 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   Mock::VerifyAndClearExpectations(validator.get());
 
   // Without a copy request Attempt() should be called once.
-  root_pass = AddRenderPass(&render_passes_in_draw_order_, RenderPassId(1, 0),
-                            gfx::Rect(viewport_size), gfx::Transform());
+  root_pass =
+      AddRenderPass(&render_passes_in_draw_order_, 1, gfx::Rect(viewport_size),
+                    gfx::Transform(), FilterOperations());
   root_pass->has_transparent_background = false;
 
   overlay_quad = root_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
@@ -1712,8 +1710,9 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
 
   // If the CALayerOverlay path is taken, then the ordinary overlay path should
   // not be called.
-  root_pass = AddRenderPass(&render_passes_in_draw_order_, RenderPassId(1, 0),
-                            gfx::Rect(viewport_size), gfx::Transform());
+  root_pass =
+      AddRenderPass(&render_passes_in_draw_order_, 1, gfx::Rect(viewport_size),
+                    gfx::Transform(), FilterOperations());
   root_pass->has_transparent_background = false;
 
   overlay_quad = root_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
@@ -1811,8 +1810,8 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
 
   gfx::Size viewport_size(1, 1);
   RenderPass* root_pass =
-      AddRenderPass(&render_passes_in_draw_order_, RenderPassId(1, 0),
-                    gfx::Rect(viewport_size), gfx::Transform());
+      AddRenderPass(&render_passes_in_draw_order_, 1, gfx::Rect(viewport_size),
+                    gfx::Transform(), FilterOperations());
   root_pass->has_transparent_background = false;
 
   gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
@@ -1836,7 +1835,7 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
   SharedQuadState* shared_state = root_pass->CreateAndAppendSharedQuadState();
   shared_state->SetAll(gfx::Transform(), viewport_size,
                        gfx::Rect(viewport_size), gfx::Rect(viewport_size),
-                       false, 1, SkXfermode::kSrcOver_Mode, 0);
+                       false, 1, SkBlendMode::kSrcOver, 0);
   overlay_quad->SetNew(shared_state, gfx::Rect(viewport_size),
                        gfx::Rect(viewport_size), gfx::Rect(viewport_size),
                        resource_id, premultiplied_alpha, uv_top_left,
@@ -1895,10 +1894,10 @@ class GLRendererPartialSwapTest : public GLRendererTest {
     gfx::Size viewport_size(100, 100);
 
     {
-      RenderPassId root_pass_id(1, 0);
-      RenderPass* root_pass =
-          AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
-                        gfx::Rect(viewport_size), gfx::Transform());
+      int root_pass_id = 1;
+      RenderPass* root_pass = AddRenderPass(
+          &render_passes_in_draw_order_, root_pass_id, gfx::Rect(viewport_size),
+          gfx::Transform(), FilterOperations());
       AddQuad(root_pass, gfx::Rect(viewport_size), SK_ColorGREEN);
 
       testing::Sequence seq;
@@ -1908,6 +1907,7 @@ class GLRendererPartialSwapTest : public GLRendererTest {
       EXPECT_CALL(*gl, Disable(GL_STENCIL_TEST)).InSequence(seq);
       EXPECT_CALL(*gl, Enable(GL_BLEND)).InSequence(seq);
       EXPECT_CALL(*gl, Disable(GL_SCISSOR_TEST)).InSequence(seq);
+      EXPECT_CALL(*gl, Scissor(0, 0, 0, 0)).InSequence(seq);
 
       // Partial frame, we should use a scissor to swap only that part when
       // partial swap is enabled.

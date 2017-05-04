@@ -30,7 +30,6 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_view_host.h"
-#include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/resource_throttle.h"
@@ -200,15 +199,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   controller.GoBack();
   back_load_observer.Wait();
 
-  // Check title.
-  // TODO(creis): The default navigation path incorrectly loads the history_url
-  // and claims it loaded the data_url (due to a bug where GoToEntry does not
-  // handle this case).  This is confusing.  When using subframe
-  // FrameNavigationEntries, we load the data URL when going back, as expected.
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries())
-    EXPECT_EQ("One", base::UTF16ToUTF8(shell()->web_contents()->GetTitle()));
-  else
-    EXPECT_EQ("form", base::UTF16ToUTF8(shell()->web_contents()->GetTitle()));
+  // Check title.  We should load the data URL when going back.
+  EXPECT_EQ("One", base::UTF16ToUTF8(shell()->web_contents()->GetTitle()));
 
   // Verify the last committed NavigationEntry.
   NavigationEntryImpl* back_entry = controller.GetLastCommittedEntry();
@@ -1184,7 +1176,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   {
     // Reload from the browser side.
     FrameNavigateParamsCapturer capturer(root);
-    shell()->web_contents()->GetController().Reload(false);
+    shell()->web_contents()->GetController().Reload(ReloadType::NORMAL, false);
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.params().transition, ui::PAGE_TRANSITION_RELOAD));
@@ -1334,6 +1326,27 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
         capturer.params().transition, ui::PAGE_TRANSITION_LINK));
     EXPECT_EQ(NAVIGATION_TYPE_SAME_PAGE, capturer.details().type);
   }
+}
+
+// Verify that reloading a page with url anchor scrolls to correct position.
+// Disabled due to flakiness: https://crbug.com/672545.
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       DISABLED_ReloadWithUrlAnchor) {
+  GURL url1(embedded_test_server()->GetURL(
+      "/navigation_controller/reload-with-url-anchor.html#d2"));
+  EXPECT_TRUE(NavigateToURL(shell(), url1));
+
+  std::string script =
+      "domAutomationController.send(document.getElementById('div').scrollTop)";
+  int value = 0;
+  EXPECT_TRUE(ExecuteScriptAndExtractInt(shell(), script, &value));
+  EXPECT_EQ(100, value);
+
+  // Reload.
+  ReloadBlockUntilNavigationsComplete(shell(), 1);
+
+  EXPECT_TRUE(ExecuteScriptAndExtractInt(shell(), script, &value));
+  EXPECT_EQ(100, value);
 }
 
 // Verify that empty GURL navigations are not classified as SAME_PAGE.
@@ -1660,18 +1673,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   FrameNavigationEntry* root_entry = entry->root_node()->frame_entry.get();
   EXPECT_EQ(main_url, root_entry->url());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should now have one blank subframe FrameNavigationEntry, but
-    // this does not count as committing a real load.
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    FrameNavigationEntry* frame_entry =
-        entry->root_node()->children[0]->frame_entry.get();
-    EXPECT_EQ(about_blank_url, frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry->root_node()->children.size());
-  }
+  // Verify subframe entries.  The entry should now have one blank subframe
+  // FrameNavigationEntry, but this does not count as committing a real load.
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  FrameNavigationEntry* frame_entry =
+      entry->root_node()->children[0]->frame_entry.get();
+  EXPECT_EQ(about_blank_url, frame_entry->url());
   EXPECT_FALSE(root->child_at(0)->has_committed_real_load());
 
   // 1a. A nested iframe with no URL should also create a subframe entry but not
@@ -1686,18 +1693,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
   }
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The nested entry should have one blank subframe FrameNavigationEntry, but
-    // this does not count as committing a real load.
-    ASSERT_EQ(1U, entry->root_node()->children[0]->children.size());
-    FrameNavigationEntry* frame_entry =
-        entry->root_node()->children[0]->children[0]->frame_entry.get();
-    EXPECT_EQ(about_blank_url, frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry->root_node()->children.size());
-  }
+  // Verify subframe entries.  The nested entry should have one blank subframe
+  // FrameNavigationEntry, but this does not count as committing a real load.
+  ASSERT_EQ(1U, entry->root_node()->children[0]->children.size());
+  frame_entry = entry->root_node()->children[0]->children[0]->frame_entry.get();
+  EXPECT_EQ(about_blank_url, frame_entry->url());
   EXPECT_FALSE(root->child_at(0)->child_at(0)->has_committed_real_load());
 
   // 2. Create another iframe with an explicit about:blank URL.
@@ -1716,18 +1716,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(1, controller.GetEntryCount());
   EXPECT_EQ(entry, controller.GetLastCommittedEntry());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The new entry should have one blank subframe FrameNavigationEntry, but
-    // this does not count as committing a real load.
-    ASSERT_EQ(2U, entry->root_node()->children.size());
-    FrameNavigationEntry* frame_entry =
-        entry->root_node()->children[1]->frame_entry.get();
-    EXPECT_EQ(about_blank_url, frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry->root_node()->children.size());
-  }
+  // Verify subframe entries.  The new entry should have one blank subframe
+  // FrameNavigationEntry, but this does not count as committing a real load.
+  ASSERT_EQ(2U, entry->root_node()->children.size());
+  frame_entry = entry->root_node()->children[1]->frame_entry.get();
+  EXPECT_EQ(about_blank_url, frame_entry->url());
   EXPECT_FALSE(root->child_at(1)->has_committed_real_load());
 
   // 3. A real same-site navigation in the nested iframe should be AUTO.
@@ -1748,17 +1741,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(1, controller.GetEntryCount());
   EXPECT_EQ(entry, controller.GetLastCommittedEntry());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should still have one nested subframe FrameNavigationEntry.
-    ASSERT_EQ(1U, entry->root_node()->children[0]->children.size());
-    FrameNavigationEntry* frame_entry =
-        entry->root_node()->children[0]->children[0]->frame_entry.get();
-    EXPECT_EQ(frame_url, frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry->root_node()->children.size());
-  }
+  // The entry should still have one nested subframe FrameNavigationEntry.
+  ASSERT_EQ(1U, entry->root_node()->children[0]->children.size());
+  frame_entry = entry->root_node()->children[0]->children[0]->frame_entry.get();
+  EXPECT_EQ(frame_url, frame_entry->url());
   EXPECT_FALSE(root->child_at(0)->has_committed_real_load());
   EXPECT_TRUE(root->child_at(0)->child_at(0)->has_committed_real_load());
   EXPECT_FALSE(root->child_at(1)->has_committed_real_load());
@@ -1780,17 +1766,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(1, controller.GetEntryCount());
   EXPECT_EQ(entry, controller.GetLastCommittedEntry());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should still have two subframe FrameNavigationEntries.
-    ASSERT_EQ(2U, entry->root_node()->children.size());
-    FrameNavigationEntry* frame_entry =
-        entry->root_node()->children[1]->frame_entry.get();
-    EXPECT_EQ(foo_url, frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry->root_node()->children.size());
-  }
+  // The entry should still have two subframe FrameNavigationEntries.
+  ASSERT_EQ(2U, entry->root_node()->children.size());
+  frame_entry = entry->root_node()->children[1]->frame_entry.get();
+  EXPECT_EQ(foo_url, frame_entry->url());
   EXPECT_FALSE(root->child_at(0)->has_committed_real_load());
   EXPECT_TRUE(root->child_at(0)->child_at(0)->has_committed_real_load());
   EXPECT_TRUE(root->child_at(1)->has_committed_real_load());
@@ -1813,16 +1792,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_NE(entry, controller.GetLastCommittedEntry());
   NavigationEntryImpl* entry2 = controller.GetLastCommittedEntry();
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    ASSERT_EQ(2U, entry->root_node()->children.size());
-    FrameNavigationEntry* frame_entry =
-        entry2->root_node()->children[0]->children[0]->frame_entry.get();
-    EXPECT_EQ(about_blank_url, frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry->root_node()->children.size());
-  }
+  // Verify subframe entries.
+  ASSERT_EQ(2U, entry->root_node()->children.size());
+  frame_entry =
+      entry2->root_node()->children[0]->children[0]->frame_entry.get();
+  EXPECT_EQ(about_blank_url, frame_entry->url());
   EXPECT_FALSE(root->child_at(0)->has_committed_real_load());
   EXPECT_TRUE(root->child_at(0)->child_at(0)->has_committed_real_load());
   EXPECT_TRUE(root->child_at(1)->has_committed_real_load());
@@ -2075,18 +2049,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(main_url, root_entry->url());
   EXPECT_FALSE(controller.GetPendingEntry());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should now have a subframe FrameNavigationEntry.
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    FrameNavigationEntry* frame_entry =
-        entry->root_node()->children[0]->frame_entry.get();
-    EXPECT_EQ(frame_url, frame_entry->url());
-    EXPECT_TRUE(root->child_at(0)->has_committed_real_load());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry->root_node()->children.size());
-  }
+  // The entry should now have a subframe FrameNavigationEntry.
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  FrameNavigationEntry* frame_entry =
+      entry->root_node()->children[0]->frame_entry.get();
+  EXPECT_EQ(frame_url, frame_entry->url());
+  EXPECT_TRUE(root->child_at(0)->has_committed_real_load());
 
   // 2. Create a second, initially cross-site iframe.
   GURL foo_url(embedded_test_server()->GetURL(
@@ -2110,18 +2078,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(main_url, root_entry->url());
   EXPECT_FALSE(controller.GetPendingEntry());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should now have 2 subframe FrameNavigationEntries.
-    ASSERT_EQ(2U, entry->root_node()->children.size());
-    FrameNavigationEntry* frame_entry =
-        entry->root_node()->children[1]->frame_entry.get();
-    EXPECT_EQ(foo_url, frame_entry->url());
-    EXPECT_TRUE(root->child_at(1)->has_committed_real_load());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry->root_node()->children.size());
-  }
+  // The entry should now have 2 subframe FrameNavigationEntries.
+  ASSERT_EQ(2U, entry->root_node()->children.size());
+  frame_entry = entry->root_node()->children[1]->frame_entry.get();
+  EXPECT_EQ(foo_url, frame_entry->url());
+  EXPECT_TRUE(root->child_at(1)->has_committed_real_load());
 
   // 3. Create a nested iframe in the second subframe.
   {
@@ -2142,18 +2103,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   root_entry = entry->root_node()->frame_entry.get();
   EXPECT_EQ(main_url, root_entry->url());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should now have 2 subframe FrameNavigationEntries.
-    ASSERT_EQ(2U, entry->root_node()->children.size());
-    ASSERT_EQ(1U, entry->root_node()->children[1]->children.size());
-    FrameNavigationEntry* frame_entry =
-        entry->root_node()->children[1]->children[0]->frame_entry.get();
-    EXPECT_EQ(foo_url, frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry->root_node()->children.size());
-  }
+  // The entry should now have 2 subframe FrameNavigationEntries.
+  ASSERT_EQ(2U, entry->root_node()->children.size());
+  ASSERT_EQ(1U, entry->root_node()->children[1]->children.size());
+  frame_entry = entry->root_node()->children[1]->children[0]->frame_entry.get();
+  EXPECT_EQ(foo_url, frame_entry->url());
 
   // 4. Create a third iframe on the same site as the second.  This ensures that
   // the commit type is correct even when the subframe process already exists.
@@ -2175,17 +2129,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   root_entry = entry->root_node()->frame_entry.get();
   EXPECT_EQ(main_url, root_entry->url());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should now have 3 subframe FrameNavigationEntries.
-    ASSERT_EQ(3U, entry->root_node()->children.size());
-    FrameNavigationEntry* frame_entry =
-        entry->root_node()->children[2]->frame_entry.get();
-    EXPECT_EQ(foo_url, frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry->root_node()->children.size());
-  }
+  // The entry should now have 3 subframe FrameNavigationEntries.
+  ASSERT_EQ(3U, entry->root_node()->children.size());
+  frame_entry = entry->root_node()->children[2]->frame_entry.get();
+  EXPECT_EQ(foo_url, frame_entry->url());
 
   // 5. Create a nested iframe on the original site (A-B-A).
   {
@@ -2207,17 +2154,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   root_entry = entry->root_node()->frame_entry.get();
   EXPECT_EQ(main_url, root_entry->url());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // There should be a corresponding FrameNavigationEntry.
-    ASSERT_EQ(1U, entry->root_node()->children[2]->children.size());
-    FrameNavigationEntry* frame_entry =
-        entry->root_node()->children[2]->children[0]->frame_entry.get();
-    EXPECT_EQ(frame_url, frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry->root_node()->children.size());
-  }
+  // There should be a corresponding FrameNavigationEntry.
+  ASSERT_EQ(1U, entry->root_node()->children[2]->children.size());
+  frame_entry = entry->root_node()->children[2]->children[0]->frame_entry.get();
+  EXPECT_EQ(frame_url, frame_entry->url());
 
   // Check the end result of the frame tree.
   if (AreAllSitesIsolatedForTesting()) {
@@ -2284,15 +2224,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   FrameNavigationEntry* root_entry2 = entry2->root_node()->frame_entry.get();
   EXPECT_EQ(main_url, root_entry2->url());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a new FrameNavigationEntries for the subframe.
-    ASSERT_EQ(1U, entry2->root_node()->children.size());
-    EXPECT_EQ(frame_url2, entry2->root_node()->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry2->root_node()->children.size());
-  }
+  // The entry should have a new FrameNavigationEntries for the subframe.
+  ASSERT_EQ(1U, entry2->root_node()->children.size());
+  EXPECT_EQ(frame_url2, entry2->root_node()->children[0]->frame_entry->url());
 
   // 3. Create a second, initially cross-site iframe.
   GURL foo_url(embedded_test_server()->GetURL(
@@ -2341,20 +2275,13 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   FrameNavigationEntry* root_entry3 = entry3->root_node()->frame_entry.get();
   EXPECT_EQ(main_url, root_entry3->url());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should still have FrameNavigationEntries for all 3 subframes.
-    ASSERT_EQ(2U, entry3->root_node()->children.size());
-    EXPECT_EQ(frame_url2, entry3->root_node()->children[0]->frame_entry->url());
-    EXPECT_EQ(foo_url, entry3->root_node()->children[1]->frame_entry->url());
-    ASSERT_EQ(1U, entry3->root_node()->children[1]->children.size());
-    EXPECT_EQ(
-        bar_url,
-        entry3->root_node()->children[1]->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry3->root_node()->children.size());
-  }
+  // The entry should still have FrameNavigationEntries for all 3 subframes.
+  ASSERT_EQ(2U, entry3->root_node()->children.size());
+  EXPECT_EQ(frame_url2, entry3->root_node()->children[0]->frame_entry->url());
+  EXPECT_EQ(foo_url, entry3->root_node()->children[1]->frame_entry->url());
+  ASSERT_EQ(1U, entry3->root_node()->children[1]->children.size());
+  EXPECT_EQ(bar_url,
+            entry3->root_node()->children[1]->children[0]->frame_entry->url());
 
   // 6. Navigate the second subframe cross-site, clearing its existing subtree.
   GURL baz_url(embedded_test_server()->GetURL(
@@ -2384,17 +2311,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   FrameNavigationEntry* root_entry4 = entry4->root_node()->frame_entry.get();
   EXPECT_EQ(main_url, root_entry4->url());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should still have FrameNavigationEntries for all 3 subframes.
-    ASSERT_EQ(2U, entry4->root_node()->children.size());
-    EXPECT_EQ(frame_url2, entry4->root_node()->children[0]->frame_entry->url());
-    EXPECT_EQ(baz_url, entry4->root_node()->children[1]->frame_entry->url());
-    ASSERT_EQ(0U, entry4->root_node()->children[1]->children.size());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry4->root_node()->children.size());
-  }
+  // The entry should still have FrameNavigationEntries for all 3 subframes.
+  ASSERT_EQ(2U, entry4->root_node()->children.size());
+  EXPECT_EQ(frame_url2, entry4->root_node()->children[0]->frame_entry->url());
+  EXPECT_EQ(baz_url, entry4->root_node()->children[1]->frame_entry->url());
+  ASSERT_EQ(0U, entry4->root_node()->children[1]->children.size());
 
   // Check the end result of the frame tree.
   if (AreAllSitesIsolatedForTesting()) {
@@ -2444,17 +2365,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(ExecuteScript(root, push_script));
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
+  // The entry should have a FrameNavigationEntry for the subframe.
   NavigationEntryImpl* entry = controller.GetLastCommittedEntry();
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the subframe.
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    EXPECT_EQ(subframe_url,
-              entry->root_node()->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry->root_node()->children.size());
-  }
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  EXPECT_EQ(subframe_url, entry->root_node()->children[0]->frame_entry->url());
 
   // 3. Add a nested subframe.
   {
@@ -2468,20 +2382,13 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
         capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
   }
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
+  // The entry should have a FrameNavigationEntry for the subframe.
   entry = controller.GetLastCommittedEntry();
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the subframe.
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    EXPECT_EQ(subframe_url,
-              entry->root_node()->children[0]->frame_entry->url());
-    ASSERT_EQ(1U, entry->root_node()->children[0]->children.size());
-    EXPECT_EQ(subframe_url,
-              entry->root_node()->children[0]->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry->root_node()->children.size());
-  }
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  EXPECT_EQ(subframe_url, entry->root_node()->children[0]->frame_entry->url());
+  ASSERT_EQ(1U, entry->root_node()->children[0]->children.size());
+  EXPECT_EQ(subframe_url,
+            entry->root_node()->children[0]->children[0]->frame_entry->url());
 }
 
 // Verify the tree of FrameNavigationEntries after back/forward navigations in a
@@ -2548,15 +2455,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(entry2, controller.GetLastCommittedEntry());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the subframe.
-    ASSERT_EQ(1U, entry2->root_node()->children.size());
-    EXPECT_EQ(frame_url2, entry2->root_node()->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry2->root_node()->children.size());
-  }
+  // The entry should have a FrameNavigationEntry for the subframe.
+  ASSERT_EQ(1U, entry2->root_node()->children.size());
+  EXPECT_EQ(frame_url2, entry2->root_node()->children[0]->frame_entry->url());
 
   // 5. Go back in the subframe again to the parent page's site.
   {
@@ -2571,15 +2472,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(entry1, controller.GetLastCommittedEntry());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the subframe.
-    ASSERT_EQ(1U, entry1->root_node()->children.size());
-    EXPECT_EQ(frame_url, entry1->root_node()->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry1->root_node()->children.size());
-  }
+  // The entry should have a FrameNavigationEntry for the subframe.
+  ASSERT_EQ(1U, entry1->root_node()->children.size());
+  EXPECT_EQ(frame_url, entry1->root_node()->children[0]->frame_entry->url());
 
   // 6. Go forward in the subframe cross-site.
   {
@@ -2594,15 +2489,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(entry2, controller.GetLastCommittedEntry());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the subframe.
-    ASSERT_EQ(1U, entry2->root_node()->children.size());
-    EXPECT_EQ(frame_url2, entry2->root_node()->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry2->root_node()->children.size());
-  }
+  // The entry should have a FrameNavigationEntry for the subframe.
+  ASSERT_EQ(1U, entry2->root_node()->children.size());
+  EXPECT_EQ(frame_url2, entry2->root_node()->children[0]->frame_entry->url());
 
   // 7. Go forward in the subframe again, cross-site.
   {
@@ -2617,15 +2506,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(2, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(entry3, controller.GetLastCommittedEntry());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the subframe.
-    ASSERT_EQ(1U, entry3->root_node()->children.size());
-    EXPECT_EQ(frame_url3, entry3->root_node()->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry3->root_node()->children.size());
-  }
+  // The entry should have a FrameNavigationEntry for the subframe.
+  ASSERT_EQ(1U, entry3->root_node()->children.size());
+  EXPECT_EQ(frame_url3, entry3->root_node()->children[0]->frame_entry->url());
 }
 
 // Verify the tree of FrameNavigationEntries after subframes are recreated in
@@ -2665,15 +2548,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   NavigationEntryImpl* entry2 = controller.GetLastCommittedEntry();
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the data subframe.
-    ASSERT_EQ(1U, entry2->root_node()->children.size());
-    EXPECT_EQ(data_url, entry2->root_node()->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry2->root_node()->children.size());
-  }
+  // The entry should have a FrameNavigationEntry for the data subframe.
+  ASSERT_EQ(1U, entry2->root_node()->children.size());
+  EXPECT_EQ(data_url, entry2->root_node()->children[0]->frame_entry->url());
 
   // 3. Navigate the iframe cross-site to a page with a nested iframe.
   GURL frame_url_b(embedded_test_server()->GetURL(
@@ -2692,20 +2569,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(2, controller.GetLastCommittedEntryIndex());
   NavigationEntryImpl* entry3 = controller.GetLastCommittedEntry();
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the b.com subframe.
-    ASSERT_EQ(1U, entry3->root_node()->children.size());
-    ASSERT_EQ(1U, entry3->root_node()->children[0]->children.size());
-    EXPECT_EQ(frame_url_b,
-              entry3->root_node()->children[0]->frame_entry->url());
-    EXPECT_EQ(
-        data_url,
-        entry3->root_node()->children[0]->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry3->root_node()->children.size());
-  }
+  // The entry should have a FrameNavigationEntry for the b.com subframe.
+  ASSERT_EQ(1U, entry3->root_node()->children.size());
+  ASSERT_EQ(1U, entry3->root_node()->children[0]->children.size());
+  EXPECT_EQ(frame_url_b, entry3->root_node()->children[0]->frame_entry->url());
+  EXPECT_EQ(data_url,
+            entry3->root_node()->children[0]->children[0]->frame_entry->url());
 
   // 4. Navigate the nested iframe cross-site.
   GURL frame_url_c(embedded_test_server()->GetURL(
@@ -2724,35 +2593,22 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(3, controller.GetLastCommittedEntryIndex());
   NavigationEntryImpl* entry4 = controller.GetLastCommittedEntry();
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have FrameNavigationEntries for the subframes.
-    ASSERT_EQ(1U, entry4->root_node()->children.size());
-    ASSERT_EQ(1U, entry4->root_node()->children[0]->children.size());
-    EXPECT_EQ(frame_url_b,
-              entry4->root_node()->children[0]->frame_entry->url());
-    EXPECT_EQ(
-        frame_url_c,
-        entry4->root_node()->children[0]->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry4->root_node()->children.size());
-  }
+  // The entry should have FrameNavigationEntries for the subframes.
+  ASSERT_EQ(1U, entry4->root_node()->children.size());
+  ASSERT_EQ(1U, entry4->root_node()->children[0]->children.size());
+  EXPECT_EQ(frame_url_b, entry4->root_node()->children[0]->frame_entry->url());
+  EXPECT_EQ(frame_url_c,
+            entry4->root_node()->children[0]->children[0]->frame_entry->url());
 
   // Remember the DSNs for later.
   int64_t root_dsn =
       entry4->root_node()->frame_entry->document_sequence_number();
-  int64_t frame_b_dsn = -1;
-  int64_t frame_c_dsn = -1;
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    frame_b_dsn = entry4->root_node()
-                      ->children[0]
-                      ->frame_entry->document_sequence_number();
-    frame_c_dsn = entry4->root_node()
-                      ->children[0]
-                      ->children[0]
-                      ->frame_entry->document_sequence_number();
-  }
+  int64_t frame_b_dsn =
+      entry4->root_node()->children[0]->frame_entry->document_sequence_number();
+  int64_t frame_c_dsn = entry4->root_node()
+                            ->children[0]
+                            ->children[0]
+                            ->frame_entry->document_sequence_number();
 
   // 5. Navigate main frame cross-site, destroying the frames.
   GURL main_url_d(embedded_test_server()->GetURL(
@@ -2786,30 +2642,21 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(root_dsn,
             entry4->root_node()->frame_entry->document_sequence_number());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have FrameNavigationEntries for the subframes.
-    ASSERT_EQ(1U, entry4->root_node()->children.size());
-    ASSERT_EQ(1U, entry4->root_node()->children[0]->children.size());
-    EXPECT_EQ(frame_url_b,
-              entry4->root_node()->children[0]->frame_entry->url());
-    EXPECT_EQ(
-        frame_url_c,
-        entry4->root_node()->children[0]->children[0]->frame_entry->url());
-
-    // The subframes should not have changed their DSNs.
-    // See https://crbug.com/628286.
-    EXPECT_EQ(frame_b_dsn, entry4->root_node()
-                               ->children[0]
-                               ->frame_entry->document_sequence_number());
-    EXPECT_EQ(frame_c_dsn, entry4->root_node()
-                               ->children[0]
-                               ->children[0]
-                               ->frame_entry->document_sequence_number());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry4->root_node()->children.size());
-  }
+  // The entry should have FrameNavigationEntries for the subframes.
+  ASSERT_EQ(1U, entry4->root_node()->children.size());
+  ASSERT_EQ(1U, entry4->root_node()->children[0]->children.size());
+  EXPECT_EQ(frame_url_b, entry4->root_node()->children[0]->frame_entry->url());
+  EXPECT_EQ(frame_url_c,
+            entry4->root_node()->children[0]->children[0]->frame_entry->url());
+  // The subframes should not have changed their DSNs.
+  // See https://crbug.com/628286.
+  EXPECT_EQ(frame_b_dsn, entry4->root_node()
+                             ->children[0]
+                             ->frame_entry->document_sequence_number());
+  EXPECT_EQ(frame_c_dsn, entry4->root_node()
+                             ->children[0]
+                             ->children[0]
+                             ->frame_entry->document_sequence_number());
 
   // Inject a JS value so that we can check for it later.
   EXPECT_TRUE(content::ExecuteScript(root, "foo=3;"));
@@ -2830,20 +2677,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(2, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(entry3, controller.GetLastCommittedEntry());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have FrameNavigationEntries for the subframes.
-    ASSERT_EQ(1U, entry3->root_node()->children.size());
-    ASSERT_EQ(1U, entry3->root_node()->children[0]->children.size());
-    EXPECT_EQ(frame_url_b,
-              entry3->root_node()->children[0]->frame_entry->url());
-    EXPECT_EQ(
-        data_url,
-        entry3->root_node()->children[0]->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry3->root_node()->children.size());
-  }
+  // The entry should have FrameNavigationEntries for the subframes.
+  ASSERT_EQ(1U, entry3->root_node()->children.size());
+  ASSERT_EQ(1U, entry3->root_node()->children[0]->children.size());
+  EXPECT_EQ(frame_url_b, entry3->root_node()->children[0]->frame_entry->url());
+  EXPECT_EQ(data_url,
+            entry3->root_node()->children[0]->children[0]->frame_entry->url());
 
   // Verify that we did not reload the main frame. See https://crbug.com/586234.
   {
@@ -2868,15 +2707,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(entry2, controller.GetLastCommittedEntry());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the subframe.
-    ASSERT_EQ(1U, entry2->root_node()->children.size());
-    EXPECT_EQ(data_url, entry2->root_node()->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry2->root_node()->children.size());
-  }
+  // The entry should have a FrameNavigationEntry for the subframe.
+  ASSERT_EQ(1U, entry2->root_node()->children.size());
+  EXPECT_EQ(data_url, entry2->root_node()->children[0]->frame_entry->url());
 
   // 9. Go back again, to the initial main frame page.
   {
@@ -2907,29 +2740,17 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(2, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(entry3, controller.GetLastCommittedEntry());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have FrameNavigationEntries for the subframes.
-    ASSERT_EQ(1U, entry3->root_node()->children.size());
-    EXPECT_EQ(frame_url_b,
-              entry3->root_node()->children[0]->frame_entry->url());
-    EXPECT_EQ(
-        data_url,
-        entry3->root_node()->children[0]->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry3->root_node()->children.size());
-  }
+  // The entry should have FrameNavigationEntries for the subframes.
+  ASSERT_EQ(1U, entry3->root_node()->children.size());
+  EXPECT_EQ(frame_url_b, entry3->root_node()->children[0]->frame_entry->url());
+  EXPECT_EQ(data_url,
+            entry3->root_node()->children[0]->children[0]->frame_entry->url());
 }
 
 // Verify that we navigate to the fallback (original) URL if a subframe's
 // FrameNavigationEntry can't be found during a history navigation.
 IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                        FrameNavigationEntry_SubframeHistoryFallback) {
-  // This test only makes sense when subframe FrameNavigationEntries are in use.
-  if (!SiteIsolationPolicy::UseSubframeNavigationEntries())
-    return;
-
   // 1. Start on a page with a data URL iframe.
   GURL main_url_a(embedded_test_server()->GetURL(
       "a.com", "/navigation_controller/page_with_data_iframe.html"));
@@ -3038,10 +2859,6 @@ class DataUrlCommitObserver : public WebContentsObserver {
 // See https://crbug.com/649345.
 IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                        FrameNavigationEntry_DynamicSubframeHistoryFallback) {
-  // This test only makes sense when subframe FrameNavigationEntries are in use.
-  if (!SiteIsolationPolicy::UseSubframeNavigationEntries())
-    return;
-
   // 1. Start on a page with a script-generated iframe.  The iframe has a
   // dynamic name, starts at about:blank, and gets navigated to a dynamic data
   // URL as the page is loading.
@@ -3151,10 +2968,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   NavigationEntryImpl* entry = controller.GetLastCommittedEntry();
 
   // The entry should have a FrameNavigationEntry for the blank subframe.
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
-  }
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
 
   // 2. Navigate the main frame, destroying the frames.
   GURL main_url_2(embedded_test_server()->GetURL(
@@ -3190,10 +3005,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(entry, controller.GetLastCommittedEntry());
 
   // The entry should have a FrameNavigationEntry for the blank subframe.
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
-  }
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
 }
 
 // Verify that we correctly load nested iframes injected into a page if we go
@@ -3228,12 +3041,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   NavigationEntryImpl* entry = controller.GetLastCommittedEntry();
 
   // The entry should have FrameNavigationEntries for the subframes.
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
-    EXPECT_EQ(inner_url,
-              entry->root_node()->children[0]->children[0]->frame_entry->url());
-  }
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
+  EXPECT_EQ(inner_url,
+            entry->root_node()->children[0]->children[0]->frame_entry->url());
 
   // Set a value in the form which will be stored in the PageState.
   EXPECT_TRUE(
@@ -3268,12 +3079,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(entry, controller.GetLastCommittedEntry());
 
   // The entry should have FrameNavigationEntries for the subframes.
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
-    EXPECT_EQ(inner_url,
-              entry->root_node()->children[0]->children[0]->frame_entry->url());
-  }
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
+  EXPECT_EQ(inner_url,
+            entry->root_node()->children[0]->children[0]->frame_entry->url());
 
   // With injected about:blank iframes, we never restore form values from
   // PageState.
@@ -3300,7 +3109,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // nested iframe.
   GURL main_url(embedded_test_server()->GetURL(
       "/navigation_controller/inject_iframe_srcdoc_with_nested_frame.html"));
-  GURL blank_url(url::kAboutBlankURL);
+  GURL srcdoc_url(content::kAboutSrcDocURL);
   GURL inner_url(
       embedded_test_server()->GetURL("/navigation_controller/form.html"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -3315,7 +3124,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   ASSERT_EQ(1U, root->child_at(0)->child_count());
   ASSERT_EQ(0U, root->child_at(0)->child_at(0)->child_count());
   EXPECT_EQ(main_url, root->current_url());
-  EXPECT_EQ(blank_url, root->child_at(0)->current_url());
+  EXPECT_EQ(srcdoc_url, root->child_at(0)->current_url());
   EXPECT_EQ(inner_url, root->child_at(0)->child_at(0)->current_url());
 
   EXPECT_EQ(1, controller.GetEntryCount());
@@ -3323,12 +3132,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   NavigationEntryImpl* entry = controller.GetLastCommittedEntry();
 
   // The entry should have FrameNavigationEntries for the subframes.
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
-    EXPECT_EQ(inner_url,
-              entry->root_node()->children[0]->children[0]->frame_entry->url());
-  }
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  EXPECT_EQ(srcdoc_url, entry->root_node()->children[0]->frame_entry->url());
+  EXPECT_EQ(inner_url,
+            entry->root_node()->children[0]->children[0]->frame_entry->url());
 
   // Set a value in the form which will be stored in the PageState.
   EXPECT_TRUE(
@@ -3352,12 +3159,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     back_load_observer.Wait();
   }
   ASSERT_EQ(1U, root->child_count());
-  // TODO(creis): This line is unexpectedly failing in PlzNavigate, so the test
-  // is disabled there for now.
   ASSERT_EQ(1U, root->child_at(0)->child_count());
   ASSERT_EQ(0U, root->child_at(0)->child_at(0)->child_count());
   EXPECT_EQ(main_url, root->current_url());
-  EXPECT_EQ(blank_url, root->child_at(0)->current_url());
+  EXPECT_EQ(srcdoc_url, root->child_at(0)->current_url());
 
   // Verify that the inner iframe went to the correct URL.
   EXPECT_EQ(inner_url, root->child_at(0)->child_at(0)->current_url());
@@ -3367,12 +3172,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(entry, controller.GetLastCommittedEntry());
 
   // The entry should have FrameNavigationEntries for the subframes.
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
-    EXPECT_EQ(inner_url,
-              entry->root_node()->children[0]->children[0]->frame_entry->url());
-  }
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  EXPECT_EQ(srcdoc_url, entry->root_node()->children[0]->frame_entry->url());
+  EXPECT_EQ(inner_url,
+            entry->root_node()->children[0]->children[0]->frame_entry->url());
 
   // With injected iframe srcdoc pages, we do restore form values from
   // PageState.
@@ -3414,10 +3217,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   NavigationEntryImpl* entry = controller.GetLastCommittedEntry();
 
   // The entry should have a FrameNavigationEntry for the blank subframe.
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
-  }
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
 
   // 3. Navigate the main frame, destroying the frames.
   GURL main_url_2(embedded_test_server()->GetURL(
@@ -3444,10 +3245,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(entry, controller.GetLastCommittedEntry());
 
   // The entry should have a FrameNavigationEntry for the blank subframe.
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
-  }
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
 }
 
 // Ensure we don't crash if an onload handler removes an about:blank frame after
@@ -3472,10 +3271,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // The entry should have a FrameNavigationEntry for the blank subframe, even
   // though it is being removed from the page.
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
-  }
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
 
   // 2. Navigate the main frame, destroying the frames.
   GURL main_url_2(embedded_test_server()->GetURL(
@@ -3503,10 +3300,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(entry, controller.GetLastCommittedEntry());
 
   // The entry should have a FrameNavigationEntry for the blank subframe.
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
-  }
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  EXPECT_EQ(blank_url, entry->root_node()->children[0]->frame_entry->url());
 }
 
 // Verifies that we clear the children FrameNavigationEntries if a history
@@ -3533,8 +3328,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(initial_url, root->current_url());
   EXPECT_EQ(2U, root->child_count());
   NavigationEntryImpl* entry1 = controller.GetLastCommittedEntry();
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries())
-    EXPECT_EQ(2U, entry1->root_node()->children.size());
+  EXPECT_EQ(2U, entry1->root_node()->children.size());
 
   // 2. Navigate both iframes to a page with a nested iframe.
   GURL frame_url(embedded_test_server()->GetURL(
@@ -3551,17 +3345,14 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(3, controller.GetEntryCount());
   EXPECT_EQ(2, controller.GetLastCommittedEntryIndex());
   NavigationEntryImpl* entry2 = controller.GetLastCommittedEntry();
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    NavigationEntryImpl::TreeNode* root_node = entry2->root_node();
-    ASSERT_EQ(2U, root_node->children.size());
-    EXPECT_EQ(frame_url, root_node->children[0]->frame_entry->url());
-    EXPECT_EQ(data_url,
-              root_node->children[0]->children[0]->frame_entry->url());
-    EXPECT_EQ(frame_url, root_node->children[1]->frame_entry->url());
-    EXPECT_EQ(data_url,
-              root_node->children[1]->children[0]->frame_entry->url());
-  }
+
+  // Verify subframe entries.
+  NavigationEntryImpl::TreeNode* root_node = entry2->root_node();
+  ASSERT_EQ(2U, root_node->children.size());
+  EXPECT_EQ(frame_url, root_node->children[0]->frame_entry->url());
+  EXPECT_EQ(data_url, root_node->children[0]->children[0]->frame_entry->url());
+  EXPECT_EQ(frame_url, root_node->children[1]->frame_entry->url());
+  EXPECT_EQ(data_url, root_node->children[1]->children[0]->frame_entry->url());
 
   // Cause the first iframe to redirect when we come back later.  It will go
   // cross-site to a page with an about:blank iframe.
@@ -3579,12 +3370,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // We should not have lost subframe entries for the nested frame.
   EXPECT_EQ(3, controller.GetEntryCount());
   EXPECT_EQ(2, controller.GetLastCommittedEntryIndex());
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    FrameNavigationEntry* nested_entry =
-        entry2->GetFrameEntry(root->child_at(0)->child_at(0));
-    EXPECT_TRUE(nested_entry);
-    EXPECT_EQ(data_url, nested_entry->url());
-  }
+  FrameNavigationEntry* nested_entry =
+      entry2->GetFrameEntry(root->child_at(0)->child_at(0));
+  EXPECT_TRUE(nested_entry);
+  EXPECT_EQ(data_url, nested_entry->url());
 
   // 3. Navigate the main frame to a different page.  When we come back, we'll
   // commit the main frame first and have no pending entry when navigating the
@@ -3611,15 +3400,13 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // Check the FrameNavigationEntries as well.
   EXPECT_EQ(4, controller.GetEntryCount());
   EXPECT_EQ(2, controller.GetLastCommittedEntryIndex());
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    EXPECT_EQ(frame_redirect_dest_url,
-              entry2->GetFrameEntry(root->child_at(0))->url());
-    EXPECT_EQ(blank_url,
-              entry2->GetFrameEntry(root->child_at(0)->child_at(0))->url());
-    EXPECT_EQ(frame_url, entry2->GetFrameEntry(root->child_at(1))->url());
-    EXPECT_EQ(data_url,
-              entry2->GetFrameEntry(root->child_at(1)->child_at(0))->url());
-  }
+  EXPECT_EQ(frame_redirect_dest_url,
+            entry2->GetFrameEntry(root->child_at(0))->url());
+  EXPECT_EQ(blank_url,
+            entry2->GetFrameEntry(root->child_at(0)->child_at(0))->url());
+  EXPECT_EQ(frame_url, entry2->GetFrameEntry(root->child_at(1))->url());
+  EXPECT_EQ(data_url,
+            entry2->GetFrameEntry(root->child_at(1)->child_at(0))->url());
 
   // In --site-per-process, we're misclassifying the subframe redirect in step 6
   // below.  For now, skip the rest of the test in that mode.
@@ -3663,16 +3450,14 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // Check the FrameNavigationEntries as well.
   EXPECT_EQ(4, controller.GetEntryCount());
   EXPECT_EQ(2, controller.GetLastCommittedEntryIndex());
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    EXPECT_EQ(frame_redirect_dest_url,
-              entry2->GetFrameEntry(root->child_at(0))->url());
-    EXPECT_EQ(blank_url,
-              entry2->GetFrameEntry(root->child_at(0)->child_at(0))->url());
-    EXPECT_EQ(frame_redirect_dest_url,
-              entry2->GetFrameEntry(root->child_at(1))->url());
-    EXPECT_EQ(blank_url,
-              entry2->GetFrameEntry(root->child_at(1)->child_at(0))->url());
-  }
+  EXPECT_EQ(frame_redirect_dest_url,
+            entry2->GetFrameEntry(root->child_at(0))->url());
+  EXPECT_EQ(blank_url,
+            entry2->GetFrameEntry(root->child_at(0)->child_at(0))->url());
+  EXPECT_EQ(frame_redirect_dest_url,
+            entry2->GetFrameEntry(root->child_at(1))->url());
+  EXPECT_EQ(blank_url,
+            entry2->GetFrameEntry(root->child_at(1)->child_at(0))->url());
 
   // Now cause the main frame to redirect to a page with no frames when we come
   // back to it.
@@ -3721,8 +3506,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(initial_url, root->current_url());
   EXPECT_EQ(1U, root->child_count());
   NavigationEntryImpl* entry1 = controller.GetLastCommittedEntry();
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries())
-    EXPECT_EQ(1U, entry1->root_node()->children.size());
+  EXPECT_EQ(1U, entry1->root_node()->children.size());
 
   // 2. Navigate the iframe to a page with a nested iframe.
   GURL frame_url(embedded_test_server()->GetURL(
@@ -3736,14 +3520,12 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(2, controller.GetEntryCount());
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   NavigationEntryImpl* entry2 = controller.GetLastCommittedEntry();
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    NavigationEntryImpl::TreeNode* root_node = entry2->root_node();
-    ASSERT_EQ(1U, root_node->children.size());
-    EXPECT_EQ(frame_url, root_node->children[0]->frame_entry->url());
-    EXPECT_EQ(data_url,
-              root_node->children[0]->children[0]->frame_entry->url());
-  }
+
+  // Verify subframe entries.
+  NavigationEntryImpl::TreeNode* root_node = entry2->root_node();
+  ASSERT_EQ(1U, root_node->children.size());
+  EXPECT_EQ(frame_url, root_node->children[0]->frame_entry->url());
+  EXPECT_EQ(data_url, root_node->children[0]->children[0]->frame_entry->url());
 
   // Cause the iframe to redirect when we come back later.  It will go
   // same-origin to a page with an about:blank iframe.
@@ -3760,12 +3542,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // We should not have lost subframe entries for the nested frame.
   EXPECT_EQ(2, controller.GetEntryCount());
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    FrameNavigationEntry* nested_entry =
-        entry2->GetFrameEntry(root->child_at(0)->child_at(0));
-    EXPECT_TRUE(nested_entry);
-    EXPECT_EQ(data_url, nested_entry->url());
-  }
+  FrameNavigationEntry* nested_entry =
+      entry2->GetFrameEntry(root->child_at(0)->child_at(0));
+  EXPECT_TRUE(nested_entry);
+  EXPECT_EQ(data_url, nested_entry->url());
 
   // 3. Navigate the main frame to a different page.  When we come back, we'll
   // commit the main frame first and have no pending entry when navigating the
@@ -3791,12 +3571,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // Check the FrameNavigationEntries as well.
   EXPECT_EQ(3, controller.GetEntryCount());
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    EXPECT_EQ(frame_redirect_dest_url,
-              entry2->GetFrameEntry(root->child_at(0))->url());
-    EXPECT_EQ(blank_url,
-              entry2->GetFrameEntry(root->child_at(0)->child_at(0))->url());
-  }
+  EXPECT_EQ(frame_redirect_dest_url,
+            entry2->GetFrameEntry(root->child_at(0))->url());
+  EXPECT_EQ(blank_url,
+            entry2->GetFrameEntry(root->child_at(0)->child_at(0))->url());
 
   // Now cause the main frame to redirect to a page with no frames when we come
   // back to it.
@@ -3853,15 +3631,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
   NavigationEntryImpl* entry1 = controller.GetLastCommittedEntry();
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the data subframe.
-    ASSERT_EQ(1U, entry1->root_node()->children.size());
-    EXPECT_EQ(data_url, entry1->root_node()->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry1->root_node()->children.size());
-  }
+  // The entry should have a FrameNavigationEntry for the data subframe.
+  ASSERT_EQ(1U, entry1->root_node()->children.size());
+  EXPECT_EQ(data_url, entry1->root_node()->children[0]->frame_entry->url());
 
   // 2. Navigate the iframe cross-site.
   GURL frame_url_b(embedded_test_server()->GetURL(
@@ -3879,16 +3651,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   NavigationEntryImpl* entry2 = controller.GetLastCommittedEntry();
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the b.com subframe.
-    ASSERT_EQ(1U, entry2->root_node()->children.size());
-    EXPECT_EQ(frame_url_b,
-              entry2->root_node()->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, entry2->root_node()->children.size());
-  }
+  // The entry should have a FrameNavigationEntry for the b.com subframe.
+  ASSERT_EQ(1U, entry2->root_node()->children.size());
+  EXPECT_EQ(frame_url_b, entry2->root_node()->children[0]->frame_entry->url());
 
   // 3. Navigate main frame cross-site, destroying the frames.
   GURL main_url_c(embedded_test_server()->GetURL(
@@ -3912,17 +3677,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(0U, restored_entry->root_node()->children.size());
   restored_entry->SetPageState(entry2->GetPageState());
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the b.com subframe.
-    EXPECT_EQ(main_url_a, restored_entry->root_node()->frame_entry->url());
-    ASSERT_EQ(1U, restored_entry->root_node()->children.size());
-    EXPECT_EQ(frame_url_b,
-              restored_entry->root_node()->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, restored_entry->root_node()->children.size());
-  }
+  // The entry should have a FrameNavigationEntry for the b.com subframe.
+  EXPECT_EQ(main_url_a, restored_entry->root_node()->frame_entry->url());
+  ASSERT_EQ(1U, restored_entry->root_node()->children.size());
+  EXPECT_EQ(frame_url_b,
+            restored_entry->root_node()->children[0]->frame_entry->url());
 
   // 5. Restore the new entry in a new tab and verify the correct URLs load.
   std::vector<std::unique_ptr<NavigationEntry>> entries;
@@ -3952,17 +3711,11 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(0, new_controller.GetLastCommittedEntryIndex());
   NavigationEntryImpl* new_entry = new_controller.GetLastCommittedEntry();
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the b.com subframe.
-    EXPECT_EQ(main_url_a, new_entry->root_node()->frame_entry->url());
-    ASSERT_EQ(1U, new_entry->root_node()->children.size());
-    EXPECT_EQ(frame_url_b,
-              new_entry->root_node()->children[0]->frame_entry->url());
-  } else {
-    // There are no subframe FrameNavigationEntries by default.
-    EXPECT_EQ(0U, new_entry->root_node()->children.size());
-  }
+  // The entry should have a FrameNavigationEntry for the b.com subframe.
+  EXPECT_EQ(main_url_a, new_entry->root_node()->frame_entry->url());
+  ASSERT_EQ(1U, new_entry->root_node()->children.size());
+  EXPECT_EQ(frame_url_b,
+            new_entry->root_node()->children[0]->frame_entry->url());
 }
 
 // Verify that we can finish loading a page on restore if the PageState is
@@ -4014,16 +3767,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(0, controller.GetLastCommittedEntryIndex());
   NavigationEntryImpl* new_entry = controller.GetLastCommittedEntry();
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // The entry should have a FrameNavigationEntry for the blank subframe.
-    EXPECT_EQ(main_url, new_entry->root_node()->frame_entry->url());
-    ASSERT_EQ(1U, new_entry->root_node()->children.size());
-    EXPECT_EQ(blank_url,
-              new_entry->root_node()->children[0]->frame_entry->url());
-  } else {
-    EXPECT_EQ(0U, new_entry->root_node()->children.size());
-  }
+  // The entry should have a FrameNavigationEntry for the blank subframe.
+  EXPECT_EQ(main_url, new_entry->root_node()->frame_entry->url());
+  ASSERT_EQ(1U, new_entry->root_node()->children.size());
+  EXPECT_EQ(blank_url, new_entry->root_node()->children[0]->frame_entry->url());
 
   // Verify that the parent was able to script the iframe.
   std::string expected_text("Injected text");
@@ -4059,10 +3806,6 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   FrameNavigationEntry* frame_entry =
       controller.GetLastCommittedEntry()->GetFrameEntry(root);
   EXPECT_EQ("", frame_entry->frame_unique_name());
-
-  // Test subframe unique names only if enabled, e.g. in --site-per-process.
-  if (!SiteIsolationPolicy::UseSubframeNavigationEntries())
-    return;
 
   // 2. Add an unnamed subframe, which does an AUTO_SUBFRAME navigation.
   {
@@ -4303,16 +4046,14 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_NE(main_site_instance,
               subframe->current_frame_host()->GetSiteInstance());
   }
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    FrameNavigationEntry* subframe_entry =
-        controller.GetLastCommittedEntry()->GetFrameEntry(subframe);
-    EXPECT_EQ(frame_url, subframe_entry->url());
-  }
+  FrameNavigationEntry* subframe_entry =
+      controller.GetLastCommittedEntry()->GetFrameEntry(subframe);
+  EXPECT_EQ(frame_url, subframe_entry->url());
 
   // 3. Reload the main frame.
   {
     FrameNavigateParamsCapturer capturer(root);
-    controller.Reload(false);
+    controller.Reload(ReloadType::NORMAL, false);
     capturer.Wait();
     EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
         capturer.params().transition, ui::PAGE_TRANSITION_RELOAD));
@@ -4368,10 +4109,6 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_NE(-1, isn_2);
   EXPECT_NE(isn_1, isn_2);
   EXPECT_EQ(dsn_1, dsn_2);
-
-  // Test subframe sequence numbers only if enabled, e.g. in --site-per-process.
-  if (!SiteIsolationPolicy::UseSubframeNavigationEntries())
-    return;
 
   // 3. Add a subframe, which does an AUTO_SUBFRAME navigation.
   {
@@ -4459,16 +4196,13 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
   EXPECT_EQ(entry->GetRedirectChain()[0], main_url);
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // Check that the FrameNavigationEntry's redirect chain contains 2 urls.
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    FrameNavigationEntry* frame_entry =
-        entry->root_node()->children[0]->frame_entry.get();
-    EXPECT_EQ(frame_entry->redirect_chain().size(), 2u);
-    EXPECT_EQ(frame_entry->redirect_chain()[0], iframe_redirect_url);
-    EXPECT_EQ(frame_entry->redirect_chain()[1], iframe_final_url);
-  }
+  // Check that the FrameNavigationEntry's redirect chain contains 2 urls.
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  FrameNavigationEntry* frame_entry =
+      entry->root_node()->children[0]->frame_entry.get();
+  EXPECT_EQ(frame_entry->redirect_chain().size(), 2u);
+  EXPECT_EQ(frame_entry->redirect_chain()[0], iframe_redirect_url);
+  EXPECT_EQ(frame_entry->redirect_chain()[1], iframe_final_url);
 }
 
 // Verifies that FrameNavigationEntry's redirect chain is created and stored on
@@ -4500,16 +4234,13 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(entry->GetRedirectChain().size(), 1u);
   EXPECT_EQ(entry->GetRedirectChain()[0], main_url);
 
-  // Verify subframe entries if they're enabled (e.g. in --site-per-process).
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    // Check that the FrameNavigationEntry's redirect chain contains 2 urls.
-    ASSERT_EQ(1U, entry->root_node()->children.size());
-    FrameNavigationEntry* frame_entry =
-        entry->root_node()->children[0]->frame_entry.get();
-    EXPECT_EQ(frame_entry->redirect_chain().size(), 2u);
-    EXPECT_EQ(frame_entry->redirect_chain()[0], frame_redirect_url);
-    EXPECT_EQ(frame_entry->redirect_chain()[1], frame_final_url);
-  }
+  // Check that the FrameNavigationEntry's redirect chain contains 2 urls.
+  ASSERT_EQ(1U, entry->root_node()->children.size());
+  FrameNavigationEntry* frame_entry =
+      entry->root_node()->children[0]->frame_entry.get();
+  EXPECT_EQ(frame_entry->redirect_chain().size(), 2u);
+  EXPECT_EQ(frame_entry->redirect_chain()[0], frame_redirect_url);
+  EXPECT_EQ(frame_entry->redirect_chain()[1], frame_final_url);
 }
 
 // Support a set of tests that isolate only a subset of sites with
@@ -5061,10 +4792,11 @@ class RenderProcessKilledObserver : public WebContentsObserver {
 };
 }
 
-// This tests a race in ReloadOriginalRequest, where a cross-origin reload was
-// causing an in-flight replaceState to look like a cross-origin navigation,
-// even though it's in-page.  (The reload should not modify the underlying last
-// committed entry.)  Not crashing means that the test is successful.
+// This tests a race in Reload with ReloadType::ORIGINAL_REQUEST_URL, where a
+// cross-origin reload was causing an in-flight replaceState to look like a
+// cross-origin navigation, even though it's in-page.  (The reload should not
+// modify the underlying last committed entry.)  Not crashing means that the
+// test is successful.
 IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, ReloadOriginalRequest) {
   GURL original_url(embedded_test_server()->GetURL(
       "/navigation_controller/simple_page_1.html"));
@@ -5074,7 +4806,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, ReloadOriginalRequest) {
                             ->root();
   RenderProcessKilledObserver kill_observer(shell()->web_contents());
 
-  // Redirect so that we can use ReloadOriginalRequest.
+  // Redirect so that we can use Reload with ReloadType::ORIGINAL_REQUEST_URL.
   GURL redirect_url(embedded_test_server()->GetURL(
       "foo.com", "/navigation_controller/simple_page_1.html"));
   {
@@ -5093,16 +4825,17 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest, ReloadOriginalRequest) {
   {
     // We first send a replaceState() to the renderer, which will cause the
     // renderer to send back a DidCommitProvisionalLoad. Immediately after,
-    // we send a ReloadOriginalRequest (which in this case is a different
-    // origin) and will also cause the renderer to commit the frame. In the
-    // end we verify that both navigations committed and that the URLs are
-    // correct.
+    // we send a Reload request with ReloadType::ORIGINAL_REQUEST_URL (which in
+    // this case is a different origin) and will also cause the renderer to
+    // commit the frame. In the end we verify that both navigations committed
+    // and that the URLs are correct.
     std::string script = "history.replaceState({}, '', 'foo');";
     root->render_manager()
         ->current_frame_host()
         ->ExecuteJavaScriptWithUserGestureForTests(base::UTF8ToUTF16(script));
     EXPECT_FALSE(shell()->web_contents()->IsLoading());
-    shell()->web_contents()->GetController().ReloadOriginalRequestURL(false);
+    shell()->web_contents()->GetController().Reload(
+        ReloadType::ORIGINAL_REQUEST_URL, false);
     EXPECT_TRUE(shell()->web_contents()->IsLoading());
     EXPECT_EQ(redirect_url, shell()->web_contents()->GetLastCommittedURL());
 
@@ -5245,12 +4978,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // initial blank page.  That might require updating all relevant NavEntries to
   // know what the first committed URL is, so that we really elide the initial
   // blank page from history.
-  //
-  // TODO(creis): This actually goes to frame_url in some cases when subframe
-  // FrameNavigationEntries are enabled, due to a mismatch between PageState and
-  // the entry's URL.  That should be fixed in https://crbug.com/617239.
-  if (!SiteIsolationPolicy::UseSubframeNavigationEntries())
-    EXPECT_EQ(blank_url, frame->current_url());
+  EXPECT_EQ(blank_url, frame->current_url());
 }
 
 // This test is similar to "BackToAboutBlankIframe" above, except that a
@@ -5316,9 +5044,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   EXPECT_EQ(3, controller.GetEntryCount());
-  // TODO(creis): Replicate history length for OOPIFs: https://crbug.com/501116.
-  if (!AreAllSitesIsolatedForTesting())
-    EXPECT_EQ(3, RendererHistoryLength(shell()));
+  EXPECT_EQ(3, RendererHistoryLength(shell()));
   EXPECT_EQ(2, controller.GetLastCommittedEntryIndex());
 
   EXPECT_EQ(frame_url_2, frame->current_url());
@@ -5354,9 +5080,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   EXPECT_EQ(2, controller.GetEntryCount());
-  // TODO(creis): Replicate history length for OOPIFs: https://crbug.com/501116.
-  if (!AreAllSitesIsolatedForTesting())
-    EXPECT_EQ(2, RendererHistoryLength(shell()));
+  EXPECT_EQ(2, RendererHistoryLength(shell()));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
 
   // Go back.
@@ -5375,12 +5099,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // TODO(creis): It's a bit surprising to go to frame_url_1 here instead of
   // frame_url_2.  Perhaps we should be going back to frame_url_1 when going
   // back two entries above, since it's different than the initial blank case.
-  //
-  // TODO(creis): This actually goes to frame_url_2 in some cases when subframe
-  // FrameNavigationEntries are enabled, due to a mismatch between PageState and
-  // the entry's URL.  That should be fixed in https://crbug.com/617239.
-  if (!SiteIsolationPolicy::UseSubframeNavigationEntries())
-    EXPECT_EQ(frame_url_1, frame->current_url());
+  EXPECT_EQ(frame_url_1, frame->current_url());
 }
 
 // Test for in-page navigation kills due to using the wrong history item in
@@ -5453,9 +5172,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   NavigateFrameToURL(frame, frame_url_3);
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   EXPECT_EQ(4, controller.GetEntryCount());
-  // TODO(creis): Replicate history length for OOPIFs: https://crbug.com/501116.
-  if (!AreAllSitesIsolatedForTesting())
-    EXPECT_EQ(4, RendererHistoryLength(shell()));
+  EXPECT_EQ(4, RendererHistoryLength(shell()));
   EXPECT_EQ(3, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(frame_url_3, frame->current_url());
 
@@ -5467,9 +5184,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     observer.Wait();
   }
   EXPECT_EQ(4, controller.GetEntryCount());
-  // TODO(creis): Replicate history length for OOPIFs: https://crbug.com/501116.
-  if (!AreAllSitesIsolatedForTesting())
-    EXPECT_EQ(4, RendererHistoryLength(shell()));
+  EXPECT_EQ(4, RendererHistoryLength(shell()));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(links_url, root->current_url());
 
@@ -5502,12 +5217,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // TODO(creis): It's a bit surprising to go to frame_url_1 here instead of
   // frame_url_2.  Perhaps we should be going back to frame_url_1 when going
   // back two entries above, since it's different than the initial blank case.
-  //
-  // TODO(creis): This actually goes to frame_url_2 in some cases when subframe
-  // FrameNavigationEntries are enabled, due to a mismatch between PageState and
-  // the entry's URL.  That should be fixed in https://crbug.com/617239.
-  if (!SiteIsolationPolicy::UseSubframeNavigationEntries())
-    EXPECT_EQ(frame_url_1, frame->current_url());
+  EXPECT_EQ(frame_url_1, frame->current_url());
 }
 
 // Test for in-page navigation kills when going back to about:blank after a
@@ -6057,9 +5767,6 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 // is recorded on a subframe level.
 IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                        PostInSubframe) {
-  if (!SiteIsolationPolicy::UseSubframeNavigationEntries())
-    return;
-
   GURL page_with_form_url = embedded_test_server()->GetURL(
       "/navigation_controller/subframe_form.html");
   EXPECT_TRUE(NavigateToURL(shell(), page_with_form_url));
@@ -6172,16 +5879,14 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     FrameNavigationEntry* root_entry = entry->GetFrameEntry(root);
     EXPECT_NE(nullptr, root_entry);
     EXPECT_EQ("", root_entry->frame_unique_name());
-    if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-      EXPECT_EQ(3U, entry->root_node()->children.size());
+    EXPECT_EQ(3U, entry->root_node()->children.size());
 
-      // * The first child of the main frame is named and has two more children.
-      FrameTreeNode* frame = root->child_at(0);
-      FrameNavigationEntry* frame_entry = entry->GetFrameEntry(frame);
-      EXPECT_NE(nullptr, frame_entry);
-      EXPECT_EQ("1-1-name", frame_entry->frame_unique_name());
-      EXPECT_EQ(2U, entry->root_node()->children[0]->children.size());
-    }
+    // * The first child of the main frame is named and has two more children.
+    FrameTreeNode* frame = root->child_at(0);
+    FrameNavigationEntry* frame_entry = entry->GetFrameEntry(frame);
+    EXPECT_NE(nullptr, frame_entry);
+    EXPECT_EQ("1-1-name", frame_entry->frame_unique_name());
+    EXPECT_EQ(2U, entry->root_node()->children[0]->children.size());
   }
 
   // Removing the first child of the main frame should remove the corresponding
@@ -6194,10 +5899,8 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   {
     FrameNavigationEntry* root_entry = entry->GetFrameEntry(root);
     EXPECT_NE(nullptr, root_entry);
-    if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-      EXPECT_EQ(3U, entry->root_node()->children.size());
-      EXPECT_EQ(2U, entry->root_node()->children[0]->children.size());
-    }
+    EXPECT_EQ(3U, entry->root_node()->children.size());
+    EXPECT_EQ(2U, entry->root_node()->children[0]->children.size());
   }
 
   // Now, insert a frame with the same name as the previously removed one
@@ -6216,9 +5919,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   {
     FrameNavigationEntry* root_entry = entry->GetFrameEntry(root);
     EXPECT_NE(nullptr, root_entry);
-    if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-      EXPECT_EQ(2U, entry->root_node()->children.size());
-    }
+    EXPECT_EQ(2U, entry->root_node()->children.size());
   }
 }
 
@@ -6248,12 +5949,10 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // When a frame is removed from the page, the corresponding
   // FrameNavigationEntry is not removed. This is done intentionally to support
   // back-forward navigations in subframes and more intuitive UX on tab restore.
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    EXPECT_EQ(1U, nav_entry->root_node()->children.size());
-    FrameNavigationEntry* frame_entry =
-        nav_entry->root_node()->children[0]->frame_entry.get();
-    EXPECT_EQ("foo-frame-name", frame_entry->frame_unique_name());
-  }
+  EXPECT_EQ(1U, nav_entry->root_node()->children.size());
+  FrameNavigationEntry* frame_entry =
+      nav_entry->root_node()->children[0]->frame_entry.get();
+  EXPECT_EQ("foo-frame-name", frame_entry->frame_unique_name());
 
   EXPECT_TRUE(ExecuteScript(root, kAddFrameScript));
   EXPECT_EQ(1U, root->child_count());
@@ -6264,17 +5963,15 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   EXPECT_EQ(1U, root->child_at(0)->child_count());
   EXPECT_EQ("foo-frame-name", root->child_at(0)->child_at(0)->frame_name());
 
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    EXPECT_EQ(1U, nav_entry->root_node()->children.size());
+  EXPECT_EQ(1U, nav_entry->root_node()->children.size());
 
-    NavigationEntryImpl::TreeNode* tree_node =
-        nav_entry->root_node()->children[0];
-    EXPECT_EQ(1U, tree_node->children.size());
+  NavigationEntryImpl::TreeNode* tree_node =
+      nav_entry->root_node()->children[0];
+  EXPECT_EQ(1U, tree_node->children.size());
 
-    tree_node = tree_node->children[0];
-    EXPECT_EQ(0U, tree_node->children.size());
-    EXPECT_EQ("foo-frame-name", tree_node->frame_entry->frame_unique_name());
-  }
+  tree_node = tree_node->children[0];
+  EXPECT_EQ(0U, tree_node->children.size());
+  EXPECT_EQ("foo-frame-name", tree_node->frame_entry->frame_unique_name());
 
   EXPECT_TRUE(ExecuteScript(root->child_at(0), kRemoveFrameScript));
   EXPECT_EQ(0U, root->child_at(0)->child_count());
@@ -6299,25 +5996,20 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // for the name and leave it around.
   EXPECT_TRUE(ExecuteScript(root, kAddNamedFrameScript));
   EXPECT_EQ(1U, root->child_count());
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    EXPECT_EQ(1U, nav_entry->root_node()->children.size());
-    tree_node = nav_entry->root_node()->children[0];
-  }
+  EXPECT_EQ(1U, nav_entry->root_node()->children.size());
+  tree_node = nav_entry->root_node()->children[0];
 
   EXPECT_TRUE(ExecuteScript(root, kRemoveFrameScript));
   EXPECT_EQ(0U, root->child_count());
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries())
-    EXPECT_EQ(1U, nav_entry->root_node()->children.size());
+  EXPECT_EQ(1U, nav_entry->root_node()->children.size());
 
   // Add another frame with the same name as before. The matching logic
   // should consider them the same and result in the FrameNavigationEntry
   // being reused.
   EXPECT_TRUE(ExecuteScript(root, kAddNamedFrameScript));
   EXPECT_EQ(1U, root->child_count());
-  if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
-    EXPECT_EQ(1U, nav_entry->root_node()->children.size());
-    EXPECT_EQ(tree_node, nav_entry->root_node()->children[0]);
-  }
+  EXPECT_EQ(1U, nav_entry->root_node()->children.size());
+  EXPECT_EQ(tree_node, nav_entry->root_node()->children[0]);
 
   EXPECT_TRUE(ExecuteScript(root, kRemoveFrameScript));
   EXPECT_EQ(0U, root->child_count());
@@ -6690,23 +6382,23 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   NavigationControllerImpl& controller = static_cast<NavigationControllerImpl&>(
       shell()->web_contents()->GetController());
 
-  // ReloadToRefreshContent triggers a reload of ReloadType::MAIN_RESOURCE.  The
-  // first reload should not be counted.
-  controller.ReloadToRefreshContent(false);
+  // Reload triggers a reload of ReloadType::NORMAL.  The first reload should
+  // not be counted.
+  controller.Reload(ReloadType::NORMAL, false);
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   histogram.ExpectTotalCount(kReloadToReloadMetricName, 0);
   histogram.ExpectTotalCount(kReloadMainResourceToReloadMetricName, 0);
 
-  // ReloadBypassingCache triggers a reload of ReloadType::BYPASSING_CACHE.
-  // Both metrics should count the consecutive reloads.
-  controller.ReloadBypassingCache(false);
+  // Reload with ReloadType::BYPASSING_CACHE.  Both metrics should count the
+  // consecutive reloads.
+  controller.Reload(ReloadType::BYPASSING_CACHE, false);
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   histogram.ExpectTotalCount(kReloadToReloadMetricName, 1);
   histogram.ExpectTotalCount(kReloadMainResourceToReloadMetricName, 1);
 
-  // Triggers another reload of ReloadType::BYPASSING_CACHE.
+  // Triggers another reload with ReloadType::BYPASSING_CACHE.
   // ReloadMainResourceToReload should not be counted here.
-  controller.ReloadBypassingCache(false);
+  controller.Reload(ReloadType::BYPASSING_CACHE, false);
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   histogram.ExpectTotalCount(kReloadToReloadMetricName, 2);
   histogram.ExpectTotalCount(kReloadMainResourceToReloadMetricName, 1);
@@ -6721,14 +6413,14 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // Then, the next reload should be assumed as the first reload.  Metrics
   // should not be changed for the first reload.
-  controller.ReloadToRefreshContent(false);
+  controller.Reload(ReloadType::NORMAL, false);
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   histogram.ExpectTotalCount(kReloadToReloadMetricName, 2);
   histogram.ExpectTotalCount(kReloadMainResourceToReloadMetricName, 1);
 
-  // Another reload of ReloadType::MAIN_RESOURCE should be counted by both
-  // metrics again.
-  controller.ReloadToRefreshContent(false);
+  // Another reload of ReloadType::NORMAL should be counted by both metrics
+  // again.
+  controller.Reload(ReloadType::NORMAL, false);
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   histogram.ExpectTotalCount(kReloadToReloadMetricName, 3);
   histogram.ExpectTotalCount(kReloadMainResourceToReloadMetricName, 2);
@@ -6745,7 +6437,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   histogram.ExpectTotalCount(kReloadToReloadMetricName, 3);
   histogram.ExpectTotalCount(kReloadMainResourceToReloadMetricName, 2);
 
-  controller.ReloadToRefreshContent(false);
+  controller.Reload(ReloadType::NORMAL, false);
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   histogram.ExpectTotalCount(kReloadToReloadMetricName, 4);
   histogram.ExpectTotalCount(kReloadMainResourceToReloadMetricName, 3);
@@ -6756,7 +6448,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   histogram.ExpectTotalCount(kReloadToReloadMetricName, 4);
   histogram.ExpectTotalCount(kReloadMainResourceToReloadMetricName, 3);
 
-  controller.ReloadToRefreshContent(false);
+  controller.Reload(ReloadType::NORMAL, false);
   EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
   histogram.ExpectTotalCount(kReloadToReloadMetricName, 4);
   histogram.ExpectTotalCount(kReloadMainResourceToReloadMetricName, 3);
@@ -6765,9 +6457,6 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 // Check that the referrer is stored inside FrameNavigationEntry for subframes.
 IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
                        RefererStoredForSubFrame) {
-  if (!SiteIsolationPolicy::UseSubframeNavigationEntries())
-    return;
-
   const NavigationControllerImpl& controller =
       static_cast<const NavigationControllerImpl&>(
           shell()->web_contents()->GetController());
@@ -6799,18 +6488,12 @@ class RequestMonitoringNavigationBrowserTest : public ContentBrowserTest {
 
   const net::test_server::HttpRequest* FindAccumulatedRequest(
       const GURL& url_to_find) {
-    // net::test_server::HttpRequest::GetURL hardcodes "http://localhost/" part.
-    GURL::Replacements replacements;
-    replacements.SetHostStr("localhost");
-    replacements.ClearPort();
-    replacements.SetSchemeStr("http");
     DCHECK(url_to_find.SchemeIsHTTPOrHTTPS());
-    GURL canonical_url_to_find = url_to_find.ReplaceComponents(replacements);
 
     auto it = std::find_if(
         accumulated_requests_.begin(), accumulated_requests_.end(),
-        [&canonical_url_to_find](const net::test_server::HttpRequest& request) {
-          return request.GetURL() == canonical_url_to_find;
+        [&url_to_find](const net::test_server::HttpRequest& request) {
+          return request.GetURL() == url_to_find;
         });
     if (it == accumulated_requests_.end())
       return nullptr;

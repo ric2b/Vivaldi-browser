@@ -90,8 +90,8 @@ class PropertyTreePrinter {
       stringBuilder.append(' ');
     if (m_nodeToDebugString.contains(node))
       stringBuilder.append(m_nodeToDebugString.get(node));
-    stringBuilder.append(String::format(" %p", node));
-    Traits::printNodeAsString(node, stringBuilder);
+    stringBuilder.append(String::format(" %p ", node));
+    stringBuilder.append(node->toString());
     stringBuilder.append("\n");
 
     for (const auto* childNode : m_nodeToDebugString.keys()) {
@@ -162,38 +162,6 @@ class PropertyTreePrinterTraits<TransformPaintPropertyNode> {
           scrollbarPaintOffset,
           "ScrollbarPaintOffset (" + object.debugName() + ")");
   }
-
-  static void printNodeAsString(const TransformPaintPropertyNode* node,
-                                StringBuilder& stringBuilder) {
-    stringBuilder.append(" transform=");
-
-    TransformationMatrix::DecomposedType decomposition;
-    if (!node->matrix().decompose(decomposition)) {
-      stringBuilder.append("degenerate");
-      return;
-    }
-
-    stringBuilder.append(
-        String::format("translation=%f,%f,%f", decomposition.translateX,
-                       decomposition.translateY, decomposition.translateZ));
-    if (node->matrix().isIdentityOrTranslation())
-      return;
-
-    stringBuilder.append(
-        String::format(", scale=%f,%f,%f", decomposition.scaleX,
-                       decomposition.scaleY, decomposition.scaleZ));
-    stringBuilder.append(String::format(", skew=%f,%f,%f", decomposition.skewXY,
-                                        decomposition.skewXZ,
-                                        decomposition.skewYZ));
-    stringBuilder.append(
-        String::format(", quaternion=%f,%f,%f,%f", decomposition.quaternionX,
-                       decomposition.quaternionY, decomposition.quaternionZ,
-                       decomposition.quaternionW));
-    stringBuilder.append(
-        String::format(", perspective=%f,%f,%f,%f", decomposition.perspectiveX,
-                       decomposition.perspectiveY, decomposition.perspectiveZ,
-                       decomposition.perspectiveW));
-  }
 };
 
 template <>
@@ -227,16 +195,6 @@ class PropertyTreePrinterTraits<ClipPaintPropertyNode> {
       printer.addPropertyNode(overflowClip,
                               "OverflowClip (" + object.debugName() + ")");
   }
-
-  static void printNodeAsString(const ClipPaintPropertyNode* node,
-                                StringBuilder& stringBuilder) {
-    stringBuilder.append(String::format(" localTransformSpace=%p ",
-                                        node->localTransformSpace()));
-    stringBuilder.append(String::format(
-        "rect=%f,%f,%f,%f", node->clipRect().rect().x(),
-        node->clipRect().rect().y(), node->clipRect().rect().width(),
-        node->clipRect().rect().height()));
-  }
 };
 
 template <>
@@ -252,11 +210,6 @@ class PropertyTreePrinterTraits<EffectPaintPropertyNode> {
       PropertyTreePrinter<EffectPaintPropertyNode>& printer) {
     if (const EffectPaintPropertyNode* effect = paintProperties.effect())
       printer.addPropertyNode(effect, "Effect (" + object.debugName() + ")");
-  }
-
-  static void printNodeAsString(const EffectPaintPropertyNode* node,
-                                StringBuilder& stringBuilder) {
-    stringBuilder.append(String::format(" opacity=%f", node->opacity()));
   }
 };
 
@@ -276,29 +229,6 @@ class PropertyTreePrinterTraits<ScrollPaintPropertyNode> {
       PropertyTreePrinter<ScrollPaintPropertyNode>& printer) {
     if (const ScrollPaintPropertyNode* scroll = paintProperties.scroll())
       printer.addPropertyNode(scroll, "Scroll (" + object.debugName() + ")");
-  }
-
-  static void printNodeAsString(const ScrollPaintPropertyNode* node,
-                                StringBuilder& stringBuilder) {
-    FloatSize scrollOffset =
-        node->scrollOffsetTranslation()->matrix().to2DTranslation();
-    stringBuilder.append(" scrollOffsetTranslation=");
-    stringBuilder.append(scrollOffset.toString());
-    stringBuilder.append(" clip=");
-    stringBuilder.append(node->clip().toString());
-    stringBuilder.append(" bounds=");
-    stringBuilder.append(node->bounds().toString());
-    stringBuilder.append(" userScrollableHorizontal=");
-    stringBuilder.append(node->userScrollableHorizontal() ? "yes" : "no");
-    stringBuilder.append(" userScrollableVertical=");
-    stringBuilder.append(node->userScrollableVertical() ? "yes" : "no");
-    stringBuilder.append(
-        " hasBackgroundAttachmentFixedMainThreadScrollingReason=");
-    stringBuilder.append(
-        node->hasMainThreadScrollingReasons(
-            MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects)
-            ? "yes"
-            : "no");
   }
 };
 
@@ -379,7 +309,7 @@ class PaintPropertyTreeGraphBuilder {
 
     os << "flattensInheritedTransform="
        << (node.flattensInheritedTransform() ? "true" : "false") << "\\n";
-    os << "renderingContextID=" << node.renderingContextID() << "\\n";
+    os << "renderingContextId=" << node.renderingContextId() << "\\n";
 
     const TransformationMatrix& matrix = node.matrix();
     os << "[" << std::setw(8) << matrix.m11() << "," << std::setw(8)
@@ -534,7 +464,7 @@ class PaintPropertyTreeGraphBuilder {
     ClipPaintPropertyNode* contentClip = frameView.contentClip();
     if (contentClip)
       writePaintPropertyNode(*contentClip, &frameView, "contentClip");
-    ScrollPaintPropertyNode* scroll = frameView.scroll();
+    const ScrollPaintPropertyNode* scroll = frameView.scroll();
     if (scroll)
       writePaintPropertyNode(*scroll, &frameView, "scroll");
   }

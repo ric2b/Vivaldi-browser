@@ -13,12 +13,15 @@
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/widget/widget.h"
 
-class AvatarMenuButton;
 class BrowserRootView;
 class BrowserView;
 class NativeBrowserFrame;
 class NonClientFrameView;
 class SystemMenuModelBuilder;
+
+namespace content {
+struct NativeWebKeyboardEvent;
+}
 
 namespace gfx {
 class FontList;
@@ -70,15 +73,6 @@ class BrowserFrame
   // Tells the frame to update the throbber.
   void UpdateThrobber(bool running);
 
-  // Tells the frame to update any toolbar elements it has.
-  void UpdateToolbar();
-
-  // Returns the location icon, if there is a location icon embedded into the
-  // frame. This is the case for web app frames, which do not have a visible
-  // toolbar. Instead of using the normal location icon from the location bar
-  // in the toolbar, these windows have a location icon in the frame.
-  views::View* GetLocationIconView() const;
-
   // Returns the NonClientFrameView of this frame.
   BrowserNonClientFrameView* GetFrameView() const;
 
@@ -91,6 +85,15 @@ class BrowserFrame
   // Retrieves the window placement (show state and bounds) for restoring.
   void GetWindowPlacement(gfx::Rect* bounds,
                           ui::WindowShowState* show_state) const;
+
+  // Returns true if the |event| was handled by the platform implementation
+  // before sending it to the renderer. E.g., it may be swallowed by a native
+  // menu bar.
+  bool PreHandleKeyboardEvent(const content::NativeWebKeyboardEvent& event);
+
+  // Returns true if the |event| was handled by the platform implementation,
+  // if the renderer did not process it.
+  bool HandleKeyboardEvent(const content::NativeWebKeyboardEvent& event);
 
   // Called when BrowserView creates all it's child views.
   void OnBrowserViewInitViewsComplete();
@@ -105,6 +108,7 @@ class BrowserFrame
   void SchedulePaintInRect(const gfx::Rect& rect) override;
   void OnNativeWidgetActivationChanged(bool active) override;
   void OnNativeWidgetWorkspaceChanged() override;
+  void OnNativeThemeUpdated(ui::NativeTheme* observed_theme) override;
 
   // Overridden from views::ContextMenuController:
   void ShowContextMenuForView(views::View* source,

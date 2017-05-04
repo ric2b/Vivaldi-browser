@@ -6,8 +6,6 @@
 
 #include "modules/bluetooth/BluetoothDevice.h"
 #include "modules/bluetooth/BluetoothRemoteGATTService.h"
-#include "public/platform/modules/bluetooth/WebBluetoothRemoteGATTCharacteristicInit.h"
-#include "public/platform/modules/bluetooth/WebBluetoothRemoteGATTService.h"
 #include <memory>
 #include <utility>
 
@@ -18,16 +16,17 @@ BluetoothAttributeInstanceMap::BluetoothAttributeInstanceMap(
     : m_device(device) {}
 
 BluetoothRemoteGATTService*
-BluetoothAttributeInstanceMap::getOrCreateBluetoothRemoteGATTService(
-    std::unique_ptr<WebBluetoothRemoteGATTService> webService) {
-  String serviceInstanceId = webService->serviceInstanceID;
-
+BluetoothAttributeInstanceMap::getOrCreateRemoteGATTService(
+    mojom::blink::WebBluetoothRemoteGATTServicePtr remoteGATTService,
+    bool isPrimary,
+    const String& deviceInstanceId) {
+  String serviceInstanceId = remoteGATTService->instance_id;
   BluetoothRemoteGATTService* service =
       m_serviceIdToObject.get(serviceInstanceId);
 
   if (!service) {
-    service =
-        new BluetoothRemoteGATTService(std::move(webService), m_device.get());
+    service = new BluetoothRemoteGATTService(
+        std::move(remoteGATTService), isPrimary, deviceInstanceId, m_device);
     m_serviceIdToObject.add(serviceInstanceId, service);
   }
 
@@ -40,19 +39,19 @@ bool BluetoothAttributeInstanceMap::containsService(
 }
 
 BluetoothRemoteGATTCharacteristic*
-BluetoothAttributeInstanceMap::getOrCreateBluetoothRemoteGATTCharacteristic(
+BluetoothAttributeInstanceMap::getOrCreateRemoteGATTCharacteristic(
     ExecutionContext* context,
-    std::unique_ptr<WebBluetoothRemoteGATTCharacteristicInit> webCharacteristic,
+    mojom::blink::WebBluetoothRemoteGATTCharacteristicPtr
+        remoteGATTCharacteristic,
     BluetoothRemoteGATTService* service) {
-  String characteristicInstanceId = webCharacteristic->characteristicInstanceID;
-
+  String instanceId = remoteGATTCharacteristic->instance_id;
   BluetoothRemoteGATTCharacteristic* characteristic =
-      m_characteristicIdToObject.get(characteristicInstanceId);
+      m_characteristicIdToObject.get(instanceId);
 
   if (!characteristic) {
     characteristic = BluetoothRemoteGATTCharacteristic::create(
-        context, std::move(webCharacteristic), service);
-    m_characteristicIdToObject.add(characteristicInstanceId, characteristic);
+        context, std::move(remoteGATTCharacteristic), service, m_device);
+    m_characteristicIdToObject.add(instanceId, characteristic);
   }
 
   return characteristic;
@@ -63,15 +62,39 @@ bool BluetoothAttributeInstanceMap::containsCharacteristic(
   return m_characteristicIdToObject.contains(characteristicInstanceId);
 }
 
+BluetoothRemoteGATTDescriptor*
+BluetoothAttributeInstanceMap::getOrCreateBluetoothRemoteGATTDescriptor(
+    mojom::blink::WebBluetoothRemoteGATTDescriptorPtr descriptor,
+    BluetoothRemoteGATTCharacteristic* characteristic) {
+  String instanceId = descriptor->instance_id;
+  BluetoothRemoteGATTDescriptor* result =
+      m_descriptorIdToObject.get(instanceId);
+
+  if (result)
+    return result;
+
+  result =
+      new BluetoothRemoteGATTDescriptor(std::move(descriptor), characteristic);
+  m_descriptorIdToObject.add(instanceId, result);
+  return result;
+}
+
+bool BluetoothAttributeInstanceMap::containsDescriptor(
+    const String& descriptorInstanceId) {
+  return m_descriptorIdToObject.contains(descriptorInstanceId);
+}
+
 void BluetoothAttributeInstanceMap::Clear() {
   m_serviceIdToObject.clear();
   m_characteristicIdToObject.clear();
+  m_descriptorIdToObject.clear();
 }
 
 DEFINE_TRACE(BluetoothAttributeInstanceMap) {
   visitor->trace(m_device);
   visitor->trace(m_serviceIdToObject);
   visitor->trace(m_characteristicIdToObject);
+  visitor->trace(m_descriptorIdToObject);
 }
 
 }  // namespace blink

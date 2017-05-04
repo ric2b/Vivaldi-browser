@@ -58,6 +58,8 @@ TaskManagerImpl::TaskManagerImpl()
   task_providers_.emplace_back(new WebContentsTaskProvider());
 #if defined(OS_CHROMEOS)
   if (arc::ArcBridgeService::GetEnabled(
+          base::CommandLine::ForCurrentProcess()) ||
+      arc::ArcBridgeService::GetKioskStarted(
           base::CommandLine::ForCurrentProcess())) {
     task_providers_.emplace_back(new ArcProcessTaskProvider());
   }
@@ -93,6 +95,24 @@ double TaskManagerImpl::GetCpuUsage(TaskId task_id) const {
   return GetTaskGroupByTaskId(task_id)->cpu_usage();
 }
 
+base::Time TaskManagerImpl::GetStartTime(TaskId task_id) const {
+#if defined(OS_WIN)
+  return GetTaskGroupByTaskId(task_id)->start_time();
+#else
+  NOTIMPLEMENTED();
+  return base::Time();
+#endif
+}
+
+base::TimeDelta TaskManagerImpl::GetCpuTime(TaskId task_id) const {
+#if defined(OS_WIN)
+  return GetTaskGroupByTaskId(task_id)->cpu_time();
+#else
+  NOTIMPLEMENTED();
+  return base::TimeDelta();
+#endif
+}
+
 int64_t TaskManagerImpl::GetPhysicalMemoryUsage(TaskId task_id) const {
   return GetTaskGroupByTaskId(task_id)->physical_bytes();
 }
@@ -119,6 +139,10 @@ int64_t TaskManagerImpl::GetGpuMemoryUsage(TaskId task_id,
   if (has_duplicates)
     *has_duplicates = task_group->gpu_memory_has_duplicates();
   return task_group->gpu_memory();
+}
+
+base::MemoryState TaskManagerImpl::GetMemoryState(TaskId task_id) const {
+  return GetTaskGroupByTaskId(task_id)->memory_state();
 }
 
 int TaskManagerImpl::GetIdleWakeupsPerSecond(TaskId task_id) const {

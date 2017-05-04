@@ -21,15 +21,18 @@ namespace {
 class HeadersIterationSource final
     : public PairIterable<String, String>::IterationSource {
  public:
-  explicit HeadersIterationSource(FetchHeaderList* headers)
-      : m_headers(headers), m_current(0) {}
+  explicit HeadersIterationSource(const FetchHeaderList* headers)
+      : m_headers(headers->clone()), m_current(0) {
+    m_headers->sortAndCombine();
+  }
 
   bool next(ScriptState* scriptState,
             String& key,
             String& value,
             ExceptionState& exception) override {
-    // FIXME: This simply advances an index and returns the next value if
-    // any, so if the iterated object is mutated values may be skipped.
+    // This simply advances an index and returns the next value if any; the
+    // iterated list is not exposed to script so it will never be mutated
+    // during iteration.
     if (m_current >= m_headers->size())
       return false;
 
@@ -174,8 +177,9 @@ String Headers::get(const String& name, ExceptionState& exceptionState) {
     exceptionState.throwTypeError("Invalid name");
     return String();
   }
-  // "2. Return the value of the first header in header list whose name is
-  //     |name|, and null otherwise."
+  // "2. If there is no header in header list whose name is |name|,
+  //     return null."
+  // "3. Return the combined value given |name| and header list."
   String result;
   m_headerList->get(name, result);
   return result;
@@ -284,9 +288,8 @@ void Headers::fillWith(const Vector<Vector<String>>& object,
 void Headers::fillWith(const Dictionary& object,
                        ExceptionState& exceptionState) {
   ASSERT(!m_headerList->size());
-  Vector<String> keys;
-  object.getPropertyNames(keys);
-  if (!keys.size())
+  const Vector<String>& keys = object.getPropertyNames(exceptionState);
+  if (exceptionState.hadException() || !keys.size())
     return;
 
   // "3. Otherwise, if |object| is an open-ended dictionary, then for each

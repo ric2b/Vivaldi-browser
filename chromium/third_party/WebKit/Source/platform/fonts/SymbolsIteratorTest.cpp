@@ -29,7 +29,7 @@ class SymbolsIteratorTest : public testing::Test {
     Vector<ExpectedRun> expect;
     for (auto& run : runs) {
       text.append(String::fromUTF8(run.text.c_str()));
-      expect.append(ExpectedRun(text.length(), run.fontFallbackPriority));
+      expect.push_back(ExpectedRun(text.length(), run.fontFallbackPriority));
     }
     SymbolsIterator symbolsIterator(text.characters16(), text.length());
     VerifyRuns(&symbolsIterator, expect);
@@ -106,6 +106,12 @@ TEST_F(SymbolsIteratorTest, NumbersAndHashNormalAndEmoji) {
   CHECK_RUNS({{"0123456789#*", FontFallbackPriority::Text},
               {"0⃣1⃣2⃣3⃣4⃣5⃣6⃣7⃣8⃣9⃣*⃣", FontFallbackPriority::EmojiEmoji},
               {"0123456789#*", FontFallbackPriority::Text}});
+}
+
+TEST_F(SymbolsIteratorTest, VS16onDigits) {
+  CHECK_RUNS({{"#", FontFallbackPriority::Text},
+              {"#\uFE0F#\uFE0F\u20E3", FontFallbackPriority::EmojiEmoji},
+              {"#", FontFallbackPriority::Text}});
 }
 
 TEST_F(SymbolsIteratorTest, SingleFlag) {
@@ -199,6 +205,11 @@ TEST_F(SymbolsIteratorTest, ExtraZWJPrefix) {
 
 TEST_F(SymbolsIteratorTest, Arrows) {
   CHECK_RUNS({{"x→←x←↑↓→", FontFallbackPriority::Text}});
+}
+
+TEST_F(SymbolsIteratorTest, JudgePilot) {
+  CHECK_RUNS({{"👨‍⚖️👩‍⚖️👨🏼‍⚖️👩🏼‍⚖️",
+               FontFallbackPriority::EmojiEmoji}});
 }
 
 }  // namespace blink

@@ -11,8 +11,9 @@
 
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "components/ntp_snippets/category_factory.h"
+#include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/category_info.h"
 #include "components/ntp_snippets/content_suggestion.h"
 #include "components/ntp_snippets/features.h"
@@ -22,6 +23,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/session_types.h"
 #include "components/sync_sessions/synced_session.h"
+#include "components/variations/variations_associated_data.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
@@ -49,18 +51,19 @@ const char* kMaxForeignTabAgeInMinutesParamName =
     "max_foreign_tabs_age_in_minutes";
 
 int GetMaxForeignTabsTotal() {
-  return GetParamAsInt(ntp_snippets::kForeignSessionsSuggestionsFeature,
-                       kMaxForeignTabsTotalParamName, kMaxForeignTabsTotal);
+  return variations::GetVariationParamByFeatureAsInt(
+      ntp_snippets::kForeignSessionsSuggestionsFeature,
+      kMaxForeignTabsTotalParamName, kMaxForeignTabsTotal);
 }
 
 int GetMaxForeignTabsPerDevice() {
-  return GetParamAsInt(ntp_snippets::kForeignSessionsSuggestionsFeature,
-                       kMaxForeignTabsPerDeviceParamName,
-                       kMaxForeignTabsPerDevice);
+  return variations::GetVariationParamByFeatureAsInt(
+      ntp_snippets::kForeignSessionsSuggestionsFeature,
+      kMaxForeignTabsPerDeviceParamName, kMaxForeignTabsPerDevice);
 }
 
 TimeDelta GetMaxForeignTabAge() {
-  return TimeDelta::FromMinutes(GetParamAsInt(
+  return TimeDelta::FromMinutes(variations::GetVariationParamByFeatureAsInt(
       ntp_snippets::kForeignSessionsSuggestionsFeature,
       kMaxForeignTabAgeInMinutesParamName, kMaxForeignTabAgeInMinutes));
 }
@@ -159,13 +162,12 @@ struct ForeignSessionsSuggestionsProvider::SessionData {
 
 ForeignSessionsSuggestionsProvider::ForeignSessionsSuggestionsProvider(
     ContentSuggestionsProvider::Observer* observer,
-    CategoryFactory* category_factory,
     std::unique_ptr<ForeignSessionsProvider> foreign_sessions_provider,
     PrefService* pref_service)
-    : ContentSuggestionsProvider(observer, category_factory),
+    : ContentSuggestionsProvider(observer),
       category_status_(CategoryStatus::INITIALIZING),
       provided_category_(
-          category_factory->FromKnownCategory(KnownCategories::FOREIGN_TABS)),
+          Category::FromKnownCategory(KnownCategories::FOREIGN_TABS)),
       foreign_sessions_provider_(std::move(foreign_sessions_provider)),
       pref_service_(pref_service) {
   foreign_sessions_provider_->SubscribeForForeignTabChange(
@@ -369,8 +371,9 @@ ForeignSessionsSuggestionsProvider::GetSuggestionCandidates(
                          std::unique_ptr<sessions::SessionWindow>>& key_value :
          session->windows) {
       for (const std::unique_ptr<SessionTab>& tab : key_value.second->tabs) {
-        if (tab->navigations.empty())
+        if (tab->navigations.empty()) {
           continue;
+        }
 
         const SerializedNavigationEntry& navigation = tab->navigations.back();
         const std::string id = navigation.virtual_url().spec();

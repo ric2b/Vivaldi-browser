@@ -16,6 +16,8 @@
 #include "google_apis/gaia/gaia_urls.h"
 #include "url/gurl.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace gaia {
 
 namespace {
@@ -25,6 +27,8 @@ const char kGooglemailDomain[] = "googlemail.com";
 
 std::string CanonicalizeEmailImpl(const std::string& email_address,
                                   bool change_googlemail_to_gmail) {
+  if(vivaldi::IsVivaldiRunning())
+    return email_address;
   std::vector<std::string> parts = base::SplitString(
       email_address, "@", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (parts.size() != 2U) {

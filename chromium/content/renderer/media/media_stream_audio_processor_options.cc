@@ -134,31 +134,7 @@ bool ScanConstraintsForBoolean(
   return the_default;
 }
 
-void SetIfNotSet(rtc::Optional<bool>* field, bool value) {
-  if (!*field) {
-    *field = rtc::Optional<bool>(value);
-  }
-}
-
 }  // namespace
-
-// TODO(xians): Remove this method after the APM in WebRtc is deprecated.
-void MediaAudioConstraints::ApplyFixedAudioConstraints(
-    cricket::AudioOptions* options) {
-  SetIfNotSet(&options->echo_cancellation, true);
-#if defined(OS_ANDROID)
-  SetIfNotSet(&options->extended_filter_aec, false);
-#else
-  // Enable the extended filter mode AEC on all non-mobile platforms.
-  SetIfNotSet(&options->extended_filter_aec, true);
-#endif
-  SetIfNotSet(&options->auto_gain_control, true);
-  SetIfNotSet(&options->experimental_agc, true);
-  SetIfNotSet(&options->noise_suppression, true);
-  SetIfNotSet(&options->highpass_filter, true);
-  SetIfNotSet(&options->typing_detection, true);
-  SetIfNotSet(&options->experimental_ns, true);
-}
 
 MediaAudioConstraints::MediaAudioConstraints(
     const blink::WebMediaConstraints& constraints, int effects)
@@ -435,10 +411,6 @@ void EnableNoiseSuppression(AudioProcessing* audio_processing,
   CHECK_EQ(err, 0);
 }
 
-void EnableHighPassFilter(AudioProcessing* audio_processing) {
-  CHECK_EQ(audio_processing->high_pass_filter()->Enable(true), 0);
-}
-
 void EnableTypingDetection(AudioProcessing* audio_processing,
                            webrtc::TypingDetection* typing_detector) {
   int err = audio_processing->voice_detection()->Enable(true);
@@ -495,6 +467,8 @@ void GetAudioProcessingStats(
   stats->echo_delay_std_ms = apm_stats.delay_standard_deviation;
 
   stats->residual_echo_likelihood = apm_stats.residual_echo_likelihood;
+  stats->residual_echo_likelihood_recent_max =
+      apm_stats.residual_echo_likelihood_recent_max;
 }
 
 std::vector<webrtc::Point> GetArrayGeometryPreferringConstraints(

@@ -100,25 +100,19 @@ Range* Range::create(Document& ownerDocument,
                    end.computeOffsetInContainerNode());
 }
 
+// TODO(yosin): We should move |Range::createAdjustedToTreeScope()| to
+// "Document.cpp" since it is use only one place in "Document.cpp".
 Range* Range::createAdjustedToTreeScope(const TreeScope& treeScope,
                                         const Position& position) {
-  Range* range = create(treeScope.document(), position, position);
-
-  // Make sure the range is in this scope.
-  Node* firstNode = range->firstNode();
-  DCHECK(firstNode);
-  Node* shadowHostInThisScopeOrFirstNode =
-      treeScope.ancestorInThisScope(firstNode);
-  DCHECK(shadowHostInThisScopeOrFirstNode);
-  if (shadowHostInThisScopeOrFirstNode == firstNode)
-    return range;
-
-  // If not, create a range for the shadow host in this scope.
-  ContainerNode* container = shadowHostInThisScopeOrFirstNode->parentNode();
-  DCHECK(container);
-  unsigned offset = shadowHostInThisScopeOrFirstNode->nodeIndex();
-  return Range::create(treeScope.document(), container, offset, container,
-                       offset);
+  DCHECK(position.isNotNull());
+  // Note: Since |Position::computeContanerNode()| returns |nullptr| if
+  // |position| is |BeforeAnchor| or |AfterAnchor|.
+  Node* const anchorNode = position.anchorNode();
+  if (anchorNode->treeScope() == treeScope)
+    return create(treeScope.document(), position, position);
+  Node* const shadowHost = treeScope.ancestorInThisScope(anchorNode);
+  return Range::create(treeScope.document(), Position::beforeNode(shadowHost),
+                       Position::beforeNode(shadowHost));
 }
 
 void Range::dispose() {
@@ -238,13 +232,15 @@ void Range::collapse(bool toStart) {
 bool Range::isNodeFullyContained(Node& node) const {
   ContainerNode* parentNode = node.parentNode();
   int nodeIndex = node.nodeIndex();
-  return isPointInRange(parentNode, nodeIndex,
-                        IGNORE_EXCEPTION)  // starts in the middle of this
-                                           // range, or on the boundary points.
-         && isPointInRange(parentNode, nodeIndex + 1,
-                           IGNORE_EXCEPTION);  // ends in the middle of this
-                                               // range, or on the boundary
-                                               // points.
+  return isPointInRange(
+             parentNode, nodeIndex,
+             IGNORE_EXCEPTION_FOR_TESTING)  // starts in the middle of this
+                                            // range, or on the boundary points.
+         && isPointInRange(
+                parentNode, nodeIndex + 1,
+                IGNORE_EXCEPTION_FOR_TESTING);  // ends in the middle of this
+                                                // range, or on the boundary
+                                                // points.
 }
 
 bool Range::hasSameRoot(const Node& node) const {
@@ -394,7 +390,7 @@ short Range::compareBoundaryPoints(const RangeBoundaryPoint& boundaryA,
 }
 
 bool Range::boundaryPointsValid() const {
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   return compareBoundaryPoints(m_start, m_end, exceptionState) <= 0 &&
          !exceptionState.hadException();
 }
@@ -596,7 +592,7 @@ DocumentFragment* Range::processContents(ActionType action,
   if (processStart) {
     NodeVector nodes;
     for (Node* n = processStart; n && n != processEnd; n = n->nextSibling())
-      nodes.append(n);
+      nodes.push_back(n);
     processNodes(action, nodes, commonRoot, fragment, exceptionState);
   }
 
@@ -668,7 +664,7 @@ Node* Range::processContentsBetweenOffsets(ActionType action,
         n = n->nextSibling();
       for (unsigned i = startOffset; n && i < endOffset;
            i++, n = n->nextSibling())
-        nodes.append(n);
+        nodes.push_back(n);
 
       processNodes(action, nodes, container, result, exceptionState);
       break;
@@ -711,7 +707,7 @@ Node* Range::processAncestorsAndTheirSiblings(
   for (Node& runner : NodeTraversal::ancestorsOf(*container)) {
     if (runner == commonRoot)
       break;
-    ancestors.append(runner);
+    ancestors.push_back(runner);
   }
 
   Node* firstChildInAncestorToProcess = direction == ProcessContentsForward
@@ -737,7 +733,7 @@ Node* Range::processAncestorsAndTheirSiblings(
          child = (direction == ProcessContentsForward)
                      ? child->nextSibling()
                      : child->previousSibling())
-      nodes.append(child);
+      nodes.push_back(child);
 
     for (const auto& node : nodes) {
       Node* child = node.get();
@@ -780,6 +776,7 @@ DocumentFragment* Range::extractContents(ExceptionState& exceptionState) {
   if (exceptionState.hadException())
     return nullptr;
 
+  EventQueueScope scope;
   return processContents(EXTRACT_CONTENTS, exceptionState);
 }
 
@@ -1575,7 +1572,7 @@ void Range::updateOwnerDocumentIfNeeded() {
 }
 
 static inline void boundaryTextNodeSplit(RangeBoundaryPoint& boundary,
-                                         Text& oldNode) {
+                                         const Text& oldNode) {
   Node* boundaryContainer = boundary.container();
   unsigned boundaryOffset = boundary.offset();
   if (boundary.childBefore() == &oldNode)
@@ -1585,7 +1582,7 @@ static inline void boundaryTextNodeSplit(RangeBoundaryPoint& boundary,
     boundary.set(oldNode.nextSibling(), boundaryOffset - oldNode.length(), 0);
 }
 
-void Range::didSplitTextNode(Text& oldNode) {
+void Range::didSplitTextNode(const Text& oldNode) {
   DCHECK_EQ(oldNode.document(), m_ownerDocument);
   DCHECK(oldNode.parentNode());
   DCHECK(oldNode.nextSibling());
@@ -1692,7 +1689,7 @@ FloatRect Range::boundingRect() const {
 
   // If all rects are empty, return the first rect.
   if (result.isEmpty() && !quads.isEmpty())
-    return quads.first().boundingBox();
+    return quads.front().boundingBox();
 
   return result;
 }

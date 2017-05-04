@@ -25,13 +25,18 @@ void CSSTiming::recordAuthorStyleSheetParseTime(double seconds) {
     m_parseTimeBeforeFCP += seconds;
 }
 
+void CSSTiming::recordUpdateDuration(double seconds) {
+  if (!m_paintTiming->firstContentfulPaint())
+    m_updateTimeBeforeFCP += seconds;
+}
+
 DEFINE_TRACE(CSSTiming) {
-  visitor->trace(m_document);
   visitor->trace(m_paintTiming);
   Supplement<Document>::trace(visitor);
 }
 
 CSSTiming::CSSTiming(Document& document)
-    : m_document(document), m_paintTiming(PaintTiming::from(document)) {}
+    : Supplement<Document>(document),
+      m_paintTiming(PaintTiming::from(document)) {}
 
 }  // namespace blink

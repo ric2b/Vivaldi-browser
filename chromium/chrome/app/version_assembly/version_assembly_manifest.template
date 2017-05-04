@@ -6,4 +6,5 @@
       type='win32'/>
   <file name='vivaldi_elf.dll'/>
   <file name='kasko.dll'/>
+  <file name='WinSparkle.dll'/>
 </assembly>

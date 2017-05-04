@@ -44,7 +44,8 @@ class POLICY_EXPORT PolicyMap {
     // Returns a copy of |this|.
     Entry DeepCopy() const;
 
-    // Returns true if |this| has higher priority than |other|.
+    // Returns true if |this| has higher priority than |other|. The priority of
+    // the fields are |level| > |scope| > |source|.
     bool has_higher_priority_than(const Entry& other) const;
 
     // Returns true if |this| equals |other|.
@@ -74,6 +75,9 @@ class POLICY_EXPORT PolicyMap {
            std::unique_ptr<base::Value> value,
            std::unique_ptr<ExternalDataFetcher> external_data_fetcher);
   void Set(const std::string& policy, Entry entry);
+
+  // For all policies, overwrite the PolicySource with |source|.
+  void SetSourceForAll(PolicySource source);
 
   // Erase the given |policy|, if it exists in this map.
   void Erase(const std::string& policy);

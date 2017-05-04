@@ -44,7 +44,7 @@ void {{v8_class}}::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v8Value, {{
   }
   {% endif %}
   {% for member in members %}
-  {% filter runtime_enabled(member.runtime_enabled_function) %}
+  {% filter runtime_enabled(member.runtime_enabled_feature_name) %}
   v8::Local<v8::Value> {{member.name}}Value;
   if (!v8Object->Get(isolate->GetCurrentContext(), v8String(isolate, "{{member.name}}")).ToLocal(&{{member.name}}Value)) {
     exceptionState.rethrowV8Exception(block.Exception());
@@ -63,7 +63,7 @@ void {{v8_class}}::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v8Value, {{
   {% endif %}
   } else {
     {% if member.deprecate_as %}
-    Deprecation::countDeprecationIfNotPrivateScript(isolate, currentExecutionContext(isolate), UseCounter::{{member.deprecate_as}});
+    Deprecation::countDeprecation(currentExecutionContext(isolate), UseCounter::{{member.deprecate_as}});
     {% endif %}
     {{v8_value_to_local_cpp_value(member) | indent}}
     {% if member.is_interface_type %}
@@ -105,7 +105,7 @@ bool toV8{{cpp_class}}(const {{cpp_class}}& impl, v8::Local<v8::Object> dictiona
   {% for member in members %}
   if (impl.{{member.has_method_name}}()) {
     {% if member.is_object %}
-    DCHECK(impl.{{member.cpp_name}}().isObject());
+    DCHECK(impl.{{member.getter_name}}().isObject());
     {% endif %}
     if (!v8CallBoolean(dictionary->CreateDataProperty(isolate->GetCurrentContext(), v8String(isolate, "{{member.name}}"), {{member.cpp_value_to_v8_value}})))
       return false;

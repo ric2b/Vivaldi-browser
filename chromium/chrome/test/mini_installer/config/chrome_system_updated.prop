@@ -23,12 +23,7 @@
       }
     },
     "HKEY_LOCAL_MACHINE\\$BINARIES_UPDATE_REGISTRY_SUBKEY": {
-      "exists": "required",
-      "values": {
-        "pv": {"type": "SZ", "data": "$NEXT_VERSION_MINI_INSTALLER_FILE_VERSION"},
-        "opv": {},
-        "cmd": {}
-      }
+      "exists": "forbidden"
     },
     "HKEY_LOCAL_MACHINE\\$LAUNCHER_UPDATE_REGISTRY_SUBKEY": {
       "condition": "'$CHROME_SHORT_NAME' == 'Chrome'",
@@ -39,13 +34,38 @@
       "values": {
         "UninstallString": {
           "type": "SZ",
-          "data": "\"$PROGRAM_FILES\\$CHROME_DIR\\Application\\$NEXT_VERSION_MINI_INSTALLER_FILE_VERSION\\Installer\\setup.exe\" --uninstall --multi-install --chrome --system-level --verbose-logging"
+          "data": "\"$PROGRAM_FILES\\$CHROME_DIR\\Application\\$NEXT_VERSION_MINI_INSTALLER_FILE_VERSION\\Installer\\setup.exe\" --uninstall --system-level --verbose-logging"
         },
         "Version": {"type": "SZ", "data": "$NEXT_VERSION_MINI_INSTALLER_FILE_VERSION"}
       }
     },
     "HKEY_LOCAL_MACHINE\\Software\\Classes\\$CHROME_SHORT_NAME": {
       "exists": "forbidden"
+    },
+    "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\EventLog\\Application\\$CHROME_SHORT_NAME": {
+      "exists": "required",
+      "values": {
+        "CategoryCount": {
+          "type": "DWORD",
+          "data": 1
+        },
+        "TypesSupported": {
+          "type": "DWORD",
+          "data": 7
+        },
+        "CategoryMessageFile": {
+          "type": "SZ",
+          "data": "$PROGRAM_FILES\\$CHROME_DIR\\Application\\$NEXT_VERSION_MINI_INSTALLER_FILE_VERSION\\eventlog_provider.dll"
+        },
+        "EventMessageFile": {
+          "type": "SZ",
+          "data": "$PROGRAM_FILES\\$CHROME_DIR\\Application\\$NEXT_VERSION_MINI_INSTALLER_FILE_VERSION\\eventlog_provider.dll"
+        },
+        "ParameterMessageFile": {
+          "type": "SZ",
+          "data": "$PROGRAM_FILES\\$CHROME_DIR\\Application\\$NEXT_VERSION_MINI_INSTALLER_FILE_VERSION\\eventlog_provider.dll"
+        }
+      }
     }
   }
 }

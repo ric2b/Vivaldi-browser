@@ -32,7 +32,7 @@
 #ifndef WebPluginContainerImpl_h
 #define WebPluginContainerImpl_h
 
-#include "core/frame/DOMWindowProperty.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/plugins/PluginView.h"
 #include "platform/Widget.h"
 #include "public/web/WebPluginContainer.h"
@@ -41,8 +41,6 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
-
-struct NPObject;
 
 namespace blink {
 
@@ -63,8 +61,8 @@ struct WebPrintPresetOptions;
 
 class WEB_EXPORT WebPluginContainerImpl final
     : public PluginView,
-      WTF_NON_EXPORTED_BASE(public WebPluginContainer),
-      public DOMWindowProperty {
+      NON_EXPORTED_BASE(public WebPluginContainer),
+      public ContextClient {
   USING_GARBAGE_COLLECTED_MIXIN(WebPluginContainerImpl);
   USING_PRE_FINALIZER(WebPluginContainerImpl, dispose);
 

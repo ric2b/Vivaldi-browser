@@ -5,7 +5,7 @@
 package org.chromium.chrome.browser.widget.selection;
 
 import android.content.Context;
-import android.support.graphics.drawable.VectorDrawableCompat;
+import android.graphics.drawable.Drawable;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -34,13 +34,16 @@ import javax.annotation.Nullable;
  *
  * After the SelectableListLayout is inflated, it should be initialized through calls to
  * #initializeRecyclerView(), #initializeToolbar(), and #initializeEmptyView().
+ *
+ * @param <E> The type of the selectable items this layout holds.
  */
-public class SelectableListLayout extends RelativeLayout {
+public class SelectableListLayout<E> extends RelativeLayout {
     private Adapter<RecyclerView.ViewHolder> mAdapter;
     private ViewStub mToolbarStub;
     private TextView mEmptyView;
     private LoadingView mLoadingView;
     private RecyclerView mRecyclerView;
+    SelectionToolbar<E> mToolbar;
 
     private final AdapterDataObserver mAdapterObserver = new AdapterDataObserver() {
         @Override
@@ -55,6 +58,8 @@ public class SelectableListLayout extends RelativeLayout {
             // At inflation, the RecyclerView is set to gone, and the loading view is visible. As
             // long as the adapter data changes, we show the recycler view, and hide loading view.
             mLoadingView.hideLoadingUI();
+
+            mToolbar.onDataChanged(mAdapter.getItemCount());
         }
     };
 
@@ -74,13 +79,8 @@ public class SelectableListLayout extends RelativeLayout {
 
         mToolbarStub = (ViewStub) findViewById(R.id.action_bar_stub);
 
-        FadingShadowView shadow = (FadingShadowView) findViewById(R.id.shadow);
-        if (DeviceFormFactor.isLargeTablet(getContext())) {
-            shadow.setVisibility(View.GONE);
-        } else {
-            shadow.init(ApiCompatibilityUtils.getColor(getResources(),
-                    R.color.toolbar_shadow_color), FadingShadow.POSITION_TOP);
-        }
+        setFocusable(true);
+        setFocusableInTouchMode(true);
     }
 
     /**
@@ -88,14 +88,16 @@ public class SelectableListLayout extends RelativeLayout {
      *
      * @param adapter The adapter that provides a binding from an app-specific data set to views
      *                that are displayed within the RecyclerView.
+     * @return The RecyclerView itself.
      */
-    public void initializeRecyclerView(Adapter<RecyclerView.ViewHolder> adapter) {
+    public RecyclerView initializeRecyclerView(Adapter<RecyclerView.ViewHolder> adapter) {
         mAdapter = adapter;
         mAdapter.registerAdapterDataObserver(mAdapterObserver);
 
         mRecyclerView = (RecyclerView) findViewById(R.id.recycler_view);
         mRecyclerView.setAdapter(mAdapter);
         mRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+        return mRecyclerView;
     }
 
     /**
@@ -111,32 +113,54 @@ public class SelectableListLayout extends RelativeLayout {
      *                         established.
      * @param selectedGroupResId The resource id of the menu item to show when a selection is
      *                           established.
+     * @param normalBackgroundColorResId The resource id of the color to use as the background color
+     *                                   when selection is not enabled. If null the default appbar
+     *                                   background color will be used.
+     * @param hideShadowOnLargeTablets Whether the toolbar shadow should be hidden on large tablets.
      * @param listener The OnMenuItemClickListener to set on the toolbar.
      * @return The initialized SelectionToolbar.
      */
-    public <E> SelectionToolbar<E> initializeToolbar(int toolbarLayoutId,
+    public SelectionToolbar<E> initializeToolbar(int toolbarLayoutId,
             SelectionDelegate<E> delegate, int titleResId, @Nullable DrawerLayout drawerLayout,
-            int normalGroupResId, int selectedGroupResId, OnMenuItemClickListener listener) {
+            int normalGroupResId, int selectedGroupResId,
+            @Nullable Integer normalBackgroundColorResId, boolean hideShadowOnLargeTablets,
+            OnMenuItemClickListener listener) {
+
+        FadingShadowView shadow = (FadingShadowView) findViewById(R.id.shadow);
+        if (hideShadowOnLargeTablets && DeviceFormFactor.isLargeTablet(getContext())) {
+            shadow.setVisibility(View.GONE);
+        } else {
+            shadow.init(ApiCompatibilityUtils.getColor(getResources(),
+                    R.color.toolbar_shadow_color), FadingShadow.POSITION_TOP);
+        }
+
         mToolbarStub.setLayoutResource(toolbarLayoutId);
         @SuppressWarnings("unchecked")
         SelectionToolbar<E> toolbar = (SelectionToolbar<E>) mToolbarStub.inflate();
-        toolbar.initialize(delegate, titleResId, drawerLayout, normalGroupResId,
-                selectedGroupResId);
-        toolbar.setOnMenuItemClickListener(listener);
-        return toolbar;
+        mToolbar = toolbar;
+        mToolbar.initialize(delegate, titleResId, drawerLayout, normalGroupResId,
+                selectedGroupResId, normalBackgroundColorResId);
+        mToolbar.setOnMenuItemClickListener(listener);
+        return mToolbar;
     }
 
     /**
      * Initializes the view shown when the selectable list is empty.
      *
-     * @param emptyIconResId The icon to show when the selectable list is empty.
+     * @param emptyDrawable The Drawable to show when the selectable list is empty.
+     * @param emptyStringResId The string to show when the selectable list is empty.
+     * @return The {@link TextView} displayed when the list is empty.
+     */
+    public TextView initializeEmptyView(Drawable emptyDrawable, int emptyStringResId) {
+        mEmptyView.setCompoundDrawablesWithIntrinsicBounds(null, emptyDrawable, null, null);
+        mEmptyView.setText(emptyStringResId);
+        return mEmptyView;
+    }
+
+    /**
      * @param emptyStringResId The string to show when the selectable list is empty.
      */
-    public void initializeEmptyView(int emptyIconResId, int emptyStringResId) {
-        mEmptyView.setCompoundDrawablesWithIntrinsicBounds(null,
-                VectorDrawableCompat.create(getResources(), emptyIconResId,
-                        getContext().getTheme()),
-                null, null);
+    public void setEmptyViewText(int emptyStringResId) {
         mEmptyView.setText(emptyStringResId);
     }
 

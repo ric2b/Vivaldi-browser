@@ -201,6 +201,7 @@ void DesktopCaptureDevice::Core::OnCaptureResult(
     webrtc::DesktopCapturer::Result result,
     std::unique_ptr<webrtc::DesktopFrame> frame) {
   DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(client_);
   DCHECK(capture_in_progress_);
   capture_in_progress_ = false;
 
@@ -223,9 +224,6 @@ void DesktopCaptureDevice::Core::OnCaptureResult(
     return;
   }
   DCHECK(frame);
-
-  if (!client_)
-    return;
 
   base::TimeDelta capture_time(
       base::TimeDelta::FromMilliseconds(frame->capture_time_ms()));
@@ -398,8 +396,8 @@ std::unique_ptr<media::VideoCaptureDevice> DesktopCaptureDevice::Create(
     }
 
     case DesktopMediaID::TYPE_WINDOW: {
-      std::unique_ptr<webrtc::DesktopCapturer> window_capturer(
-          webrtc::CroppingWindowCapturer::Create(options));
+      std::unique_ptr<webrtc::DesktopCapturer> window_capturer =
+          webrtc::CroppingWindowCapturer::CreateCapturer(options);
       if (window_capturer && window_capturer->SelectSource(source.id)) {
         window_capturer->FocusOnSelectedSource();
         capturer.reset(new webrtc::DesktopAndCursorComposer(

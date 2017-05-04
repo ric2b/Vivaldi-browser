@@ -55,6 +55,9 @@ REPLACE_GOOGLE_EXCEPTIONS =[
   "IDS_HOTWORD_NOTIFICATION_DESCRIPTION",
   "IDS_HOTWORD_NOTIFICATION_BUTTON",
   "IDS_HOTWORD_SEARCH_PREF_CHKBOX",
+  "IDS_CONTENT_CONTEXT_SPELLING_ASK_GOOGLE",
+  "IDS_CONTENT_CONTEXT_SPELLING_NO_SUGGESTIONS_FROM_GOOGLE",
+  "IDS_CONTENT_CONTEXT_SPELLING_BUBBLE_TEXT",
 ]
 
 sequence_number = 0
@@ -302,11 +305,23 @@ class GritFile(dict):
     resources = grd_reader.Parse(filename, **params)
 
     if extra_languages:
-      resources.AddChild(extra_languages)
-      extra_languages.parent = resources
+      language_list = []
+      for node in iter_gritnode(resources, empty.TranslationsNode):
+        for lnode in iter_gritnode(node, io.FileNode):
+          language_list.append(lnode.GetLang())
+      new_translate = empty.TranslationsNode()
+      new_translate.name = "translations"
+      for lnode in iter_gritnode(extra_languages, io.FileNode):
+        if lnode.GetLang() not in language_list:
+          new_translate.AddChild(lnode)
+          lnode.parent = new_translate
+
+      resources.AddChild(new_translate)
+      new_translate.parent = resources
 
     resources.SetOutputLanguage('en')
     if load_translations:
+      resources.UberClique().keep_additional_translations_ = True
       resources.RunGatherers()
 
     active_resources = {"internals":{}}
@@ -465,6 +480,12 @@ class GritFile(dict):
                             self["messages"])
 
       if name in self.get("message-entries", {}):
+        if load_translations:
+          new_clique = seq_node[1].GetCliques()[0].clique
+          old_clique = self["message-entries"][name][1].GetCliques()[0].clique
+          for lang in old_clique:
+            if lang not in new_clique:
+              new_clique[lang] = old_clique[lang]
         self["message-entries"][name] = (self["message-entries"][name][0],
                                          seq_node[1])
       else:
@@ -698,6 +719,12 @@ def merge_resource(origin_file, overlay_file, target_location, params = {},
     pass # Just ignore the errors here. Most likely the dir exists,
          # otherwise next step will fail instead
   if action in [WRITE_GRD_FILES, PRINT_ALL]:
+    for lang, extra_translation_items in mergeresource.resources["resources"].UberClique().additional_translations_.iteritems():
+      xtb_callback = mainresource.resources["resources"].UberClique().GenerateXtbParserCallback(lang, override_exisiting=True)
+      for tid, string in extra_translation_items.iteritems():
+        #print "Item", tid, type(string), string
+        xtb_callback(tid, string);
+        #translations.setdefault(lang, {})[tid] = util.EscapeHtml(string)
     translations = mainresource.Translations()
     for lang, translation in translations.iteritems():
       if lang == "en" or lang == "x-P-pseudo":
@@ -712,7 +739,8 @@ def merge_resource(origin_file, overlay_file, target_location, params = {},
       xtbfile = cStringIO.StringIO()
       xtbfile.write("""<?xml version="1.0" encoding="utf-8" ?>\n"""
                     """<!DOCTYPE translationbundle>\n"""
-                    """<translationbundle lang="%s">""" % lang)
+                    """<translationbundle lang="%s">"""
+                    % (lang if lang != "nb" else "no"))
       for msgid, text in sorted(translation.iteritems()):
         try:
           xtbfile.write((u"""<translation id="%s">%s</translation>\n""" %

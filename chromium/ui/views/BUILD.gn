@@ -5,6 +5,7 @@
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
+import("//ui/base/ui_features.gni")
 import("//ui/ozone/ozone.gni")
 
 config("flags") {
@@ -324,6 +325,7 @@ component("views") {
     "view_model.h",
     "view_model_utils.cc",
     "view_model_utils.h",
+    "view_observer.h",
     "view_targeter.cc",
     "view_targeter.h",
     "view_targeter_delegate.cc",
@@ -396,6 +398,7 @@ component("views") {
   deps = [
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
+    "//services/ui/public/interfaces",
     "//skia",
     "//third_party/icu",
     "//ui/accessibility",
@@ -405,6 +408,7 @@ component("views") {
     "//ui/resources",
     "//ui/strings",
     "//ui/views/resources",
+    "//ui/views/resources/vector_icons",
     "//url",
   ]
 
@@ -444,10 +448,7 @@ component("views") {
       "linux_ui/status_icon_linux.cc",
       "linux_ui/status_icon_linux.h",
     ]
-    sources += [
-      "widget/desktop_aura/desktop_cursor_loader_updater_chromeos.cc",
-      "widget/desktop_aura/desktop_window_tree_host_chromeos.cc",
-    ]
+    sources += [ "widget/desktop_aura/desktop_window_tree_host_chromeos.cc" ]
   }
 
   if (is_win) {
@@ -539,7 +540,6 @@ component("views") {
       "views_touch_selection_controller_factory_aura.cc",
       "widget/desktop_aura/desktop_capture_client.cc",
       "widget/desktop_aura/desktop_capture_client.h",
-      "widget/desktop_aura/desktop_cursor_loader_updater.h",
       "widget/desktop_aura/desktop_drop_target_win.cc",
       "widget/desktop_aura/desktop_drop_target_win.h",
       "widget/desktop_aura/desktop_event_client.cc",
@@ -564,6 +564,7 @@ component("views") {
       "widget/window_reorderer.h",
     ]
     deps += [
+      "//services/ui/public/interfaces",
       "//ui/aura",
       "//ui/touch_selection",
       "//ui/wm",
@@ -602,7 +603,6 @@ component("views") {
         }
       } else if (is_win) {
         sources += [
-          "widget/desktop_aura/desktop_cursor_loader_updater_aurawin.cc",
           "widget/desktop_aura/desktop_drag_drop_client_win.cc",
           "widget/desktop_aura/desktop_drag_drop_client_win.h",
           "widget/desktop_aura/desktop_screen_win.cc",
@@ -619,11 +619,7 @@ component("views") {
         ]
       }
       if (is_linux) {
-        sources += [
-          "style/platform_style_linux.cc",
-          "widget/desktop_aura/desktop_cursor_loader_updater_auralinux.cc",
-          "widget/desktop_aura/desktop_cursor_loader_updater_auralinux.h",
-        ]
+        sources += [ "style/platform_style_linux.cc" ]
       }
     }
   }
@@ -669,6 +665,8 @@ static_library("test_support_internal") {
     "animation/test/test_ink_drop_ripple_observer.h",
     "controls/textfield/textfield_test_api.cc",
     "controls/textfield/textfield_test_api.h",
+    "corewm/test/tooltip_aura_test_api.cc",
+    "corewm/test/tooltip_aura_test_api.h",
     "test/capture_tracking_view.cc",
     "test/capture_tracking_view.h",
     "test/combobox_test_api.cc",
@@ -727,6 +725,7 @@ static_library("test_support_internal") {
   deps = [
     "//base",
     "//base/test:test_support",
+    "//gpu/ipc/service",
     "//ipc:test_support",
     "//skia",
     "//testing/gtest",
@@ -847,6 +846,7 @@ source_set("views_unittests_sources") {
     "controls/scrollbar/scrollbar_unittest.cc",
     "controls/slider_unittest.cc",
     "controls/styled_label_unittest.cc",
+    "controls/tabbed_pane/tabbed_pane_accessibility_mac_unittest.mm",
     "controls/tabbed_pane/tabbed_pane_unittest.cc",
     "controls/table/table_utils_unittest.cc",
     "controls/table/table_view_unittest.cc",
@@ -886,6 +886,7 @@ source_set("views_unittests_sources") {
     "//base:i18n",
     "//base/test:test_support",
     "//cc",
+    "//services/ui/public/interfaces",
     "//skia",
     "//testing/gtest",
     "//third_party/icu",

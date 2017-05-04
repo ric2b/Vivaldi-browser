@@ -485,7 +485,7 @@ bool LayoutThemeMac::isControlStyled(const ComputedStyle& style) const {
       return true;
     // NSPopUpButtonCell on macOS 10.9 doesn't support
     // NSUserInterfaceLayoutDirectionRightToLeft.
-    if (IsOS10_9() && style.direction() == RTL)
+    if (IsOS10_9() && style.direction() == TextDirection::kRtl)
       return true;
   }
   // Some other cells don't work well when scaled.
@@ -718,7 +718,7 @@ void LayoutThemeMac::adjustMenuListStyle(ComputedStyle& style,
   style.setHeight(Length(Auto));
 
   // White-space is locked to pre.
-  style.setWhiteSpace(PRE);
+  style.setWhiteSpace(EWhiteSpace::kPre);
 
   // Set the foreground color to black or gray when we have the aqua look.
   // Cast to RGB32 is to work around a compiler bug.
@@ -754,7 +754,8 @@ int LayoutThemeMac::popupInternalPaddingStart(
   return 0;
 }
 
-int LayoutThemeMac::popupInternalPaddingEnd(const ComputedStyle& style) const {
+int LayoutThemeMac::popupInternalPaddingEnd(const HostWindow*,
+                                            const ComputedStyle& style) const {
   if (style.appearance() == MenulistPart)
     return popupButtonPadding(
                controlSizeForFont(style))[ThemeMac::RightMargin] *
@@ -819,7 +820,7 @@ void LayoutThemeMac::setPopupButtonCellState(const LayoutObject& object,
   updatePressedState(popupButton, object);
 
   popupButton.userInterfaceLayoutDirection =
-      object.styleRef().direction() == LTR
+      object.styleRef().direction() == TextDirection::kLtr
           ? NSUserInterfaceLayoutDirectionLeftToRight
           : NSUserInterfaceLayoutDirectionRightToLeft;
 }

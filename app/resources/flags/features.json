@@ -1,11 +1,5 @@
 {
   "flags": {
-    "new_history_page": {
-      "friendly_name": "New History Page",
-      "description": "Enable the new history page (under heavy development). Restart required.",
-      "value": "false",
-      "internal_value": "true"
-    },
     "hue_integration": {
       "friendly_name": "Philips Hue Integration",
       "description": "Lets Vivaldi integrate with an existing Philips Hue Lighting system.",

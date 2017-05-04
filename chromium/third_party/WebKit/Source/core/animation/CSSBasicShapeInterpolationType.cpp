@@ -22,7 +22,7 @@ class UnderlyingCompatibilityChecker
  public:
   static std::unique_ptr<UnderlyingCompatibilityChecker> create(
       PassRefPtr<NonInterpolableValue> underlyingNonInterpolableValue) {
-    return wrapUnique(new UnderlyingCompatibilityChecker(
+    return WTF::wrapUnique(new UnderlyingCompatibilityChecker(
         std::move(underlyingNonInterpolableValue)));
   }
 
@@ -45,7 +45,7 @@ class InheritedShapeChecker : public InterpolationType::ConversionChecker {
   static std::unique_ptr<InheritedShapeChecker> create(
       CSSPropertyID property,
       PassRefPtr<BasicShape> inheritedShape) {
-    return wrapUnique(
+    return WTF::wrapUnique(
         new InheritedShapeChecker(property, std::move(inheritedShape)));
   }
 
@@ -73,7 +73,7 @@ InterpolationValue CSSBasicShapeInterpolationType::maybeConvertNeutral(
   // const_cast is for taking refs.
   NonInterpolableValue* nonInterpolableValue =
       const_cast<NonInterpolableValue*>(underlying.nonInterpolableValue.get());
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       UnderlyingCompatibilityChecker::create(nonInterpolableValue));
   return InterpolationValue(
       BasicShapeInterpolationFunctions::createNeutralValue(
@@ -94,7 +94,7 @@ InterpolationValue CSSBasicShapeInterpolationType::maybeConvertInherit(
   const BasicShape* shape = BasicShapePropertyFunctions::getBasicShape(
       cssProperty(), *state.parentStyle());
   // const_cast to take a ref.
-  conversionCheckers.append(InheritedShapeChecker::create(
+  conversionCheckers.push_back(InheritedShapeChecker::create(
       cssProperty(), const_cast<BasicShape*>(shape)));
   return BasicShapeInterpolationFunctions::maybeConvertBasicShape(
       shape, state.parentStyle()->effectiveZoom());
@@ -121,12 +121,13 @@ PairwiseInterpolationValue CSSBasicShapeInterpolationType::maybeMergeSingles(
     return nullptr;
   return PairwiseInterpolationValue(std::move(start.interpolableValue),
                                     std::move(end.interpolableValue),
-                                    start.nonInterpolableValue.release());
+                                    std::move(start.nonInterpolableValue));
 }
 
-InterpolationValue CSSBasicShapeInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
-  const ComputedStyle& style = *environment.state().style();
+InterpolationValue
+CSSBasicShapeInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const StyleResolverState& state) const {
+  const ComputedStyle& style = *state.style();
   return BasicShapeInterpolationFunctions::maybeConvertBasicShape(
       BasicShapePropertyFunctions::getBasicShape(cssProperty(), style),
       style.effectiveZoom());
@@ -148,15 +149,15 @@ void CSSBasicShapeInterpolationType::composite(
       underlyingFraction, *value.interpolableValue);
 }
 
-void CSSBasicShapeInterpolationType::apply(
+void CSSBasicShapeInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue* nonInterpolableValue,
-    InterpolationEnvironment& environment) const {
+    StyleResolverState& state) const {
   BasicShapePropertyFunctions::setBasicShape(
-      cssProperty(), *environment.state().style(),
+      cssProperty(), *state.style(),
       BasicShapeInterpolationFunctions::createBasicShape(
           interpolableValue, *nonInterpolableValue,
-          environment.state().cssToLengthConversionData()));
+          state.cssToLengthConversionData()));
 }
 
 }  // namespace blink

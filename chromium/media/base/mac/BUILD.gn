@@ -2,8 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/features.gni")
-
 assert(is_mac || is_ios)
 
 source_set("mac") {
@@ -15,39 +13,28 @@ source_set("mac") {
 
   set_sources_assignment_filter([])
   sources = [
-    "coremedia_glue.h",
-    "coremedia_glue.mm",
-    "corevideo_glue.h",
     "video_frame_mac.cc",
     "video_frame_mac.h",
-    "videotoolbox_glue.h",
-    "videotoolbox_glue.mm",
     "videotoolbox_helpers.cc",
     "videotoolbox_helpers.h",
   ]
   if (is_mac) {
-    sources += [
-      "avfoundation_glue.h",
-      "avfoundation_glue.mm",
-    ]
     libs = [
       "AVFoundation.framework",
+      "CoreMedia.framework",
       "CoreVideo.framework",  # Required by video_frame_mac.cc.
-    ]
-  }
-  if (system_proprietary_codecs) {
-    sources += [
-      "framework_type_conversions.h",
-      "framework_type_conversions.mm",
-      "mediatoolbox_glue.h",
-      "mediatoolbox_glue.mm",
-      "scoped_audio_queue_ref.h",
+      "VideoToolbox.framework",
     ]
   }
   set_sources_assignment_filter(sources_assignment_filter)
   configs += [
     "//media:media_config",
     "//media:media_implementation",
+  ]
+
+  deps = [
+    "//ppapi/features",
+    "//ui/gfx:color_space",
   ]
 }
 
@@ -60,5 +47,6 @@ source_set("unit_tests") {
   configs += [ "//media:media_config" ]
   deps = [
     "//testing/gtest",
+    "//ui/gfx:color_space",
   ]
 }

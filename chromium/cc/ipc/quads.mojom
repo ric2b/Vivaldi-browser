@@ -5,7 +5,6 @@
 module cc.mojom;
 
 import "cc/ipc/filter_operations.mojom";
-import "cc/ipc/render_pass_id.mojom";
 import "cc/ipc/shared_quad_state.mojom";
 import "cc/ipc/surface_id.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
@@ -20,15 +19,12 @@ struct DebugBorderQuadState {
 };
 
 struct RenderPassQuadState {
-  cc.mojom.RenderPassId render_pass_id;
+  int32 render_pass_id;
 
   // If nonzero, resource id of mask to use when drawing this pass.
   uint32 mask_resource_id;
   gfx.mojom.Vector2dF mask_uv_scale;
   gfx.mojom.Size mask_texture_size;
-
-  // Post-processing filters, applied to the pixels in the render pass' texture.
-  cc.mojom.FilterOperations filters;
 
   // The scale from layer space of the root layer of the render pass to
   // the render pass physical pixels. This scale is applied to the filter
@@ -40,10 +36,6 @@ struct RenderPassQuadState {
   // original primitive. This used to correctly position crop rects, lights,
   // etc.
   gfx.mojom.PointF filters_origin;
-
-  // Post-processing filters, applied to the pixels showing through the
-  // background of the render pass, from behind it.
-  cc.mojom.FilterOperations background_filters;
 };
 
 struct SolidColorQuadState {
@@ -63,6 +55,7 @@ struct SurfaceQuadState {
 
 struct TextureQuadState {
   uint32 resource_id;
+  gfx.mojom.Size resource_size_in_pixels;
   bool premultiplied_alpha;
   gfx.mojom.PointF uv_top_left;
   gfx.mojom.PointF uv_bottom_right;

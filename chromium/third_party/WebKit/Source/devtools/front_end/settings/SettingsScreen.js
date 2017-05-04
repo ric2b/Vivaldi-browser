@@ -52,7 +52,7 @@ Settings.SettingsScreen = class extends UI.VBox {
     tabbedPane.setShrinkableTabs(false);
     tabbedPane.setVerticalTabLayout(true);
     var shortcutsView = new UI.SimpleView(Common.UIString('Shortcuts'));
-    Components.shortcutsScreen.createShortcutsTabView().show(shortcutsView.element);
+    UI.shortcutsScreen.createShortcutsTabView().show(shortcutsView.element);
     this._tabbedLocation.appendView(shortcutsView);
     tabbedPane.show(this.contentElement);
 
@@ -177,7 +177,7 @@ Settings.GenericSettingsTab = class extends Settings.SettingsTab {
     self.runtime.extensions(UI.SettingUI).forEach(this._addSettingUI.bind(this));
 
     this._appendSection().appendChild(
-        createTextButton(Common.UIString('Restore defaults and reload'), restoreAndReload));
+        UI.createTextButton(Common.UIString('Restore defaults and reload'), restoreAndReload));
 
     function restoreAndReload() {
       Common.settings.clearAll();
@@ -287,10 +287,20 @@ Settings.WorkspaceSettingsTab = class extends Settings.SettingsTab {
     folderExcludePatternInput.classList.add('folder-exclude-pattern');
     this.containerElement.appendChild(folderExcludePatternInput);
 
+    if (Runtime.experiments.isEnabled('persistence2')) {
+      var div = this.containerElement.createChild('div', 'settings-info-message');
+      div.createTextChild(
+          Common.UIString('Mappings are inferred automatically via the \'Persistence 2.0\' experiment. Please '));
+      div.appendChild(UI.createExternalLink(
+          'https://bugs.chromium.org/p/chromium/issues/entry?template=Defect%20report%20from%20user&components=Platform%3EDevTools%3EAuthoring&comment=DevTools%20failed%20to%20link%20network%20resource%20to%20filesystem.%0A%0APlatform%3A%20%3CLinux%2FWin%2FMac%3E%0AChrome%20version%3A%20%3Cyour%20chrome%20version%3E%0A%0AWhat%20are%20the%20details%20of%20your%20project%3F%0A-%20Source%20code%20(if%20any)%3A%20http%3A%2F%2Fgithub.com%2Fexample%2Fexample%0A-%20Build%20System%3A%20gulp%2Fgrunt%2Fwebpack%2Frollup%2F...%0A-%20HTTP%20server%3A%20node%20HTTP%2Fnginx%2Fapache...%0A%0AAssets%20failed%20to%20link%20(or%20incorrectly%20linked)%3A%0A1.%0A2.%0A3.%0A%0AIf%20possible%2C%20please%20attach%20a%20screenshot%20of%20network%20sources%20navigator%20which%20should%0Ashow%20which%20resources%20failed%20to%20map',
+          Common.UIString('report')));
+      div.createTextChild(Common.UIString(' any bugs.'));
+    }
+
     this._fileSystemsListContainer = this.containerElement.createChild('div', '');
 
     this.containerElement.appendChild(
-        createTextButton(Common.UIString('Add folder\u2026'), this._addFileSystemClicked.bind(this)));
+        UI.createTextButton(Common.UIString('Add folder\u2026'), this._addFileSystemClicked.bind(this)));
 
     /** @type {!Map<string, !Element>} */
     this._elementByPath = new Map();
@@ -368,7 +378,7 @@ Settings.WorkspaceSettingsTab = class extends Settings.SettingsTab {
 
     var toolbar = new UI.Toolbar('');
     var button = new UI.ToolbarButton(Common.UIString('Remove'), 'largeicon-delete');
-    button.addEventListener('click', this._removeFileSystemClicked.bind(this, fileSystem));
+    button.addEventListener(UI.ToolbarButton.Events.Click, this._removeFileSystemClicked.bind(this, fileSystem));
     toolbar.appendToolbarItem(button);
     header.appendChild(toolbar.element);
 
@@ -438,7 +448,7 @@ Settings.ExperimentsSettingsTab = class extends Settings.SettingsTab {
   }
 
   _createExperimentCheckbox(experiment) {
-    var label = createCheckboxLabel(Common.UIString(experiment.title), experiment.isEnabled());
+    var label = UI.createCheckboxLabel(Common.UIString(experiment.title), experiment.isEnabled());
     var input = label.checkboxElement;
     input.name = experiment.name;
     function listener() {

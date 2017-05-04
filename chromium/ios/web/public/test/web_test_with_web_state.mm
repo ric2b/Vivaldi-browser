@@ -6,8 +6,8 @@
 
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/test/ios/wait_util.h"
-#import "ios/web/public/web_state/url_verification_constants.h"
+#import "base/test/ios/wait_util.h"
+#include "ios/web/public/web_state/url_verification_constants.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/web_state_impl.h"
@@ -113,9 +113,7 @@ void WebTestWithWebState::WaitForBackgroundTasks() {
 }
 
 void WebTestWithWebState::WaitForCondition(ConditionBlock condition) {
-  base::MessageLoop* messageLoop = base::MessageLoop::current();
-  DCHECK(messageLoop);
-  base::test::ios::WaitUntilCondition(condition, messageLoop,
+  base::test::ios::WaitUntilCondition(condition, true,
                                       base::TimeDelta::FromSeconds(10));
 }
 

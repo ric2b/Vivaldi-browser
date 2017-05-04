@@ -25,13 +25,13 @@ class TestActivityLogger : public V8DOMActivityLogger {
   ~TestActivityLogger() override {}
 
   void logGetter(const String& apiName) override {
-    m_loggedActivities.append(apiName);
+    m_loggedActivities.push_back(apiName);
   }
 
   void logSetter(const String& apiName,
                  const v8::Local<v8::Value>& newValue) override {
-    m_loggedActivities.append(apiName + " | " +
-                              toCoreStringWithUndefinedOrNullCheck(newValue));
+    m_loggedActivities.push_back(
+        apiName + " | " + toCoreStringWithUndefinedOrNullCheck(newValue));
   }
 
   void logMethod(const String& apiName,
@@ -41,7 +41,7 @@ class TestActivityLogger : public V8DOMActivityLogger {
     for (int i = 0; i < argc; i++)
       activityString = activityString + " | " +
                        toCoreStringWithUndefinedOrNullCheck(argv[i]);
-    m_loggedActivities.append(activityString);
+    m_loggedActivities.push_back(activityString);
   }
 
   void logEvent(const String& eventName,
@@ -51,7 +51,7 @@ class TestActivityLogger : public V8DOMActivityLogger {
     for (int i = 0; i < argc; i++) {
       activityString = activityString + " | " + argv[i];
     }
-    m_loggedActivities.append(activityString);
+    m_loggedActivities.push_back(activityString);
   }
 
   void clear() { m_loggedActivities.clear(); }
@@ -74,7 +74,7 @@ class ActivityLoggerTest : public testing::Test {
   ActivityLoggerTest() {
     m_activityLogger = new TestActivityLogger();
     V8DOMActivityLogger::setActivityLogger(isolatedWorldId, String(),
-                                           wrapUnique(m_activityLogger));
+                                           WTF::wrapUnique(m_activityLogger));
     m_webViewHelper.initialize(true);
     m_scriptController =
         &m_webViewHelper.webView()->mainFrameImpl()->frame()->script();
@@ -93,10 +93,10 @@ class ActivityLoggerTest : public testing::Test {
   void executeScriptInIsolatedWorld(const String& script) const {
     v8::HandleScope scope(v8::Isolate::GetCurrent());
     HeapVector<ScriptSourceCode> sources;
-    sources.append(ScriptSourceCode(script));
+    sources.push_back(ScriptSourceCode(script));
     Vector<v8::Local<v8::Value>> results;
     m_scriptController->executeScriptInIsolatedWorld(isolatedWorldId, sources,
-                                                     extensionGroup, 0);
+                                                     0);
     pumpPendingRequestsForFrameToLoad(m_webViewHelper.webView()->mainFrame());
   }
 
@@ -108,7 +108,6 @@ class ActivityLoggerTest : public testing::Test {
 
  private:
   static const int isolatedWorldId = 1;
-  static const int extensionGroup = 0;
 
   WebViewHelper m_webViewHelper;
   Persistent<ScriptController> m_scriptController;
@@ -580,12 +579,12 @@ TEST_F(ActivityLoggerTest, RequestResource) {
   const char* expectedActivities =
       "blinkAddElement | iframe | data:text/html;charset=utf-8,A\n"
       "blinkRequestResource | Main resource | data:text/html;charset=utf-8,A\n"
-      "blinkRequestResource | Image | data:text/html;charset=utf-8,B\n"
       "blinkAddElement | link | stylesheet | data:text/html;charset=utf-8,C\n"
       "blinkRequestResource | CSS stylesheet | data:text/html;charset=utf-8,C\n"
       "blinkAddElement | script | data:text/html;charset=utf-8,D\n"
       "blinkRequestResource | Script | data:text/html;charset=utf-8,D\n"
-      "blinkRequestResource | XMLHttpRequest | data:text/html;charset=utf-8,E";
+      "blinkRequestResource | XMLHttpRequest | data:text/html;charset=utf-8,E\n"
+      "blinkRequestResource | Image | data:text/html;charset=utf-8,B\n";
   executeScriptInMainWorld(code);
   ASSERT_TRUE(verifyActivities(""));
   executeScriptInIsolatedWorld(code);

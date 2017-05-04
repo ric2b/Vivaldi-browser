@@ -13,7 +13,7 @@ namespace blink {
 {% if has_event_constructor %}
 class Dictionary;
 {% endif %}
-{% if attributes|origin_trial_enabled_attributes %}
+{% if origin_trial_attributes %}
 class ScriptState;
 {% endif %}
 {% if named_constructor %}
@@ -21,29 +21,13 @@ class {{v8_class}}Constructor {
   STATIC_ONLY({{v8_class}}Constructor);
  public:
   static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*, const DOMWrapperWorld&);
-  static const WrapperTypeInfo wrapperTypeInfo;
+  {{exported}}static const WrapperTypeInfo wrapperTypeInfo;
 };
 
 {% endif %}
 class {{v8_class}} {
   STATIC_ONLY({{v8_class}});
  public:
-  {% if has_private_script %}
-  class PrivateScript {
-    STATIC_ONLY(PrivateScript);
-   public:
-    {% for method in methods if method.is_implemented_in_private_script %}
-    static bool {{method.name}}Method({{method.argument_declarations_for_private_script | join(', ')}});
-    {% endfor %}
-    {% for attribute in attributes if attribute.is_implemented_in_private_script %}
-    static bool {{attribute.name}}AttributeGetter(LocalFrame* frame, {{cpp_class}}* holderImpl, {{attribute.cpp_type}}* result);
-    {% if not attribute.is_read_only %}
-    static bool {{attribute.name}}AttributeSetter(LocalFrame* frame, {{cpp_class}}* holderImpl, {{attribute.argument_cpp_type}} cppValue);
-    {% endif %}
-    {% endfor %}
-  };
-
-  {% endif %}
   {% if is_array_buffer_or_view %}
   {{exported}}static {{cpp_class}}* toImpl(v8::Local<v8::Object> object);
   {% else %}
@@ -155,6 +139,8 @@ class {{v8_class}} {
   {% if unscopables or has_conditional_attributes_on_prototype or
         methods | conditionally_exposed(is_partial) %}
   {{exported}}static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate);
+  {% elif has_partial_interface %}
+  {{exported}}static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate) {}
   {% endif %}
   {% if has_partial_interface %}
   {{exported}}static void updateWrapperTypeInfo(InstallTemplateFunction, PreparePrototypeAndInterfaceObjectFunction);
@@ -163,11 +149,22 @@ class {{v8_class}} {
   {{exported}}static void register{{method.name | blink_capitalize}}MethodForPartialInterface(void (*)(const v8::FunctionCallbackInfo<v8::Value>&));
   {% endfor %}
   {% endif %}
-  {% for origin_trial_feature in origin_trial_features %}{{newline}}
-  static void install{{origin_trial_feature.name}}(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, v8::Local<v8::Function> interface);
-  static void install{{origin_trial_feature.name}}(ScriptState*, v8::Local<v8::Object> instance);
-  {% if not origin_trial_feature.needs_instance %}
-  static void install{{origin_trial_feature.name}}(ScriptState*);
+
+  {% if needs_runtime_enabled_installer %}
+  {{exported}}static void installRuntimeEnabledFeatures(
+      v8::Isolate* isolate,
+      const DOMWrapperWorld& world,
+      v8::Local<v8::Object> instance,
+      v8::Local<v8::Object> prototype,
+      v8::Local<v8::Function> interface);
+  {% endif %}
+
+  {% for feature in origin_trial_features %}
+
+  static void install{{feature.name}}(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, v8::Local<v8::Function> interface);
+  static void install{{feature.name}}(ScriptState*, v8::Local<v8::Object> instance);
+  {% if not feature.needs_instance %}
+  static void install{{feature.name}}(ScriptState*);
   {% endif %}
   {% endfor %}
   {% if has_partial_interface %}

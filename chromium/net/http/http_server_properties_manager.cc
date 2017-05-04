@@ -12,7 +12,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "net/base/ip_address.h"
@@ -24,13 +23,13 @@ namespace net {
 namespace {
 
 // Time to wait before starting an update the http_server_properties_impl_ cache
-// from preferences. Scheduling another update during this period will reset the
-// timer.
+// from preferences. Scheduling another update during this period will be a
+// no-op.
 const int64_t kUpdateCacheDelayMs = 1000;
 
 // Time to wait before starting an update the preferences from the
 // http_server_properties_impl_ cache. Scheduling another update during this
-// period will reset the timer.
+// period will be a no-op.
 const int64_t kUpdatePrefsDelayMs = 60000;
 
 // "version" 0 indicates, http_server_properties doesn't have "version"
@@ -74,8 +73,9 @@ HttpServerPropertiesManager::PrefDelegate::~PrefDelegate() {}
 
 HttpServerPropertiesManager::HttpServerPropertiesManager(
     PrefDelegate* pref_delegate,
-    scoped_refptr<base::SequencedTaskRunner> network_task_runner)
-    : pref_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+    scoped_refptr<base::SingleThreadTaskRunner> pref_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> network_task_runner)
+    : pref_task_runner_(pref_task_runner),
       pref_delegate_(pref_delegate),
       setting_prefs_(false),
       network_task_runner_(network_task_runner) {
@@ -84,6 +84,7 @@ HttpServerPropertiesManager::HttpServerPropertiesManager(
       new base::WeakPtrFactory<HttpServerPropertiesManager>(this));
   pref_weak_ptr_ = pref_weak_ptr_factory_->GetWeakPtr();
   pref_cache_update_timer_.reset(new base::OneShotTimer);
+  pref_cache_update_timer_->SetTaskRunner(pref_task_runner_);
   pref_delegate_->StartListeningForUpdates(
       base::Bind(&HttpServerPropertiesManager::OnHttpServerPropertiesChanged,
                  base::Unretained(this)));
@@ -101,7 +102,7 @@ void HttpServerPropertiesManager::InitializeOnNetworkThread() {
   http_server_properties_impl_.reset(new HttpServerPropertiesImpl());
 
   network_prefs_update_timer_.reset(new base::OneShotTimer);
-
+  network_prefs_update_timer_->SetTaskRunner(network_task_runner_);
   pref_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&HttpServerPropertiesManager::UpdateCacheFromPrefsOnPrefThread,
@@ -356,8 +357,10 @@ void HttpServerPropertiesManager::SetMaxServerConfigsStoredInProperties(
 //
 void HttpServerPropertiesManager::ScheduleUpdateCacheOnPrefThread() {
   DCHECK(pref_task_runner_->RunsTasksOnCurrentThread());
-  // Cancel pending updates, if any.
-  pref_cache_update_timer_->Stop();
+  // Do not schedule a new update if there is already one scheduled.
+  if (pref_cache_update_timer_->IsRunning())
+    return;
+
   StartCacheUpdateTimerOnPrefThread(
       base::TimeDelta::FromMilliseconds(kUpdateCacheDelayMs));
 }
@@ -780,8 +783,10 @@ void HttpServerPropertiesManager::UpdateCacheFromPrefsOnNetworkThread(
 void HttpServerPropertiesManager::ScheduleUpdatePrefsOnNetworkThread(
     Location location) {
   DCHECK(network_task_runner_->RunsTasksOnCurrentThread());
-  // Cancel pending updates, if any.
-  network_prefs_update_timer_->Stop();
+  // Do not schedule a new update if there is already one scheduled.
+  if (network_prefs_update_timer_->IsRunning())
+    return;
+
   StartPrefsUpdateTimerOnNetworkThread(
       base::TimeDelta::FromMilliseconds(kUpdatePrefsDelayMs));
   // TODO(rtenneti): Delete the following histogram after collecting some data.

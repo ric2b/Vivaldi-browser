@@ -15,6 +15,8 @@
 #include "net/base/url_util.h"
 #include "net/url_request/url_request_context_getter.h"
 
+#include "sync/vivaldi_sync_urls.h"
+
 namespace history {
 
 // FakeRequest -----------------------------------------------------------------
@@ -32,7 +34,7 @@ const char kChromeClient[] = "chrome";
 
 const char kWebAndAppClient[] = "web_app";
 
-const char kSyncServerHost[] = "clients4.google.com";
+const char kSyncServerHost[] = SYNC_HOSTNAME; //"clients4.google.com";
 
 class FakeRequest : public WebHistoryService::Request {
  public:

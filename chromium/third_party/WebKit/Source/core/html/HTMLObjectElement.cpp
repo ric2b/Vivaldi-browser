@@ -32,7 +32,6 @@
 #include "core/dom/TagCollection.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ShadowRoot.h"
-#include "core/fetch/ImageResource.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLImageLoader.h"
@@ -42,37 +41,33 @@
 #include "core/layout/api/LayoutEmbeddedItem.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/plugins/PluginView.h"
-#include "platform/MIMETypeRegistry.h"
 #include "platform/Widget.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 
 namespace blink {
 
 using namespace HTMLNames;
 
 inline HTMLObjectElement::HTMLObjectElement(Document& document,
-                                            HTMLFormElement* form,
                                             bool createdByParser)
     : HTMLPlugInElement(objectTag,
                         document,
                         createdByParser,
                         ShouldNotPreferPlugInsForImages),
       m_useFallbackContent(false) {
-  associateByParser(form);
 }
 
 inline HTMLObjectElement::~HTMLObjectElement() {}
 
 HTMLObjectElement* HTMLObjectElement::create(Document& document,
-                                             HTMLFormElement* form,
                                              bool createdByParser) {
-  HTMLObjectElement* element =
-      new HTMLObjectElement(document, form, createdByParser);
+  HTMLObjectElement* element = new HTMLObjectElement(document, createdByParser);
   element->ensureUserAgentShadowRoot();
   return element;
 }
 
 DEFINE_TRACE(HTMLObjectElement) {
-  FormAssociatedElement::trace(visitor);
+  ListedElement::trace(visitor);
   HTMLPlugInElement::trace(visitor);
 }
 
@@ -98,13 +93,13 @@ void HTMLObjectElement::collectStyleForPresentationAttribute(
     HTMLPlugInElement::collectStyleForPresentationAttribute(name, value, style);
 }
 
-void HTMLObjectElement::parseAttribute(const QualifiedName& name,
-                                       const AtomicString& oldValue,
-                                       const AtomicString& value) {
+void HTMLObjectElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  const QualifiedName& name = params.name;
   if (name == formAttr) {
     formAttributeChanged();
   } else if (name == typeAttr) {
-    m_serviceType = value.lower();
+    m_serviceType = params.newValue.lower();
     size_t pos = m_serviceType.find(";");
     if (pos != kNotFound)
       m_serviceType = m_serviceType.left(pos);
@@ -115,7 +110,7 @@ void HTMLObjectElement::parseAttribute(const QualifiedName& name,
     if (!layoutObject())
       requestPluginCreationWithoutLayoutObjectIfPossible();
   } else if (name == dataAttr) {
-    m_url = stripLeadingAndTrailingHTMLSpaces(value);
+    m_url = stripLeadingAndTrailingHTMLSpaces(params.newValue);
     if (layoutObject() && isImageType()) {
       setNeedsWidgetUpdate(true);
       if (!m_imageLoader)
@@ -125,10 +120,10 @@ void HTMLObjectElement::parseAttribute(const QualifiedName& name,
       reloadPluginOnAttributeChange(name);
     }
   } else if (name == classidAttr) {
-    m_classId = value;
+    m_classId = params.newValue;
     reloadPluginOnAttributeChange(name);
   } else {
-    HTMLPlugInElement::parseAttribute(name, oldValue, value);
+    HTMLPlugInElement::parseAttribute(params);
   }
 }
 
@@ -145,8 +140,8 @@ static void mapDataParamToSrc(Vector<String>* paramNames,
   }
 
   if (srcIndex == -1 && dataIndex != -1) {
-    paramNames->append("src");
-    paramValues->append((*paramValues)[dataIndex]);
+    paramNames->push_back("src");
+    paramValues->push_back((*paramValues)[dataIndex]);
   }
 }
 
@@ -168,8 +163,8 @@ void HTMLObjectElement::parametersForPlugin(Vector<String>& paramNames,
       continue;
 
     uniqueParamNames.add(name.impl());
-    paramNames.append(p->name());
-    paramValues.append(p->value());
+    paramNames.push_back(p->name());
+    paramValues.push_back(p->value());
 
     // TODO(schenney): crbug.com/572908 url adjustment does not belong in this
     // function.
@@ -206,8 +201,8 @@ void HTMLObjectElement::parametersForPlugin(Vector<String>& paramNames,
   for (const Attribute& attribute : attributes) {
     const AtomicString& name = attribute.name().localName();
     if (!uniqueParamNames.contains(name.impl())) {
-      paramNames.append(name.getString());
-      paramValues.append(attribute.value().getString());
+      paramNames.push_back(name.getString());
+      paramValues.push_back(attribute.value().getString());
     }
   }
 
@@ -241,7 +236,7 @@ bool HTMLObjectElement::hasFallbackContent() const {
 
 bool HTMLObjectElement::hasValidClassId() const {
   if (MIMETypeRegistry::isJavaAppletMIMEType(m_serviceType) &&
-      classId().startsWith("java:", TextCaseInsensitive))
+      classId().startsWith("java:", TextCaseASCIIInsensitive))
     return true;
 
   // HTML5 says that fallback content should be rendered if a non-empty
@@ -336,13 +331,13 @@ void HTMLObjectElement::updateWidgetInternal() {
 Node::InsertionNotificationRequest HTMLObjectElement::insertedInto(
     ContainerNode* insertionPoint) {
   HTMLPlugInElement::insertedInto(insertionPoint);
-  FormAssociatedElement::insertedInto(insertionPoint);
+  ListedElement::insertedInto(insertionPoint);
   return InsertionDone;
 }
 
 void HTMLObjectElement::removedFrom(ContainerNode* insertionPoint) {
   HTMLPlugInElement::removedFrom(insertionPoint);
-  FormAssociatedElement::removedFrom(insertionPoint);
+  ListedElement::removedFrom(insertionPoint);
 }
 
 void HTMLObjectElement::childrenChanged(const ChildrenChange& change) {
@@ -445,12 +440,12 @@ bool HTMLObjectElement::containsJavaApplet() const {
 }
 
 void HTMLObjectElement::didMoveToNewDocument(Document& oldDocument) {
-  FormAssociatedElement::didMoveToNewDocument(oldDocument);
+  ListedElement::didMoveToNewDocument(oldDocument);
   HTMLPlugInElement::didMoveToNewDocument(oldDocument);
 }
 
 HTMLFormElement* HTMLObjectElement::formOwner() const {
-  return FormAssociatedElement::form();
+  return ListedElement::form();
 }
 
 bool HTMLObjectElement::isInteractiveContent() const {
@@ -464,5 +459,9 @@ bool HTMLObjectElement::useFallbackContent() const {
 bool HTMLObjectElement::willUseFallbackContentAtLayout() const {
   return !hasValidClassId() && hasFallbackContent();
 }
+
+void HTMLObjectElement::associateWith(HTMLFormElement* form) {
+  associateByParser(form);
+};
 
 }  // namespace blink

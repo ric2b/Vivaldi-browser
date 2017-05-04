@@ -26,7 +26,7 @@
 #include "platform/graphics/ImageDecodingStore.h"
 
 #include "platform/graphics/ImageFrameGenerator.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "wtf/Threading.h"
 #include <memory>
 
@@ -43,7 +43,7 @@ ImageDecodingStore::ImageDecodingStore()
       m_heapMemoryUsageInBytes(0) {}
 
 ImageDecodingStore::~ImageDecodingStore() {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   setCacheLimitInBytes(0);
   ASSERT(!m_decoderCacheMap.size());
   ASSERT(!m_orderedCacheList.size());
@@ -252,7 +252,7 @@ void ImageDecodingStore::removeFromCacheInternal(
     identifierMap->remove(iter);
 
   // Remove entry from cache map.
-  deletionList->append(cacheMap->take(cacheEntry->cacheKey()));
+  deletionList->push_back(cacheMap->take(cacheEntry->cacheKey()));
 
   TRACE_COUNTER1(TRACE_DISABLED_BY_DEFAULT("blink.image_decoding"),
                  "ImageDecodingStoreHeapMemoryUsageBytes",

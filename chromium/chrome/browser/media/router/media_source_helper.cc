@@ -22,6 +22,12 @@ constexpr char kTabMediaUrnFormat[] = "urn:x-org.chromium.media:source:tab:%d";
 constexpr char kDesktopMediaUrn[] = "urn:x-org.chromium.media:source:desktop";
 constexpr char kTabRemotingUrnFormat[] =
     "urn:x-org.chromium.media:source:tab_content_remoting:%d";
+constexpr char kCastPresentationUrlDomain[] = "google.com";
+constexpr char kCastPresentationUrlPath[] = "/cast";
+
+// This value must be the same as |chrome.cast.AUTO_JOIN_PRESENTATION_ID| in the
+// component extension.
+constexpr char kAutoJoinPresentationId[] = "auto-join";
 
 }  // namespace
 
@@ -59,6 +65,14 @@ bool IsMirroringMediaSource(const MediaSource& source) {
          IsTabMirroringMediaSource(source);
 }
 
+bool CanConnectToMediaSource(const MediaSource& source) {
+  // Compare host, port, scheme, and path prefix for source.url().
+  return source.url().SchemeIs(url::kHttpsScheme) &&
+         source.url().DomainIs(kCastPresentationUrlDomain) &&
+         source.url().has_path() &&
+         source.url().path() == kCastPresentationUrlPath;
+}
+
 int TabIdFromMediaSource(const MediaSource& source) {
   int tab_id;
   if (sscanf(source.id().c_str(), kTabMediaUrnFormat, &tab_id) == 1)
@@ -77,6 +91,10 @@ bool IsValidMediaSource(const MediaSource& source) {
 
 bool IsValidPresentationUrl(const GURL& url) {
   return url.is_valid() && url.SchemeIsHTTPOrHTTPS();
+}
+
+bool IsAutoJoinPresentationId(const std::string& presentation_id) {
+  return presentation_id == kAutoJoinPresentationId;
 }
 
 }  // namespace media_router

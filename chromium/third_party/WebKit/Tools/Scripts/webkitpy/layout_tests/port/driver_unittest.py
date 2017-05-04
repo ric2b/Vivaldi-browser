@@ -29,7 +29,7 @@
 import optparse
 import unittest
 
-from webkitpy.common.system.systemhost_mock import MockSystemHost
+from webkitpy.common.system.system_host_mock import MockSystemHost
 from webkitpy.layout_tests.port.base import Port
 from webkitpy.layout_tests.port.driver import Driver
 from webkitpy.layout_tests.port.server_process_mock import MockServerProcess
@@ -219,7 +219,7 @@ class DriverTest(unittest.TestCase):
 
     def test_stop_cleans_up_properly(self):
         port = self.make_port()
-        port._server_process_constructor = MockServerProcess
+        port.server_process_constructor = MockServerProcess
         driver = Driver(port, 0, pixel_tests=True)
         driver.start(True, [], None)
         last_tmpdir = port.host.filesystem.last_tmpdir
@@ -229,7 +229,7 @@ class DriverTest(unittest.TestCase):
 
     def test_two_starts_cleans_up_properly(self):
         port = self.make_port()
-        port._server_process_constructor = MockServerProcess
+        port.server_process_constructor = MockServerProcess
         driver = Driver(port, 0, pixel_tests=True)
         driver.start(True, [], None)
         last_tmpdir = port.host.filesystem.last_tmpdir
@@ -238,7 +238,7 @@ class DriverTest(unittest.TestCase):
 
     def test_start_actually_starts(self):
         port = self.make_port()
-        port._server_process_constructor = MockServerProcess
+        port.server_process_constructor = MockServerProcess
         driver = Driver(port, 0, pixel_tests=True)
         driver.start(True, [], None)
         self.assertTrue(driver._server_process.started)

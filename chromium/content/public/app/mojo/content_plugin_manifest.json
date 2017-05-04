@@ -10,7 +10,9 @@
         ]
       },
       "requires": {
-        "content_browser": [ "plugin" ]
+        "content_browser": [ "plugin" ],
+        "device": [ "device:power_monitor" ],
+        "ui": [ "discardable_memory" ]
       }
     }
   }

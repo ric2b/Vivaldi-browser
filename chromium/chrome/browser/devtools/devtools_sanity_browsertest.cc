@@ -19,7 +19,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -979,6 +978,12 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
   dir->WriteManifest(extensions::DictionaryBuilder()
                          .Set("name", "Devtools Panel")
                          .Set("version", "1")
+                         // Whitelist the script we stuff into the 'blob:' URL:
+                         .Set("content_security_policy",
+                              "script-src 'self' "
+                              "'sha256-95xJWHeV+"
+                              "1zjAKQufDVW0misgmR4gCjgpipP2LJ5iis='; "
+                              "object-src 'none'")
                          .Set("manifest_version", 2)
                          .Set("devtools_page", "devtools.html")
                          .ToJSON());
@@ -1115,6 +1120,22 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
 IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
                        MAYBE_TestPauseWhenScriptIsRunning) {
   RunTest("testPauseWhenScriptIsRunning", kPauseWhenScriptIsRunning);
+}
+
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestTempFileIncognito) {
+  GURL url("about:blank");
+  ui_test_utils::BrowserAddedObserver window_observer;
+  chrome::NewEmptyWindow(browser()->profile()->GetOffTheRecordProfile());
+  Browser* new_browser = window_observer.WaitForSingleNewBrowser();
+  ui_test_utils::NavigateToURL(new_browser, url);
+  DevToolsWindow* window = DevToolsWindowTesting::OpenDevToolsWindowSync(
+      new_browser->tab_strip_model()->GetWebContentsAt(0), false);
+  RunTestFunction(window, "testTempFile");
+  DevToolsWindowTesting::CloseDevToolsWindowSync(window);
+}
+
+IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestTempFile) {
+  RunTest("testTempFile", kDebuggerTestPage);
 }
 
 // Tests network timing.
@@ -1423,7 +1444,9 @@ IN_PROC_BROWSER_TEST_F(DevToolsPixelOutputTests,
 
 // This test enables switches::kUseGpuInTests which causes false positives
 // with MemorySanitizer.
-#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER) || defined(OS_WIN)
+// Flaky on Linux and Windows https://crbug.com/624215
+#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER) || \
+    defined(OS_WIN) || defined(OS_LINUX)
 #define MAYBE_TestLatencyInfoInstrumentation \
   DISABLED_TestLatencyInfoInstrumentation
 #else

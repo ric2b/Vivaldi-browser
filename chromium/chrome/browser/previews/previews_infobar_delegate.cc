@@ -55,6 +55,7 @@ PreviewsInfoBarDelegate::~PreviewsInfoBarDelegate() {
 void PreviewsInfoBarDelegate::Create(
     content::WebContents* web_contents,
     PreviewsInfoBarType infobar_type,
+    bool is_data_saver_user,
     const OnDismissPreviewsInfobarCallback& on_dismiss_callback) {
   PreviewsInfoBarTabHelper* infobar_tab_helper =
       PreviewsInfoBarTabHelper::FromWebContents(web_contents);
@@ -67,7 +68,8 @@ void PreviewsInfoBarDelegate::Create(
   infobars::InfoBar* infobar =
       infobar_service->AddInfoBar(infobar_service->CreateConfirmInfoBar(
           std::unique_ptr<ConfirmInfoBarDelegate>(new PreviewsInfoBarDelegate(
-              web_contents, infobar_type, on_dismiss_callback))));
+              web_contents, infobar_type, is_data_saver_user,
+              on_dismiss_callback))));
 
   if (infobar && (infobar_type == LITE_PAGE || infobar_type == LOFI)) {
     auto* data_reduction_proxy_settings =
@@ -83,9 +85,13 @@ void PreviewsInfoBarDelegate::Create(
 PreviewsInfoBarDelegate::PreviewsInfoBarDelegate(
     content::WebContents* web_contents,
     PreviewsInfoBarType infobar_type,
+    bool is_data_saver_user,
     const OnDismissPreviewsInfobarCallback& on_dismiss_callback)
     : ConfirmInfoBarDelegate(),
       infobar_type_(infobar_type),
+      message_text_(l10n_util::GetStringUTF16(
+          is_data_saver_user ? IDS_PREVIEWS_INFOBAR_SAVED_DATA_TITLE
+                             : IDS_PREVIEWS_INFOBAR_FASTER_PAGE_TITLE)),
       on_dismiss_callback_(on_dismiss_callback) {}
 
 infobars::InfoBarDelegate::InfoBarIdentifier
@@ -103,7 +109,9 @@ int PreviewsInfoBarDelegate::GetIconId() const {
 
 bool PreviewsInfoBarDelegate::ShouldExpire(
     const NavigationDetails& details) const {
-  RecordPreviewsInfoBarAction(infobar_type_, INFOBAR_DISMISSED_BY_NAVIGATION);
+  RecordPreviewsInfoBarAction(
+      infobar_type_, details.is_reload ? INFOBAR_DISMISSED_BY_RELOAD
+                                       : INFOBAR_DISMISSED_BY_NAVIGATION);
   return InfoBarDelegate::ShouldExpire(details);
 }
 
@@ -112,9 +120,7 @@ void PreviewsInfoBarDelegate::InfoBarDismissed() {
 }
 
 base::string16 PreviewsInfoBarDelegate::GetMessageText() const {
-  return l10n_util::GetStringUTF16((infobar_type_ == OFFLINE)
-                                       ? IDS_PREVIEWS_INFOBAR_FASTER_PAGE_TITLE
-                                       : IDS_PREVIEWS_INFOBAR_SAVED_DATA_TITLE);
+  return message_text_;
 }
 
 int PreviewsInfoBarDelegate::GetButtons() const {
@@ -135,7 +141,8 @@ bool PreviewsInfoBarDelegate::LinkClicked(WindowOpenDisposition disposition) {
       InfoBarService::WebContentsFromInfoBar(infobar());
   if (infobar_type_ == LITE_PAGE || infobar_type_ == LOFI) {
     if (infobar_type_ == LITE_PAGE)
-      web_contents->GetController().ReloadDisableLoFi(true);
+      web_contents->GetController().Reload(
+          content::ReloadType::DISABLE_LOFI_MODE, true);
     else if (infobar_type_ == LOFI)
       web_contents->ReloadLoFiImages();
 
@@ -144,7 +151,7 @@ bool PreviewsInfoBarDelegate::LinkClicked(WindowOpenDisposition disposition) {
             web_contents->GetBrowserContext());
     data_reduction_proxy_settings->IncrementLoFiUserRequestsForImages();
   } else if (infobar_type_ == OFFLINE) {
-    web_contents->GetController().Reload(true);
+    web_contents->GetController().Reload(content::ReloadType::NORMAL, true);
   }
 
   return true;

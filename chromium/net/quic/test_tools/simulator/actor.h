@@ -7,14 +7,13 @@
 
 #include <string>
 
-#include "net/quic/core/quic_clock.h"
 #include "net/quic/core/quic_time.h"
+#include "net/quic/platform/api/quic_clock.h"
 
 namespace net {
 namespace simulator {
 
 class Simulator;
-struct ScheduledActor;
 
 // Actor is the base class for all participants of the simulation which can
 // schedule events to be triggered at the specified time.  Every actor has a

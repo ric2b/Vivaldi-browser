@@ -19,7 +19,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
 {
   "name": "gpu driver bug list",
   // Please update the version number whenever you change this file.
-  "version": "9.24",
+  "version": "9.29",
   "entries": [
     {
       "id": 1,
@@ -1739,7 +1739,11 @@ LONG_STRING_CONST(
       "description": "Mac Drivers store texture level parameters on int16_t that overflow",
       "cr_bugs": [610153],
       "os": {
-        "type": "macosx"
+        "type": "macosx",
+        "version": {
+          "op": "<",
+          "value": "10.12.2"
+        }
       },
       "features": [
         "use_shadowed_tex_level_params"
@@ -2171,14 +2175,15 @@ LONG_STRING_CONST(
     },
     {
       "id": 201,
-      "cr_bugs": [659326],
+      "cr_bugs": [659326,639760],
       "description": "AMD drivers in Linux require invariant qualifier to match between vertex and fragment shaders",
       "os": {
         "type": "linux"
       },
       "vendor_id": "0x1002",
       "features": [
-        "dont_remove_invariant_for_fragment_input"
+        "dont_remove_invariant_for_fragment_input",
+        "remove_invariant_and_centroid_for_essl3"
       ]
     },
     {
@@ -2206,6 +2211,127 @@ LONG_STRING_CONST(
       },
       "features": [
         "remove_invariant_and_centroid_for_essl3"
+      ]
+    },
+    {
+      "id": 205,
+      "description": "Adreno 5xx support for EXT_multisampled_render_to_texture is buggy on Android 7.1",
+      "cr_bugs": [663811],
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "=",
+          "value": "7.1.0"
+        }
+      },
+      "gl_renderer": "Adreno \\(TM\\) 5.*",
+      "disabled_extensions": [
+        "GL_EXT_multisampled_render_to_texture"
+      ]
+    },
+    {
+      "id": 206,
+      "description": "Disable KHR_blend_equation_advanced until cc shaders are updated",
+      "cr_bugs": [661715],
+      "disabled_extensions": [
+        "GL_KHR_blend_equation_advanced",
+        "GL_KHR_blend_equation_advanced_coherent"
+      ]
+    },
+    {
+      "id": 207,
+      "description": "Decode and Encode before generateMipmap for srgb format textures on Windows",
+      "cr_bugs": [634519],
+      "os" : {
+        "type": "win"
+      },
+      "features" : [
+        "decode_encode_srgb_for_generatemipmap"
+      ]
+    },
+    {
+      "id": 208,
+      "description": "Decode and Encode before generateMipmap for srgb format textures on Linux Mesa ANGLE path",
+      "cr_bugs": [634519],
+      "os": {
+        "type": "linux"
+      },
+      "gl_renderer": "ANGLE.*",
+      "vendor_id": "0x8086",
+      "features": [
+        "decode_encode_srgb_for_generatemipmap"
+      ]
+    },
+    {
+      "id": 209,
+      "description": "Decode and Encode before generateMipmap for srgb format textures on Chromeos Intel",
+      "cr_bugs": [634519],
+      "os": {
+        "type": "chromeos"
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "decode_encode_srgb_for_generatemipmap"
+      ]
+    },
+    {
+      "id": 210,
+      "description": "Decode and Encode before generateMipmap for srgb format textures on Linux AMD",
+      "cr_bugs": [634519],
+      "os": {
+        "type": "linux"
+      },
+      "vendor_id": "0x1002",
+      "features": [
+        "decode_encode_srgb_for_generatemipmap"
+      ]
+    },
+    {
+      "id": 211,
+      "description": "Rewrite -float to 0.0 - float for Intel Mac",
+      "cr_bugs": [672380],
+      "os": {
+        "type": "macosx",
+        "version": {
+          "op": "<=",
+          "value": "10.11"
+        }
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "rewrite_float_unary_minus_operator"
+      ]
+    },
+    {
+      "id": 212,
+      "description": "Program binaries don't contain transform feedback varyings on Qualcomm GPUs",
+      "cr_bugs": [658074],
+      "os": {
+        "type": "android"
+      },
+      "gl_renderer": "Adreno.*",
+      "features": [
+        "disable_program_caching_for_transform_feedback"
+      ]
+    },
+    {
+      "id": 213,
+      "description": "The Mali-Gxx driver does not guarantee flush ordering",
+      "cr_bugs": [678508],
+      "gl_vendor": "ARM.*",
+      "gl_renderer": "Mali-G.*",
+      "features": [
+        "use_virtualized_gl_contexts"
+      ]
+    },
+    {
+      "id": 214,
+      "description": "Certain versions of Qualcomm driver don't setup scissor state correctly when FBO0 is bound.",
+      "cr_bugs": [670607],
+      "gl_vendor": "Qualcomm.*",
+      "machine_model_name": ["Nexus 7"],
+      "features": [
+        "force_update_scissor_state_when_binding_fbo0"
       ]
     }
   ]

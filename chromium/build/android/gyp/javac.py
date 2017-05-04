@@ -4,6 +4,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import distutils.spawn
 import optparse
 import os
 import shutil
@@ -319,6 +320,13 @@ def _ParseOptions(argv):
   for arg in options.bootclasspath:
     bootclasspath += build_utils.ParseGnList(arg)
   options.bootclasspath = bootclasspath
+  if options.java_version == '1.8' and options.bootclasspath:
+    # Android's boot jar doesn't contain all java 8 classes.
+    # See: https://github.com/evant/gradle-retrolambda/issues/23.
+    javac_path = os.path.realpath(distutils.spawn.find_executable('javac'))
+    jdk_dir = os.path.dirname(os.path.dirname(javac_path))
+    rt_jar = os.path.join(jdk_dir, 'jre', 'lib', 'rt.jar')
+    options.bootclasspath.append(rt_jar)
 
   classpath = []
   for arg in options.classpath:
@@ -374,10 +382,11 @@ def main(argv):
       # Chromium only allows UTF8 source files.  Being explicit avoids
       # javac pulling a default encoding from the user's environment.
       '-encoding', 'UTF-8',
-      '-classpath', ':'.join(options.classpath),
+      # Make sure we do not pass an empty string to -classpath and -sourcepath.
+      '-classpath', ':'.join(options.classpath) or ':',
       # Prevent compiler from compiling .java files not listed as inputs.
       # See: http://blog.ltgt.net/most-build-tools-misuse-javac/
-      '-sourcepath', ''
+      '-sourcepath', ':',
   ))
 
   if options.bootclasspath:

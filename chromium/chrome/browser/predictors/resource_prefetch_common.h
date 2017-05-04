@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include "base/time/time.h"
+#include "components/sessions/core/session_id.h"
 #include "url/gurl.h"
 
 class Profile;
@@ -32,25 +33,25 @@ enum PrefetchKeyType {
   PREFETCH_KEY_TYPE_URL
 };
 
+// Indicates what caused the prefetch request.
+enum class PrefetchOrigin { NAVIGATION, EXTERNAL };
+
 // Represents a single navigation for a render frame.
 struct NavigationID {
   NavigationID();
-  NavigationID(int render_process_id,
-               int render_frame_id,
-               const GURL& main_frame_url);
-  NavigationID(const NavigationID& other);
   explicit NavigationID(content::WebContents* web_contents);
+  NavigationID(content::WebContents* web_contents,
+               const GURL& main_frame_url,
+               const base::TimeTicks& creation_time);
+  NavigationID(const NavigationID& other);
+
   bool operator<(const NavigationID& rhs) const;
   bool operator==(const NavigationID& rhs) const;
 
-  bool IsSameRenderer(const NavigationID& other) const;
-
-  // Returns true iff the render_process_id_, render_frame_id_ and
-  // frame_url_ has been set correctly.
+  // Returns true iff the tab_id is valid and the Main frame URL is set.
   bool is_valid() const;
 
-  int render_process_id;
-  int render_frame_id;
+  SessionID::id_type tab_id;
   GURL main_frame_url;
 
   // NOTE: Even though we store the creation time here, it is not used during
@@ -59,8 +60,7 @@ struct NavigationID {
   base::TimeTicks creation_time;
 };
 
-// Represents the config for the resource prefetch prediction algorithm. It is
-// useful for running experiments.
+// Represents the config for the resource prefetch prediction algorithm.
 struct ResourcePrefetchPredictorConfig {
   // Initializes the config with default values.
   ResourcePrefetchPredictorConfig();
@@ -69,20 +69,17 @@ struct ResourcePrefetchPredictorConfig {
 
   // The mode the prefetcher is running in. Forms a bit map.
   enum Mode {
-    URL_LEARNING    = 1 << 0,
-    HOST_LEARNING   = 1 << 1,
-    URL_PREFETCHING = 1 << 2,  // Should also turn on URL_LEARNING.
-    HOST_PRFETCHING = 1 << 3   // Should also turn on HOST_LEARNING.
+    LEARNING = 1 << 0,
+    PREFETCHING_FOR_NAVIGATION = 1 << 2,  // Also enables LEARNING.
+    PREFETCHING_FOR_EXTERNAL = 1 << 3     // Also enables LEARNING.
   };
   int mode;
 
   // Helpers to deal with mode.
   bool IsLearningEnabled() const;
-  bool IsPrefetchingEnabled(Profile* profile) const;
-  bool IsURLLearningEnabled() const;
-  bool IsHostLearningEnabled() const;
-  bool IsURLPrefetchingEnabled(Profile* profile) const;
-  bool IsHostPrefetchingEnabled(Profile* profile) const;
+  bool IsPrefetchingEnabledForSomeOrigin(Profile* profile) const;
+  bool IsPrefetchingEnabledForOrigin(Profile* profile,
+                                     PrefetchOrigin origin) const;
 
   bool IsLowConfidenceForTest() const;
   bool IsHighConfidenceForTest() const;

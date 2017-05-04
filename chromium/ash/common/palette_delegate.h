@@ -20,7 +20,6 @@ class PaletteDelegate {
   using EnableListener = base::Callback<void(bool)>;
   using EnableListenerSubscription =
       base::CallbackList<void(bool)>::Subscription;
-  using OnStylusStateChangedCallback = base::Callback<void(ui::StylusState)>;
 
   virtual ~PaletteDelegate() {}
 
@@ -40,10 +39,6 @@ class PaletteDelegate {
   // TODO(sammiequon): This can be removed from the delegate and put in wmshell.
   // See http://crbug.com/647031.
   virtual void SetPartialMagnifierState(bool enabled) = 0;
-
-  // Set callback that is run when a stylus is inserted or removed.
-  virtual void SetStylusStateChangedCallback(
-      const OnStylusStateChangedCallback& on_stylus_state_changed) = 0;
 
   // Returns true if the palette should be automatically opened on an eject
   // event.

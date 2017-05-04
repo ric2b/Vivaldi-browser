@@ -4,7 +4,7 @@
 
 #include "bindings/modules/v8/serialization/V8ScriptValueSerializerForModules.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ToV8.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
@@ -179,7 +179,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripRTCCertificate) {
 
   // Round trip test.
   v8::Local<v8::Value> wrapper =
-      toV8(certificate, scope.context()->Global(), scope.isolate());
+      ToV8(certificate, scope.context()->Global(), scope.isolate());
   v8::Local<v8::Value> result = roundTrip(wrapper, scope);
   ASSERT_TRUE(V8RTCCertificate::hasInstance(result, scope.isolate()));
   RTCCertificate* newCertificate =
@@ -242,7 +242,8 @@ CryptoKey* convertCryptoResult<CryptoKey*>(const ScriptValue& value) {
 }
 template <>
 CryptoKeyPair convertCryptoResult<CryptoKeyPair>(const ScriptValue& value) {
-  Dictionary dictionary(value.isolate(), value.v8Value());
+  NonThrowableExceptionState exceptionState;
+  Dictionary dictionary(value.isolate(), value.v8Value(), exceptionState);
   v8::Local<v8::Value> privateKey, publicKey;
   EXPECT_TRUE(dictionary.get("publicKey", publicKey));
   EXPECT_TRUE(dictionary.get("privateKey", privateKey));
@@ -410,7 +411,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripCryptoKeyAES) {
                       WebCryptoKeyUsageEncrypt | WebCryptoKeyUsageDecrypt);
 
   // Round trip it and check the visible attributes.
-  v8::Local<v8::Value> wrapper = toV8(key, scope.getScriptState());
+  v8::Local<v8::Value> wrapper = ToV8(key, scope.getScriptState());
   v8::Local<v8::Value> result = roundTrip(wrapper, scope);
   ASSERT_TRUE(V8CryptoKey::hasInstance(result, scope.isolate()));
   CryptoKey* newKey = V8CryptoKey::toImpl(result.As<v8::Object>());
@@ -427,8 +428,8 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripCryptoKeyAES) {
 
   // Check that one can decrypt data encrypted with the other.
   Vector<unsigned char> iv(16, 0);
-  WebCryptoAlgorithm encryptAlgorithm(WebCryptoAlgorithmIdAesCbc,
-                                      makeUnique<WebCryptoAesCbcParams>(iv));
+  WebCryptoAlgorithm encryptAlgorithm(
+      WebCryptoAlgorithmIdAesCbc, WTF::makeUnique<WebCryptoAesCbcParams>(iv));
   Vector<unsigned char> plaintext{1, 2, 3};
   WebVector<uint8_t> ciphertext =
       syncEncrypt(scriptState, encryptAlgorithm, key->key(), plaintext);
@@ -459,8 +460,8 @@ TEST(V8ScriptValueSerializerForModulesTest, DecodeCryptoKeyAES) {
   Vector<uint8_t> iv(16, 0);
   Vector<uint8_t> ciphertext{0x33, 0x26, 0xe7, 0x64, 0x11, 0x5e, 0xf4, 0x60,
                              0x96, 0x08, 0x11, 0xaf, 0x65, 0x8b, 0x87, 0x04};
-  WebCryptoAlgorithm encryptAlgorithm(WebCryptoAlgorithmIdAesCbc,
-                                      makeUnique<WebCryptoAesCbcParams>(iv));
+  WebCryptoAlgorithm encryptAlgorithm(
+      WebCryptoAlgorithmIdAesCbc, WTF::makeUnique<WebCryptoAesCbcParams>(iv));
   WebVector<uint8_t> plaintext =
       syncDecrypt(scriptState, encryptAlgorithm, newKey->key(), ciphertext);
   EXPECT_THAT(plaintext, ElementsAre(1, 2, 3));
@@ -483,7 +484,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripCryptoKeyHMAC) {
                       WebCryptoKeyUsageSign | WebCryptoKeyUsageVerify);
 
   // Round trip it and check the visible attributes.
-  v8::Local<v8::Value> wrapper = toV8(key, scope.getScriptState());
+  v8::Local<v8::Value> wrapper = ToV8(key, scope.getScriptState());
   v8::Local<v8::Value> result = roundTrip(wrapper, scope);
   ASSERT_TRUE(V8CryptoKey::hasInstance(result, scope.isolate()));
   CryptoKey* newKey = V8CryptoKey::toImpl(result.As<v8::Object>());
@@ -559,7 +560,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripCryptoKeyRSAHashed) {
                           WebCryptoKeyUsageSign | WebCryptoKeyUsageVerify);
 
   // Round trip the private key and check the visible attributes.
-  v8::Local<v8::Value> wrapper = toV8(privateKey, scope.getScriptState());
+  v8::Local<v8::Value> wrapper = ToV8(privateKey, scope.getScriptState());
   v8::Local<v8::Value> result = roundTrip(wrapper, scope);
   ASSERT_TRUE(V8CryptoKey::hasInstance(result, scope.isolate()));
   CryptoKey* newPrivateKey = V8CryptoKey::toImpl(result.As<v8::Object>());
@@ -577,7 +578,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripCryptoKeyRSAHashed) {
   // Check that one can verify a message signed by the other.
   Vector<uint8_t> message{1, 2, 3};
   WebCryptoAlgorithm algorithm(WebCryptoAlgorithmIdRsaPss,
-                               makeUnique<WebCryptoRsaPssParams>(16));
+                               WTF::makeUnique<WebCryptoRsaPssParams>(16));
   WebVector<uint8_t> signature =
       syncSign(scriptState, algorithm, newPrivateKey->key(), message);
   EXPECT_TRUE(syncVerifySignature(scriptState, algorithm, publicKey->key(),
@@ -629,7 +630,7 @@ TEST(V8ScriptValueSerializerForModulesTest, DecodeCryptoKeyRSAHashed) {
       0xeb, 0x17, 0x68, 0x1f, 0xbd, 0xfa, 0xf7, 0xd6, 0x1f, 0xa4, 0x7c, 0x9e,
       0x9e, 0xb1, 0x96, 0x8f, 0xe6, 0x5e, 0x89, 0x99};
   WebCryptoAlgorithm algorithm(WebCryptoAlgorithmIdRsaPss,
-                               makeUnique<WebCryptoRsaPssParams>(16));
+                               WTF::makeUnique<WebCryptoRsaPssParams>(16));
   EXPECT_TRUE(syncVerifySignature(scriptState, algorithm, newPublicKey->key(),
                                   signature, message));
 }
@@ -652,7 +653,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripCryptoKeyEC) {
                           WebCryptoKeyUsageSign | WebCryptoKeyUsageVerify);
 
   // Round trip the private key and check the visible attributes.
-  v8::Local<v8::Value> wrapper = toV8(privateKey, scope.getScriptState());
+  v8::Local<v8::Value> wrapper = ToV8(privateKey, scope.getScriptState());
   v8::Local<v8::Value> result = roundTrip(wrapper, scope);
   ASSERT_TRUE(V8CryptoKey::hasInstance(result, scope.isolate()));
   CryptoKey* newPrivateKey = V8CryptoKey::toImpl(result.As<v8::Object>());
@@ -671,7 +672,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripCryptoKeyEC) {
   WebCryptoAlgorithm hash(WebCryptoAlgorithmIdSha256, nullptr);
   Vector<uint8_t> message{1, 2, 3};
   WebCryptoAlgorithm algorithm(WebCryptoAlgorithmIdEcdsa,
-                               makeUnique<WebCryptoEcdsaParams>(hash));
+                               WTF::makeUnique<WebCryptoEcdsaParams>(hash));
   WebVector<uint8_t> signature =
       syncSign(scriptState, algorithm, newPrivateKey->key(), message);
   EXPECT_TRUE(syncVerifySignature(scriptState, algorithm, publicKey->key(),
@@ -713,7 +714,7 @@ TEST(V8ScriptValueSerializerForModulesTest, DecodeCryptoKeyEC) {
       0x83, 0x27, 0x37, 0x69, 0x4d, 0x32, 0x63, 0x1e, 0x82};
   WebCryptoAlgorithm hash(WebCryptoAlgorithmIdSha256, nullptr);
   WebCryptoAlgorithm algorithm(WebCryptoAlgorithmIdEcdsa,
-                               makeUnique<WebCryptoEcdsaParams>(hash));
+                               WTF::makeUnique<WebCryptoEcdsaParams>(hash));
   EXPECT_TRUE(syncVerifySignature(scriptState, algorithm, newPublicKey->key(),
                                   signature, message));
 }
@@ -730,7 +731,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripCryptoKeyNoParams) {
                                  false, WebCryptoKeyUsageDeriveBits);
 
   // Round trip the key and check the visible attributes.
-  v8::Local<v8::Value> wrapper = toV8(key, scope.getScriptState());
+  v8::Local<v8::Value> wrapper = ToV8(key, scope.getScriptState());
   v8::Local<v8::Value> result = roundTrip(wrapper, scope);
   ASSERT_TRUE(V8CryptoKey::hasInstance(result, scope.isolate()));
   CryptoKey* newKey = V8CryptoKey::toImpl(result.As<v8::Object>());
@@ -793,6 +794,16 @@ TEST(V8ScriptValueSerializerForModulesTest, DecodeCryptoKeyInvalid) {
                                    0xa0, 0x02, 0x03, 0x01, 0x02, 0x03, 0x00}))
                   .deserialize()
                   ->IsNull());
+
+  // Algorithm ID / params type mismatch (AES params, RSA-OEAP ID).
+  EXPECT_TRUE(
+      V8ScriptValueDeserializerForModules(
+          scriptState,
+          serializedValue({0xff, 0x09, 0x3f, 0x00, 0x4b, 0x01, 0x0a, 0x10, 0x04,
+                           0x10, 0x7e, 0x25, 0xb2, 0xe8, 0x62, 0x3e, 0xd7, 0x83,
+                           0x70, 0xa2, 0xae, 0x98, 0x79, 0x1b, 0xc5, 0xf7}))
+          .deserialize()
+          ->IsNull());
 
   // Invalid asymmetric key type.
   EXPECT_TRUE(
@@ -885,7 +896,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripDOMFileSystem) {
       KURL(ParsedURLString, "filesystem:http://example.com/persistent/"));
   // At time of writing, this can only happen for filesystems from PPAPI.
   fs->makeClonable();
-  v8::Local<v8::Value> wrapper = toV8(fs, scope.getScriptState());
+  v8::Local<v8::Value> wrapper = ToV8(fs, scope.getScriptState());
   v8::Local<v8::Value> result = roundTrip(wrapper, scope);
   ASSERT_FALSE(result.IsEmpty());
   ASSERT_TRUE(V8DOMFileSystem::hasInstance(result, scope.isolate()));
@@ -908,7 +919,7 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripDOMFileSystemNotClonable) {
       FileSystemTypePersistent,
       KURL(ParsedURLString, "filesystem:http://example.com/persistent/0/"));
   ASSERT_FALSE(fs->clonable());
-  v8::Local<v8::Value> wrapper = toV8(fs, scope.getScriptState());
+  v8::Local<v8::Value> wrapper = ToV8(fs, scope.getScriptState());
   EXPECT_FALSE(V8ScriptValueSerializer(scope.getScriptState())
                    .serialize(wrapper, nullptr, exceptionState));
   EXPECT_TRUE(hadDOMException("DataCloneError", scope.getScriptState(),

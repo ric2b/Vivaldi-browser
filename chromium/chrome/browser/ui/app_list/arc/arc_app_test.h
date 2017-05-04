@@ -17,8 +17,8 @@ namespace mojom {
 class AppInfo;
 class ArcPackageInfo;
 }
-class ArcAuthService;
-class FakeArcBridgeService;
+class ArcServiceManager;
+class ArcSessionManager;
 class FakeAppInstance;
 }
 
@@ -73,13 +73,16 @@ class ArcAppTest {
 
   chromeos::FakeChromeUserManager* GetUserManager();
 
-  arc::FakeArcBridgeService* bridge_service() { return bridge_service_.get(); }
-
   arc::FakeAppInstance* app_instance() { return app_instance_.get(); }
 
   ArcAppListPrefs* arc_app_list_prefs() { return arc_app_list_pref_; }
 
-  arc::ArcAuthService* arc_auth_service() { return auth_service_.get(); }
+  arc::ArcSessionManager* arc_session_manager() {
+    return arc_session_manager_.get();
+  }
+  arc::ArcServiceManager* arc_service_manager() {
+    return arc_service_manager_.get();
+  }
 
  private:
   const user_manager::User* CreateUserAndLogin();
@@ -91,9 +94,10 @@ class ArcAppTest {
 
   ArcAppListPrefs* arc_app_list_pref_ = nullptr;
 
-  std::unique_ptr<arc::FakeArcBridgeService> bridge_service_;
+  std::unique_ptr<arc::ArcServiceManager> arc_service_manager_;
+  std::unique_ptr<arc::ArcSessionManager> arc_session_manager_;
   std::unique_ptr<arc::FakeAppInstance> app_instance_;
-  std::unique_ptr<arc::ArcAuthService> auth_service_;
+
   std::unique_ptr<chromeos::ScopedUserManagerEnabler> user_manager_enabler_;
   std::vector<arc::mojom::AppInfo> fake_apps_;
   std::vector<arc::mojom::AppInfo> fake_default_apps_;

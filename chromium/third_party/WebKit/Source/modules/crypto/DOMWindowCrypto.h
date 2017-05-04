@@ -31,7 +31,7 @@
 #ifndef DOMWindowCrypto_h
 #define DOMWindowCrypto_h
 
-#include "core/frame/DOMWindowProperty.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
 
@@ -42,8 +42,7 @@ class DOMWindow;
 class LocalDOMWindow;
 
 class DOMWindowCrypto final : public GarbageCollected<DOMWindowCrypto>,
-                              public Supplement<LocalDOMWindow>,
-                              public DOMWindowProperty {
+                              public Supplement<LocalDOMWindow> {
   USING_GARBAGE_COLLECTED_MIXIN(DOMWindowCrypto);
 
  public:

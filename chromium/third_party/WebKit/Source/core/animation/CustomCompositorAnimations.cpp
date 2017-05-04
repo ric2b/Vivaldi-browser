@@ -12,7 +12,7 @@
 #include "core/animation/animatable/AnimatableTransform.h"
 #include "core/animation/animatable/AnimatableValue.h"
 #include "platform/graphics/CompositorMutation.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/transforms/Matrix3DTransformOperation.h"
 #include "platform/transforms/MatrixTransformOperation.h"
 #include "platform/transforms/TransformOperations.h"
@@ -92,16 +92,16 @@ void CustomCompositorAnimations::applyUpdate(
     RefPtr<AnimatableValue> animatableValue =
         AnimatableDouble::create(mutation.opacity());
     m_animation = createOrUpdateAnimation(
-        m_animation, element, CSSPropertyOpacity, animatableValue.release());
+        m_animation, element, CSSPropertyOpacity, std::move(animatableValue));
   }
   if (mutation.isTransformMutated()) {
     TransformOperations ops;
-    ops.operations().append(Matrix3DTransformOperation::create(
+    ops.operations().push_back(Matrix3DTransformOperation::create(
         TransformationMatrix(mutation.transform())));
     RefPtr<AnimatableValue> animatableValue =
         AnimatableTransform::create(ops, 1);
     m_animation = createOrUpdateAnimation(
-        m_animation, element, CSSPropertyTransform, animatableValue.release());
+        m_animation, element, CSSPropertyTransform, std::move(animatableValue));
   }
 }
 

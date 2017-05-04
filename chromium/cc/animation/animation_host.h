@@ -7,13 +7,14 @@
 
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "cc/animation/animation.h"
-#include "cc/base/cc_export.h"
+#include "cc/animation/animation_export.h"
 #include "cc/trees/mutator_host.h"
 #include "cc/trees/mutator_host_client.h"
 #include "ui/gfx/geometry/box_f.h"
@@ -42,12 +43,14 @@ enum class ThreadInstance { MAIN, IMPL };
 // (PushPropertiesTo).
 // An AnimationHost talks to its correspondent LayerTreeHost via
 // MutatorHostClient interface.
-class CC_EXPORT AnimationHost : public NON_EXPORTED_BASE(MutatorHost) {
+class CC_ANIMATION_EXPORT AnimationHost
+    : public NON_EXPORTED_BASE(MutatorHost) {
  public:
   using ElementToAnimationsMap =
       std::unordered_map<ElementId,
                          scoped_refptr<ElementAnimations>,
                          ElementIdHash>;
+  using PlayersList = std::vector<scoped_refptr<AnimationPlayer>>;
 
   static std::unique_ptr<AnimationHost> CreateMainInstance();
   static std::unique_ptr<AnimationHost> CreateForTesting(
@@ -92,10 +95,10 @@ class CC_EXPORT AnimationHost : public NON_EXPORTED_BASE(MutatorHost) {
   void PushPropertiesTo(MutatorHost* host_impl) override;
 
   void SetSupportsScrollAnimations(bool supports_scroll_animations) override;
-  bool NeedsAnimateLayers() const override;
+  bool NeedsTickAnimations() const override;
 
   bool ActivateAnimations() override;
-  bool AnimateLayers(base::TimeTicks monotonic_time) override;
+  bool TickAnimations(base::TimeTicks monotonic_time) override;
   bool UpdateAnimationState(bool start_ready_animations,
                             MutatorEvents* events) override;
 
@@ -150,7 +153,7 @@ class CC_EXPORT AnimationHost : public NON_EXPORTED_BASE(MutatorHost) {
                            float* start_scale) const override;
 
   bool HasAnyAnimation(ElementId element_id) const override;
-  bool HasActiveAnimationForTesting(ElementId element_id) const override;
+  bool HasTickingAnimationForTesting(ElementId element_id) const override;
 
   void ImplOnlyScrollAnimationCreate(ElementId element_id,
                                      const gfx::ScrollOffset& target_offset,
@@ -168,16 +171,16 @@ class CC_EXPORT AnimationHost : public NON_EXPORTED_BASE(MutatorHost) {
   // This should only be called from the main thread.
   ScrollOffsetAnimations& scroll_offset_animations() const;
 
-  // Registers the given element animations as active. An active element
-  // animations is one that has a running animation that needs to be ticked.
-  void DidActivateElementAnimations(ElementAnimations* element_animations);
+  // Registers the given animation player as ticking. A ticking animation
+  // player is one that has a running animation.
+  void AddToTicking(scoped_refptr<AnimationPlayer> player);
 
-  // Unregisters the given element animations. When this happens, the
-  // element animations will no longer be ticked (since it's not active).
-  void DidDeactivateElementAnimations(ElementAnimations* element_animations);
+  // Unregisters the given animation player. When this happens, the
+  // animation player will no longer be ticked.
+  void RemoveFromTicking(scoped_refptr<AnimationPlayer> player);
 
-  const ElementToAnimationsMap& active_element_animations_for_testing() const;
-  const ElementToAnimationsMap& all_element_animations_for_testing() const;
+  const PlayersList& ticking_players_for_testing() const;
+  const ElementToAnimationsMap& element_animations_for_testing() const;
 
  private:
   explicit AnimationHost(ThreadInstance thread_instance);
@@ -189,7 +192,7 @@ class CC_EXPORT AnimationHost : public NON_EXPORTED_BASE(MutatorHost) {
   void EraseTimeline(scoped_refptr<AnimationTimeline> timeline);
 
   ElementToAnimationsMap element_to_animations_map_;
-  ElementToAnimationsMap active_element_to_animations_map_;
+  PlayersList ticking_players_;
 
   // A list of all timelines which this host owns.
   using IdToTimelineMap =

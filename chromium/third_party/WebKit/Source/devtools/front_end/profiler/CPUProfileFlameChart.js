@@ -29,25 +29,21 @@
  */
 
 /**
- * @implements {UI.FlameChartDataProvider}
+ * @implements {PerfUI.FlameChartDataProvider}
  * @unrestricted
  */
 Profiler.ProfileFlameChartDataProvider = class {
-  /**
-   * @param {?SDK.Target} target
-   */
-  constructor(target) {
-    UI.FlameChartDataProvider.call(this);
-    this._target = target;
+  constructor() {
+    PerfUI.FlameChartDataProvider.call(this);
     this._colorGenerator = Profiler.ProfileFlameChartDataProvider.colorGenerator();
   }
 
   /**
-   * @return {!UI.FlameChart.ColorGenerator}
+   * @return {!PerfUI.FlameChart.ColorGenerator}
    */
   static colorGenerator() {
     if (!Profiler.ProfileFlameChartDataProvider._colorGenerator) {
-      var colorGenerator = new UI.FlameChart.ColorGenerator(
+      var colorGenerator = new PerfUI.FlameChart.ColorGenerator(
           {min: 30, max: 330}, {min: 50, max: 80, count: 5}, {min: 80, max: 90, count: 3});
 
       colorGenerator.setColorForID('(idle)', 'hsl(0, 0%, 94%)');
@@ -56,30 +52,6 @@ Profiler.ProfileFlameChartDataProvider = class {
       Profiler.ProfileFlameChartDataProvider._colorGenerator = colorGenerator;
     }
     return Profiler.ProfileFlameChartDataProvider._colorGenerator;
-  }
-
-  /**
-   * @override
-   * @return {number}
-   */
-  barHeight() {
-    return 15;
-  }
-
-  /**
-   * @override
-   * @return {number}
-   */
-  textBaseline() {
-    return 4;
-  }
-
-  /**
-   * @override
-   * @return {number}
-   */
-  textPadding() {
-    return 2;
   }
 
   /**
@@ -118,14 +90,14 @@ Profiler.ProfileFlameChartDataProvider = class {
 
   /**
    * @override
-   * @return {?UI.FlameChart.TimelineData}
+   * @return {?PerfUI.FlameChart.TimelineData}
    */
   timelineData() {
     return this._timelineData || this._calculateTimelineData();
   }
 
   /**
-   * @return {!UI.FlameChart.TimelineData}
+   * @return {!PerfUI.FlameChart.TimelineData}
    */
   _calculateTimelineData() {
     throw 'Not implemented.';
@@ -166,10 +138,10 @@ Profiler.ProfileFlameChartDataProvider = class {
    */
   entryFont(entryIndex) {
     if (!this._font) {
-      this._font = (this.barHeight() - 4) + 'px ' + Host.fontFamily();
+      this._font = '11px ' + Host.fontFamily();
       this._boldFont = 'bold ' + this._font;
     }
-    var node = this._entryNodes[entryIndex];
+    const node = this._entryNodes[entryIndex];
     return node.deoptReason ? this._boldFont : this._font;
   }
 
@@ -211,14 +183,6 @@ Profiler.ProfileFlameChartDataProvider = class {
 
   /**
    * @override
-   * @return {number}
-   */
-  paddingLeft() {
-    return 0;
-  }
-
-  /**
-   * @override
    * @param {number} entryIndex
    * @return {string}
    */
@@ -235,7 +199,7 @@ Profiler.ProfileFlameChartDataProvider = class {
 Profiler.CPUProfileFlameChart = class extends UI.VBox {
   /**
    * @param {!UI.SearchableView} searchableView
-   * @param {!UI.FlameChartDataProvider} dataProvider
+   * @param {!PerfUI.FlameChartDataProvider} dataProvider
    */
   constructor(searchableView, dataProvider) {
     super();
@@ -245,10 +209,13 @@ Profiler.CPUProfileFlameChart = class extends UI.VBox {
     this._overviewPane = new Profiler.CPUProfileFlameChart.OverviewPane(dataProvider);
     this._overviewPane.show(this.element);
 
-    this._mainPane = new UI.FlameChart(dataProvider, this._overviewPane);
+    this._mainPane = new PerfUI.FlameChart(dataProvider, this._overviewPane);
+    this._mainPane.setBarHeight(15);
+    this._mainPane.setTextBaseline(4);
+    this._mainPane.setTextPadding(2);
     this._mainPane.show(this.element);
-    this._mainPane.addEventListener(UI.FlameChart.Events.EntrySelected, this._onEntrySelected, this);
-    this._overviewPane.addEventListener(UI.OverviewGrid.Events.WindowChanged, this._onWindowChanged, this);
+    this._mainPane.addEventListener(PerfUI.FlameChart.Events.EntrySelected, this._onEntrySelected, this);
+    this._overviewPane.addEventListener(PerfUI.OverviewGrid.Events.WindowChanged, this._onWindowChanged, this);
     this._dataProvider = dataProvider;
     this._searchResults = [];
   }
@@ -281,7 +248,7 @@ Profiler.CPUProfileFlameChart = class extends UI.VBox {
    * @param {!Common.Event} event
    */
   _onEntrySelected(event) {
-    this.dispatchEventToListeners(UI.FlameChart.Events.EntrySelected, event.data);
+    this.dispatchEventToListeners(PerfUI.FlameChart.Events.EntrySelected, event.data);
   }
 
   update() {
@@ -363,7 +330,7 @@ Profiler.CPUProfileFlameChart = class extends UI.VBox {
 };
 
 /**
- * @implements {UI.TimelineGrid.Calculator}
+ * @implements {PerfUI.TimelineGrid.Calculator}
  * @unrestricted
  */
 Profiler.CPUProfileFlameChart.OverviewCalculator = class {
@@ -442,24 +409,24 @@ Profiler.CPUProfileFlameChart.OverviewCalculator = class {
 };
 
 /**
- * @implements {UI.FlameChartDelegate}
+ * @implements {PerfUI.FlameChartDelegate}
  * @unrestricted
  */
 Profiler.CPUProfileFlameChart.OverviewPane = class extends UI.VBox {
   /**
-   * @param {!UI.FlameChartDataProvider} dataProvider
+   * @param {!PerfUI.FlameChartDataProvider} dataProvider
    */
   constructor(dataProvider) {
     super();
     this.element.classList.add('cpu-profile-flame-chart-overview-pane');
     this._overviewContainer = this.element.createChild('div', 'cpu-profile-flame-chart-overview-container');
-    this._overviewGrid = new UI.OverviewGrid('cpu-profile-flame-chart');
+    this._overviewGrid = new PerfUI.OverviewGrid('cpu-profile-flame-chart');
     this._overviewGrid.element.classList.add('fill');
     this._overviewCanvas = this._overviewContainer.createChild('canvas', 'cpu-profile-flame-chart-overview-canvas');
     this._overviewContainer.appendChild(this._overviewGrid.element);
     this._overviewCalculator = new Profiler.CPUProfileFlameChart.OverviewCalculator(dataProvider);
     this._dataProvider = dataProvider;
-    this._overviewGrid.addEventListener(UI.OverviewGrid.Events.WindowChanged, this._onWindowChanged, this);
+    this._overviewGrid.addEventListener(PerfUI.OverviewGrid.Events.WindowChanged, this._onWindowChanged, this);
   }
 
   /**
@@ -499,11 +466,11 @@ Profiler.CPUProfileFlameChart.OverviewPane = class extends UI.VBox {
       windowTimeLeft: startTime + this._overviewGrid.windowLeft() * totalTime,
       windowTimeRight: startTime + this._overviewGrid.windowRight() * totalTime
     };
-    this.dispatchEventToListeners(UI.OverviewGrid.Events.WindowChanged, data);
+    this.dispatchEventToListeners(PerfUI.OverviewGrid.Events.WindowChanged, data);
   }
 
   /**
-   * @return {?UI.FlameChart.TimelineData}
+   * @return {?PerfUI.FlameChart.TimelineData}
    */
   _timelineData() {
     return this._dataProvider.timelineData();
@@ -528,7 +495,7 @@ Profiler.CPUProfileFlameChart.OverviewPane = class extends UI.VBox {
     if (!timelineData)
       return;
     this._resetCanvas(
-        this._overviewContainer.clientWidth, this._overviewContainer.clientHeight - UI.FlameChart.DividersBarHeight);
+        this._overviewContainer.clientWidth, this._overviewContainer.clientHeight - PerfUI.FlameChart.HeaderHeight);
     this._overviewCalculator._updateBoundaries(this);
     this._overviewGrid.updateDividers(this._overviewCalculator);
     this._drawOverviewCanvas();

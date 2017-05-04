@@ -46,9 +46,7 @@ enum AccessPoint {
   FFTB_LINKDOCTOR,    // Linkdoctor of FF Toolbar
   IETB7_SEARCH_BOX,   // IE Toolbar search box.
   TB8_SEARCH_BOX,     // IE/FF Toolbar search box.
-#ifndef OMIT_CHROME_FRAME
   CHROME_FRAME,       // Chrome Frame.
-#endif
 
   // Partner access points.
   PARTNER_AP_1,

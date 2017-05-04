@@ -15,8 +15,8 @@ struct DevToolsToggleAction {
  public:
   enum Type {
     kShow,
-    kShowConsole,
-    kShowSecurityPanel,
+    kShowConsolePanel,
+    kShowElementsPanel,
     kInspect,
     kToggle,
     kReveal,
@@ -39,8 +39,8 @@ struct DevToolsToggleAction {
   ~DevToolsToggleAction();
 
   static DevToolsToggleAction Show();
-  static DevToolsToggleAction ShowConsole();
-  static DevToolsToggleAction ShowSecurityPanel();
+  static DevToolsToggleAction ShowConsolePanel();
+  static DevToolsToggleAction ShowElementsPanel();
   static DevToolsToggleAction Inspect();
   static DevToolsToggleAction Toggle();
   static DevToolsToggleAction Reveal(const base::string16& url,

@@ -26,8 +26,10 @@
     [NewObject, DoNotTestNewObject, RaisesException] Text splitText(unsigned long offset);
     [MeasureAs=TextWholeText] readonly attribute DOMString wholeText;
 
-    // Shadow DOM
-    // http://w3c.github.io/webcomponents/spec/shadow/#extensions-to-text-interface
+    // Mixin Slotable
+    // https://dom.spec.whatwg.org/#mixin-slotable
+    [ImplementedAs=assignedSlotForBinding] readonly attribute HTMLSlotElement? assignedSlot;
+
+    // Non-standard API:
     NodeList getDestinationInsertionPoints();
-    [RuntimeEnabled=ShadowDOMV1, ImplementedAs=assignedSlotForBinding] readonly attribute HTMLSlotElement assignedSlot;
 };

@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "url/gurl.h"
 
 namespace media_router {
 
@@ -34,6 +35,7 @@ class RouteRequestResult {
   // - RouteRequestResultCode in media_router.mojom
   // - MediaRouteProviderResult enum in tools/metrics/histograms.xml
   // - mr.RouteRequestResultCode in route_request_error.js
+  // - RouteRequestResultCodeFromMojo in media_router_type_converters.cc
   enum ResultCode {
     UNKNOWN_ERROR = 0,
     OK = 1,
@@ -43,9 +45,10 @@ class RouteRequestResult {
     INVALID_ORIGIN = 5,
     INCOGNITO_MISMATCH = 6,
     NO_SUPPORTED_PROVIDER = 7,
+    CANCELLED = 8,
     // New values must be added here.
 
-    TOTAL_COUNT = 8 // The total number of values.
+    TOTAL_COUNT = 9 // The total number of values.
   };
 
   static std::unique_ptr<RouteRequestResult> FromSuccess(
@@ -60,6 +63,7 @@ class RouteRequestResult {
   // create a copy if they wish to use it after this object is destroyed.
   const MediaRoute* route() const { return route_.get(); }
   std::string presentation_id() const { return presentation_id_; }
+  GURL presentation_url() const { return presentation_url_; }
   std::string error() const { return error_; }
   ResultCode result_code() const { return result_code_; }
 
@@ -71,6 +75,7 @@ class RouteRequestResult {
 
   std::unique_ptr<MediaRoute> route_;
   std::string presentation_id_;
+  GURL presentation_url_;
   std::string error_;
   ResultCode result_code_;
 

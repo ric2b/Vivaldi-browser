@@ -128,12 +128,13 @@ PassRefPtr<FontData> CSSSegmentedFontFace::getFontData(
     if (RefPtr<SimpleFontData> faceFontData =
             (*it)->cssFontFace()->getFontData(requestedFontDescription)) {
       ASSERT(!faceFontData->isSegmented());
-      if (faceFontData->isCustomFont())
+      if (faceFontData->isCustomFont()) {
         fontData->appendFace(adoptRef(new FontDataForRangeSet(
-            faceFontData.release(), (*it)->cssFontFace()->ranges())));
-      else
+            std::move(faceFontData), (*it)->cssFontFace()->ranges())));
+      } else {
         fontData->appendFace(adoptRef(new FontDataForRangeSetFromCache(
-            faceFontData.release(), (*it)->cssFontFace()->ranges())));
+            std::move(faceFontData), (*it)->cssFontFace()->ranges())));
+      }
     }
   }
   if (fontData->numFaces()) {
@@ -185,12 +186,13 @@ void CSSSegmentedFontFace::match(const String& text,
                                  HeapVector<Member<FontFace>>& faces) const {
   for (const auto& fontFace : m_fontFaces) {
     if (fontFace->cssFontFace()->ranges()->intersectsWith(text))
-      faces.append(fontFace);
+      faces.push_back(fontFace);
   }
 }
 
 DEFINE_TRACE(CSSSegmentedFontFace) {
   visitor->trace(m_fontSelector);
+  visitor->trace(m_firstNonCssConnectedFace);
   visitor->trace(m_fontFaces);
 }
 

@@ -49,7 +49,7 @@ class ImageLoader : public KeyedService {
     ImageRepresentation(const ExtensionResource& resource,
                         ResizeCondition resize_condition,
                         const gfx::Size& desired_size,
-                        ui::ScaleFactor scale_factor);
+                        float scale_factor);
     ~ImageRepresentation();
 
     // Extension resource to load.
@@ -62,7 +62,7 @@ class ImageLoader : public KeyedService {
     gfx::Size desired_size;
 
     // |scale_factor| is used to construct the loaded gfx::ImageSkia.
-    ui::ScaleFactor scale_factor;
+    float scale_factor;
   };
 
   struct LoadResult;
@@ -80,15 +80,26 @@ class ImageLoader : public KeyedService {
   // if the image was found in the cache.
   // Note this method loads a raw bitmap from the resource. All sizes given are
   // assumed to be in pixels.
-  void LoadImageAsync(const extensions::Extension* extension,
+  // TODO(estade): remove this in favor of LoadImageAtEveryScaleFactorAsync,
+  // and rename the latter to LoadImageAsync.
+  void LoadImageAsync(const Extension* extension,
                       const ExtensionResource& resource,
                       const gfx::Size& max_size,
                       const ImageLoaderImageCallback& callback);
 
+  // Loads a gfx::Image that has representations at all scale factors we are
+  // likely to care about. That includes every scale for which we pack resources
+  // in ResourceBundle plus the scale for all currently attached displays. The
+  // image is returned via |callback|.
+  void LoadImageAtEveryScaleFactorAsync(
+      const Extension* extension,
+      const gfx::Size& dip_size,
+      const ImageLoaderImageCallback& callback);
+
   // Same as LoadImageAsync() above except it loads multiple images from the
   // same extension. This is used to load multiple resolutions of the same image
   // type.
-  void LoadImagesAsync(const extensions::Extension* extension,
+  void LoadImagesAsync(const Extension* extension,
                        const std::vector<ImageRepresentation>& info_list,
                        const ImageLoaderImageCallback& callback);
 
@@ -99,7 +110,7 @@ class ImageLoader : public KeyedService {
   //
   // If multiple images of the same logical size are loaded, they will be
   // combined into a single ImageSkia in the ImageFamily.
-  void LoadImageFamilyAsync(const extensions::Extension* extension,
+  void LoadImageFamilyAsync(const Extension* extension,
                             const std::vector<ImageRepresentation>& info_list,
                             const ImageLoaderImageFamilyCallback& callback);
 

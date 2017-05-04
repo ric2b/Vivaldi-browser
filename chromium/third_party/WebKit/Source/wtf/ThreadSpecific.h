@@ -44,9 +44,11 @@
 
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
+#include "wtf/StackUtil.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/WTF.h"
 #include "wtf/WTFExport.h"
+#include "wtf/allocator/PartitionAllocator.h"
 #include "wtf/allocator/Partitions.h"
 
 #if OS(POSIX)
@@ -112,6 +114,8 @@ class ThreadSpecific {
 #elif OS(WIN)
   int m_index;
 #endif
+  // This member must only be accessed or modified on the main thread.
+  T* m_mainThreadStorage = nullptr;
 };
 
 #if OS(POSIX)
@@ -154,7 +158,7 @@ inline T* ThreadSpecific<T>::get() {
 
 template <typename T>
 inline void ThreadSpecific<T>::set(T* ptr) {
-  ASSERT(!get());
+  DCHECK(!get());
   pthread_setspecific(m_key, new Data(ptr, this));
 }
 
@@ -211,7 +215,7 @@ inline T* ThreadSpecific<T>::get() {
 
 template <typename T>
 inline void ThreadSpecific<T>::set(T* ptr) {
-  ASSERT(!get());
+  DCHECK(!get());
   Data* data = new Data(ptr, this);
   data->destructor = &ThreadSpecific<T>::destroy;
   TlsSetValue(tlsKeys()[m_index], data);
@@ -223,9 +227,6 @@ inline void ThreadSpecific<T>::set(T* ptr) {
 
 template <typename T>
 inline void ThreadSpecific<T>::destroy(void* ptr) {
-  if (isShutdown())
-    return;
-
   Data* data = static_cast<Data*>(ptr);
 
 #if OS(POSIX)
@@ -234,6 +235,13 @@ inline void ThreadSpecific<T>::destroy(void* ptr) {
   // zero out the pointer before calling destroy(), so we temporarily reset it.
   pthread_setspecific(data->owner->m_key, ptr);
 #endif
+
+  // Never call destructors on the main thread. This is fine because Blink no
+  // longer has a graceful shutdown sequence. Be careful to call this function
+  // (which can be re-entrant) while the pointer is still set, to avoid lazily
+  // allocating WTFThreadData after it is destroyed.
+  if (isMainThread())
+    return;
 
   data->value->~T();
   Partitions::fastFree(data->value);
@@ -256,17 +264,29 @@ inline bool ThreadSpecific<T>::isSet() {
 
 template <typename T>
 inline ThreadSpecific<T>::operator T*() {
-  T* ptr = static_cast<T*>(get());
-  if (!ptr) {
-    // Set up thread-specific value's memory pointer before invoking
-    // constructor, in case any function it calls
-    // needs to access the value, to avoid recursion.
-    ptr = static_cast<T*>(Partitions::fastZeroedMalloc(
-        sizeof(T), WTF_HEAP_PROFILER_TYPE_NAME(T)));
-    set(ptr);
-    new (NotNull, ptr) T;
+  T* offThreadPtr;
+#if defined(__GLIBC__) || OS(ANDROID) || OS(FREEBSD)
+  // TLS is fast on these platforms.
+  // TODO(csharrison): Qualify this statement for Android.
+  T** ptr = &offThreadPtr;
+  offThreadPtr = static_cast<T*>(get());
+#else
+  T** ptr = &m_mainThreadStorage;
+  if (UNLIKELY(internal::mayNotBeMainThread())) {
+    offThreadPtr = static_cast<T*>(get());
+    ptr = &offThreadPtr;
   }
-  return ptr;
+#endif
+  // Set up thread-specific value's memory pointer before invoking constructor,
+  // in case any function it calls needs to access the value, to avoid
+  // recursion.
+  if (UNLIKELY(!*ptr)) {
+    *ptr = static_cast<T*>(Partitions::fastZeroedMalloc(
+        sizeof(T), WTF_HEAP_PROFILER_TYPE_NAME(T)));
+    set(*ptr);
+    new (NotNull, *ptr) T;
+  }
+  return *ptr;
 }
 
 template <typename T>

@@ -19,6 +19,7 @@
 namespace base {
 namespace trace_event {
 class BlameContext;
+class TracedValue;
 }  // namespace trace_event
 }  // namespace base
 
@@ -46,6 +47,7 @@ class BLINK_PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   bool virtualTimeAllowedToAdvance() const override;
   void setVirtualTimePolicy(VirtualTimePolicy virtual_time_policy) override;
   void audioStateChanged(bool is_audio_playing) override;
+  bool hasActiveConnectionForTest() const override;
 
   // Virtual for testing.
   virtual void ReportIntervention(const std::string& message);
@@ -62,6 +64,10 @@ class BLINK_PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
 
   bool IsAudioPlaying() const;
 
+  void OnConnectionUpdated();
+
+  void AsValueInto(base::trace_event::TracedValue* state) const;
+
  private:
   friend class WebFrameSchedulerImpl;
 
@@ -73,11 +79,19 @@ class BLINK_PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
 
   void OnThrottlingReported(base::TimeDelta throttling_duration);
 
-  // Depending on page visibility, either turns budget throttling off, or
-  // schedules a call to enable it after a grace period.
-  void UpdateBackgroundBudgetThrottlingState();
+  static const char* VirtualTimePolicyToString(
+      VirtualTimePolicy virtual_time_policy);
 
-  void EnableBackgroundBudgetThrottling();
+  // Depending on page visibility, either turns throttling off, or schedules a
+  // call to enable it after a grace period.
+  void UpdateBackgroundThrottlingState();
+
+  // As a part of UpdateBackgroundThrottlingState set correct
+  // background_time_budget_pool_ state depending on page visibility and
+  // number of active connections.
+  void UpdateBackgroundBudgetPoolThrottlingState();
+
+  void EnableBackgroundThrottling();
 
   std::set<WebFrameSchedulerImpl*> frame_schedulers_;
   std::set<unsigned long> pending_loads_;
@@ -86,15 +100,17 @@ class BLINK_PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   VirtualTimePolicy virtual_time_policy_;
   int background_parser_count_;
   bool page_visible_;
+  bool should_throttle_frames_;
   bool disable_background_timer_throttling_;
   bool allow_virtual_time_to_advance_;
   bool have_seen_loading_task_;
   bool virtual_time_;
   bool is_audio_playing_;
   bool reported_background_throttling_since_navigation_;
+  bool has_active_connection_;
   TaskQueueThrottler::TimeBudgetPool*
       background_time_budget_pool_;  // Not owned.
-  CancelableClosureHolder delayed_background_budget_throttling_enabler_;
+  CancelableClosureHolder delayed_background_throttling_enabler_;
   WebViewScheduler::WebViewSchedulerSettings* settings_;  // Not owned.
 
   DISALLOW_COPY_AND_ASSIGN(WebViewSchedulerImpl);

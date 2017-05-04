@@ -9,7 +9,7 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventTarget.h"
-#include "media/mojo/interfaces/image_capture.mojom-blink.h"
+#include "media/capture/mojo/image_capture.mojom-blink.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
 #include "platform/AsyncMethodRunner.h"
@@ -24,9 +24,10 @@ class WebImageCaptureFrameGrabber;
 
 // TODO(mcasas): Consideradding a LayoutTest checking that this class is not
 // garbage collected while it has event listeners.
-class MODULES_EXPORT ImageCapture final : public EventTargetWithInlineData,
-                                          public ActiveScriptWrappable,
-                                          public ContextLifecycleObserver {
+class MODULES_EXPORT ImageCapture final
+    : public EventTargetWithInlineData,
+      public ActiveScriptWrappable<ImageCapture>,
+      public ContextLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(ImageCapture);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -44,7 +45,7 @@ class MODULES_EXPORT ImageCapture final : public EventTargetWithInlineData,
   bool hasPendingActivity() const final;
 
   // ContextLifecycleObserver
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   MediaStreamTrack* videoStreamTrack() const { return m_streamTrack.get(); }
 

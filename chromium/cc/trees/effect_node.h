@@ -7,7 +7,7 @@
 
 #include "cc/base/cc_export.h"
 #include "cc/output/filter_operations.h"
-#include "third_party/skia/include/core/SkXfermode.h"
+#include "third_party/skia/include/core/SkBlendMode.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size_f.h"
 
@@ -25,9 +25,12 @@ struct CC_EXPORT EffectNode {
   EffectNode();
   EffectNode(const EffectNode& other);
 
+  // The node index of this node in the effect tree node vector.
   int id;
+  // The node index of the parent node in the effect tree node vector.
   int parent_id;
-  int owner_id;
+  // The layer id of the layer that owns this node.
+  int owning_layer_id;
 
   float opacity;
   float screen_space_opacity;
@@ -36,7 +39,7 @@ struct CC_EXPORT EffectNode {
   FilterOperations background_filters;
   gfx::PointF filters_origin;
 
-  SkXfermode::Mode blend_mode;
+  SkBlendMode blend_mode;
 
   gfx::Vector2dF surface_contents_scale;
 
@@ -44,6 +47,13 @@ struct CC_EXPORT EffectNode {
 
   bool has_render_surface;
   RenderSurfaceImpl* render_surface;
+  // Only applicable if has render surface. A true value means a clip needs to
+  // be applied to the output of the surface when it is drawn onto its parent
+  // surface.
+  // TODO(crbug.com/504464): There is ongoing work to delay render surface
+  // decision to later phase of the pipeline. This flag shall be removed and
+  // computed during render surface decision.
+  bool surface_is_clipped;
   bool has_copy_request;
   bool hidden_by_backface_visibility;
   bool double_sided;

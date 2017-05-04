@@ -29,13 +29,11 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/drag_controller.h"
 
-class ActionBoxButtonView;
 class CommandUpdater;
 class ContentSettingBubbleModelDelegate;
 class ContentSettingImageView;
 class ExtensionAction;
 class GURL;
-class InstantController;
 class KeywordHintView;
 class LocationIconView;
 class OpenPDFInReaderView;
@@ -55,7 +53,6 @@ class SaveCardIconView;
 
 namespace views {
 class Label;
-class Widget;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -94,10 +91,7 @@ class LocationBarView : public LocationBar,
         GetContentSettingBubbleModelDelegate() = 0;
 
     // Shows permissions and settings for the given web contents.
-    virtual void ShowWebsiteSettings(
-        content::WebContents* web_contents,
-        const GURL& virtual_url,
-        const security_state::SecurityInfo& security_info) = 0;
+    virtual void ShowWebsiteSettings(content::WebContents* web_contents) = 0;
 
    protected:
     virtual ~Delegate() {}
@@ -113,6 +107,13 @@ class LocationBarView : public LocationBar,
 
   // Width (and height) of icons in location bar.
   static constexpr int kIconWidth = 16;
+
+  // Space between items in the location bar, as well as between items and the
+  // edges.
+  static constexpr int kHorizontalPadding = 6;
+
+  // The additional vertical padding of a bubble.
+  static constexpr int kBubbleVerticalPadding = 3;
 
   // The location bar view's class name.
   static const char kViewClassName[];
@@ -192,12 +193,6 @@ class LocationBarView : public LocationBar,
   // we can't show the autocompletion inside the actual OmniboxView.  See
   // comments on |ime_inline_autocomplete_view_|.
   void SetImeInlineAutocompletion(const base::string16& text);
-
-  // Invoked from OmniboxViewWin to show gray text autocompletion.
-  void SetGrayTextAutocompletion(const base::string16& text);
-
-  // Returns the current gray text autocompletion.
-  base::string16 GetGrayTextAutocompletion() const;
 
   // Set if we should show a focus rect while the location entry field is
   // focused. Used when the toolbar is in full keyboard accessibility mode.
@@ -313,21 +308,22 @@ class LocationBarView : public LocationBar,
   // Helper to show the first run info bubble.
   void ShowFirstRunBubbleInternal();
 
-  // Returns true if the suggest text is valid.
-  bool HasValidSuggestText() const;
-
-  // Returns text describing the URL's security level, to be placed in the
-  // security chip.
-  base::string16 GetSecurityText() const;
+  // Returns text to be placed in the location icon view.
+  // - For secure/insecure pages, returns text describing the URL's security
+  // level.
+  // - For extension URLs, returns the extension name.
+  // - For chrome:// URLs, returns the short product name (e.g. Chrome).
+  base::string16 GetLocationIconText() const;
 
   bool ShouldShowKeywordBubble() const;
 
-  // Returns true when the current page is explicitly secure or insecure.
-  // In these cases, we should show the state of the security chip.
-  bool ShouldShowSecurityChip() const;
+  // Returns true if any of the following is true:
+  // - the current page is explicitly secure or insecure.
+  // - the current page URL is a chrome-extension:// URL.
+  bool ShouldShowLocationIconText() const;
 
-  // Returns true if the chip should be animated
-  bool ShouldAnimateSecurityChip() const;
+  // Returns true if the location icon text should be animated.
+  bool ShouldAnimateLocationIconTextVisibilityChange() const;
 
   // Used to "reverse" the URL showing/hiding animations, since we use separate
   // animations whose curves are not true inverses of each other.  Based on the
@@ -425,10 +421,6 @@ class LocationBarView : public LocationBar,
   // Shown if the user has selected a keyword.
   SelectedKeywordView* selected_keyword_view_;
 
-  // View responsible for showing suggested text. This is NULL when there is no
-  // suggested text.
-  views::Label* suggested_text_view_;
-
   // Shown if the selected url has a corresponding keyword.
   KeywordHintView* keyword_hint_view_;
 
@@ -477,12 +469,6 @@ class LocationBarView : public LocationBar,
   // This is a debug state variable that stores if the WebContents was null
   // during the last RefreshPageAction.
   bool web_contents_null_at_last_refresh_;
-
-  // These allow toggling the verbose security state behavior via flags.
-  bool should_show_secure_state_;
-  bool should_show_nonsecure_state_;
-  bool should_animate_secure_state_;
-  bool should_animate_nonsecure_state_;
 
   DISALLOW_COPY_AND_ASSIGN(LocationBarView);
 };

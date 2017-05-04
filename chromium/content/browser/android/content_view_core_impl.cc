@@ -16,7 +16,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/solid_color_layer.h"
@@ -43,7 +42,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/browser/screen_orientation_dispatcher_host.h"
+#include "content/public/browser/render_view_host.h"
+#include "content/public/browser/screen_orientation_provider.h"
 #include "content/public/browser/ssl_host_state_delegate.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
@@ -428,7 +428,7 @@ void ContentViewCoreImpl::UpdateFrameInfo(
   if (obj.is_null() || !GetWindowAndroid())
     return;
 
-  GetWindowAndroid()->set_content_offset(
+  GetViewAndroid()->set_content_offset(
       gfx::Vector2dF(0.0f, top_controls_height * top_controls_shown_ratio));
 
   page_scale_ = page_scale_factor;
@@ -454,16 +454,6 @@ void ContentViewCoreImpl::UpdateFrameInfo(
       is_mobile_optimized_hint, has_insertion_marker,
       is_insertion_marker_visible, insertion_marker_horizontal,
       insertion_marker_top, insertion_marker_bottom);
-}
-
-void ContentViewCoreImpl::SetTitle(const base::string16& title) {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (obj.is_null())
-    return;
-  ScopedJavaLocalRef<jstring> jtitle =
-      ConvertUTF8ToJavaString(env, base::UTF16ToUTF8(title));
-  Java_ContentViewCore_setTitle(env, obj, jtitle);
 }
 
 void ContentViewCoreImpl::OnBackgroundColorChanged(SkColor color) {
@@ -527,8 +517,7 @@ void ContentViewCoreImpl::ShowSelectPopupMenu(
   const ScopedJavaLocalRef<jobject> popup_view = select_popup_.view();
   if (popup_view.is_null())
     return;
-  view->SetAnchorRect(popup_view,
-                      gfx::ScaleRect(gfx::RectF(bounds), page_scale_));
+  view->SetAnchorRect(popup_view, gfx::RectF(bounds));
   Java_ContentViewCore_showSelectPopup(
       env, j_obj, popup_view, reinterpret_cast<intptr_t>(frame), items_array,
       enabled_array, multiple, selected_array, right_aligned);
@@ -549,7 +538,7 @@ void ContentViewCoreImpl::OnGestureEventAck(const blink::WebGestureEvent& event,
   if (j_obj.is_null())
     return;
 
-  switch (event.type) {
+  switch (event.type()) {
     case WebInputEvent::GestureFlingStart:
       if (ack_result == INPUT_EVENT_ACK_STATE_CONSUMED) {
         // The view expects the fling velocity in pixels/s.
@@ -594,10 +583,10 @@ void ContentViewCoreImpl::OnGestureEventAck(const blink::WebGestureEvent& event,
 }
 
 bool ContentViewCoreImpl::FilterInputEvent(const blink::WebInputEvent& event) {
-  if (event.type != WebInputEvent::GestureTap &&
-      event.type != WebInputEvent::GestureDoubleTap &&
-      event.type != WebInputEvent::GestureLongTap &&
-      event.type != WebInputEvent::GestureLongPress)
+  if (event.type() != WebInputEvent::GestureTap &&
+      event.type() != WebInputEvent::GestureDoubleTap &&
+      event.type() != WebInputEvent::GestureLongTap &&
+      event.type() != WebInputEvent::GestureLongPress)
     return false;
 
   JNIEnv* env = AttachCurrentThread();
@@ -607,7 +596,7 @@ bool ContentViewCoreImpl::FilterInputEvent(const blink::WebInputEvent& event) {
 
   const blink::WebGestureEvent& gesture =
       static_cast<const blink::WebGestureEvent&>(event);
-  int gesture_type = ToGestureEventType(event.type);
+  int gesture_type = ToGestureEventType(event.type());
   return Java_ContentViewCore_filterTapOrPressEvent(env, j_obj, gesture_type,
                                                     gesture.x * dpi_scale(),
                                                     gesture.y * dpi_scale());
@@ -1307,13 +1296,14 @@ void ContentViewCoreImpl::ForceUpdateImeAdapter(long native_ime_adapter) {
 void ContentViewCoreImpl::UpdateImeAdapter(long native_ime_adapter,
                                            int text_input_type,
                                            int text_input_flags,
+                                           int text_input_mode,
                                            const std::string& text,
                                            int selection_start,
                                            int selection_end,
                                            int composition_start,
                                            int composition_end,
                                            bool show_ime_if_needed,
-                                           bool is_non_ime_change) {
+                                           bool reply_to_request) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
@@ -1322,8 +1312,8 @@ void ContentViewCoreImpl::UpdateImeAdapter(long native_ime_adapter,
   ScopedJavaLocalRef<jstring> jstring_text = ConvertUTF8ToJavaString(env, text);
   Java_ContentViewCore_updateImeAdapter(
       env, obj, native_ime_adapter, text_input_type, text_input_flags,
-      jstring_text, selection_start, selection_end, composition_start,
-      composition_end, show_ime_if_needed, is_non_ime_change);
+      text_input_mode, jstring_text, selection_start, selection_end,
+      composition_start, composition_end, show_ime_if_needed, reply_to_request);
 }
 
 void ContentViewCoreImpl::SetAccessibilityEnabled(
@@ -1393,7 +1383,7 @@ void ContentViewCoreImpl::SetAccessibilityEnabledInternal(bool enabled) {
     // this WebContents if that succeeded.
     accessibility_state->OnScreenReaderDetected();
     if (accessibility_state->IsAccessibleBrowser() && web_contents_)
-      web_contents_->AddAccessibilityMode(AccessibilityModeComplete);
+      web_contents_->AddAccessibilityMode(ACCESSIBILITY_MODE_COMPLETE);
   } else {
     accessibility_state->ResetAccessibilityMode();
     if (web_contents_) {
@@ -1408,8 +1398,9 @@ void ContentViewCoreImpl::SendOrientationChangeEventInternal() {
   if (rwhv)
     rwhv->UpdateScreenInfo(GetViewAndroid());
 
-  static_cast<WebContentsImpl*>(web_contents())->
-      screen_orientation_dispatcher_host()->OnOrientationChange();
+  static_cast<WebContentsImpl*>(web_contents())
+      ->GetScreenOrientationProvider()
+      ->OnOrientationChange();
 }
 
 void ContentViewCoreImpl::ExtractSmartClipData(JNIEnv* env,
@@ -1426,7 +1417,7 @@ void ContentViewCoreImpl::ExtractSmartClipData(JNIEnv* env,
       static_cast<int>((height > 0 && height < dpi_scale()) ?
           1 : (int)(height / dpi_scale())));
   GetWebContents()->Send(new ViewMsg_ExtractSmartClipData(
-      GetWebContents()->GetRoutingID(), rect));
+      GetWebContents()->GetRenderViewHost()->GetRoutingID(), rect));
 }
 
 jint ContentViewCoreImpl::GetCurrentRenderProcessId(
@@ -1554,36 +1545,6 @@ void ContentViewCoreImpl::WebContentsDestroyed() {
       static_cast<WebContentsImpl*>(web_contents())->GetView());
   DCHECK(wcva);
   wcva->SetContentViewCore(NULL);
-}
-
-bool ContentViewCoreImpl::PullStart() {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (!obj.is_null())
-    return Java_ContentViewCore_onOverscrollRefreshStart(env, obj);
-  return false;
-}
-
-void ContentViewCoreImpl::PullUpdate(float delta) {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (!obj.is_null())
-    Java_ContentViewCore_onOverscrollRefreshUpdate(env, obj, delta);
-}
-
-void ContentViewCoreImpl::PullRelease(bool allow_refresh) {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (!obj.is_null()) {
-    Java_ContentViewCore_onOverscrollRefreshRelease(env, obj, allow_refresh);
-  }
-}
-
-void ContentViewCoreImpl::PullReset() {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
-  if (!obj.is_null())
-    Java_ContentViewCore_onOverscrollRefreshReset(env, obj);
 }
 
 // This is called for each ContentView.

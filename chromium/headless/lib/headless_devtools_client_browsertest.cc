@@ -7,9 +7,12 @@
 #include "base/json/json_reader.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
+#include "headless/public/devtools/domains/dom.h"
 #include "headless/public/devtools/domains/emulation.h"
+#include "headless/public/devtools/domains/inspector.h"
 #include "headless/public/devtools/domains/network.h"
 #include "headless/public/devtools/domains/page.h"
 #include "headless/public/devtools/domains/runtime.h"
@@ -62,6 +65,7 @@ class HeadlessDevToolsClientNavigationTest
   }
 
   void OnLoadEventFired(const page::LoadEventFiredParams& params) override {
+    devtools_client_->GetPage()->Disable();
     devtools_client_->GetPage()->GetExperimental()->RemoveObserver(this);
     FinishAsynchronousTest();
   }
@@ -171,6 +175,7 @@ class HeadlessDevToolsClientObserverTest
                                                               &content_type));
     EXPECT_EQ("text/html", content_type);
 
+    devtools_client_->GetNetwork()->Disable();
     devtools_client_->GetNetwork()->RemoveObserver(this);
     FinishAsynchronousTest();
   }
@@ -205,6 +210,9 @@ class HeadlessDevToolsClientExperimentalTest
 
   void OnFrameStoppedLoading(
       const page::FrameStoppedLoadingParams& params) override {
+    devtools_client_->GetPage()->Disable();
+    devtools_client_->GetPage()->GetExperimental()->RemoveObserver(this);
+
     // Check that a non-experimental command which has no return value can be
     // called with a void() callback.
     devtools_client_->GetPage()->Reload(
@@ -659,5 +667,126 @@ class HeadlessDevToolsNavigationControlTest
 };
 
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessDevToolsNavigationControlTest);
+
+class HeadlessCrashObserverTest : public HeadlessAsyncDevTooledBrowserTest,
+                                  inspector::ExperimentalObserver {
+ public:
+  void RunDevTooledTest() override {
+    devtools_client_->GetInspector()->GetExperimental()->AddObserver(this);
+    devtools_client_->GetInspector()->GetExperimental()->Enable(
+        headless::inspector::EnableParams::Builder().Build());
+    devtools_client_->GetPage()->Enable();
+    devtools_client_->GetPage()->Navigate(content::kChromeUICrashURL);
+  }
+
+  void OnTargetCrashed(const inspector::TargetCrashedParams& params) override {
+    FinishAsynchronousTest();
+    render_process_exited_ = true;
+  }
+
+  // Make sure we don't fail because the renderer crashed!
+  void RenderProcessExited(base::TerminationStatus status,
+                           int exit_code) override {
+    EXPECT_EQ(base::TERMINATION_STATUS_ABNORMAL_TERMINATION, status);
+  }
+};
+
+HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessCrashObserverTest);
+
+class HeadlessDevToolsClientAttachTest
+    : public HeadlessAsyncDevTooledBrowserTest {
+ public:
+  void RunDevTooledTest() override {
+    other_devtools_client_ = HeadlessDevToolsClient::Create();
+    HeadlessDevToolsTarget* devtools_target =
+        web_contents_->GetDevToolsTarget();
+
+    // Try attaching: there's already a client attached.
+    EXPECT_FALSE(devtools_target->AttachClient(other_devtools_client_.get()));
+    EXPECT_TRUE(devtools_target->IsAttached());
+    // Detach the existing client, attach the other client.
+    devtools_target->DetachClient(devtools_client_.get());
+    EXPECT_FALSE(devtools_target->IsAttached());
+    EXPECT_TRUE(devtools_target->AttachClient(other_devtools_client_.get()));
+    EXPECT_TRUE(devtools_target->IsAttached());
+
+    // Now, let's make sure this devtools client works.
+    other_devtools_client_->GetRuntime()->Evaluate(
+        "24 * 7", base::Bind(&HeadlessDevToolsClientAttachTest::OnFirstResult,
+                             base::Unretained(this)));
+  }
+
+  void OnFirstResult(std::unique_ptr<runtime::EvaluateResult> result) {
+    int value;
+    EXPECT_TRUE(result->GetResult()->HasValue());
+    EXPECT_TRUE(result->GetResult()->GetValue()->GetAsInteger(&value));
+    EXPECT_EQ(24 * 7, value);
+
+    HeadlessDevToolsTarget* devtools_target =
+        web_contents_->GetDevToolsTarget();
+
+    // Try attach, then force-attach the original client.
+    EXPECT_FALSE(devtools_target->AttachClient(devtools_client_.get()));
+    devtools_target->ForceAttachClient(devtools_client_.get());
+    EXPECT_TRUE(devtools_target->IsAttached());
+
+    devtools_client_->GetRuntime()->Evaluate(
+        "27 * 4", base::Bind(&HeadlessDevToolsClientAttachTest::OnSecondResult,
+                             base::Unretained(this)));
+  }
+
+  void OnSecondResult(std::unique_ptr<runtime::EvaluateResult> result) {
+    int value;
+    EXPECT_TRUE(result->GetResult()->HasValue());
+    EXPECT_TRUE(result->GetResult()->GetValue()->GetAsInteger(&value));
+    EXPECT_EQ(27 * 4, value);
+
+    // If everything worked, this call will not crash, since it
+    // detaches devtools_client_.
+    FinishAsynchronousTest();
+  }
+
+ protected:
+  std::unique_ptr<HeadlessDevToolsClient> other_devtools_client_;
+};
+
+HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessDevToolsClientAttachTest);
+
+class HeadlessDevToolsMethodCallErrorTest
+    : public HeadlessAsyncDevTooledBrowserTest,
+      public page::Observer {
+ public:
+  void RunDevTooledTest() override {
+    EXPECT_TRUE(embedded_test_server()->Start());
+    devtools_client_->GetPage()->AddObserver(this);
+    devtools_client_->GetPage()->Enable();
+    devtools_client_->GetPage()->Navigate(
+        embedded_test_server()->GetURL("/hello.html").spec());
+  }
+
+  void OnLoadEventFired(const page::LoadEventFiredParams& params) override {
+    devtools_client_->GetPage()->GetExperimental()->RemoveObserver(this);
+    devtools_client_->GetDOM()->GetDocument(
+        base::Bind(&HeadlessDevToolsMethodCallErrorTest::OnGetDocument,
+                   base::Unretained(this)));
+  }
+
+  void OnGetDocument(std::unique_ptr<dom::GetDocumentResult> result) {
+    devtools_client_->GetDOM()->QuerySelector(
+        dom::QuerySelectorParams::Builder()
+            .SetNodeId(result->GetRoot()->GetNodeId())
+            .SetSelector("<o_O>")
+            .Build(),
+        base::Bind(&HeadlessDevToolsMethodCallErrorTest::OnQuerySelector,
+                   base::Unretained(this)));
+  }
+
+  void OnQuerySelector(std::unique_ptr<dom::QuerySelectorResult> result) {
+    EXPECT_EQ(nullptr, result);
+    FinishAsynchronousTest();
+  }
+};
+
+HEADLESS_ASYNC_DEVTOOLED_TEST_F(HeadlessDevToolsMethodCallErrorTest);
 
 }  // namespace headless

@@ -80,8 +80,6 @@ PRUNE_PATHS = set([
 
     # Redistribution does not require attribution in documentation.
     os.path.join('third_party','directxsdk'),
-    os.path.join('third_party','platformsdk_win2008_6_1'),
-    os.path.join('third_party','platformsdk_win7'),
 
     # For testing only, presents on some bots.
     os.path.join('isolate_deps_dir'),
@@ -189,7 +187,7 @@ SPECIAL_CASES = {
     os.path.join('third_party', 'WebKit'): {
         "Name": "WebKit",
         "URL": "http://webkit.org/",
-        "License": "BSD and GPL v2",
+        "License": "BSD and LGPL v2 and LGPL v2.1",
         # Absolute path here is resolved as relative to the source root.
         "License File": "/third_party/WebKit/LICENSE_FOR_ABOUT_CREDITS",
     },

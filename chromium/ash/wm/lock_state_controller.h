@@ -17,15 +17,6 @@
 #include "base/timer/timer.h"
 #include "ui/aura/window_tree_host_observer.h"
 
-namespace gfx {
-class Rect;
-class Size;
-}
-
-namespace ui {
-class Layer;
-}
-
 namespace ash {
 
 class ShutdownController;
@@ -61,13 +52,6 @@ class LockStateControllerTestApi;
 class ASH_EXPORT LockStateController : public aura::WindowTreeHostObserver,
                                        public ShellObserver {
  public:
-  // Amount of time that the power button needs to be held before we lock the
-  // screen.
-  static const int kLockTimeoutMs;
-
-  // Amount of time that the power button needs to be held before we shut down.
-  static const int kShutdownTimeoutMs;
-
   // Amount of time to wait for our lock requests to be honored before giving
   // up.
   static const int kLockFailTimeoutMs;

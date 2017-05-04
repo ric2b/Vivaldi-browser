@@ -53,8 +53,7 @@ void ResetShortcutsOnFileThread() {
   base::FilePath chrome_exe;
   if (!PathService::Get(base::FILE_EXE, &chrome_exe))
     return;
-  BrowserDistribution* dist = BrowserDistribution::GetSpecificDistribution(
-      BrowserDistribution::CHROME_BROWSER);
+  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
   for (int location = ShellUtil::SHORTCUT_LOCATION_FIRST;
        location < ShellUtil::NUM_SHORTCUT_LOCATIONS; ++location) {
     ShellUtil::ShortcutListMaybeRemoveUnknownArgs(
@@ -257,8 +256,7 @@ void ProfileResetter::ResetCookiesAndSiteData() {
   // Don't try to clear LSO data if it's not supported.
   if (!prefs->GetBoolean(prefs::kClearPluginLSODataEnabled))
     remove_mask &= ~BrowsingDataRemover::REMOVE_PLUGIN_DATA;
-  cookies_remover_->RemoveAndReply(BrowsingDataRemover::Unbounded(),
-                                   remove_mask,
+  cookies_remover_->RemoveAndReply(base::Time(), base::Time::Max(), remove_mask,
                                    BrowsingDataHelper::UNPROTECTED_WEB, this);
 }
 
@@ -348,8 +346,7 @@ std::vector<ShortcutCommand> GetChromeLaunchShortcuts(
   base::FilePath chrome_exe;
   if (!PathService::Get(base::FILE_EXE, &chrome_exe))
     return std::vector<ShortcutCommand>();
-  BrowserDistribution* dist = BrowserDistribution::GetSpecificDistribution(
-      BrowserDistribution::CHROME_BROWSER);
+  BrowserDistribution* dist = BrowserDistribution::GetDistribution();
   std::vector<ShortcutCommand> shortcuts;
   for (int location = ShellUtil::SHORTCUT_LOCATION_FIRST;
        location < ShellUtil::NUM_SHORTCUT_LOCATIONS; ++location) {

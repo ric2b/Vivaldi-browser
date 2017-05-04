@@ -9,10 +9,10 @@
 #include <string>
 
 #include "base/files/file_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task_runner_util.h"
-#include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_service.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
@@ -21,7 +21,7 @@
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_service_manager.h"
 #include "components/crx_file/id_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -50,8 +50,8 @@ const char kShouldSync[] = "should_sync";
 const char kSystem[] = "system";
 const char kUninstalled[] = "uninstalled";
 
-constexpr uint32_t kSetNotificationsEnabledMinVersion = 6;
-constexpr uint32_t kRequestIconMinVersion = 9;
+constexpr base::TimeDelta kDetectDefaultAppAvailabilityTimeout =
+    base::TimeDelta::FromSeconds(15);
 
 // Provider of write access to a dictionary storing ARC prefs.
 class ScopedArcPrefUpdate : public DictionaryPrefUpdate {
@@ -143,10 +143,11 @@ void DeleteAppFolderFromFileThread(const base::FilePath& path) {
 }
 
 bool IsArcEnabled() {
-  arc::ArcAuthService* auth_service = arc::ArcAuthService::Get();
-  return auth_service &&
-         auth_service->state() != arc::ArcAuthService::State::NOT_INITIALIZED &&
-         auth_service->IsArcEnabled();
+  arc::ArcSessionManager* arc_session_manager = arc::ArcSessionManager::Get();
+  return arc_session_manager &&
+         arc_session_manager->state() !=
+             arc::ArcSessionManager::State::NOT_INITIALIZED &&
+         arc_session_manager->IsArcEnabled();
 }
 
 bool GetInt64FromPref(const base::DictionaryValue* dict,
@@ -241,11 +242,11 @@ ArcAppListPrefs::ArcAppListPrefs(
   const base::FilePath& base_path = profile->GetPath();
   base_path_ = base_path.AppendASCII(prefs::kArcApps);
 
-  arc::ArcAuthService* auth_service = arc::ArcAuthService::Get();
-  if (!auth_service)
+  arc::ArcSessionManager* arc_session_manager = arc::ArcSessionManager::Get();
+  if (!arc_session_manager)
     return;
 
-  DCHECK(arc::ArcAuthService::IsAllowedForProfile(profile));
+  DCHECK(arc::ArcSessionManager::IsAllowedForProfile(profile));
 
   const std::vector<std::string> existing_app_ids = GetAppIds();
   tracked_apps_.insert(existing_app_ids.begin(), existing_app_ids.end());
@@ -254,25 +255,22 @@ ArcAppListPrefs::ArcAppListPrefs(
 }
 
 ArcAppListPrefs::~ArcAppListPrefs() {
-  // A reference to ArcBridgeService is kept here so that it would crash the
-  // tests where ArcBridgeService and ArcAppListPrefs are not destroyed in right
-  // order.
-  arc::ArcBridgeService* bridge_service = arc::ArcBridgeService::Get();
-  if (bridge_service)
-    app_instance_holder_->RemoveObserver(this);
-
-  arc::ArcAuthService* auth_service = arc::ArcAuthService::Get();
-  if (auth_service)
-    auth_service->RemoveObserver(this);
+  arc::ArcSessionManager* arc_session_manager = arc::ArcSessionManager::Get();
+  if (!arc_session_manager)
+    return;
+  DCHECK(arc::ArcServiceManager::Get());
+  arc_session_manager->RemoveObserver(this);
+  app_instance_holder_->RemoveObserver(this);
 }
 
 void ArcAppListPrefs::StartPrefs() {
-  arc::ArcAuthService* auth_service = arc::ArcAuthService::Get();
-  CHECK(auth_service);
+  arc::ArcSessionManager* arc_session_manager = arc::ArcSessionManager::Get();
+  CHECK(arc_session_manager);
 
-  if (auth_service->state() != arc::ArcAuthService::State::NOT_INITIALIZED)
-    OnOptInEnabled(auth_service->IsArcEnabled());
-  auth_service->AddObserver(this);
+  if (arc_session_manager->state() !=
+      arc::ArcSessionManager::State::NOT_INITIALIZED)
+    OnArcOptInChanged(arc_session_manager->IsArcEnabled());
+  arc_session_manager->AddObserver(this);
 
   app_instance_holder_->AddObserver(this);
   if (!app_instance_holder_->has_instance())
@@ -327,7 +325,7 @@ void ArcAppListPrefs::RequestIcon(const std::string& app_id,
 
   if (app_info->icon_resource_id.empty()) {
     auto* app_instance =
-        app_instance_holder_->GetInstanceForMethod("RequestAppIcon");
+        ARC_GET_INSTANCE_FOR_METHOD(app_instance_holder_, RequestAppIcon);
     // Version 0 instance should always be available here because has_instance()
     // returned true above.
     DCHECK(app_instance);
@@ -335,8 +333,8 @@ void ArcAppListPrefs::RequestIcon(const std::string& app_id,
         app_info->package_name, app_info->activity,
         static_cast<arc::mojom::ScaleFactor>(scale_factor));
   } else {
-    auto* app_instance = app_instance_holder_->GetInstanceForMethod(
-        "RequestIcon", kRequestIconMinVersion);
+    auto* app_instance =
+        ARC_GET_INSTANCE_FOR_METHOD(app_instance_holder_, RequestIcon);
     if (!app_instance)
       return;  // The instance version on ARC side was too old.
     app_instance->RequestIcon(
@@ -369,8 +367,8 @@ void ArcAppListPrefs::SetNotificationsEnabled(const std::string& app_id,
     return;
   }
 
-  auto* app_instance = app_instance_holder_->GetInstanceForMethod(
-      "SetNotificationsEnabled", kSetNotificationsEnabledMinVersion);
+  auto* app_instance = ARC_GET_INSTANCE_FOR_METHOD(app_instance_holder_,
+                                                   SetNotificationsEnabled);
   if (!app_instance)
     return;
 
@@ -401,6 +399,10 @@ std::unique_ptr<ArcAppListPrefs::PackageInfo> ArcAppListPrefs::GetPackage(
   if (!packages ||
       !packages->GetDictionaryWithoutPathExpansion(package_name, &package))
     return std::unique_ptr<PackageInfo>();
+
+  bool uninstalled = false;
+  if (package->GetBoolean(kUninstalled, &uninstalled) && uninstalled)
+    return nullptr;
 
   int32_t package_version = 0;
   int64_t last_backup_android_id = 0;
@@ -595,7 +597,7 @@ void ArcAppListPrefs::RemoveAllApps() {
   DCHECK(ready_apps_.empty());
 }
 
-void ArcAppListPrefs::OnOptInEnabled(bool enabled) {
+void ArcAppListPrefs::OnArcOptInChanged(bool enabled) {
   UpdateDefaultAppsHiddenState();
 
   if (enabled)
@@ -662,19 +664,20 @@ void ArcAppListPrefs::SetDefaltAppsReadyCallback(base::Closure callback) {
     default_apps_ready_callback_.Run();
 }
 
+void ArcAppListPrefs::SimulateDefaultAppAvailabilityTimeoutForTesting() {
+  if (!detect_default_app_availability_timeout_.IsRunning())
+    return;
+  detect_default_app_availability_timeout_.Stop();
+  DetectDefaultAppAvailability();
+}
+
 void ArcAppListPrefs::OnInstanceReady() {
   // Init() is also available at version 0.
   arc::mojom::AppInstance* app_instance =
-      app_instance_holder_->GetInstanceForMethod("RefreshAppList");
+      ARC_GET_INSTANCE_FOR_METHOD(app_instance_holder_, RefreshAppList);
 
   // Note, sync_service_ may be nullptr in testing.
   sync_service_ = arc::ArcPackageSyncableService::Get(profile_);
-
-  // Kiosk apps should be run only for kiosk sessions.
-  if (user_manager::UserManager::Get()->IsLoggedInAsArcKioskApp()) {
-    kiosk_app_service_ = chromeos::ArcKioskAppService::Get(profile_);
-    DCHECK(kiosk_app_service_);
-  }
 
   // In some tests app_instance may not be set.
   if (!app_instance)
@@ -688,6 +691,9 @@ void ArcAppListPrefs::OnInstanceReady() {
 
 void ArcAppListPrefs::OnInstanceClosed() {
   DisableAllApps();
+  installing_packages_count_ = 0;
+  default_apps_installations_.clear();
+  detect_default_app_availability_timeout_.Stop();
   binding_.Close();
 
   if (sync_service_) {
@@ -695,7 +701,6 @@ void ArcAppListPrefs::OnInstanceClosed() {
     sync_service_ = nullptr;
   }
 
-  kiosk_app_service_ = nullptr;
   is_initialized_ = false;
   package_list_initial_refreshed_ = false;
 }
@@ -916,7 +921,28 @@ void ArcAppListPrefs::OnAppListRefreshed(
 
   if (!is_initialized_) {
     is_initialized_ = true;
+    MaybeSetDefaultAppLoadingTimeout();
     UMA_HISTOGRAM_COUNTS_1000("Arc.AppsInstalledAtStartup", ready_apps_.size());
+  }
+}
+
+void ArcAppListPrefs::DetectDefaultAppAvailability() {
+  for (const auto& package : default_apps_.GetActivePackages()) {
+    // Check if already installed or installation in progress.
+    if (!GetPackage(package) && !default_apps_installations_.count(package))
+      HandlePackageRemoved(package);
+  }
+}
+
+void ArcAppListPrefs::MaybeSetDefaultAppLoadingTimeout() {
+  // Find at least one not installed default app package.
+  for (const auto& package : default_apps_.GetActivePackages()) {
+    if (!GetPackage(package)) {
+      detect_default_app_availability_timeout_.Start(FROM_HERE,
+          kDetectDefaultAppAvailabilityTimeout, this,
+          &ArcAppListPrefs::DetectDefaultAppAvailability);
+      break;
+    }
   }
 }
 
@@ -1018,13 +1044,18 @@ std::unordered_set<std::string> ArcAppListPrefs::GetAppsForPackage(
   return app_set;
 }
 
-void ArcAppListPrefs::OnPackageRemoved(const std::string& package_name) {
+void ArcAppListPrefs::HandlePackageRemoved(const std::string& package_name) {
   const std::unordered_set<std::string> apps_to_remove =
       GetAppsForPackage(package_name);
   for (const auto& app_id : apps_to_remove)
     RemoveApp(app_id);
 
   RemovePackageFromPrefs(prefs_, package_name);
+}
+
+void ArcAppListPrefs::OnPackageRemoved(const std::string& package_name) {
+  HandlePackageRemoved(package_name);
+
   for (auto& observer : observer_list_)
     observer.OnPackageRemoved(package_name);
 }
@@ -1129,8 +1160,15 @@ void ArcAppListPrefs::MaybeShowPackageInAppLauncher(
     AppListService* service = AppListService::Get();
     CHECK(service);
     service->ShowForAppInstall(profile_, app_id, false);
+    last_shown_batch_installation_revision_ =
+        current_batch_installation_revision_;
     break;
   }
+}
+
+bool ArcAppListPrefs::IsUnknownPackage(const std::string& package_name) const {
+  return !GetPackage(package_name) &&
+      !sync_service_->IsPackageSyncing(package_name);
 }
 
 void ArcAppListPrefs::OnPackageAdded(
@@ -1139,14 +1177,16 @@ void ArcAppListPrefs::OnPackageAdded(
 
   // Ignore packages installed by internal sync.
   DCHECK(sync_service_);
-  const bool new_package_in_system = !GetPackage(package_info->package_name) &&
-      !sync_service_->IsPackageSyncing(package_info->package_name);
+  const bool unknown_package = IsUnknownPackage(package_info->package_name);
 
   AddOrUpdatePackagePrefs(prefs_, *package_info);
   for (auto& observer : observer_list_)
     observer.OnPackageInstalled(*package_info);
-  if (new_package_in_system)
+  if (unknown_package &&
+      current_batch_installation_revision_ !=
+          last_shown_batch_installation_revision_) {
     MaybeShowPackageInAppLauncher(*package_info);
+  }
 }
 
 void ArcAppListPrefs::OnPackageModified(
@@ -1252,6 +1292,33 @@ void ArcAppListPrefs::OnIconInstalled(const std::string& app_id,
 
   for (auto& observer : observer_list_)
     observer.OnAppIconUpdated(app_id, scale_factor);
+}
+
+void ArcAppListPrefs::OnInstallationStarted(
+    const base::Optional<std::string>& package_name) {
+  // Start new batch installation group if this is first installation.
+  if (!installing_packages_count_)
+    ++current_batch_installation_revision_;
+  ++installing_packages_count_;
+
+  if (package_name.has_value() && default_apps_.HasPackage(*package_name))
+    default_apps_installations_.insert(*package_name);
+}
+
+void ArcAppListPrefs::OnInstallationFinished(
+    arc::mojom::InstallationResultPtr result) {
+  if (result && default_apps_.HasPackage(result->package_name)) {
+    default_apps_installations_.erase(result->package_name);
+
+    if (!result->success && !GetPackage(result->package_name))
+      HandlePackageRemoved(result->package_name);
+  }
+
+  if (!installing_packages_count_) {
+    VLOG(2) << "Received unexpected installation finished event";
+    return;
+  }
+  --installing_packages_count_;
 }
 
 ArcAppListPrefs::AppInfo::AppInfo(const std::string& name,

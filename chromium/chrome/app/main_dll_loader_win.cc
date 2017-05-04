@@ -16,14 +16,15 @@
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/scoped_handle.h"
@@ -41,11 +42,12 @@
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "chrome/installer/util/install_util.h"
-#include "chrome/installer/util/module_util_win.h"
 #include "chrome/installer/util/util_constants.h"
 #include "content/public/app/sandbox_helper_win.h"
 #include "content/public/common/content_switches.h"
 #include "sandbox/win/src/sandbox.h"
+
+#include "app/vivaldi_constants.h"
 
 namespace {
 // The entry point signature of chrome.dll.
@@ -63,19 +65,46 @@ HMODULE LoadModuleWithDirectory(const base::FilePath& module) {
 }
 
 void RecordDidRun(const base::FilePath& dll_path) {
-  bool system_level = !InstallUtil::IsPerUserInstall(dll_path);
-  GoogleUpdateSettings::UpdateDidRunState(true, system_level);
+  GoogleUpdateSettings::UpdateDidRunState(true);
 }
 
 void ClearDidRun(const base::FilePath& dll_path) {
-  bool system_level = !InstallUtil::IsPerUserInstall(dll_path);
-  GoogleUpdateSettings::UpdateDidRunState(false, system_level);
+  GoogleUpdateSettings::UpdateDidRunState(false);
 }
 
 typedef int (*InitMetro)();
 
 bool ProcessTypeUsesMainDll(const std::string& process_type) {
   return process_type.empty() || process_type == switches::kServiceProcess;
+}
+
+// Indicates whether a file can be opened using the same flags that
+// ::LoadLibrary() uses to open modules.
+bool ModuleCanBeRead(const base::FilePath& file_path) {
+  return base::File(file_path, base::File::FLAG_OPEN | base::File::FLAG_READ)
+      .IsValid();
+}
+
+// Returns the full path to |module_name|. Both dev builds (where |module_name|
+// is in the current executable's directory) and proper installs (where
+// |module_name| is in a versioned sub-directory of the current executable's
+// directory) are suported. The identified file is not guaranteed to exist.
+base::FilePath GetModulePath(base::StringPiece16 module_name) {
+  base::FilePath exe_dir;
+  const bool has_path = base::PathService::Get(base::DIR_EXE, &exe_dir);
+  DCHECK(has_path);
+
+  // Look for the module in the current executable's directory and return the
+  // path if it can be read. This is the expected location of modules for dev
+  // builds.
+  const base::FilePath module_path = exe_dir.Append(module_name);
+  if (ModuleCanBeRead(module_path))
+    return module_path;
+
+  // Othwerwise, return the path to the module in a versioned sub-directory of
+  // the current executable's directory. This is the expected location of
+  // modules for proper installs.
+  return exe_dir.AppendASCII(vivaldi::kVivaldiVersion).Append(module_name);
 }
 
 }  // namespace
@@ -103,7 +132,7 @@ HMODULE MainDllLoader::Load(base::FilePath* module) {
 #endif
   }
 
-  *module = installer::GetModulePath(dll_name);
+  *module = GetModulePath(dll_name);
   if (module->empty()) {
     PLOG(ERROR) << "Cannot find module " << dll_name;
     return nullptr;
@@ -162,7 +191,14 @@ int MainDllLoader::Launch(HINSTANCE instance,
 
   // Initialize the sandbox services.
   sandbox::SandboxInterfaceInfo sandbox_info = {0};
-  content::InitializeSandboxInfo(&sandbox_info);
+  const bool is_browser = process_type_.empty();
+  const bool is_sandboxed = !cmd_line.HasSwitch(switches::kNoSandbox);
+  if (is_browser || is_sandboxed) {
+    // For child processes that are running as --no-sandbox, don't initialize
+    // the sandbox info, otherwise they'll be treated as brokers (as if they
+    // were the browser).
+    content::InitializeSandboxInfo(&sandbox_info);
+  }
 
   dll_ = Load(&file);
   if (!dll_)

@@ -8,7 +8,10 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/common/prerender_types.h"
+#include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/resource_throttle.h"
 #include "content/public/common/resource_type.h"
 
@@ -20,6 +23,7 @@ class URLRequest;
 
 namespace prerender {
 class PrerenderContents;
+class PrerenderThrottleInfo;
 
 // This class implements policy on resource requests in prerenders.  It cancels
 // prerenders on certain requests.  It also defers certain requests until after
@@ -33,6 +37,8 @@ class PrerenderResourceThrottle
  public:
   explicit PrerenderResourceThrottle(net::URLRequest* request);
 
+  ~PrerenderResourceThrottle() override;
+
   // content::ResourceThrottle implementation:
   void WillStartRequest(bool* defer) override;
   void WillRedirectRequest(const net::RedirectInfo& redirect_info,
@@ -42,22 +48,19 @@ class PrerenderResourceThrottle
 
   // Called by the PrerenderContents when a prerender becomes visible.
   // May only be called if currently throttling the resource.
-  void Resume();
+  void ResumeHandler();
 
   static void OverridePrerenderContentsForTesting(PrerenderContents* contents);
 
  private:
-  // Helper method to cancel the request. May only be called if currently
-  // throttling the resource.
-  void Cancel();
-
   static void WillStartRequestOnUI(
       const base::WeakPtr<PrerenderResourceThrottle>& throttle,
       const std::string& method,
       content::ResourceType resource_type,
-      int render_process_id,
-      int render_frame_id,
-      const GURL& url);
+      const GURL& url,
+      const content::ResourceRequestInfo::WebContentsGetter&
+          web_contents_getter,
+      scoped_refptr<PrerenderThrottleInfo> prerender_throttle_info);
 
   static void WillRedirectRequestOnUI(
       const base::WeakPtr<PrerenderResourceThrottle>& throttle,
@@ -65,22 +68,29 @@ class PrerenderResourceThrottle
       content::ResourceType resource_type,
       bool async,
       bool is_no_store,
-      int render_process_id,
-      int render_frame_id,
-      const GURL& new_url);
+      const GURL& new_url,
+      const content::ResourceRequestInfo::WebContentsGetter&
+          web_contents_getter);
 
-  static void WillProcessResponseOnUI(bool is_main_resource,
-                                      bool is_no_store,
-                                      int redirect_count,
-                                      int render_process_id,
-                                      int render_frame_id);
+  static void WillProcessResponseOnUI(
+      bool is_main_resource,
+      bool is_no_store,
+      int redirect_count,
+      scoped_refptr<PrerenderThrottleInfo> prerender_throttle_info);
 
-  // Helper to return the PrerenderContents given a render frame id. May return
-  // NULL if it's gone.
-  static PrerenderContents* PrerenderContentsFromRenderFrame(
-      int render_process_id, int render_frame_id);
+  // Helper to return the PrerenderContents given a WebContentsGetter. May
+  // return nullptr if it's gone.
+  static PrerenderContents* PrerenderContentsFromGetter(
+      const content::ResourceRequestInfo::WebContentsGetter&
+          web_contents_getter);
+
+  // Sets the prerender mode. Must be called befor ResumeHandler().
+  void SetPrerenderMode(PrerenderMode mode);
 
   net::URLRequest* request_;
+  int load_flags_;  // Load flags to be OR'ed with the existing request flags.
+
+  scoped_refptr<PrerenderThrottleInfo> prerender_throttle_info_;
 
   DISALLOW_COPY_AND_ASSIGN(PrerenderResourceThrottle);
 };

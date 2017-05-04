@@ -5,9 +5,10 @@
 #include "core/paint/FirstMeaningfulPaintDetector.h"
 
 #include "core/css/FontFaceSet.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/paint/PaintTiming.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
 
@@ -29,14 +30,16 @@ FirstMeaningfulPaintDetector& FirstMeaningfulPaintDetector::from(
 }
 
 FirstMeaningfulPaintDetector::FirstMeaningfulPaintDetector(
-    PaintTiming* paintTiming)
+    PaintTiming* paintTiming,
+    Document& document)
     : m_paintTiming(paintTiming),
       m_networkStableTimer(
+          TaskRunnerHelper::get(TaskType::UnspecedTimer, &document),
           this,
           &FirstMeaningfulPaintDetector::networkStableTimerFired) {}
 
 Document* FirstMeaningfulPaintDetector::document() {
-  return m_paintTiming->document();
+  return m_paintTiming->supplementable();
 }
 
 // Computes "layout significance" (http://goo.gl/rytlPL) of a layout operation.
@@ -95,6 +98,13 @@ void FirstMeaningfulPaintDetector::notifyPaint() {
       "loading", "firstMeaningfulPaintCandidate",
       TraceEvent::toTraceTimestamp(m_provisionalFirstMeaningfulPaint), "frame",
       document()->frame());
+  // Ignore the first meaningful paint candidate as this generally is the first
+  // contentful paint itself.
+  if (!m_seenFirstMeaningfulPaintCandidate) {
+    m_seenFirstMeaningfulPaintCandidate = true;
+    return;
+  }
+  m_paintTiming->markFirstMeaningfulPaintCandidate();
 }
 
 void FirstMeaningfulPaintDetector::checkNetworkStable() {
@@ -108,7 +118,8 @@ void FirstMeaningfulPaintDetector::checkNetworkStable() {
 
 void FirstMeaningfulPaintDetector::networkStableTimerFired(TimerBase*) {
   if (m_state == Reported || !document() ||
-      document()->fetcher()->hasPendingRequest())
+      document()->fetcher()->hasPendingRequest() ||
+      !m_paintTiming->firstContentfulPaint())
     return;
 
   if (m_provisionalFirstMeaningfulPaint)

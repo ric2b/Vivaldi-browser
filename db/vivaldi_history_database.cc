@@ -12,7 +12,8 @@ VivaldiHistoryDatabase::VivaldiHistoryDatabase() {}
 
 VivaldiHistoryDatabase::~VivaldiHistoryDatabase() {}
 
-UrlVisitCount::TopUrlsPerDayList VivaldiHistoryDatabase::TopUrlsPerDay(size_t num_hosts) {
+UrlVisitCount::TopUrlsPerDayList VivaldiHistoryDatabase::TopUrlsPerDay(
+    size_t num_hosts) {
   sql::Statement url_sql(GetDB().GetUniqueStatement(
       "SELECT date, url, visit_count, id FROM "
       "  ( SELECT v.id, u.url, count(*) AS visit_count, "
@@ -44,26 +45,32 @@ UrlVisitCount::TopUrlsPerDayList VivaldiHistoryDatabase::TopUrlsPerDay(size_t nu
 }
 
 Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(
-	const QueryOptions& options) {
+    const QueryOptions& options) {
   base::Time begin_time = options.begin_time;
   base::Time end_time = options.end_time;
 
-  sql::Statement url_sql(
-      GetDB().GetUniqueStatement("SELECT "
-                                 "  v.id as id, "
-                                 "  v.visit_time, "
-                                 "  u.url, "
-                                 "  u.title, "
-                                 " v.transition "
-                                 "  FROM urls u "
-                                 "    JOIN visits v on (u.id = v.url) "
-                                 " WHERE v.visit_time >= ? "
-                                 "  AND v.visit_time < ? "
-                                 "      ORDER BY v.visit_time DESC"));
+  sql::Statement url_sql(GetDB().GetUniqueStatement(
+      "SELECT "
+      "  v.id as id, "
+      "  max(v.visit_time) as visit_time, "
+      "  u.url, "
+      "  u.title, "
+      " v.transition, "
+      " count(*) as visit_count "
+      "  FROM urls u "
+      "    JOIN visits v on (u.id = v.url) "
+      " WHERE v.visit_time >= ? "
+      "  AND v.visit_time < ? "
+      " GROUP BY u.url, "
+      "  strftime('%Y-%m-%d', datetime(v.visit_time / 1000000 + "
+      "  (strftime('%s', '1601-01-01')), 'unixepoch')), "
+      "  strftime('%HH', datetime(v.visit_time / 1000000 + "
+      "  (strftime('%s', '1601-01-01')), 'unixepoch')) "
+      " ORDER BY v.visit_time DESC"));
   int64_t begin = begin_time.ToInternalValue();
   int64_t end = end_time.ToInternalValue();
   url_sql.BindInt64(0, begin ? begin : std::numeric_limits<int64_t>::min());
-  url_sql.BindInt64(1, end ? end: std::numeric_limits<int64_t>::max());
+  url_sql.BindInt64(1, end ? end : std::numeric_limits<int64_t>::max());
 
   Visit::VisitsList hosts;
   while (url_sql.Step()) {
@@ -75,8 +82,11 @@ Visit::VisitsList VivaldiHistoryDatabase::VisitSearch(
     GURL url(url_sql.ColumnString(2));
     base::string16 title = url_sql.ColumnString16(3);
     ui::PageTransition transitionType =
-      ui::PageTransitionFromInt(url_sql.ColumnInt(4));
-    hosts.push_back(Visit(id, visit_time, url, title, transitionType));
+        ui::PageTransitionFromInt(url_sql.ColumnInt(4));
+    int visit_count = url_sql.ColumnInt(5);
+
+    hosts.push_back(
+        Visit(id, visit_time, url, title, transitionType, visit_count));
   }
   return hosts;
 }

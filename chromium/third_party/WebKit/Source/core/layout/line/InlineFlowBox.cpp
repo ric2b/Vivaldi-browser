@@ -51,14 +51,12 @@ struct SameSizeAsInlineFlowBox : public InlineBox {
 static_assert(sizeof(InlineFlowBox) == sizeof(SameSizeAsInlineFlowBox),
               "InlineFlowBox should stay small");
 
-#if ENABLE(ASSERT)
-
+#if DCHECK_IS_ON()
 InlineFlowBox::~InlineFlowBox() {
   if (!m_hasBadChildList)
     for (InlineBox* child = firstChild(); child; child = child->nextOnLine())
       child->setHasBadParent();
 }
-
 #endif
 
 LayoutUnit InlineFlowBox::getFlowSpacingLogicalWidth() {
@@ -72,7 +70,7 @@ LayoutUnit InlineFlowBox::getFlowSpacingLogicalWidth() {
 }
 
 LayoutRect InlineFlowBox::frameRect() const {
-  return LayoutRect(topLeft(), size());
+  return LayoutRect(location(), size());
 }
 
 static void setHasTextDescendantsOnAncestors(InlineFlowBox* box) {
@@ -88,8 +86,8 @@ static inline bool hasIdenticalLineHeightProperties(
     bool isRoot) {
   return parentStyle.hasIdenticalAscentDescentAndLineGap(childStyle) &&
          parentStyle.lineHeight() == childStyle.lineHeight() &&
-         (parentStyle.verticalAlign() == VerticalAlignBaseline || isRoot) &&
-         childStyle.verticalAlign() == VerticalAlignBaseline;
+         (parentStyle.verticalAlign() == EVerticalAlign::Baseline || isRoot) &&
+         childStyle.verticalAlign() == EVerticalAlign::Baseline;
 }
 
 void InlineFlowBox::addToLine(InlineBox* child) {
@@ -227,13 +225,13 @@ void InlineFlowBox::deleteLine() {
   while (child) {
     ASSERT(this == child->parent());
     next = child->nextOnLine();
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     child->setParent(nullptr);
 #endif
     child->deleteLine();
     child = next;
   }
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_firstChild = nullptr;
   m_lastChild = nullptr;
 #endif
@@ -531,10 +529,10 @@ void InlineFlowBox::adjustMaxAscentAndDescent(int& maxAscent,
     // positioned elements
     if (curr->getLineLayoutItem().isOutOfFlowPositioned())
       continue;  // Positioned placeholders don't affect calculations.
-    if (curr->verticalAlign() == VerticalAlignTop ||
-        curr->verticalAlign() == VerticalAlignBottom) {
+    if (curr->verticalAlign() == EVerticalAlign::Top ||
+        curr->verticalAlign() == EVerticalAlign::Bottom) {
       int lineHeight = curr->lineHeight().round();
-      if (curr->verticalAlign() == VerticalAlignTop) {
+      if (curr->verticalAlign() == EVerticalAlign::Top) {
         if (maxAscent + maxDescent < lineHeight)
           maxDescent = lineHeight - maxAscent;
       } else {
@@ -588,6 +586,10 @@ void InlineFlowBox::computeLogicalBoxHeights(
   bool affectsDescent = false;
   bool checkChildren = !descendantsHaveSameLineHeightAndBaseline();
 
+  DCHECK(rootBox);
+  if (!rootBox)
+    return;
+
   if (isRootInlineBox()) {
     // Examine our root box.
     int ascent = 0;
@@ -624,6 +626,7 @@ void InlineFlowBox::computeLogicalBoxHeights(
     // child box's baseline and the root box's baseline. The value is negative
     // if the child box's baseline is above the root box's baseline, and it is
     // positive if the child box's baseline is below the root box's baseline.
+    DCHECK(rootBox);
     curr->setLogicalTop(
         rootBox->verticalPositionForBox(curr, verticalPositionCache));
 
@@ -633,10 +636,10 @@ void InlineFlowBox::computeLogicalBoxHeights(
                                     affectsAscent, affectsDescent);
 
     LayoutUnit boxHeight(ascent + descent);
-    if (curr->verticalAlign() == VerticalAlignTop) {
+    if (curr->verticalAlign() == EVerticalAlign::Top) {
       if (maxPositionTop < boxHeight)
         maxPositionTop = boxHeight;
-    } else if (curr->verticalAlign() == VerticalAlignBottom) {
+    } else if (curr->verticalAlign() == EVerticalAlign::Bottom) {
       if (maxPositionBottom < boxHeight)
         maxPositionBottom = boxHeight;
     } else if (!inlineFlowBox || noQuirksMode ||
@@ -724,9 +727,9 @@ void InlineFlowBox::placeBoxesInBlockDirection(
     InlineFlowBox* inlineFlowBox =
         curr->isInlineFlowBox() ? toInlineFlowBox(curr) : nullptr;
     bool childAffectsTopBottomPos = true;
-    if (curr->verticalAlign() == VerticalAlignTop) {
+    if (curr->verticalAlign() == EVerticalAlign::Top) {
       curr->setLogicalTop(top);
-    } else if (curr->verticalAlign() == VerticalAlignBottom) {
+    } else if (curr->verticalAlign() == EVerticalAlign::Bottom) {
       curr->setLogicalTop((top + maxHeight - curr->lineHeight()));
     } else {
       if (!noQuirksMode && inlineFlowBox && !inlineFlowBox->hasTextChildren() &&
@@ -769,6 +772,8 @@ void InlineFlowBox::placeBoxesInBlockDirection(
       // m_layoutObject.isHorizontalWritingMode(). crbug.com/552954
       // ASSERT(curr->isHorizontal() ==
       // curr->getLineLayoutItem().style()->isHorizontalWritingMode());
+      // We may flip lines in case of verticalLR mode, so we can
+      // assume verticalRL for now.
       LayoutUnit overSideMargin =
           curr->isHorizontal() ? box.marginTop() : box.marginRight();
       LayoutUnit underSideMargin =
@@ -1183,7 +1188,7 @@ void InlineFlowBox::setLayoutOverflow(const LayoutRect& rect,
     return;
 
   if (!m_overflow)
-    m_overflow = makeUnique<SimpleOverflowModel>(frameBox, frameBox);
+    m_overflow = WTF::makeUnique<SimpleOverflowModel>(frameBox, frameBox);
 
   m_overflow->setLayoutOverflow(rect);
 }
@@ -1195,7 +1200,7 @@ void InlineFlowBox::setVisualOverflow(const LayoutRect& rect,
     return;
 
   if (!m_overflow)
-    m_overflow = makeUnique<SimpleOverflowModel>(frameBox, frameBox);
+    m_overflow = WTF::makeUnique<SimpleOverflowModel>(frameBox, frameBox);
 
   m_overflow->setVisualOverflow(rect);
 }
@@ -1286,14 +1291,13 @@ bool InlineFlowBox::nodeAtPoint(HitTestResult& result,
     }
   }
 
-  if (getLineLayoutItem().style()->hasBorderRadius()) {
-    LayoutPoint adjustedLocation = accumulatedOffset + overflowRect.location();
-    if (getLineLayoutItem().isBox() &&
-        toLayoutBox(LineLayoutAPIShim::layoutObjectFrom(getLineLayoutItem()))
-            ->hitTestClippedOutByRoundedBorder(locationInContainer,
-                                               adjustedLocation))
-      return false;
+  if (getLineLayoutItem().isBox() &&
+      toLayoutBox(LineLayoutAPIShim::layoutObjectFrom(getLineLayoutItem()))
+          ->hitTestClippedOutByBorder(locationInContainer,
+                                      overflowRect.location()))
+    return false;
 
+  if (getLineLayoutItem().style()->hasBorderRadius()) {
     LayoutRect borderRect = logicalFrameRect();
     borderRect.moveBy(accumulatedOffset);
     FloatRoundedRect border = getLineLayoutItem().style()->getRoundedBorderFor(
@@ -1569,10 +1573,10 @@ void InlineFlowBox::collectLeafBoxesInLogicalOrder(
   for (; leaf; leaf = leaf->nextLeafChild()) {
     minLevel = std::min(minLevel, leaf->bidiLevel());
     maxLevel = std::max(maxLevel, leaf->bidiLevel());
-    leafBoxesInLogicalOrder.append(leaf);
+    leafBoxesInLogicalOrder.push_back(leaf);
   }
 
-  if (getLineLayoutItem().style()->rtlOrdering() == VisualOrder)
+  if (getLineLayoutItem().style()->rtlOrdering() == EOrder::kVisual)
     return;
 
   // Reverse of reordering of the line (L2 according to Bidi spec):
@@ -1631,7 +1635,7 @@ void InlineFlowBox::showLineTreeAndMark(const InlineBox* markedBox1,
 
 #endif
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 void InlineFlowBox::checkConsistency() const {
 #ifdef CHECK_CONSISTENCY
   ASSERT(!m_hasBadChildList);

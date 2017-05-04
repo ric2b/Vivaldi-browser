@@ -144,15 +144,18 @@ inline bool operator!=(const InlineIterator& it1, const InlineIterator& it2) {
 
 static inline WTF::Unicode::CharDirection embedCharFromDirection(
     TextDirection dir,
-    EUnicodeBidi unicodeBidi) {
+    UnicodeBidi unicodeBidi) {
   using namespace WTF::Unicode;
-  if (unicodeBidi == Embed)
-    return dir == RTL ? RightToLeftEmbedding : LeftToRightEmbedding;
-  return dir == RTL ? RightToLeftOverride : LeftToRightOverride;
+  if (unicodeBidi == UnicodeBidi::kEmbed) {
+    return dir == TextDirection::kRtl ? RightToLeftEmbedding
+                                      : LeftToRightEmbedding;
+  }
+  return dir == TextDirection::kRtl ? RightToLeftOverride : LeftToRightOverride;
 }
 
 static inline bool treatAsIsolated(const ComputedStyle& style) {
-  return isIsolated(style.unicodeBidi()) && style.rtlOrdering() == LogicalOrder;
+  return isIsolated(style.getUnicodeBidi()) &&
+         style.rtlOrdering() == EOrder::kLogical;
 }
 
 template <class Observer>
@@ -162,8 +165,8 @@ static inline void notifyObserverEnteredObject(Observer* observer,
     return;
 
   const ComputedStyle& style = object.styleRef();
-  EUnicodeBidi unicodeBidi = style.unicodeBidi();
-  if (unicodeBidi == UBNormal) {
+  UnicodeBidi unicodeBidi = style.getUnicodeBidi();
+  if (unicodeBidi == UnicodeBidi::kNormal) {
     // http://dev.w3.org/csswg/css3-writing-modes/#unicode-bidi
     // "The element does not open an additional level of embedding with respect
     // to the bidirectional algorithm."
@@ -191,8 +194,8 @@ static inline void notifyObserverWillExitObject(Observer* observer,
   if (!observer || !object || !object.isLayoutInline())
     return;
 
-  EUnicodeBidi unicodeBidi = object.style()->unicodeBidi();
-  if (unicodeBidi == UBNormal)
+  UnicodeBidi unicodeBidi = object.style()->getUnicodeBidi();
+  if (unicodeBidi == UnicodeBidi::kNormal)
     return;  // Nothing to do for unicode-bidi: normal
   if (treatAsIsolated(object.styleRef())) {
     observer->exitIsolate();
@@ -592,7 +595,7 @@ inline BidiRun* InlineBidiResolver::addTrailingRun(
   BidiRun* newTrailingRun = new BidiRun(
       context->override(), context->level(), start, stop, run->m_lineLayoutItem,
       WTF::Unicode::OtherNeutral, context->dir());
-  if (direction == LTR)
+  if (direction == TextDirection::kLtr)
     runs.addRun(newTrailingRun);
   else
     runs.prependRun(newTrailingRun);
@@ -658,8 +661,8 @@ static inline BidiRun* addPlaceholderRunForIsolatedInline(
   // FIXME: isolatedRuns() could be a hash of object->run and then we could
   // cheaply ASSERT here that we didn't create multiple objects for the same
   // inline.
-  resolver.isolatedRuns().append(BidiIsolatedRun(obj, pos, root, *isolatedRun,
-                                                 resolver.context()->level()));
+  resolver.isolatedRuns().push_back(BidiIsolatedRun(
+      obj, pos, root, *isolatedRun, resolver.context()->level()));
   return isolatedRun;
 }
 

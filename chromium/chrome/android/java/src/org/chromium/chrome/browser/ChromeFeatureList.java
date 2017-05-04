@@ -48,8 +48,27 @@ public abstract class ChromeFeatureList {
         return sTestEnabledFeatures.contains(featureName);
     }
 
+    /**
+     * Returns a field trial param as an int for the specified feature.
+     *
+     * Note: Features queried through this API must be added to the array
+     * |kFeaturesExposedToJava| in chrome/browser/android/chrome_feature_list.cc
+     *
+     * @param featureName The name of the feature to retrieve a param for.
+     * @param paramName The name of the param for which to get as an integer.
+     * @param defaultValue The integer value to use if the param is not available.
+     * @return The parameter value as an int. Default value if the feature does not exist or the
+     *         specified parameter does not exist.
+     */
+    public static long getFieldTrialParamByFeatureAsInt(
+            String featureName, String paramName, int defaultValue) {
+        return nativeGetFieldTrialParamByFeatureAsInt(featureName, paramName, defaultValue);
+    }
+
     // Alphabetical:
     public static final String ANDROID_PAY_INTEGRATION_V1 = "AndroidPayIntegrationV1";
+    public static final String ANDROID_PAY_INTEGRATION_V2 = "AndroidPayIntegrationV2";
+    public static final String ANDROID_PAYMENT_APPS = "AndroidPaymentApps";
     public static final String AUTOFILL_SCAN_CARDHOLDER_NAME = "AutofillScanCardholderName";
     public static final String CCT_EXTERNAL_LINK_HANDLING = "CCTExternalLinkHandling";
     public static final String CCT_POST_MESSAGE_API = "CCTPostMessageAPI";
@@ -58,18 +77,25 @@ public abstract class ChromeFeatureList {
     public static final String CONTEXTUAL_SEARCH_SINGLE_ACTIONS = "ContextualSearchSingleActions";
     /** Whether we show an important sites dialog in the "Clear Browsing Data" flow. */
     public static final String IMPORTANT_SITES_IN_CBD = "ImportantSitesInCBD";
+    public static final String IMPROVED_A2HS = "ImprovedA2HS";
     public static final String NO_CREDIT_CARD_ABORT = "NoCreditCardAbort";
     public static final String NTP_FAKE_OMNIBOX_TEXT = "NTPFakeOmniboxText";
     public static final String NTP_FOREIGN_SESSIONS_SUGGESTIONS = "NTPForeignSessionsSuggestions";
+    public static final String NTP_OFFLINE_PAGES_FEATURE_NAME = "NTPOfflinePages";
     public static final String NTP_SNIPPETS = "NTPSnippets";
     public static final String NTP_SNIPPETS_INCREASED_VISIBILITY = "NTPSnippetsIncreasedVisibility";
     public static final String NTP_SNIPPETS_SAVE_TO_OFFLINE = "NTPSaveToOffline";
     public static final String NTP_SNIPPETS_OFFLINE_BADGE = "NTPOfflineBadge";
     public static final String NTP_SUGGESTIONS_SECTION_DISMISSAL = "NTPSuggestionsSectionDismissal";
+    public static final String NTP_SUGGESTIONS_STANDALONE_UI = "NTPSuggestionsStandaloneUI";
+    public static final String SERVICE_WORKER_PAYMENT_APPS = "ServiceWorkerPaymentApps";
     public static final String TAB_REPARENTING = "TabReparenting";
     public static final String VR_SHELL = "VrShell";
     public static final String WEB_PAYMENTS = "WebPayments";
-    public static final String WEBAPKS = "WebApks";
+    public static final String WEB_PAYMENTS_MODIFIERS = "WebPaymentsModifiers";
+    public static final String WEBVR_CARDBOARD_SUPPORT = "WebVRCardboardSupport";
 
     private static native boolean nativeIsEnabled(String featureName);
+    private static native int nativeGetFieldTrialParamByFeatureAsInt(
+            String featureName, String paramName, int defaultValue);
 }

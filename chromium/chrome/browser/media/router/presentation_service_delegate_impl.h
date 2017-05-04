@@ -18,23 +18,26 @@
 #include "chrome/browser/media/router/media_router.h"
 #include "chrome/browser/media/router/media_source.h"
 #include "chrome/browser/media/router/presentation_request.h"
+#include "chrome/browser/media/router/presentation_service_delegate_observers.h"
 #include "chrome/browser/media/router/render_frame_host_id.h"
 #include "content/public/browser/presentation_service_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
 namespace content {
-class RenderFrameHost;
 class PresentationScreenAvailabilityListener;
 class WebContents;
 struct PresentationSessionInfo;
-struct PresentationSessionMessage;
+struct PresentationConnectionMessage;
 }  // namespace content
+
+namespace url {
+class Origin;
+}  // namespace url
 
 namespace media_router {
 
 class MediaRoute;
-class MediaSinksObserver;
 class PresentationFrameManager;
 class RouteRequestResult;
 
@@ -46,7 +49,7 @@ class RouteRequestResult;
 // and is managed by the associated WebContents.
 class PresentationServiceDelegateImpl
     : public content::WebContentsUserData<PresentationServiceDelegateImpl>,
-      public content::PresentationServiceDelegate {
+      public content::ControllerPresentationServiceDelegate {
  public:
   // Observer interface for listening to default presentation request
   // changes for the WebContents.
@@ -112,22 +115,31 @@ class PresentationServiceDelegateImpl
   void Terminate(int render_process_id,
                  int render_frame_id,
                  const std::string& presentation_id) override;
-  void ListenForSessionMessages(
+  void ListenForConnectionMessages(
       int render_process_id,
       int render_frame_id,
       const content::PresentationSessionInfo& session,
-      const content::PresentationSessionMessageCallback& message_cb) override;
-  void SendMessage(int render_process_id,
-                   int render_frame_id,
-                   const content::PresentationSessionInfo& session,
-                   std::unique_ptr<content::PresentationSessionMessage> message,
-                   const SendMessageCallback& send_message_cb) override;
+      const content::PresentationConnectionMessageCallback& message_cb)
+      override;
+  void SendMessage(
+      int render_process_id,
+      int render_frame_id,
+      const content::PresentationSessionInfo& session,
+      std::unique_ptr<content::PresentationConnectionMessage> message,
+      const SendMessageCallback& send_message_cb) override;
   void ListenForConnectionStateChange(
       int render_process_id,
       int render_frame_id,
       const content::PresentationSessionInfo& connection,
       const content::PresentationConnectionStateChangedCallback&
           state_changed_cb) override;
+  void ConnectToOffscreenPresentation(
+      int render_process_id,
+      int render_frame_id,
+      const content::PresentationSessionInfo& session,
+      content::PresentationConnectionPtr controller_connection_ptr,
+      content::PresentationConnectionRequest receiver_connection_request)
+      override;
 
   // Callback invoked when a default PresentationRequest is started from a
   // browser-initiated dialog.
@@ -183,7 +195,8 @@ class PresentationServiceDelegateImpl
   void OnJoinRouteResponse(
       int render_process_id,
       int render_frame_id,
-      const content::PresentationSessionInfo& session,
+      const GURL& presentation_url,
+      const std::string& presentation_id,
       const content::PresentationSessionStartedCallback& success_cb,
       const content::PresentationSessionErrorCallback& error_cb,
       const RouteRequestResult& result);
@@ -193,7 +206,12 @@ class PresentationServiceDelegateImpl
       int render_frame_id,
       const content::PresentationSessionStartedCallback& success_cb,
       const content::PresentationSessionInfo& new_session,
-      const MediaRoute::Id& route_id);
+      const MediaRoute& route);
+
+#if !defined(OS_ANDROID)
+  // Returns true if auto-join requests should be cancelled for |origin|.
+  bool ShouldCancelAutoJoinForOrigin(const url::Origin& origin) const;
+#endif
 
   // References to the WebContents that owns this instance, and associated
   // browser profile's MediaRouter instance.
@@ -201,6 +219,7 @@ class PresentationServiceDelegateImpl
   MediaRouter* router_;
 
   std::unique_ptr<PresentationFrameManager> frame_manager_;
+  PresentationServiceDelegateObservers observers_;
 
   base::WeakPtrFactory<PresentationServiceDelegateImpl> weak_factory_;
 

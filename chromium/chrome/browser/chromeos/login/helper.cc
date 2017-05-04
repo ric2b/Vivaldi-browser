@@ -9,7 +9,6 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -22,6 +21,7 @@
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_util.h"
 #include "components/guest_view/browser/guest_view_manager.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
@@ -83,6 +83,24 @@ content::StoragePartition* GetPartition(content::WebContents* embedder,
                               guest_contents->GetBrowserContext(),
                               guest_contents->GetSiteInstance())
                         : nullptr;
+}
+
+base::ScopedFD GetDataReadPipe(const std::string& data) {
+  DCHECK(content::BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
+  int pipe_fds[2];
+  if (!base::CreateLocalNonBlockingPipe(pipe_fds)) {
+    DLOG(ERROR) << "Failed to create pipe";
+    return base::ScopedFD();
+  }
+  base::ScopedFD pipe_read_end(pipe_fds[0]);
+  base::ScopedFD pipe_write_end(pipe_fds[1]);
+
+  if (!base::WriteFileDescriptor(pipe_write_end.get(), data.c_str(),
+                                 data.size())) {
+    DLOG(ERROR) << "Failed to write to pipe";
+    return base::ScopedFD();
+  }
+  return pipe_read_end;
 }
 
 }  // namespace
@@ -231,22 +249,24 @@ content::StoragePartition* GetSigninPartition() {
 }
 
 net::URLRequestContextGetter* GetSigninContext() {
-  if (StartupUtils::IsWebviewSigninEnabled()) {
-    content::StoragePartition* signin_partition = GetSigninPartition();
+  content::StoragePartition* signin_partition = GetSigninPartition();
 
-    // Special case for unit tests. There's no LoginDisplayHost thus no
-    // webview instance. TODO(nkostylev): Investigate if there's a better
-    // place to address this like dependency injection. http://crbug.com/477402
-    if (!signin_partition && !LoginDisplayHost::default_host())
-      return ProfileHelper::GetSigninProfile()->GetRequestContext();
+  // Special case for unit tests. There's no LoginDisplayHost thus no
+  // webview instance. See http://crbug.com/477402
+  if (!signin_partition && !LoginDisplayHost::default_host())
+    return ProfileHelper::GetSigninProfile()->GetRequestContext();
 
-    if (!signin_partition)
-      return nullptr;
+  if (!signin_partition)
+    return nullptr;
 
-    return signin_partition->GetURLRequestContext();
-  }
+  return signin_partition->GetURLRequestContext();
+}
 
-  return ProfileHelper::GetSigninProfile()->GetRequestContext();
+void GetPipeReadEnd(const std::string& data,
+                    const OnPipeReadyCallback& callback) {
+  base::PostTaskAndReplyWithResult(
+      content::BrowserThread::GetBlockingPool(), FROM_HERE,
+      base::Bind(&GetDataReadPipe, data), callback);
 }
 
 }  // namespace login

@@ -31,7 +31,7 @@
 #include "core/timing/PerformanceMark.h"
 #include "core/timing/PerformanceMeasure.h"
 #include "platform/Histogram.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "wtf/text/StringHash.h"
 
@@ -84,7 +84,7 @@ static void insertPerformanceEntry(PerformanceEntryMap& performanceEntryMap,
                                    PerformanceEntry& entry) {
   PerformanceEntryMap::iterator it = performanceEntryMap.find(entry.name());
   if (it != performanceEntryMap.end()) {
-    it->value.append(&entry);
+    it->value.push_back(&entry);
   } else {
     PerformanceEntryVector vector(1);
     vector[0] = Member<PerformanceEntry>(entry);
@@ -131,7 +131,7 @@ void UserTiming::clearMarks(const String& markName) {
 double UserTiming::findExistingMarkStartTime(const String& markName,
                                              ExceptionState& exceptionState) {
   if (m_marksMap.contains(markName))
-    return m_marksMap.get(markName).last()->startTime();
+    return m_marksMap.get(markName).back()->startTime();
 
   if (restrictedKeyMap().contains(markName) && m_performance->timing()) {
     double value = static_cast<double>(

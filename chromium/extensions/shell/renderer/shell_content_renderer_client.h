@@ -22,7 +22,6 @@ class DispatcherDelegate;
 class ExtensionsClient;
 class ExtensionsGuestViewContainerDispatcher;
 class ShellExtensionsRendererClient;
-class ShellRendererMainDelegate;
 
 // Renderer initialization and runtime support for app_shell.
 class ShellContentRendererClient : public content::ContentRendererClient {
@@ -41,7 +40,7 @@ class ShellContentRendererClient : public content::ContentRendererClient {
   blink::WebPlugin* CreatePluginReplacement(
       content::RenderFrame* render_frame,
       const base::FilePath& plugin_path) override;
-  bool WillSendRequest(blink::WebFrame* frame,
+  bool WillSendRequest(blink::WebLocalFrame* frame,
                        ui::PageTransition transition_type,
                        const blink::WebURL& url,
                        GURL* new_url) override;

@@ -6,12 +6,11 @@
 
 #include <vector>
 
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/ash_constants.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm/wm_screen_util.h"
-#include "ash/common/wm_window.h"
+#include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_state_aura.h"
@@ -73,14 +72,15 @@ bool MoveWindowToEventRoot(aura::Window* window, const ui::Event& event) {
       target->GetWidget()->GetNativeView()->GetRootWindow();
   if (!target_root || target_root == window->GetRootWindow())
     return false;
-  aura::Window* window_container =
-      ash::Shell::GetContainer(target_root, window->parent()->id());
+  aura::Window* window_container = RootWindowController::ForWindow(target_root)
+                                       ->GetContainer(window->parent()->id());
   // Move the window to the target launcher.
   window_container->AddChild(window);
   return true;
 }
 
 void SnapWindowToPixelBoundary(aura::Window* window) {
+  window->SetProperty(kSnapChildrenToPixelBoundary, true);
   aura::Window* snapped_ancestor = window->parent();
   while (snapped_ancestor) {
     if (snapped_ancestor->GetProperty(kSnapChildrenToPixelBoundary)) {
@@ -94,7 +94,7 @@ void SnapWindowToPixelBoundary(aura::Window* window) {
 
 void SetSnapsChildrenToPhysicalPixelBoundary(aura::Window* container) {
   DCHECK(!container->GetProperty(kSnapChildrenToPixelBoundary))
-      << container->name();
+      << container->GetName();
   container->SetProperty(kSnapChildrenToPixelBoundary, true);
 }
 

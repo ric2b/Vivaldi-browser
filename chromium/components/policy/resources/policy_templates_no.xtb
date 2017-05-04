@@ -19,9 +19,6 @@
       Når denne regelen settes til false (usann) eller ikke spesifiseres, overføres informasjonskapsler som er angitt av IdP-en, til brukerens profil bare første gang vedkommende logger på en enhet.
 
       Denne regelen berører bare brukere med domener som samsvarer med enhetens registreringsdomene. For alle andre brukere overføres informasjonskapslene som angis av IdP-en, til brukerens profil bare første gang vedkommende logger på enheten.</translation>
-<translation id="1029536946382325801">Hvis denne regelen er angitt som «true» (sann), kan brukeren bruke maskinvaren i Chrome-enheter til å attestere identiteten eksternt til sertifiseringsinstansen for personvern via chrome.enterprise.platformKeys.challengeUserKey() i Enterprise Platform Keys API.
-
-          Hvis den er angitt som «false» (usann), eller ikke noe er angitt, returneres kall til API-en med en feilkode.</translation>
 <translation id="1040446814317236570">Slå på PAC-nettadressestripping (for https://)</translation>
 <translation id="1044878202534415707">Rapportér maskinvarestatistikk, for eksempel bruk av prosessor og minne.
 
@@ -170,6 +167,7 @@
 <translation id="1522425503138261032">Tillat nettsteder å spore brukernes fysiske plassering</translation>
 <translation id="152657506688053119">Liste over alternative nettadresser for standard søkeleverandør</translation>
 <translation id="1530812829012954197">Alltid gjengi følgende nettadressemønstre i vertsnettleseren</translation>
+<translation id="1547635088210394207">Angir maksimumslengden på PIN-koden for låseskjermen.</translation>
 <translation id="1553684822621013552">Når denne regelen er satt til true (sann), er ARC slått på for brukeren
       (avhengig av andre regelinnstillinger – ARC er likevel
       utilgjengelig hvis enten engangsmodus eller multipålogging er slått på
@@ -189,6 +187,15 @@
       tillatt.</translation>
 <translation id="1655229863189977773">Angi størrelse på diskbuffer i byte</translation>
 <translation id="166427968280387991">Proxytjener</translation>
+<translation id="1668836044817793277">Angir om den automatisk startede kioskappen uten forsinkelse skal kunne kontrollere <ph name="PRODUCT_OS_NAME" />-versjonen.
+
+      Denne regelen kontrollerer om den automatisk startede kioskappen uten forsinkelse skal kunne kontrollere <ph name="PRODUCT_OS_NAME" />-versjonen ved å erklære en required_platform_version i manifestet og bruke den som prefiks for den automatisk oppdaterte målversjonen.
+
+      Hvis regelen er angitt som «true» (sann), brukes verdien i manifestnøkkelen required_platfrom_version for den automatisk startede kioskappen uten forsinkelse som prefiks for den automatisk oppdaterte målversjonen.
+
+      Hvis regelen ikke er konfigurert eller den er angitt som «false» (usann), ignoreres manifestnøkkelen required_platform_version, og den automatiske oppdateringen fortsetter som normalt.
+
+      Advarsel: Det er ikke anbefalt å delegere kontroll over <ph name="PRODUCT_OS_NAME" />-versjonen til en kioskapp, siden dette kan hindre enheten i å motta programvareoppdateringer og kritiske sikkerhetsløsninger. Hvis kontroll over <ph name="PRODUCT_OS_NAME" />-versjonen delegeres, kan brukerne bli utsatt for risiko.</translation>
 <translation id="1675002386741412210">Støttes på:</translation>
 <translation id="1679420586049708690">Offentlig økt for automatisk pålogging</translation>
 <translation id="1680029600835707254">Denne regelen kontrollerer hvem som kan starte <ph name="PRODUCT_OS_NAME" />-økter. Den kan ikke brukes til å forhindre at brukere logger på flere Google-kontoer i Android. Hvis du vil forhindre det, bør du konfigurere den Android-spesifikke <ph name="CLOUDDPC_ACCOUNT_MANAGEMENT_POLICY" />-regelen som en del av <ph name="ARC_POLICY" />.</translation>
@@ -220,6 +227,7 @@
 <translation id="1808715480127969042">Blokkér informasjonskapsler på disse nettstedene</translation>
 <translation id="1827523283178827583">Bruk faste proxytjenere</translation>
 <translation id="1843117931376765605">Oppdateringsfrekvens for brukerinnstilling</translation>
+<translation id="1844620919405873871">Konfigurerer retningslinjer for hurtigopplåsing.</translation>
 <translation id="1847960418907100918">Angir parameterene som brukes når du utfører et Instant-søk med POST. De består av kommainndelte navn og verdi-par. Hvis en verdi er et malparameter, som {searchTerms} i eksempelet ovenfor, blir den erstattet med virkelige søkeordsdata.
 
           Denne innstillingen er valgfri. Hvis den ikke er angitt, blir forespørsler om søkeforslag sendt via GET-metoden.
@@ -323,6 +331,11 @@
 <translation id="2168397434410358693">Inaktivitetsforsinkelse når enheten kjører på vekselstrøm</translation>
 <translation id="2170233653554726857">Slå på WPAD-optimalisering</translation>
 <translation id="2178899310296064282">Fremtving bruk av minst moderat nivå for Begrenset innhold-modus på YouTube</translation>
+<translation id="2183294522275408937">Denne innstillingen kontrollerer hvor ofte brukerne må skrive inn passord på låseskjermen for å fortsette å bruke hurtigopplåsing. Når en bruker kommer til låseskjermen og det har gått lengre tid siden passordet sist ble skrevet inn, enn det som er angitt i denne innstillingen, er det ikke mulig for vedkommende å bruke hurtigopplåsing. Hvis brukeren blir på låseskjermen etter at denne tidsperioden er over, må vedkommende skrive inn passordet neste gang han eller hun skriver inn feil kode eller kommer tilbake til låseskjermen (avhengig av hva som skjer først).
+
+      Hvis denne innstillingen er konfigurert, kan brukere som bruker hurtigopplåsing, bli bedt om å skrive inn passordet sitt på låseskjermen. Dette avhenger imidlertid av hvilken innstilling som er valgt.
+
+      Hvis denne innstillingen ikke konfigureres, blir brukere som bruker hurtigopplåsing, bedt om å skrive inn passordet sitt på låseskjermen hver dag.</translation>
 <translation id="2188979373208322108">Aktiverer bokmerkeraden i <ph name="PRODUCT_NAME" />.
 
       Hvis du aktiverer denne innstillingen, viser <ph name="PRODUCT_NAME" /> en bokmerkerad.
@@ -648,15 +661,6 @@
 <translation id="2884728160143956392">Tillat informasjonskapsler som kun gjelder for den aktuelle økten på disse nettstedene</translation>
 <translation id="2893546967669465276">Send systemlogger til administrasjonstjeneren</translation>
 <translation id="2899002520262095963">Android-apper kan bruke nettverkskonfigurasjoner og CA-sertifikater som angis via denne regelen, men de har ikke tilgang til alle konfigurasjonsalternativene.</translation>
-<translation id="2901399514673504930">Behandle eksterne lagringsenheter som skrivebeskyttet.
-
-      Denne regelen gjelder bare når ExternalStorageDisabled er angitt som «false» (usann) eller ikke er angitt.
-
-      Når denne regelen er angitt som «true» (sann), kan ikke brukerne skrive noe til eksterne lagringsenheter.
-
-      Hvis denne innstillingen er slått av eller ikke er konfigurert, kan brukerne opprette og modifisere filer på eksterne lagringsenheter som det er fysisk mulig å skrive til.
-
-      M56 og nyere har støtte for dynamisk oppdatering av denne regelen.</translation>
 <translation id="2906874737073861391">Liste over AppPack-utvidelser</translation>
 <translation id="2908277604670530363">Maksimalt antall samtidige tilkoblinger til proxytjeneren</translation>
 <translation id="2948087343485265211">Angir om lydaktivitet skal påvirke strømbehandlingen.
@@ -811,9 +815,6 @@
 <translation id="3322771899429619102">Gjør det mulig å definere en liste med nettadressemønstre for å spesifisere nettsteder som har tillatelse til å bruke nøkkelgenerering. Hvis det er et nettadressemønster i «KeygenBlockedForUrls», overstyrer det disse unntakene.
 
           Hvis denne regelen ikke angis, brukes den globale standardverdien for alle nettstedene, enten fra regelen «DefaultKeygenSetting» hvis den er angitt, eller fra brukerens personlige konfigurasjon.</translation>
-<translation id="3322902067538988734">Hvis denne regelen er satt til «True» (sann), må brukeren logge på <ph name="PRODUCT_NAME" /> med profilen sin før vedkommende bruker nettleseren. Standardverdien for BrowserGuestModeEnabled blir satt til «False» (usann).
-
-      Hvis denne regelen er satt til «False» eller ikke er konfigurert, kan brukeren bruke nettleseren uten å logge på <ph name="PRODUCT_NAME" />.</translation>
 <translation id="3347687541825006165">Angir hvor ofte brukerne må skrive inn passord for å bruke hurtigopplåsing.</translation>
 <translation id="3381968327636295719">Bruk vertsnettleser som standard</translation>
 <translation id="3417418267404583991">Hvis denne retningslinjen er angitt som Sann eller ikke er konfigurert, aktiverer <ph name="PRODUCT_OS_NAME" /> gjestepålogging. Gjestepålogginger er anonyme brukerøkter og krever ikke passord.
@@ -846,6 +847,7 @@
           Hvis innstillingen er satt til False eller ikke er angitt, begynner tidtakingen av strømstyringsforsinkelser og øktens varighet å løpe umiddelbart når økten starter.</translation>
 <translation id="3478024346823118645">Slett brukerdata ved avlogging</translation>
 <translation id="348495353354674884">Aktiver virtuelt tastatur</translation>
+<translation id="3495440981030194931">Angir minimumslengden for PIN-koden for låseskjermen.</translation>
 <translation id="3496296378755072552">Passordbehandling</translation>
 <translation id="349667858031092827">Påvis aldri tidssonen automatisk.</translation>
 <translation id="350443680860256679">Konfigurer ARC</translation>
@@ -875,6 +877,19 @@
 <translation id="3547954654003013442">Innstillinger for proxy-tjener</translation>
 <translation id="3570008976476035109">Blokkér programtillegg på disse nettstedene</translation>
 <translation id="3591584750136265240">Konfigurer autentiseringsatferden ved pålogging</translation>
+<translation id="3601614035698083789">Konfigurerer en liste over administrerte bokmerker.
+
+      Regelen består av en liste over bokmerker, der hvert bokmerke er en
+      ordliste som inneholder nøklene <ph name="NAME" />, og <ph name="URL_LABEL" /> som inneholder bokmerkets navn og mål.
+      En undermappe kan konfigureres ved å definere et bokmerke uten <ph name="URL_LABEL" />-nøkkel,
+
+      men med en ekstra <ph name="CHILDREN" />-nøkkel som i seg selv inneholder en liste over
+      bokmerker, som definert ovenfor (noen av disse kan igjen være mapper). <ph name="PRODUCT_NAME" /> retter ufullstendige nettadresser
+      som om de er sendt inn via multifunksjonsfeltet. <ph name="GOOGLE_COM" /> blir for eksempel <ph name="HTTPS_GOOGLE_COM" />.
+
+      Disse bokmerkene plasseres i en «Administrerte bokmerker»-mappe som ikke kan modifiseres av brukeren. Brukeren kan imidlertid velge å skjule den fra bokmerkeraden. Administrerte bokmerker synkroniseres ikke med brukerkontoen og kan ikke modifiseres av utvidelser.
+
+      Fra og med versjon 51 kan mappenavnet for bokmerkene tilpasses ved å legge til et listeelement på formatet {"toplevel_name": "ett eller annet navn"}.</translation>
 <translation id="3627678165642179114">Aktiver eller deaktiver nett-tjeneste for stavekontroll</translation>
 <translation id="3646859102161347133">Angi skjermforstørrelsestype</translation>
 <translation id="3653237928288822292">Ikon for standard søkeleverandør</translation>
@@ -986,6 +1001,7 @@
       Hvis denne regelen er slått av, er det tillatt å bruke SPDY.
 
       Hvis denne regelen ikke er spesifisert, er SPDY tilgjengelig.</translation>
+<translation id="3890999316834333174">Retningslinjer for hurtigopplåsing</translation>
 <translation id="3891357445869647828">Aktiver JavaScript</translation>
 <translation id="3891953007921334498">Slår av utviklerverktøyene og JavaScript-konsollen.
 
@@ -1040,6 +1056,11 @@
 
       Hvis denne innstillingen angis som usann, kan ikke brukeren innløse tilbud.</translation>
 <translation id="4010738624545340900">Tillat anrop av av filvalgdialoger.</translation>
+<translation id="4012737788880122133">Slår av automatiske oppdateringer når den er angitt som «true» (sann).
+
+      <ph name="PRODUCT_OS_NAME" />-enheter ser automatisk etter oppdateringer når denne innstillingen ikke er konfigurert eller den er angitt som «false» (usann).
+
+      Advarsel: Vi anbefaler å ha automatiske oppdateringer slått på, slik at brukere får programvareoppdateringer og kritiske sikkerhetsløsninger. Hvis automatiske oppdateringer slås av, kan brukerne bli utsatt for risiko.</translation>
 <translation id="4020682745012723568">Informasjonskapsler som overføres til brukerens profil, kan ikke brukes av Android-apper.</translation>
 <translation id="4025586928523884733">Blokkerer informasjonskapsler fra tredjepart. Aktivering av denne innstillingen hindrer informasjonskapsler i å bli angitt av nettsideelementer som ikke kommer fra domenet som er i nettleserens adresselinje. Deaktivering av denne innstillingen tillater at informasjonskapsler angis av nettstedelementer som ikke kommer fra domenet som er i nettleserens adresselinje, og hindrer brukerne i å endre denne innstillingen. Hvis denne retningslinjen ikke angis, aktiveres informasjonskapsler fra tredjepart, men brukeren har mulighet til å endre på dette.</translation>
 <translation id="402759845255257575">Ikke tillat nettsteder å kjøre JavaScript</translation>
@@ -1113,6 +1134,16 @@
           Denne innstillingen er valgfri. Hvis den ikke er angitt, blir forespørsler om bildesøk sendt via GET-metoden.
 
           Denne innstillingen brukes bare hvis «DefaultSearchProviderEnabled»-innstillingen er aktivert.</translation>
+<translation id="4294280661005713627">Angir en målversjon for automatiske oppdateringer.
+
+     Angir prefikset for en målversjon som <ph name="PRODUCT_OS_NAME" /> skal oppdateres til. Hvis enheten kjører en versjon før det angitte prefikset, oppdateres enheten til den siste versjonen med det gitte prefikset. Hvis enheten allerede bruker en nyere versjon, skjer det ikke noe (enheten blir med andre ord ikke nedgradert), og enheten beholder den nåværende versjonen. Prefiksformatet fungerer komponentvis, som demonstrert i det følgende eksemplet:
+
+      "" (eller ikke konfigurert): Oppdater til den siste tilgjengelige versjonen.
+      "1412.": Oppdater til en underversjon av 1412 (f.eks. 1412.24.34 eller 1412.60.2)
+      "1412.2.": Oppdater til en underversjon av 1412.2 (f.eks. 1412.2.34 eller 1412.2.2)
+      "1412.24.34": Oppdater bare til denne spesifikke versjonen
+
+      Advarsel: Det er ikke anbefalt å konfigurere versjonsbegrensninger, siden de kan hindre brukere i å motta programvareoppdateringer og kritiske sikkerhetsløsninger. Hvis oppdateringer begrenses til prefikset for en spesifikk versjon, kan brukerne bli utsatt for risiko.</translation>
 <translation id="4309640770189628899">Definerer om DHE-chifferserier i TLS er slått på</translation>
 <translation id="4320376026953250541">Microsoft Windows XP SP2 eller nyere</translation>
 <translation id="4322842393287974810">La den automatisk startede kioskappen uten forsinkelse kontrollere <ph name="PRODUCT_OS_NAME" />-versjonen</translation>
@@ -1208,6 +1239,11 @@
           Du finner eksempelmønstre på https://www.chromium.org/developers/how-tos/chrome-frame-getting-started.</translation>
 <translation id="467449052039111439">Åpne en liste over nettadresser</translation>
 <translation id="4680961954980851756">Aktiver Autofyll</translation>
+<translation id="4722399051042571387">Hvis denne regelen er angitt som «false» (usann), kan ikke brukerne angi PIN-koder som er svake og enkle å gjette.
+
+          Her er noen eksempler på svake PIN-koder: PIN-koder som bare består av det samme tallet (1111), PIN-koder som består av tall i stigende eller synkende rekkefølge (1234 eller 4321) og vanlig brukte PIN-koder.
+
+          Som standard ser brukerne en advarsel – ikke en feilmelding – hvis PIN-koden anses som svak.</translation>
 <translation id="4723829699367336876">Aktiver kryssing av brannmur fra ekstern tilgangsklient</translation>
 <translation id="4725528134735324213">Slå på Android Backup Service</translation>
 <translation id="4733471537137819387">Retningslinjer knyttet til integrert HTTP-autentisering.</translation>
@@ -1344,6 +1380,9 @@
           En svartelisteverdi på «*» betyr at alle innebygde meldingsverter er svartelistet, med mindre de er eksplistitt oppført på godkjenningslisten.
 
           Hvis denne innstillingen ikke angis, laster <ph name="PRODUCT_NAME" /> inn alle installerte innebygde verter.</translation>
+<translation id="5272684451155669299">Hvis denne er angitt som «true» (sann), kan brukerne bruke maskinvaren på Chrome-enheter til å attestere enhetenes identitet eksternt til sertifiseringsinstansen for personvern via <ph name="ENTERPRISE_PLATFORM_KEYS_API" /> ved bruk av <ph name="CHALLENGE_USER_KEY_FUNCTION" />.
+
+          Hvis den er angitt som «false» (usann), eller hvis den ikke er angitt, kan ikke API-et kalles opp – i stedet vises en feilkode.</translation>
 <translation id="5288772341821359899">Hvis regelen er konfigurert, blir UDP-portområdet som brukes av WebRTC, begrenset til det spesifiserte portintervallet (inkludert endepunktene).
 
       Hvis regelen ikke er konfigurert, eller hvis den er angitt som en tom streng eller et ugyldig portområde, kan WebRTC bruke alle tilgjengelige lokale UDP-porter.</translation>
@@ -1604,6 +1643,7 @@
       Hvis denne innstillingen ikke angis, eller angis som feil, kommer utskriftskommandoene til å utløse forhåndsvisningsskjermen for utskrifter.</translation>
 <translation id="6022948604095165524">Handling ved oppstart</translation>
 <translation id="602728333950205286">Umiddelbar nettadresse for standard søkeleverandør</translation>
+<translation id="6029664378608427609">Gjør det mulig for brukere å angi svake PIN-koder for låseskjermen.</translation>
 <translation id="603410445099326293">Parametere for forslagsnettadressser som bruker POST</translation>
 <translation id="6036523166753287175">Muliggjør kryssing av brannmur fra ekstern tilgangsvert</translation>
 <translation id="6059543311891422586">Gjør at det brukes maskinvareakselerasjon når dette er tilgjengelig.
@@ -1659,12 +1699,6 @@
 <translation id="6155936611791017817">Angi standard tilstand for stor musepeker på påloggingssiden</translation>
 <translation id="6157537876488211233">Kommadelt liste over regler for å omgå proxy-tjener</translation>
 <translation id="6158324314836466367">Navn på bedriftens nettbutikk (avviklet)</translation>
-<translation id="6166832345529129545">Kontrollerer hvilke moduser for hurtigopplåsing som kan konfigureres og brukes.
-      Denne innstillingen klarerer de tillatte modusene for hurtigopplåsing som kan konfigureres og brukes til å låse opp låseskjermen, på en godkjenningsliste. Verdien er en liste over strenger, der hver må være en av de følgende: «all» (alle), «PIN». Hvis «all» (alle) er valgt, er alle hurtigmoduser tilgjengelige. Hvis ikke er bare modusene i listen tilgjengelige.
-
-      Hvis denne innstillingen er konfigurert, kan ikke opplåsingsmoduser av en type som ikke er på denne listen, konfigureres eller brukes.
-
-      Hvis denne innstillingen ikke konfigureres, blir «PIN»-modus slått på og alle andre moduser slått av.</translation>
 <translation id="6167074305866468481">Advarsel: SSLv3-støtte blir fjernet helt fra <ph name="PRODUCT_NAME" /> etter versjon 43 (cirka juli 2015), og denne regelen blir fjernet samtidig.
 
       Hvis denne regelen ikke er konfigurert, bruker <ph name="PRODUCT_NAME" /> en standard minimumsversjon, som er SSLv3 i <ph name="PRODUCT_NAME" /> 39 og TLS 1.0 i nyere versjoner.
@@ -1672,14 +1706,6 @@
       Ellers kan den settes til én av de følgende verdiene: «sslv3», «tls1», «tls1.1» eller «tls1.2». Når den er spesifisert, bruker ikke <ph name="PRODUCT_NAME" /> SSL-/TLS-versjoner som er lavere enn den angitte versjonen. Verdier som ikke gjenkjennes, blir ignorert.
 
       Vær oppmerksom på at «sslv3» er en tidligere versjon enn «tls1», til tross for tallet.</translation>
-<translation id="6177482277304066047">Angir en målversjon for automatiske oppdateringer.
-
-      Spesifiserer prefikset for en målversjon som <ph name="PRODUCT_OS_NAME" /> skal oppdateres til. Hvis enheten kjører en versjon som er en forløper til det spesifiserte prefikset, oppdateres enheten til den siste versjonen med det gitte prefikset. Hvis enheten allerede bruker en nyere versjon, skjer det ikke noe (enheten blir med andre ord ikke nedgradert), og enheten beholder den nåværende versjonen. Prefiksformatet fungerer komponentvis, som demonstrert i det følgende eksemplet:
-
-      "" (eller ikke konfigurert): Oppdater til den siste tilgjengelige versjonen.
-      "1412.": Oppdater til en underversjon av 1412 (f.eks. 1412.24.34 eller 1412.60.2)
-      "1412.2.": Oppdater til en underversjon av 1412.2 (f.eks. 1412.2.34 eller 1412.2.2)
-      "1412.24.34": Oppdater bare til denne spesifikke versjonen.</translation>
 <translation id="6190022522129724693">Standardinnstillinger for forgrunnsvinduer</translation>
 <translation id="6197453924249895891">Gir utvidelser tilgang til bedriftsnøkler.
 
@@ -1709,6 +1735,46 @@
 <translation id="6282799760374509080">Tillat eller avvis lydopptak</translation>
 <translation id="6284362063448764300">TLS 1.1</translation>
 <translation id="6310223829319187614">Slå på autofullføring av domenenavn ved brukerpålogging</translation>
+<translation id="6312861131491040487">
+          Spesifiserer en liste over apper og utvidelser som installeres skjult,
+          uten brukerinteraksjon, og som ikke kan avinstalleres av
+          brukeren. Alle tillatelser appen/utvidelsen ber om, gis
+          automatisk uten brukerinteraksjon, deriblant ytterligere
+          tillatelser fremtidige versjoner av appen/utvidelsen måtte be om.
+          Videre gis det tillatelser for
+          enterprise.deviceAttributes og enterprise.platformKeys extension
+          API-ene. (Disse to API-ene er ikke tilgjengelige for apper/utvidelser som
+          ikke er tvangsinstallerte.)
+
+          Denne regelen prioriteres høyere enn potensielt konfliktskapende
+          ExtensionsInstallBlacklist-regler. Hvis apper eller utvidelser
+          som tidligere har blitt tvangsinstallert, fjernes fra listen, blir de
+          automatisk avinstallert av <ph name="PRODUCT_NAME" />.
+
+          For Windows-forekomster som ikke er knyttet til noe Active Directory-
+          domene, er tvungen installasjon begrenset til appene og utvidelsene
+          som finnes på Chrome Nettmarked.
+
+          Vær oppmerksom på at kildekoden til enhver utvidelse kan endres av 
+          brukere via utviklerverktøyene (noe som potensielt kan ødelegge
+          utvidelsen). Hvis du er redd for dette, bør du angi DeveloperToolsDisabled-
+          regelen.
+
+          Hvert listeelement er en streng som inneholder en utvidelses-ID
+          og en oppdateringsnettadresse ("update"), atskilt av semikolon (<ph name="SEMICOLON" />). 
+          Utvidelses-ID-en er den 32-tegn lange strengen som for eksempel finnes 
+          på <ph name="CHROME_EXTENSIONS_LINK" /> i utviklermodus. «Oppdaterings»-nettadressen bør peke til et
+          oppdateringsmanifest i form av et XML-dokument, som beskrevet i <ph name="LINK_TO_EXTENSION_DOC1" />. Vær
+          oppmerksom på at oppdateringsnettadressen ("update") som er angitt i denne regelen,
+          bare brukes under den første installeringen. Etterfølgende oppdateringer av utvidelsen
+          bruker oppdateringsnettadressen som er angitt i utvidelsens manifest.
+
+          <ph name="EXTENSION_POLICY_EXAMPLE" /> installerer
+          for eksempel <ph name="EXTENSION_POLICY_EXAMPLE_EXTENSION_NAME" />-appen fra den standardnettadressen for oppdatering ("update") for Chrome
+          Nettmarked. Se <ph name="LINK_TO_EXTENSION_DOC2" /> for mer informasjon om verter for utvidelser.
+
+          Hvis denne regelen ikke angis, blir ingen apper eller utvidelser installert
+          automatisk, og brukeren kan avinstallere alle apper og utvidelser i <ph name="PRODUCT_NAME" />.</translation>
 <translation id="6315673513957120120">Brukerne ser advarselssider i Chrome når de åpner nettsteder med SSL-feil. Som standard, eller når denne regelen er satt til true (sann), kan brukerne klikke seg forbi disse advarselssidene.
       Hvis denne regelen settes til false (usann), kan ikke brukerne klikke seg forbi advarselssider.</translation>
 <translation id="6353901068939575220">Angir parameterene som brukes når du utfører søker på en nettadresse med POST. De består av kommainndelte navn og verdi-par. Hvis en verdi er et malparameter, som {searchTerms} i eksempelet ovenfor, blir den erstattet med virkelig søkeordsdata.
@@ -1719,9 +1785,6 @@
 <translation id="6367755442345892511">Om lanseringskanalen skal kunne konfigureres av brukeren</translation>
 <translation id="6368011194414932347">Konfigurer nettadresse for startsiden</translation>
 <translation id="6368403635025849609">Tillat JavaScript på disse nettstedene</translation>
-<translation id="6373222873250380826">Deaktiverer automatiske oppdateringer når angitt som Sann.
-
-      <ph name="PRODUCT_OS_NAME" />-enheter ser automatisk etter oppdateringer når denne innstillingen ikke er konfigurert eller angitt som Usann.</translation>
 <translation id="6376659517206731212">Kan være obligatorisk</translation>
 <translation id="6378076389057087301">Angi om lydaktivitet skal påvirke strømbehandling</translation>
 <translation id="637934607141010488">Rapportliste over enhetsbrukere som har logget på i det siste.
@@ -1739,6 +1802,22 @@
 <translation id="6417861582779909667">Gjør at du kan angi en liste over nettadressemønstre som spesifiserer nettsteder som ikke tillates å stille inn informasjonskapsler.
 
          Hvis denne retningslinjen ikke angis, brukes den globale standardverdien for alle nettsteder, enten fra  retningslinjen DefaultCookiesSetting hvis den er angitt, eller fra brukerens egen konfigurasjon hvis nevnte retningslinje ikke er angitt.</translation>
+<translation id="6426205278746959912">Du kan ikke tvinge Android-apper til å bruke proxy-tjenere. En undergruppe av proxy-innstillinger er gjort tilgjengelige for Android-apper, og utviklerne av slike apper kan selv velge om appene skal følge dem eller ikke:
+
+          Hvis du velger aldri å bruke proxy-tjenere, blir Android-apper informert om at ingen proxy-tjenere er konfigurert.
+
+          Hvis du velger å bruke systeminnstillingene for proxy-tjenere eller en fast proxy-tjener, får Android-apper http-addressen og porten for proxy-tjeneren.
+
+          Hvis du velger å finne proxy-tjeneren automatisk, får Android-apper skriptnettadressen «http://wpad/wpad.dat». Ingen annen del av protokollen for automatisk gjenkjennelse brukes.
+
+          Hvis du velger PAC-skript for proxy-tjenere, får Android-apper skriptnettadressen.</translation>
+<translation id="6435127182262044446">Denne innstillingen kontrollerer maksimumslengden for PIN-koder.
+
+          Hvis instillingen er konfigurert til 0 eller mindre, finnes det ingen maksimumslengde. Da kan brukerne angi så lange PIN-koder de vil.
+
+          Hvis innstillingen er konfigurert til mindre enn «PinUnlockMinimumLength» (minimumlengde for PIN-koder for opplåsing), men mer enn 0, er maksimumslengden den samme som minimumslengden.
+
+          Som standard er det ikke valgt noen maksimumslengde i denne innstillingen.</translation>
 <translation id="6467433935902485842">Gjør at du kan angi en liste over nettadressemønstre som spesifiserer hvilke nettsteder som ikke får kjøre programtillegg. Hvis denne retningslinjen ikke angis, brukes den globale standardverdien for alle nettsteder, enten fra retningslinjen DefaultPluginsSetting hvis den er angitt, eller fra brukerens egen konfigurasjon hvis nevnte retningslinje ikke brukes.</translation>
 <translation id="6473334971332473690">Tillater bruk av Smart Lock på <ph name="PRODUCT_OS_NAME" />-enheter.
 
@@ -1862,6 +1941,7 @@ skjermtastaturet når som helst og statusen den har på påloggingsskjermen er v
 <translation id="6770454900105963262">Rapportér informasjon om aktive kioskøkter</translation>
 <translation id="6774533686631353488">Tillat bruk av integrerte meldingsverter på brukernivå (installert uten administratorrettigheter).</translation>
 <translation id="6786747875388722282">Utvidelser</translation>
+<translation id="6786967369487349613">Angir katalogen for roamingprofiler</translation>
 <translation id="6810445994095397827">Blokkér JavaScript på disse nettstedene</translation>
 <translation id="681446116407619279">Støttede autentiseringssystemer</translation>
 <translation id="6828905844648501476">Hvis denne regelen settes til true (sann) eller ikke konfigureres, tillater <ph name="PRODUCT_NAME" /> «Legg til person» fra brukerbehandlingen.
@@ -2029,6 +2109,7 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 <translation id="7249828445670652637">Slå på CA-sertifikater for <ph name="PRODUCT_OS_NAME" /> for ARC-apper</translation>
 <translation id="7258823566580374486">Aktiver begrensning (curtaining) av verter for fjerntilgang</translation>
 <translation id="7260277299188117560">Automatisk oppdatering for p2p aktivert</translation>
+<translation id="7261252191178797385">Bakgrunnsbilde på enheten</translation>
 <translation id="7267809745244694722">Medietaster har standardfunksjon som funksjonstaster</translation>
 <translation id="7271085005502526897">Import av hjemmeside fra standard nettleser ved første kjøring</translation>
 <translation id="7273823081800296768">Hvis denne innstillingen er aktivert eller ikke konfigurert, kan brukere velge å knytte sammen klienter og verter ved tilkobling, og dermed sørge for at PIN-koden ikke må angis hver gang.
@@ -2073,13 +2154,6 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 <translation id="7336878834592315572">Behold informasjonskapsler så lenge økten varer</translation>
 <translation id="7340034977315324840">Rapportering av aktivitetstider for enhet</translation>
 <translation id="7384999953864505698">Tillater QUIC-protokollen</translation>
-<translation id="7406651467768226499">Spesifiserer om den automatisk startede kioskappen uten forsinkelse skal kunne kontrollere <ph name="PRODUCT_OS_NAME" />-versjonen.
-
-      Denne regelen kontrollerer om den automatisk startede kioskappen uten forsinkelse skal kunne kontrollere <ph name="PRODUCT_OS_NAME" />-versjonen ved å erklære en required_platform_version i manifestet og bruke den som prefiks for den automatisk oppdaterte målversjonen.
-
-      Hvis regelen er satt til «true» (sann), brukes verdien i manifestnøkkelen required_platfrom_version for den automatisk startede kioskappen uten forsinkelse som prefiks for den automatisk oppdaterte målversjonen.
-
-      Hvis regelen ikke er konfigurert eller er satt til «false» (usann), skal manifestnøkkelen required_platform_version ignoreres, og den automatiske oppdateringen fortsetter som normalt.</translation>
 <translation id="7417972229667085380">Prosentandelen for skalering av inaktivitetsforsinkelsen i presentasjonsmodus (avviklet)</translation>
 <translation id="7421483919690710988">Angi størrelse på mediediskbuffer i byte</translation>
 <translation id="7424751532654212117">Liste over unntak fra listen over deaktiverte programtillegg</translation>
@@ -2114,6 +2188,15 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
       Vær oppmerksom på at denne regelen avhenger av at operativsystemstakken for sertifikatverifisering tillater SHA-1-signaturer. Hvis en OS-oppdatering endrer hvordan OS-et håndterer SHA-1-sertifikater, kan det hende denne regelen ikke har noen effekt lenger. Videre er denne regelen ment som en midlertidig løsning for å gi bedrifter mer tid til å gå bort fra bruken av SHA-1. Denne regelen blir fjernet ca. 1. januar 2019.
 
       Hvis denne regelen ikke er konfigurert eller er angitt som false (usann), følger <ph name="PRODUCT_NAME" /> den offentlig kunngjorte planen for SHA-1-avvikling.</translation>
+<translation id="7589150663293249656">Slår på oppretting av roamingkopier for <ph name="PRODUCT_NAME" />-profildata.
+
+      Hvis du slår på denne innstillingen, blir innstillingene som er lagret i <ph name="PRODUCT_NAME" />-profiler (for eksempel bokmerker, autofylldata, passord og så videre) også skrevet til en fil som lagres i mappen for roamingbrukerprofilen eller et sted som bestemmes av administratoren via regelen <ph name="ROAMINGPROFILELOCATION_POLICY_NAME" />.
+
+      Google Synkronisering slås automatisk av når denne regelen slås på.
+
+      For å forhindre tilfeldige datalekkasjer anbefales det også å sette regelen <ph name="SIGNINALLOWED_POLICY_NAME" /> til False (usann).
+
+      Hvis denne regelen er slått av eller ikke er angitt, blir bare de vanlige, lokale profilene brukt.</translation>
 <translation id="7593523670408385997">Konfigurerer bufferstørrelsen som <ph name="PRODUCT_NAME" /> bruker for lagring av bufrede filer på disken.
 
       Hvis du angir denne innstillingen, bruker <ph name="PRODUCT_NAME" /> den tildelte bufferstørrelsen uansett om brukeren har spesifisert «--disk-cache-size»-flagget eller ikke. Verdien som er angitt i denne innstillingen er ikke en hard grense, men et forslag til buffersystemet. Alle verdier under et par megabyte er for små og blir avrundet oppover til et logisk minimum.
@@ -2125,6 +2208,9 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 <translation id="7611372873040492235">Passordet må skrives inn hver 12. time.</translation>
 <translation id="7612157962821894603">Flagg for hele systemet som skal brukes ved oppstart av <ph name="PRODUCT_NAME" /></translation>
 <translation id="7614663184588396421">Liste over deaktiverte protokollsystemer</translation>
+<translation id="7617319494457709698">Med denne retningslinjen kan du spesifisere hvilke utvidelser som kan bruke <ph name="ENTERPRISE_PLATFORM_KEYS_API" />-funksjonen <ph name="CHALLENGE_USER_KEY_FUNCTION" /> til ekstern attestering. Utvidelser må legges til i denne listen for å kunne bruke API-et.
+
+          Hvis en utvidelse ikke er på listen, eller hvis listen ikke er angitt, kan ikke API-et kalles opp – i stedet vises en feilkode.</translation>
 <translation id="7625444193696794922">Angir den frigivende kanalen som denne enheten skal låses til.</translation>
 <translation id="7632724434767231364">Navn på GSSAPI-bibliotek</translation>
 <translation id="7635471475589566552">Konfigurerer programmets språk i <ph name="PRODUCT_NAME" />, og hindrer brukeren i å endre på språket.
@@ -2225,6 +2311,13 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 
       Hvis denne regelen ikke er konfigurert, kan brukerne slå Android Backup Service av og på i appen for Android-innstillinger.</translation>
 <translation id="7818131573217430250">Angi standard tilstand for høykontrastsmodus på påloggingssiden</translation>
+<translation id="7822837118545582721">Når denne regelen er angitt som «true» (sann), kan ikke brukerne skrive noe til eksterne lagringsenheter.
+
+       Hvis denne innstillingen er angitt som «false» (usann) eller ikke er konfigurert, kan brukerne opprette og modifisere filer på eksterne lagringsenheter det er mulig å skrive til fysisk.
+
+       ExternalStorageDisabled-regelen har prioritet over denne regelen. Hvis ExternalStorageDisabled er angitt som «true», er all tilgang til ekstern lagring slått av, og denne regelen ignoreres.
+
+      M56 og nyere har støtte for dynamisk oppdatering av denne regelen.</translation>
 <translation id="7831595031698917016">Angir maksverdien for forsinkelse mellom mottak av en opphevet innstilling og henting av den nye innstillingen fra tjenesten for enhetsadministrasjon i milisekunder.
 
       Hvis du angir denne innstillingen, blir standardverdien på 5 000 milisekunder overskrevet. Gyldige verdier for denne innstillingen må være mellom 1 000 (1 sekund) og 30 0000 (5 minutter). Verdier som befinner seg utenfor dette området, blir tvunget inn under den respektive grensen.
@@ -2283,9 +2376,6 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
           knyttet til et Active Directory-domene.</translation>
 <translation id="7937766917976512374">Tillat eller blokkér videoopptak</translation>
 <translation id="7941975817681987555">Ikke forutsi nettverkshandlinger på noen nettverkstilkoblinger</translation>
-<translation id="7942429005743031780">Denne regelen angir hvilke utvidelser som har tillatelse til å bruke chrome.enterprise.platformKeys.challengeUserKey() i Enterprise Platform Keys API til ekstern attestering. Utvidelser må legges til i listen før de kan bruke API-en.
-
-          Hvis en utvidelse ikke er på listen, eller hvis listen ikke er angitt, returneres kall til API-en med en feilkode..</translation>
 <translation id="7953256619080733119">Verter for manuelle unntak for administrerte brukere</translation>
 <translation id="7971839631300653352">SSL 3.0</translation>
 <translation id="7974114691960514888">Denne retningslinjen støttes ikke lenger. Aktiverer bruk av STUN og relétjenere ved tilkobling til en ekstern klient. Hvis denne innstillingen er aktivert, kan maskinen oppdage og koble seg til eksterne vertsmaskiner selv om de er adskilt av en brannmur. Hvis denne innstillingen er deaktivert og utgående UDP-tilkoblinger filtreres av brannmuren, kan denne maskinen bare koble seg til vertsmaskiner i det lokale nettverket.</translation>
@@ -2346,6 +2436,7 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
       Hvis brukeren har slått på synkronisering, lagres alle disse dataene i vedkommendes synkroniseringsprofil på samme måte som vanlige profiler. Inkognitomodus er også tilgjengelig hvis den ikke er eksplisitt slått av av regelen.
 
       Hvis regelen er slått av eller ikke angitt, aktiveres vanlige profiler ved pålogging.</translation>
+<translation id="8158758865057576716">Slår på oppretting av roamingkopier for <ph name="PRODUCT_NAME" />-profildata.</translation>
 <translation id="8164246350636985940">Standardfunksjonalitet for nettsteder som ikke er i noen innholdspakke.
 
           Denne regelen er bare for intern bruk i <ph name="PRODUCT_NAME" />.</translation>
@@ -2402,6 +2493,7 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 
       Det er ønskelig å fjerne denne overstyringen i fremtiden.</translation>
 <translation id="8285435910062771358">Fullskjermsforstørrelse aktivert</translation>
+<translation id="8288199156259560552">Slå på Googles posisjonstjeneste for Android</translation>
 <translation id="8294750666104911727">Vanligvis blir sider angitt med X-UA-Compatible til chrome=1 gjengitt i <ph name="PRODUCT_FRAME_NAME" /> uavhengig av innstillingen «ChromeFrameRendererSettings».
 
           Hvis du aktiverer denne innstillingen, skannes ikke sider for metatagger.
@@ -2440,6 +2532,9 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 
       Hvis denne regelen settes til «false» (usann), vises ikke velkomstsiden på nytt i nettleseren ved den første oppstarten etter at operativsystemet er oppgradert.</translation>
 <translation id="8369602308428138533">Forsinkelse for avslått skjerm når du bruker strømadapteren</translation>
+<translation id="8370471134641900314">Hvis denne regelen angitt som «true» (sann), må brukeren logge på <ph name="PRODUCT_NAME" /> med profilen sin før vedkommende bruker nettleseren. Standardverdien for BrowserGuestModeEnabled er «false» (usann).
+
+      Hvis denne regelen er satt til «false» eller ikke er konfigurert, kan brukeren bruke nettleseren uten å logge på <ph name="PRODUCT_NAME" />.</translation>
 <translation id="8382184662529825177">Slå på bruken av ekstern attestasjon for innholdsbeskyttelse på enheten</translation>
 <translation id="838870586332499308">Aktiver datastreifing</translation>
 <translation id="8390049129576938611">Slår av den interne appen for visning av PDF-filer i <ph name="PRODUCT_NAME" />. PDF-filer blir i stedet lastet ned, og brukeren kan åpne dem med standardappen.
@@ -2490,6 +2585,17 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
       Active Directory-domener.</translation>
 <translation id="8566842294717252664">Skjul nettbutikken fra nye faner og appvelgeren</translation>
 <translation id="8587229956764455752">Tillat oppretting av nye brukerkontoer</translation>
+<translation id="8613640727149655305">Når denne regelen angis som «true» (sann), slås Googles posisjonstjeneste for Android på. Dette gir Android-apper tillatelse til å bruke dataene fra denne tjenesten til å finne enhetens posisjon, og det slår også på innsending av anonyme posisjonsdata til Google.
+
+      Når denne regelen angis som «false» (usann), slås Googles posisjonstjeneste for Android av.
+
+      Hvis denne innstillingen konfigureres, kan ikke brukere endre den selv.
+
+      Hvis denne innstillingen ikke konfigureres, kan brukere slå Googles posisjonstjeneste av og på i Innstillinger-appen for Android.
+
+      Vær oppmerksom på at verdien for denne regelen kan overstyres av <ph name="DEFAULTGEOLOCATIONSETTING_POLICY_NAME" />-regelen, når sistnevnte er angitt som <ph name="BLOCK_GEOLOCATION_SETTING" />.
+
+      Denne regelen gjelder bare for brukere som kan kjøre Android-apper.</translation>
 <translation id="8614804915612153606">Deaktiverer automatiske oppdateringer</translation>
 <translation id="8631434304112909927">frem til versjon <ph name="UNTIL_VERSION" /></translation>
 <translation id="863319402127182273">For Android-apper blir bare det innebygde kameraet påvirket av denne regelen. Når denne regelen er angitt som «true» (sann), slås kameraet av for alle Android-apper – uten unntak.</translation>
@@ -2563,15 +2669,6 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 <translation id="8833109046074170275">Autentisering via den normale GAIA-prosessen</translation>
 <translation id="8838303810937202360"><ph name="PRODUCT_OS_NAME" /> bufrer apper og utvidelser som skal installeres av flere brukere på én enkelt enhet, for å unngå å laste dem ned på nytt for hver bruker.
       Hvis denne regelen ikke er konfigurert, eller hvis verdien er lavere enn 1 MB, bruker <ph name="PRODUCT_OS_NAME" /> standardbufferstørrelsen.</translation>
-<translation id="8858120573534680488">Du kan ikke tvinge Android-apper til å bruke proxy-tjenere. En undergruppe av proxy-innstillinger – som de kan velge å respektere frivillig – er gjort tilgjengelig for Android-apper:
-
-          Hvis du velger «aldri bruk proxy-tjener», blir Android-apper informert om at ingen proxy-tjenere er konfigurert.
-
-          Hvis du velger «bruk systeminnstillingene for mellomtjener» eller «fast proxy-tjener», får Android-apper http-addressen og porten for proxy-tjeneren.
-
-          Hvis du velger «finn proxy-tjener automatisk» får Android-apper skriptnettadressen «http://wpad/wpad.dat». Ingen annen del av protokollen for automatisk gjenkjennelse brukes.
-
-          Hvis du velger «.pac-skript for proxy-tjener», får Android-apper skriptnettadressen.</translation>
 <translation id="8858642179038618439">Bruk tvungen sikkerhetsmodus i YouTube</translation>
 <translation id="8864975621965365890">Ignorerer avslagsforespørselen som vises når et nettsted gjengis av <ph name="PRODUCT_FRAME_NAME" />.</translation>
 <translation id="8870318296973696995">Startside</translation>
@@ -2645,6 +2742,13 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
 <translation id="8992176907758534924">Ikke la noen nettsteder vise bilder</translation>
 <translation id="9035964157729712237">Utvidelses-ID-er som skal unntas sperrelisten</translation>
 <translation id="9042911395677044526">Tillater skyving av nettverkskonfigurasjon for enkeltbrukere på en <ph name="PRODUCT_OS_NAME" />-enhet. Nettverkskonfigurasjon er en JSON-formatert streng, som definert av Open Network Configuration-formatet beskrevet på <ph name="ONC_SPEC_URL" /></translation>
+<translation id="908115901708809140">Konfigurerer katalogen <ph name="PRODUCT_NAME" /> bruker til å lagre roamingkopien av profilene.
+
+      Hvis du angir denne regelen, bruker <ph name="PRODUCT_NAME" /> den angitte katalogen til å lagre roamingkopien av profilene hvis regelen <ph name="ROAMINGPROFILESUPPORTENABLED_POLICY_NAME" /> er slått på. Hvis regelen <ph name="ROAMINGPROFILESUPPORTENABLED_POLICY_NAME" /> er slått av eller ikke er angitt, brukes ikke verdien som er lagret i denne regelen.
+
+      Gå til https://www.chromium.org/administrators/policy-list-3/user-data-directory-variables for å se en liste over variabler som kan brukes.
+
+      Hvis denne regelen ikke angis, brukes standardbanen for roamingprofiler.</translation>
 <translation id="9084985621503260744">Angi om videoaktivitet skal påvirke strømbehandling</translation>
 <translation id="9088433379343318874">Slå på innholdsleverandøren for administrerte brukere</translation>
 <translation id="9088444059179765143">Konfigurer metoden for automatisk påvisning av tidssoner</translation>
@@ -2657,6 +2761,13 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
           Protokollbehandlere som registreres via denne innstillingen, slås sammen med de som er registrert av brukeren, og begge er tilgjengelige for bruk. Brukeren kan overstyre protokollbehandlerne som innstillingen har installert, ved å installere en ny standardbehandler, men kan ikke fjerne en protokollbehandler som er registrert via en innstilling.</translation>
 <translation id="913195841488580904">Blokker tilgang til en liste over nettadresser</translation>
 <translation id="9135033364005346124">Aktiver mellomtjener for <ph name="CLOUD_PRINT_NAME" /></translation>
+<translation id="9136253551939494882">Denne godkjenningslisten kontrollerer hvilke moduser for hurtigopplåsing brukerne kan konfigurere og bruke til å låse opp låseskjermen.
+
+          Denne verdien er en liste med strenger. De gyldige listeoppføringene er «all» (alle) og «PIN». Hvis du legger til «all» i listen, blir alle modusene for hurtigopplåsing tilgjengelige for brukerne – inkludert moduser som implementeres i fremtiden. Hvis du ikke gjør det, er bare de modusene for hurtigopplåsing som finnes i listen, tilgjengelige.
+
+          Hvis du for eksempel vil tillate alle modusene for hurtigopplåsing, bruker du [«all»]. Hvis du bare vil tillate PIN-opplåsing, bruker du [«PIN»]. Hvis du vil slå av alle modusene for hurtigopplåsing, bruker du [].
+
+          Som standard er ingen moduser for hurtigopplåsing tilgjengelige for administrerte enheter.</translation>
 <translation id="9147029539363974059">Sender systemlogger til administrasjonstjeneren for å la administratorer
       overvåke systemloggene.
 
@@ -2672,6 +2783,11 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
       Hvis denne retningslinjen ikke angis, vil dette aktiveres, og brukeren vil kunne bruke inkognitomodus.</translation>
 <translation id="915194831143859291">Hvis denne regelen settes til usann eller ikke konfigureres, kan brukerne slå av enhetene sine i <ph name="PRODUCT_OS_NAME" />.
       Hvis denne regelen settes til sann, gjør <ph name="PRODUCT_OS_NAME" /> at enhetene starter på nytt når brukerne slår dem av. Alle «slå av»-knappene i <ph name="PRODUCT_OS_NAME" />-brukergrensesnittet blir byttet ut med «start på nytt»-knapper. Hvis brukerne slår av enhetene med den fysiske av/på-knappen, starter de ikke på nytt – selv om regelen er slått på.</translation>
+<translation id="917887642534332939">Denne innstillingen kontrollerer minimumslengden for PIN-koder.
+
+          Den minste mulige lengden for PIN-koder er 1. Verdier som er mindre enn 1, behandles som 1.
+
+          Standard og anbefalt lengde for PIN-koder er 6 sifre.</translation>
 <translation id="9187743794267626640">Deaktiver bruk av ekstern lagring</translation>
 <translation id="9197740283131855199">Prosentandelen det skaleres etter for å justere forsinkelse i skjermdemping, hvis brukeren har blitt aktiv igjen etter demping</translation>
 <translation id="9200828125069750521">Parametere for bildenettadresser som bruker POST</translation>
@@ -2680,15 +2796,21 @@ Minneinformasjon blir uansett rapportert til siden, uavhengig av verdien for alt
       Hvis innstillingen er aktivert, kan ikke brukere ta skjermdumper ved hjelp av hurtigtaster eller programmeringsgrensesnitt for utvidelser.
 
       Hvis innstillingen er deaktivert eller ikke angitt, er det fritt frem for å ta skjermdumper.</translation>
+<translation id="9213347477683611358">Konfigurer bakgrunnsbildet som vises på påloggingsskjermen, på enhentsnivå hvis ingen brukere har logget på enheten ennå. Regelen angis ved å spesifisere nettadressen hvor Chrome OS-enheten kan laste ned bakgrunnsbildet, og dessuten en kryptografisk hash-verdi som brukes til bekrefte nedlastingens integritet. Bildet må være i JPEG-format, og filstørrelsen kan ikke overskride 16 MB. Nettadressen må være tilgjengelig uten autentisering. Bakgrunnsbildet lastes ned og bufres. Det lastes ned på nytt hvis nettadressen eller hash-verdien endres.
+
+      Regelen skal spesifiseres som en streng der nettadressen og hash-verdien skrives i JSON-format, for eksempel
+      {
+        «url»: "https://example.com/device_wallpaper.jpg",
+        «hash»: "examplewallpaperhash"
+      }
+
+      Hvis regelen for enhetsbakgrunn ikke angis, laster Chrome OS ned og bruker bakgrunnsbildet på påloggingsskjermen hvis ingen brukere har logget på enheten ennå. Når en bruker logger på, blir den aktuelle brukerens bakgrunnsregler tatt i bruk.
+
+      Hvis regelen for enhetsbakgrunn ikke angis, bestemmer brukerens bakgrunnsregler hva som vises – såfremt brukerens bakgrunnsregler er angitt.</translation>
 <translation id="9217154963008402249">Frekvensen for nettverkspakker for overvåking</translation>
 <translation id="922540222991413931">Konfigurering av installeringskilder for utvidelser, programmer og brukerskript</translation>
 <translation id="924557436754151212">Importér lagrede passord fra standard nettleser ved første kjøring</translation>
 <translation id="930930237275114205">Angi <ph name="PRODUCT_FRAME_NAME" />-katalog for brukerdata</translation>
 <translation id="944607242500063080">Konfigurer tillatte moduser for hurtigopplåsing.</translation>
 <translation id="944817693306670849">Angi størrelse på diskbuffer</translation>
-<translation id="969164417253718105">Denne innstillingen kontrollerer hvor ofte brukerne må skrive inn passord på låseskjermen for å fortsette å bruke hurtigopplåsing. Når en bruker kommer til låseskjermen og det har gått lengre tid siden passordet sist ble skrevet inn enn det som er angitt i denne innstillingen, kan ikke vedkommende bruke hurtigopplåsing. Hvis brukeren blir på låseskjermen etter at denne tidsperioden er over, må vedkommende skrive inn passordet neste gang han eller hun skriver inn feil kode eller kommer tilbake til låseskjermen (avhengig av hva som skjer først).
-
-      Hvis denne innstillingen er konfigurert, kan brukere som bruker hurtigopplåsing, bli bedt om å skrive inn passordet sitt på låseskjermen. Dette avhenger imidlertid av hvilken innstilling som er valgt.
-
-      Hvis denne innstillingen ikke konfigureres, blir brukere som bruker hurtigopplåsing, bedt om å skrive inn passordet sitt på låseskjermen hver dag.</translation>
 </translationbundle>

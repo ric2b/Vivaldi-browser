@@ -63,25 +63,24 @@ void HTMLContentElement::parseSelect() {
   DCHECK(m_shouldParseSelect);
 
   m_selectorList = CSSParser::parseSelector(
-      CSSParserContext(document(), nullptr), nullptr, m_select);
+      CSSParserContext::create(document()), nullptr, m_select);
   m_shouldParseSelect = false;
   m_isValidSelector = validateSelect();
   if (!m_isValidSelector)
     m_selectorList = CSSSelectorList();
 }
 
-void HTMLContentElement::parseAttribute(const QualifiedName& name,
-                                        const AtomicString& oldValue,
-                                        const AtomicString& value) {
-  if (name == selectAttr) {
+void HTMLContentElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  if (params.name == selectAttr) {
     if (ShadowRoot* root = containingShadowRoot()) {
       if (!root->isV1() && root->owner())
         root->owner()->v0().willAffectSelector();
     }
     m_shouldParseSelect = true;
-    m_select = value;
+    m_select = params.newValue;
   } else {
-    InsertionPoint::parseAttribute(name, oldValue, value);
+    InsertionPoint::parseAttribute(params);
   }
 }
 

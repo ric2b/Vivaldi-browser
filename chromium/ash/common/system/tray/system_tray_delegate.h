@@ -16,8 +16,6 @@
 #include "base/i18n/time_formatting.h"
 #include "base/strings/string16.h"
 
-class AccountId;
-
 namespace base {
 class TimeDelta;
 class TimeTicks;
@@ -53,34 +51,14 @@ struct ASH_EXPORT BluetoothDeviceInfo {
 
 using BluetoothDeviceList = std::vector<BluetoothDeviceInfo>;
 
-struct ASH_EXPORT UpdateInfo {
-  enum UpdateSeverity {
-    UPDATE_NONE,
-    UPDATE_LOW,
-    UPDATE_ELEVATED,
-    UPDATE_HIGH,
-    UPDATE_SEVERE,
-    UPDATE_CRITICAL,
-  };
-
-  UpdateInfo();
-  ~UpdateInfo();
-
-  UpdateSeverity severity;
-  bool update_required;
-  bool factory_reset_required;
-};
-
-class CastConfigDelegate;
 class NetworkingConfigDelegate;
-class VPNDelegate;
 
 // SystemTrayDelegate is intended for delegating tasks in the System Tray to the
 // application (e.g. Chrome). These tasks should be limited to application
 // (browser) specific tasks. For non application specific tasks, where possible,
 // components/, chromeos/, device/, etc., code should be used directly. If more
 // than one related method is being added, consider adding an additional
-// specific delegate (e.g. VPNDelegate).
+// specific delegate (e.g. CastConfigDelegate).
 //
 // These methods should all have trivial default implementations for platforms
 // that do not implement the method (e.g. return false or nullptr). This
@@ -126,9 +104,6 @@ class ASH_EXPORT SystemTrayDelegate {
   // TODO(merkulova): remove on FakeUserManager componentization.
   // crbug.com/443119
   virtual bool IsUserChild() const;
-
-  // Fills |info| structure (which must not be null) with current update info.
-  virtual void GetSystemUpdateInfo(UpdateInfo* info) const;
 
   // Returns true if settings menu item should appear.
   virtual bool ShouldShowSettings() const;
@@ -187,9 +162,6 @@ class ASH_EXPORT SystemTrayDelegate {
   // Returns whether the delegate has initiated a bluetooth discovery session.
   virtual bool GetBluetoothDiscovering();
 
-  // Returns CastConfigDelegate. May return nullptr.
-  virtual CastConfigDelegate* GetCastConfigDelegate();
-
   // Returns NetworkingConfigDelegate. May return nullptr.
   virtual NetworkingConfigDelegate* GetNetworkingConfigDelegate() const;
 
@@ -218,9 +190,6 @@ class ASH_EXPORT SystemTrayDelegate {
 
   virtual void RemoveCustodianInfoTrayObserver(
       CustodianInfoTrayObserver* observer);
-
-  // Returns VPNDelegate. May return nullptr.
-  virtual VPNDelegate* GetVPNDelegate() const;
 
   // Creates a system tray item for display rotation lock.
   // TODO(jamescook): Remove this when mus has support for display management

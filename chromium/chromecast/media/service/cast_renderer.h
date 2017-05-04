@@ -16,10 +16,6 @@ namespace base {
 class SingleThreadTaskRunner;
 }  // namespace base
 
-namespace media {
-class MediaLog;
-}  // namespace media
-
 namespace chromecast {
 class TaskRunnerImpl;
 
@@ -49,8 +45,6 @@ class CastRenderer : public ::media::Renderer,
   void SetPlaybackRate(double playback_rate) final;
   void SetVolume(float volume) final;
   base::TimeDelta GetMediaTime() final;
-  bool HasAudio() final;
-  bool HasVideo() final;
 
   // VideoResolutionPolicy::Observer implementation.
   void OnVideoResolutionPolicyChanged() override;

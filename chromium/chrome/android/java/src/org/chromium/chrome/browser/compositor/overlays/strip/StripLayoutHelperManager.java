@@ -114,8 +114,8 @@ public class StripLayoutHelperManager implements SceneOverlay {
     }
 
     @Override
-    public SceneOverlayLayer getUpdatedSceneOverlayTree(LayerTitleCache layerTitleCache,
-            ResourceManager resourceManager, float yOffset) {
+    public SceneOverlayLayer getUpdatedSceneOverlayTree(RectF viewport, RectF visibleViewport,
+            LayerTitleCache layerTitleCache, ResourceManager resourceManager, float yOffset) {
         assert mTabStripTreeProvider != null;
 
         Tab selectedTab = mTabModelSelector.getCurrentModel().getTabAt(
@@ -282,11 +282,8 @@ public class StripLayoutHelperManager implements SceneOverlay {
         if (incognito == mIsIncognito) return;
         mIsIncognito = incognito;
 
-        if (mIsIncognito) {
-            mIncognitoHelper.tabModelSelected();
-        } else {
-            mNormalHelper.tabModelSelected();
-        }
+        mIncognitoHelper.tabModelSelected(mIsIncognito);
+        mNormalHelper.tabModelSelected(!mIsIncognito);
 
         updateModelSwitcherButton();
 

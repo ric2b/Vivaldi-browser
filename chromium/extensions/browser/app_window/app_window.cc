@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/callback_helpers.h"
-#include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -29,7 +28,6 @@
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/common/media_stream_request.h"
 #include "extensions/browser/app_window/app_delegate.h"
 #include "extensions/browser/app_window/app_web_contents_helper.h"
@@ -51,7 +49,6 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/permissions/permissions_data.h"
-#include "extensions/common/switches.h"
 #include "extensions/grit/extensions_browser_resources.h"
 #include "extensions/helper/vivaldi_app_helper.h"
 #include "third_party/skia/include/core/SkRegion.h"
@@ -266,13 +263,9 @@ AppWindow::AppWindow(BrowserContext* context,
       window_type_(WINDOW_TYPE_DEFAULT),
       app_delegate_(app_delegate),
       fullscreen_types_(FULLSCREEN_TYPE_NONE),
-      show_on_first_paint_(false),
-      first_paint_complete_(false),
       has_been_shown_(false),
-      can_send_events_(false),
       is_hidden_(false),
       initial_state_(ui::SHOW_STATE_NORMAL),
-      delayed_show_type_(SHOW_ACTIVE),
       cached_always_on_top_(false),
       requested_alpha_enabled_(false),
       is_ime_window_(false),
@@ -359,16 +352,9 @@ void AppWindow::Init(const GURL& url,
 
   UpdateExtensionAppIcon();
   // Download showInShelf=true window icon.
-  if (window_icon_url_.is_valid()) {
-    image_loader_ptr_factory_.InvalidateWeakPtrs();
-    web_contents()->DownloadImage(
-        window_icon_url_,
-        true,   // is a favicon
-        0,      // no maximum size
-        false,  // normal cache policy
-        base::Bind(&AppWindow::DidDownloadFavicon,
-                   image_loader_ptr_factory_.GetWeakPtr()));
-  }
+  if (window_icon_url_.is_valid())
+    SetAppIconUrl(window_icon_url_);
+
   AppWindowRegistry::Get(browser_context_)->AddAppWindow(this);
 
   if (new_params.thumbnail_window) {
@@ -419,17 +405,6 @@ void AppWindow::Init(const GURL& url,
                  base::Unretained(native_app_window_.get())));
 
   app_window_contents_->LoadContents(new_params.creator_process_id);
-
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          extensions::switches::kEnableAppsShowOnFirstPaint)) {
-    // We want to show the window only when the content has been painted. For
-    // that to happen, we need to define a size for the content, otherwise the
-    // layout will happen in a 0x0 area.
-    gfx::Insets frame_insets = native_app_window_->GetFrameInsets();
-    gfx::Rect initial_bounds = new_params.GetInitialWindowBounds(frame_insets);
-    initial_bounds.Inset(frame_insets);
-    app_delegate_->ResizeWebContents(web_contents(), initial_bounds.size());
-  }
 }
 
 AppWindow::~AppWindow() {
@@ -555,15 +530,6 @@ void AppWindow::RenderViewCreated(content::RenderViewHost* render_view_host) {
   app_delegate_->RenderViewCreated(render_view_host);
 }
 
-void AppWindow::DidFirstVisuallyNonEmptyPaint() {
-  first_paint_complete_ = true;
-  if (show_on_first_paint_) {
-    DCHECK(delayed_show_type_ == SHOW_ACTIVE ||
-           delayed_show_type_ == SHOW_INACTIVE);
-    Show(delayed_show_type_);
-  }
-}
-
 void AppWindow::SetOnFirstCommitCallback(const base::Closure& callback) {
   DCHECK(on_first_commit_callback_.is_null());
   on_first_commit_callback_ = callback;
@@ -578,7 +544,6 @@ void AppWindow::OnReadyToCommitFirstNavigation() {
   // would happen before the navigation starts, but PlzNavigate must wait until
   // this point in time in the navigation.
 
-  WindowEventsReady();
   if (on_first_commit_callback_.is_null())
     return;
   // It is important that the callback executes after the calls to
@@ -691,9 +656,13 @@ void AppWindow::SetAppIconUrl(const GURL& url) {
   image_loader_ptr_factory_.InvalidateWeakPtrs();
 
   // Reset |app_icon_image_| to abort pending image load (if any).
-  app_icon_image_.reset();
+  if (!show_in_shelf_) {
+    app_icon_image_.reset();
+    app_icon_url_ = url;
+  } else {
+    window_icon_url_ = url;
+  }
 
-  app_icon_url_ = url;
   web_contents()->DownloadImage(
       url,
       true,   // is a favicon
@@ -722,8 +691,20 @@ void AppWindow::UpdateAppIcon(const gfx::Image& image) {
             ? image
             : gfx::Image(*ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
                   IDR_APP_DEFAULT_ICON));
-    app_icon_ = gfx::Image(gfx::ImageSkiaOperations::CreateIconWithBadge(
-        base_image.AsImageSkia(), app_icon_image_->image_skia()));
+    // Scale the icon to EXTENSION_ICON_LARGE.
+    const int large_icon_size = extension_misc::EXTENSION_ICON_LARGE;
+    if (base_image.Width() != large_icon_size ||
+        base_image.Height() != large_icon_size) {
+      gfx::ImageSkia resized_image =
+          gfx::ImageSkiaOperations::CreateResizedImage(
+              base_image.AsImageSkia(), skia::ImageOperations::RESIZE_BEST,
+              gfx::Size(large_icon_size, large_icon_size));
+      app_icon_ = gfx::Image(gfx::ImageSkiaOperations::CreateIconWithBadge(
+          resized_image, app_icon_image_->image_skia()));
+    } else {
+      app_icon_ = gfx::Image(gfx::ImageSkiaOperations::CreateIconWithBadge(
+          base_image.AsImageSkia(), app_icon_image_->image_skia()));
+    }
   } else {
     if (image.IsEmpty())
       return;
@@ -815,16 +796,6 @@ void AppWindow::Show(ShowType show_type) {
   bool was_hidden = is_hidden_ || !has_been_shown_;
   is_hidden_ = false;
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableAppsShowOnFirstPaint)) {
-    show_on_first_paint_ = true;
-
-    if (!first_paint_complete_) {
-      delayed_show_type_ = show_type;
-      return;
-    }
-  }
-
   if (initial_state_ == ui::SHOW_STATE_FULLSCREEN)
     Fullscreen();
   else if (initial_state_ == ui::SHOW_STATE_MAXIMIZED)
@@ -841,20 +812,13 @@ void AppWindow::Show(ShowType show_type) {
       break;
   }
   AppWindowRegistry::Get(browser_context_)->AppWindowShown(this, was_hidden);
-
   has_been_shown_ = true;
-  SendOnWindowShownIfShown();
 
   OnNativeWindowChanged();
 }
 
 void AppWindow::Hide() {
-  // This is there to prevent race conditions with Hide() being called before
-  // there was a non-empty paint. It should have no effect in a non-racy
-  // scenario where the application is hiding then showing a window: the second
-  // show will not be delayed.
   is_hidden_ = true;
-  show_on_first_paint_ = false;
   GetBaseWindow()->Hide();
   AppWindowRegistry::Get(browser_context_)->AppWindowHidden(this);
   app_delegate_->OnHide();
@@ -880,11 +844,6 @@ bool AppWindow::IsAlwaysOnTop() const { return cached_always_on_top_; }
 void AppWindow::RestoreAlwaysOnTop() {
   if (cached_always_on_top_)
     UpdateNativeAlwaysOnTop();
-}
-
-void AppWindow::WindowEventsReady() {
-  can_send_events_ = true;
-  SendOnWindowShownIfShown();
 }
 
 void AppWindow::NotifyRenderViewReady() {
@@ -967,7 +926,9 @@ void AppWindow::DidDownloadFavicon(
 void AppWindow::OnExtensionIconImageChanged(IconImage* image) {
   DCHECK_EQ(app_icon_image_.get(), image);
 
-  UpdateAppIcon(gfx::Image(app_icon_image_->image_skia()));
+  // Update app_icon if no valid window icon url is set.
+  if (!window_icon_url_.is_valid())
+    UpdateAppIcon(gfx::Image(app_icon_image_->image_skia()));
 }
 
 void AppWindow::UpdateExtensionAppIcon() {
@@ -1035,16 +996,6 @@ void AppWindow::UpdateNativeAlwaysOnTop() {
     // When exiting fullscreen and moving away from the taskbar, reinstate
     // always-on-top.
     native_app_window_->SetAlwaysOnTop(true);
-  }
-}
-
-void AppWindow::SendOnWindowShownIfShown() {
-  if (!can_send_events_ || !has_been_shown_)
-    return;
-
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ::switches::kTestType)) {
-    app_window_contents_->DispatchWindowShownForTests();
   }
 }
 
@@ -1145,10 +1096,6 @@ void AppWindow::SetWebContentsBlocked(content::WebContents* web_contents,
 }
 
 bool AppWindow::IsWebContentsVisible(content::WebContents* web_contents) {
-  // In Vivaldi we will use the AppWindow as WebContentsModalDialogHost and
-  // the contents will always be visible.
-  if (vivaldi::IsVivaldiRunning())
-    return true;
   return app_delegate_->IsWebContentsVisible(web_contents);
 }
 

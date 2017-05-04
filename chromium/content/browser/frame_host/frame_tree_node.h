@@ -114,10 +114,18 @@ class CONTENT_EXPORT FrameTreeNode {
 
   FrameTreeNode* opener() const { return opener_; }
 
+  FrameTreeNode* original_opener() const { return original_opener_; }
+
   // Assigns a new opener for this node and, if |opener| is non-null, registers
   // an observer that will clear this node's opener if |opener| is ever
   // destroyed.
   void SetOpener(FrameTreeNode* opener);
+
+  // Assigns the initial opener for this node, and if |opener| is non-null,
+  // registers an observer that will clear this node's opener if |opener| is
+  // ever destroyed.
+  // It is not possible to change the opener once it was set.
+  void SetOriginalOpener(FrameTreeNode* opener);
 
   FrameTreeNode* child_at(size_t index) const {
     return children_[index].get();
@@ -138,6 +146,10 @@ class CONTENT_EXPORT FrameTreeNode {
   }
 
   // Returns the origin of the last committed page in this frame.
+  // WARNING: To get the last committed origin for a particular
+  // RenderFrameHost, use RenderFrameHost::GetLastCommittedOrigin() instead,
+  // which will behave correctly even when the RenderFrameHost is not the
+  // current one for this frame (such as when it's pending deletion).
   const url::Origin& current_origin() const {
     return replication_state_.origin;
   }
@@ -148,6 +160,13 @@ class CONTENT_EXPORT FrameTreeNode {
 
   // Set the current name and notify proxies about the update.
   void SetFrameName(const std::string& name, const std::string& unique_name);
+
+  // Set the frame's feature policy from an HTTP header, clearing any existing
+  // policy.
+  void SetFeaturePolicyHeader(const ParsedFeaturePolicy& parsed_header);
+
+  // Clear any feature policy associated with the frame.
+  void ResetFeaturePolicy();
 
   // Add CSP header to replication state and notify proxies about the update.
   void AddContentSecurityPolicy(const ContentSecurityPolicyHeader& header);
@@ -295,6 +314,8 @@ class CONTENT_EXPORT FrameTreeNode {
   // Returns the BlameContext associated with this node.
   FrameTreeNodeBlameContext& blame_context() { return blame_context_; }
 
+  void OnSetHasReceivedUserGesture();
+
  private:
   class OpenerDestroyedObserver;
 
@@ -334,6 +355,14 @@ class CONTENT_EXPORT FrameTreeNode {
   // changes or when this node is destroyed.  It is also cleared if |opener_|
   // is disowned.
   std::unique_ptr<OpenerDestroyedObserver> opener_observer_;
+
+  // The frame that opened this frame, if any. Contrary to opener_, this
+  // cannot be changed unless the original opener is destroyed.
+  FrameTreeNode* original_opener_;
+
+  // An observer that clears this node's |original_opener_| if the opener is
+  // destroyed.
+  std::unique_ptr<OpenerDestroyedObserver> original_opener_observer_;
 
   // The immediate children of this specific frame.
   std::vector<std::unique_ptr<FrameTreeNode>> children_;

@@ -8,7 +8,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_about_handler.h"
@@ -599,7 +598,7 @@ void Navigate(NavigateParams* params) {
         params->browser->tab_strip_model()->GetWebContentsAt(singleton_index);
 
     if (target->IsCrashed()) {
-      target->GetController().Reload(true);
+      target->GetController().Reload(content::ReloadType::NORMAL, true);
     } else if (params->path_behavior == NavigateParams::IGNORE_AND_NAVIGATE &&
         target->GetURL() != params->url) {
       LoadURLInContents(target, params->url, params);

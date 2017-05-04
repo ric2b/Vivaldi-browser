@@ -4,12 +4,17 @@
 
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
 
+#include <memory>
+
 #include "ash/common/shelf/shelf_item_types.h"
-#include "ash/common/wm_root_window_controller.h"
+#include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "ash/root_window_controller.h"
+#include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -24,7 +29,10 @@
 #include "components/arc/test/fake_app_instance.h"
 #include "components/exo/shell_surface.h"
 #include "components/prefs/pref_service.h"
+#include "components/session_manager/core/session_manager.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
 
 class LauncherContextMenuTest : public ash::test::AshTestBase {
@@ -37,6 +45,7 @@ class LauncherContextMenuTest : public ash::test::AshTestBase {
 
   void SetUp() override {
     arc_test_.SetUp(profile_.get());
+    session_manager_ = base::MakeUnique<session_manager::SessionManager>();
     ash::test::AshTestBase::SetUp();
     controller_.reset(new ChromeLauncherControllerImpl(
         profile(), ash::WmShell::Get()->shelf_model()));
@@ -48,24 +57,26 @@ class LauncherContextMenuTest : public ash::test::AshTestBase {
     ash::test::AshTestBase::TearDown();
   }
 
-  ash::WmShelf* GetWmShelf() {
-    return ash::WmShell::Get()
-        ->GetPrimaryRootWindow()
-        ->GetRootWindowController()
-        ->GetShelf();
+  ash::WmShelf* GetWmShelf(int64_t display_id) {
+    ash::RootWindowController* root_window_controller =
+        ash::WmLookup::Get()->GetRootWindowControllerWithDisplayId(display_id);
+    EXPECT_NE(nullptr, root_window_controller);
+    return root_window_controller->GetShelf();
   }
 
   LauncherContextMenu* CreateLauncherContextMenu(
-      ash::ShelfItemType shelf_item_type) {
+      ash::ShelfItemType shelf_item_type,
+      ash::WmShelf* wm_shelf) {
     ash::ShelfItem item;
     item.id = 123;  // dummy id
     item.type = shelf_item_type;
-    return LauncherContextMenu::Create(controller_.get(), &item, GetWmShelf());
+    return LauncherContextMenu::Create(controller_.get(), &item, wm_shelf);
   }
 
-  LauncherContextMenu* CreateLauncherContextMenuForDesktopShell() {
+  LauncherContextMenu* CreateLauncherContextMenuForDesktopShell(
+      ash::WmShelf* wm_shelf) {
     ash::ShelfItem* item = nullptr;
-    return LauncherContextMenu::Create(controller_.get(), item, GetWmShelf());
+    return LauncherContextMenu::Create(controller_.get(), item, wm_shelf);
   }
 
   // Creates app window and set optional Arc application id.
@@ -90,6 +101,7 @@ class LauncherContextMenuTest : public ash::test::AshTestBase {
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<ChromeLauncherControllerImpl> controller_;
   ArcAppTest arc_test_;
+  std::unique_ptr<session_manager::SessionManager> session_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(LauncherContextMenuTest);
 };
@@ -98,9 +110,10 @@ class LauncherContextMenuTest : public ash::test::AshTestBase {
 // menu is disabled when Incognito mode is switched off (by a policy).
 TEST_F(LauncherContextMenuTest,
        NewIncognitoWindowMenuIsDisabledWhenIncognitoModeOff) {
+  int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
   // Initially, "New Incognito window" should be enabled.
-  std::unique_ptr<LauncherContextMenu> menu(
-      CreateLauncherContextMenu(ash::TYPE_BROWSER_SHORTCUT));
+  std::unique_ptr<LauncherContextMenu> menu(CreateLauncherContextMenu(
+      ash::TYPE_BROWSER_SHORTCUT, GetWmShelf(primary_id)));
   ASSERT_TRUE(IsItemPresentInMenu(
       menu.get(), LauncherContextMenu::MENU_NEW_INCOGNITO_WINDOW));
   EXPECT_TRUE(menu->IsCommandIdEnabled(
@@ -109,7 +122,8 @@ TEST_F(LauncherContextMenuTest,
   // Disable Incognito mode.
   IncognitoModePrefs::SetAvailability(profile()->GetPrefs(),
                                       IncognitoModePrefs::DISABLED);
-  menu.reset(CreateLauncherContextMenu(ash::TYPE_BROWSER_SHORTCUT));
+  menu.reset(CreateLauncherContextMenu(ash::TYPE_BROWSER_SHORTCUT,
+                                       GetWmShelf(primary_id)));
   // The item should be disabled.
   ASSERT_TRUE(IsItemPresentInMenu(
       menu.get(), LauncherContextMenu::MENU_NEW_INCOGNITO_WINDOW));
@@ -121,9 +135,10 @@ TEST_F(LauncherContextMenuTest,
 // menu is disabled when Incognito mode is forced (by a policy).
 TEST_F(LauncherContextMenuTest,
        NewWindowMenuIsDisabledWhenIncognitoModeForced) {
+  int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
   // Initially, "New window" should be enabled.
-  std::unique_ptr<LauncherContextMenu> menu(
-      CreateLauncherContextMenu(ash::TYPE_BROWSER_SHORTCUT));
+  std::unique_ptr<LauncherContextMenu> menu(CreateLauncherContextMenu(
+      ash::TYPE_BROWSER_SHORTCUT, GetWmShelf(primary_id)));
   ASSERT_TRUE(IsItemPresentInMenu(
       menu.get(), LauncherContextMenu::MENU_NEW_WINDOW));
   EXPECT_TRUE(menu->IsCommandIdEnabled(LauncherContextMenu::MENU_NEW_WINDOW));
@@ -131,7 +146,8 @@ TEST_F(LauncherContextMenuTest,
   // Disable Incognito mode.
   IncognitoModePrefs::SetAvailability(profile()->GetPrefs(),
                                       IncognitoModePrefs::FORCED);
-  menu.reset(CreateLauncherContextMenu(ash::TYPE_BROWSER_SHORTCUT));
+  menu.reset(CreateLauncherContextMenu(ash::TYPE_BROWSER_SHORTCUT,
+                                       GetWmShelf(primary_id)));
   ASSERT_TRUE(IsItemPresentInMenu(
       menu.get(), LauncherContextMenu::MENU_NEW_WINDOW));
   EXPECT_FALSE(menu->IsCommandIdEnabled(LauncherContextMenu::MENU_NEW_WINDOW));
@@ -139,8 +155,9 @@ TEST_F(LauncherContextMenuTest,
 
 // Verifies status of contextmenu items for desktop shell.
 TEST_F(LauncherContextMenuTest, DesktopShellLauncherContextMenuItemCheck) {
+  int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
   std::unique_ptr<LauncherContextMenu> menu(
-      CreateLauncherContextMenuForDesktopShell());
+      CreateLauncherContextMenuForDesktopShell(GetWmShelf(primary_id)));
   EXPECT_FALSE(
       IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_OPEN_NEW));
   EXPECT_FALSE(IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_PIN));
@@ -163,8 +180,9 @@ TEST_F(LauncherContextMenuTest, DesktopShellLauncherContextMenuItemCheck) {
 // opened.
 TEST_F(LauncherContextMenuTest,
        DesktopShellLauncherContextMenuVerifyCloseItem) {
-  std::unique_ptr<LauncherContextMenu> menu(
-      CreateLauncherContextMenu(ash::TYPE_BROWSER_SHORTCUT));
+  int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  std::unique_ptr<LauncherContextMenu> menu(CreateLauncherContextMenu(
+      ash::TYPE_BROWSER_SHORTCUT, GetWmShelf(primary_id)));
   ASSERT_FALSE(
       IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_CLOSE));
 }
@@ -179,12 +197,14 @@ TEST_F(LauncherContextMenuTest, ArcLauncherContextMenuItemCheck) {
 
   controller()->PinAppWithID(app_id);
 
-  ash::ShelfItem item;
-  item.id = controller()->GetShelfIDForAppID(app_id);
-  ash::WmShelf* wm_shelf = GetWmShelf();
+  const ash::ShelfID item_id = controller()->GetShelfIDForAppID(app_id);
+  const ash::ShelfItem* item = controller()->GetItem(item_id);
+  ASSERT_TRUE(item);
+  int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  ash::WmShelf* wm_shelf = GetWmShelf(primary_id);
 
   std::unique_ptr<LauncherContextMenu> menu(
-      new ArcLauncherContextMenu(controller(), &item, wm_shelf));
+      new ArcLauncherContextMenu(controller(), item, wm_shelf));
 
   // Arc app is pinned but not running.
   EXPECT_TRUE(
@@ -214,7 +234,7 @@ TEST_F(LauncherContextMenuTest, ArcLauncherContextMenuItemCheck) {
   CreateArcWindow(window_app_id1);
   arc_test().app_instance()->SendTaskCreated(1, arc_test().fake_apps()[0],
                                              std::string());
-  menu.reset(new ArcLauncherContextMenu(controller(), &item, wm_shelf));
+  menu.reset(new ArcLauncherContextMenu(controller(), item, wm_shelf));
 
   EXPECT_FALSE(
       IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_OPEN_NEW));
@@ -229,9 +249,10 @@ TEST_F(LauncherContextMenuTest, ArcLauncherContextMenuItemCheck) {
   CreateArcWindow(window_app_id2);
   arc_test().app_instance()->SendTaskCreated(2, arc_test().fake_apps()[1],
                                              std::string());
-  item.id = controller()->GetShelfIDForAppID(app_id2);
-  ASSERT_TRUE(item.id);
-  menu.reset(new ArcLauncherContextMenu(controller(), &item, wm_shelf));
+  const ash::ShelfID item_id2 = controller()->GetShelfIDForAppID(app_id2);
+  const ash::ShelfItem* item2 = controller()->GetItem(item_id2);
+  ASSERT_TRUE(item2);
+  menu.reset(new ArcLauncherContextMenu(controller(), item2, wm_shelf));
 
   EXPECT_FALSE(
       IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_OPEN_NEW));
@@ -252,13 +273,42 @@ TEST_F(LauncherContextMenuTest, ArcLauncherContextMenuItemCheck) {
   CreateArcWindow(window_app_id3);
   arc_test().app_instance()->SendTaskCreated(3, arc_test().fake_apps()[2],
                                              shortcuts[0].intent_uri);
-  item.id = controller()->GetShelfIDForAppID(app_id3);
-  ASSERT_TRUE(item.id);
-  menu.reset(new ArcLauncherContextMenu(controller(), &item, wm_shelf));
+  const ash::ShelfID item_id3 = controller()->GetShelfIDForAppID(app_id3);
+  const ash::ShelfItem* item3 = controller()->GetItem(item_id3);
+  ASSERT_TRUE(item3);
+  menu.reset(new ArcLauncherContextMenu(controller(), item3, wm_shelf));
 
   EXPECT_FALSE(
       IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_OPEN_NEW));
   EXPECT_FALSE(IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_PIN));
   EXPECT_TRUE(IsItemPresentInMenu(menu.get(), LauncherContextMenu::MENU_CLOSE));
   EXPECT_TRUE(menu->IsCommandIdEnabled(LauncherContextMenu::MENU_CLOSE));
+}
+
+// Tests that fullscreen which makes "Autohide shelf" option disappeared on
+// shelf is a per-display setting (crbug.com/496681).
+TEST_F(LauncherContextMenuTest, AutohideShelfOptionOnExternalDisplay) {
+  if (!SupportsMultipleDisplays())
+    return;
+
+  UpdateDisplay("940x550,940x550");
+  int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  int64_t secondary_id = display_manager()->GetSecondaryDisplay().id();
+
+  // Create a normal window on primary display.
+  views::Widget* widget = new views::Widget;
+  views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
+  params.context = ash::Shell::GetPrimaryRootWindow();
+  widget->Init(params);
+  widget->Show();
+
+  widget->SetFullscreen(true);
+  std::unique_ptr<LauncherContextMenu> primary_menu(CreateLauncherContextMenu(
+      ash::TYPE_BROWSER_SHORTCUT, GetWmShelf(primary_id)));
+  std::unique_ptr<LauncherContextMenu> secondary_menu(CreateLauncherContextMenu(
+      ash::TYPE_BROWSER_SHORTCUT, GetWmShelf(secondary_id)));
+  EXPECT_FALSE(IsItemPresentInMenu(primary_menu.get(),
+                                   LauncherContextMenu::MENU_AUTO_HIDE));
+  EXPECT_TRUE(IsItemPresentInMenu(secondary_menu.get(),
+                                  LauncherContextMenu::MENU_AUTO_HIDE));
 }

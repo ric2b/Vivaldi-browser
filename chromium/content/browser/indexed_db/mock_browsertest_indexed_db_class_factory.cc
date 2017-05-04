@@ -10,6 +10,7 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "content/browser/indexed_db/indexed_db_factory.h"
 #include "content/browser/indexed_db/indexed_db_transaction.h"
 #include "content/browser/indexed_db/leveldb/leveldb_iterator_impl.h"
 #include "content/browser/indexed_db/leveldb/leveldb_transaction.h"
@@ -48,8 +49,8 @@ namespace content {
 class IndexedDBTestDatabase : public IndexedDBDatabase {
  public:
   IndexedDBTestDatabase(const base::string16& name,
-                        IndexedDBBackingStore* backing_store,
-                        IndexedDBFactory* factory,
+                        scoped_refptr<IndexedDBBackingStore> backing_store,
+                        scoped_refptr<IndexedDBFactory> factory,
                         const IndexedDBDatabase::Identifier& unique_identifier)
       : IndexedDBDatabase(name, backing_store, factory, unique_identifier) {}
 
@@ -65,12 +66,12 @@ class IndexedDBTestTransaction : public IndexedDBTransaction {
  public:
   IndexedDBTestTransaction(
       int64_t id,
-      base::WeakPtr<IndexedDBConnection> connection,
+      IndexedDBConnection* connection,
       const std::set<int64_t>& scope,
       blink::WebIDBTransactionMode mode,
       IndexedDBBackingStore::Transaction* backing_store_transaction)
       : IndexedDBTransaction(id,
-                             std::move(connection),
+                             connection,
                              scope,
                              mode,
                              backing_store_transaction) {}
@@ -256,22 +257,22 @@ MockBrowserTestIndexedDBClassFactory::~MockBrowserTestIndexedDBClassFactory() {
 scoped_refptr<IndexedDBDatabase>
 MockBrowserTestIndexedDBClassFactory::CreateIndexedDBDatabase(
     const base::string16& name,
-    IndexedDBBackingStore* backing_store,
-    IndexedDBFactory* factory,
+    scoped_refptr<IndexedDBBackingStore> backing_store,
+    scoped_refptr<IndexedDBFactory> factory,
     const IndexedDBDatabase::Identifier& unique_identifier) {
   return new IndexedDBTestDatabase(name, backing_store, factory,
                                    unique_identifier);
 }
 
-IndexedDBTransaction*
+std::unique_ptr<IndexedDBTransaction>
 MockBrowserTestIndexedDBClassFactory::CreateIndexedDBTransaction(
     int64_t id,
-    base::WeakPtr<IndexedDBConnection> connection,
+    IndexedDBConnection* connection,
     const std::set<int64_t>& scope,
     blink::WebIDBTransactionMode mode,
     IndexedDBBackingStore::Transaction* backing_store_transaction) {
-  return new IndexedDBTestTransaction(id, std::move(connection), scope, mode,
-                                      backing_store_transaction);
+  return std::unique_ptr<IndexedDBTransaction>(new IndexedDBTestTransaction(
+      id, connection, scope, mode, backing_store_transaction));
 }
 
 scoped_refptr<LevelDBTransaction>

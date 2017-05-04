@@ -4,6 +4,9 @@
 
 #include "platform/scheduler/base/task_queue_impl.h"
 
+#include "base/format_macros.h"
+#include "base/memory/ptr_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/trace_event/blame_context.h"
 #include "platform/scheduler/base/task_queue_manager.h"
 #include "platform/scheduler/base/task_queue_manager_delegate.h"
@@ -44,6 +47,23 @@ const char* TaskQueue::NameForQueueType(TaskQueue::QueueType queue_type) {
   }
   DCHECK(false);
   return nullptr;
+}
+
+// static
+const char* TaskQueue::PriorityToString(QueuePriority priority) {
+  switch (priority) {
+    case CONTROL_PRIORITY:
+      return "control";
+    case HIGH_PRIORITY:
+      return "high";
+    case NORMAL_PRIORITY:
+      return "normal";
+    case BEST_EFFORT_PRIORITY:
+      return "best_effort";
+    default:
+      NOTREACHED();
+      return nullptr;
+  }
 }
 
 namespace internal {
@@ -134,10 +154,14 @@ TaskQueueImpl::MainThreadOnly::MainThreadOnly(
     TimeDomain* time_domain)
     : task_queue_manager(task_queue_manager),
       time_domain(time_domain),
-      delayed_work_queue(new WorkQueue(task_queue, "delayed")),
-      immediate_work_queue(new WorkQueue(task_queue, "immediate")),
+      delayed_work_queue(
+          new WorkQueue(task_queue, "delayed", WorkQueue::QueueType::DELAYED)),
+      immediate_work_queue(new WorkQueue(task_queue,
+                                         "immediate",
+                                         WorkQueue::QueueType::IMMEDIATE)),
       set_index(0),
-      is_enabled(true),
+      is_enabled_refcount(0),
+      voter_refcount(0),
       blame_context(nullptr),
       current_fence(0) {}
 
@@ -156,16 +180,14 @@ void TaskQueueImpl::UnregisterTaskQueue() {
   any_thread().task_queue_manager = nullptr;
   main_thread_only().task_queue_manager = nullptr;
   main_thread_only().delayed_incoming_queue = std::priority_queue<Task>();
-  any_thread().immediate_incoming_queue = std::queue<Task>();
+  any_thread().immediate_incoming_queue.clear();
   main_thread_only().immediate_work_queue.reset();
   main_thread_only().delayed_work_queue.reset();
 }
 
 bool TaskQueueImpl::RunsTasksOnCurrentThread() const {
-  base::AutoLock lock(any_thread_lock_);
   return base::PlatformThread::CurrentId() == thread_id_;
 }
-
 
 bool TaskQueueImpl::PostDelayedTask(const tracked_objects::Location& from_here,
                                     const base::Closure& task,
@@ -306,42 +328,39 @@ void TaskQueueImpl::PushOntoImmediateIncomingQueueLocked(
     EnqueueOrder sequence_number,
     bool nestable) {
   if (any_thread().immediate_incoming_queue.empty())
-    any_thread().time_domain->RegisterAsUpdatableTaskQueue(this);
+    any_thread().time_domain->OnQueueHasIncomingImmediateWork(this);
   // If the |immediate_incoming_queue| is empty we need a DoWork posted to make
   // it run.
   if (any_thread().immediate_incoming_queue.empty()) {
     // There's no point posting a DoWork for a disabled queue, however we can
     // only tell if it's disabled from the main thread.
     if (base::PlatformThread::CurrentId() == thread_id_) {
-      if (main_thread_only().is_enabled && !BlockedByFenceLocked())
+      if (IsQueueEnabled() && !BlockedByFenceLocked())
         any_thread().task_queue_manager->MaybeScheduleImmediateWork(FROM_HERE);
     } else {
       any_thread().task_queue_manager->MaybeScheduleImmediateWork(FROM_HERE);
     }
   }
-  any_thread().immediate_incoming_queue.emplace(
-      posted_from, task, desired_run_time, sequence_number, nestable, sequence_number);
-  any_thread().task_queue_manager->DidQueueTask( any_thread().immediate_incoming_queue.back());
+  any_thread().immediate_incoming_queue.emplace_back(
+      posted_from, task, desired_run_time, sequence_number, nestable,
+      sequence_number);
+  any_thread().task_queue_manager->DidQueueTask(
+      any_thread().immediate_incoming_queue.back());
   TraceQueueSize(true);
 }
 
-void TaskQueueImpl::SetQueueEnabled(bool enabled) {
-  if (main_thread_only().is_enabled == enabled)
+void TaskQueueImpl::ReloadImmediateWorkQueueIfEmpty() {
+  if (!main_thread_only().immediate_work_queue->Empty())
     return;
-  main_thread_only().is_enabled = enabled;
-  if (!main_thread_only().task_queue_manager)
-    return;
-  if (enabled) {
-    // Note it's the job of the selector to tell the TaskQueueManager if
-    // a DoWork needs posting.
-    main_thread_only().task_queue_manager->selector_.EnableQueue(this);
-  } else {
-    main_thread_only().task_queue_manager->selector_.DisableQueue(this);
-  }
+
+  main_thread_only().immediate_work_queue->ReloadEmptyImmediateQueue();
 }
 
-bool TaskQueueImpl::IsQueueEnabled() const {
-  return main_thread_only().is_enabled;
+WTF::Deque<TaskQueueImpl::Task> TaskQueueImpl::TakeImmediateIncomingQueue() {
+  base::AutoLock lock(any_thread_lock_);
+  WTF::Deque<TaskQueueImpl::Task> queue;
+  queue.swap(any_thread().immediate_incoming_queue);
+  return queue;
 }
 
 bool TaskQueueImpl::IsEmpty() const {
@@ -419,20 +438,6 @@ void TaskQueueImpl::WakeUpForDelayedWork(LazyNow* lazy_now) {
   }
 }
 
-bool TaskQueueImpl::MaybeUpdateImmediateWorkQueues() {
-  if (!main_thread_only().task_queue_manager)
-    return false;
-
-  if (!main_thread_only().immediate_work_queue->Empty())
-    return true;
-
-  base::AutoLock lock(any_thread_lock_);
-  main_thread_only().immediate_work_queue->SwapLocked(
-      any_thread().immediate_incoming_queue);
-  // |immediate_work_queue| is now empty so updates are no longer required.
-  return false;
-}
-
 void TaskQueueImpl::TraceQueueSize(bool is_locked) const {
   bool is_tracing;
   TRACE_EVENT_CATEGORY_GROUP_ENABLED(disabled_by_default_tracing_category_,
@@ -479,28 +484,15 @@ TaskQueueImpl::QueuePriority TaskQueueImpl::GetQueuePriority() const {
   return static_cast<TaskQueue::QueuePriority>(set_index);
 }
 
-// static
-const char* TaskQueueImpl::PriorityToString(QueuePriority priority) {
-  switch (priority) {
-    case CONTROL_PRIORITY:
-      return "control";
-    case HIGH_PRIORITY:
-      return "high";
-    case NORMAL_PRIORITY:
-      return "normal";
-    case BEST_EFFORT_PRIORITY:
-      return "best_effort";
-    default:
-      NOTREACHED();
-      return nullptr;
-  }
-}
-
 void TaskQueueImpl::AsValueInto(base::trace_event::TracedValue* state) const {
   base::AutoLock lock(any_thread_lock_);
   state->BeginDictionary();
   state->SetString("name", GetName());
-  state->SetBoolean("enabled", main_thread_only().is_enabled);
+  state->SetString(
+      "task_queue_id",
+      base::StringPrintf("%" PRIx64, static_cast<uint64_t>(
+                                         reinterpret_cast<uintptr_t>(this))));
+  state->SetBoolean("enabled", IsQueueEnabled());
   state->SetString("time_domain_name",
                    main_thread_only().time_domain->GetName());
   bool verbose_tracing_enabled = false;
@@ -587,7 +579,7 @@ void TaskQueueImpl::SetTimeDomain(TimeDomain* time_domain) {
     any_thread().time_domain = time_domain;
   }
   // We rely here on TimeDomain::MigrateQueue being thread-safe to use with
-  // TimeDomain::Register/UnregisterAsUpdatableTaskQueue.
+  // TimeDomain::Register.
   main_thread_only().time_domain->MigrateQueue(this, time_domain);
   main_thread_only().time_domain = time_domain;
 }
@@ -634,7 +626,7 @@ void TaskQueueImpl::InsertFence(TaskQueue::InsertFencePosition position) {
     }
   }
 
-  if (main_thread_only().is_enabled && task_unblocked) {
+  if (IsQueueEnabled() && task_unblocked) {
     main_thread_only().task_queue_manager->MaybeScheduleImmediateWork(
         FROM_HERE);
   }
@@ -659,7 +651,7 @@ void TaskQueueImpl::RemoveFence() {
     }
   }
 
-  if (main_thread_only().is_enabled && task_unblocked) {
+  if (IsQueueEnabled() && task_unblocked) {
     main_thread_only().task_queue_manager->MaybeScheduleImmediateWork(
         FROM_HERE);
   }
@@ -703,18 +695,11 @@ EnqueueOrder TaskQueueImpl::GetFenceForTest() const {
 }
 
 // static
-void TaskQueueImpl::QueueAsValueInto(const std::queue<Task>& queue,
+void TaskQueueImpl::QueueAsValueInto(const WTF::Deque<Task>& queue,
                                      base::trace_event::TracedValue* state) {
-  // Remove const to search |queue| in the destructive manner. Restore the
-  // content from |visited| later.
-  std::queue<Task>* mutable_queue = const_cast<std::queue<Task>*>(&queue);
-  std::queue<Task> visited;
-  while (!mutable_queue->empty()) {
-    TaskAsValueInto(mutable_queue->front(), state);
-    visited.push(std::move(mutable_queue->front()));
-    mutable_queue->pop();
+  for (const Task& task : queue) {
+    TaskAsValueInto(task, state);
   }
-  *mutable_queue = std::move(visited);
 }
 
 // static
@@ -752,6 +737,111 @@ void TaskQueueImpl::TaskAsValueInto(const Task& task,
       "delayed_run_time",
       (task.delayed_run_time - base::TimeTicks()).InMicroseconds() / 1000.0L);
   state->EndDictionary();
+}
+
+TaskQueueImpl::QueueEnabledVoterImpl::QueueEnabledVoterImpl(
+    TaskQueueImpl* task_queue)
+    : task_queue_(task_queue), enabled_(true) {}
+
+TaskQueueImpl::QueueEnabledVoterImpl::~QueueEnabledVoterImpl() {
+  task_queue_->RemoveQueueEnabledVoter(this);
+}
+
+void TaskQueueImpl::QueueEnabledVoterImpl::SetQueueEnabled(bool enabled) {
+  if (enabled_ == enabled)
+    return;
+
+  task_queue_->OnQueueEnabledVoteChanged(enabled);
+  enabled_ = enabled;
+}
+
+void TaskQueueImpl::RemoveQueueEnabledVoter(
+    const QueueEnabledVoterImpl* voter) {
+  // Bail out if we're being called from TaskQueueImpl::UnregisterTaskQueue.
+  if (!main_thread_only().time_domain)
+    return;
+
+  bool was_enabled = IsQueueEnabled();
+  if (voter->enabled_) {
+    main_thread_only().is_enabled_refcount--;
+    DCHECK_GE(main_thread_only().is_enabled_refcount, 0);
+  }
+
+  main_thread_only().voter_refcount--;
+  DCHECK_GE(main_thread_only().voter_refcount, 0);
+
+  bool is_enabled = IsQueueEnabled();
+  if (was_enabled != is_enabled)
+    EnableOrDisableWithSelector(is_enabled);
+}
+
+bool TaskQueueImpl::IsQueueEnabled() const {
+  return main_thread_only().is_enabled_refcount ==
+         main_thread_only().voter_refcount;
+}
+
+void TaskQueueImpl::OnQueueEnabledVoteChanged(bool enabled) {
+  bool was_enabled = IsQueueEnabled();
+  if (enabled) {
+    main_thread_only().is_enabled_refcount++;
+    DCHECK_LE(main_thread_only().is_enabled_refcount,
+              main_thread_only().voter_refcount);
+  } else {
+    main_thread_only().is_enabled_refcount--;
+    DCHECK_GE(main_thread_only().is_enabled_refcount, 0);
+  }
+
+  bool is_enabled = IsQueueEnabled();
+  if (was_enabled != is_enabled)
+    EnableOrDisableWithSelector(is_enabled);
+}
+
+void TaskQueueImpl::EnableOrDisableWithSelector(bool enable) {
+  if (!main_thread_only().task_queue_manager)
+    return;
+
+  if (enable) {
+    // Note the selector calls TaskQueueManager::OnTaskQueueEnabled which posts
+    // a DoWork if needed.
+    main_thread_only().task_queue_manager->selector_.EnableQueue(this);
+  } else {
+    main_thread_only().task_queue_manager->selector_.DisableQueue(this);
+  }
+}
+
+std::unique_ptr<TaskQueueImpl::QueueEnabledVoter>
+TaskQueueImpl::CreateQueueEnabledVoter() {
+  main_thread_only().voter_refcount++;
+  main_thread_only().is_enabled_refcount++;
+  return base::MakeUnique<QueueEnabledVoterImpl>(this);
+}
+
+void TaskQueueImpl::SweepCanceledDelayedTasks(base::TimeTicks now) {
+  if (main_thread_only().delayed_incoming_queue.empty())
+    return;
+
+  base::TimeTicks first_task_runtime =
+      main_thread_only().delayed_incoming_queue.top().delayed_run_time;
+
+  // TODO(alexclarke): Let this remove all tasks once the DoWork refactor has
+  // landed.
+  std::priority_queue<Task> remaining_tasks;
+  while (!main_thread_only().delayed_incoming_queue.empty()) {
+    if (!main_thread_only().delayed_incoming_queue.top().task.IsCancelled() ||
+        main_thread_only().delayed_incoming_queue.top().delayed_run_time ==
+            first_task_runtime) {
+      remaining_tasks.push(std::move(
+          const_cast<Task&>(main_thread_only().delayed_incoming_queue.top())));
+    }
+    main_thread_only().delayed_incoming_queue.pop();
+  }
+  main_thread_only().delayed_incoming_queue = std::move(remaining_tasks);
+}
+
+void TaskQueueImpl::PushImmediateIncomingTaskForTest(
+    TaskQueueImpl::Task&& task) {
+  base::AutoLock lock(any_thread_lock_);
+  any_thread().immediate_incoming_queue.push_back(std::move(task));
 }
 
 }  // namespace internal

@@ -18,6 +18,7 @@
 #include "base/debug/leak_annotations.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
@@ -43,8 +44,7 @@
 #include "components/component_updater/pref_names.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/prefs/pref_service.h"
-#include "components/rappor/rappor_service.h"
-#include "components/safe_browsing_db/safe_browsing_prefs.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
@@ -67,12 +67,6 @@ const wchar_t kCleanerSubKey[] = L"Cleaner";
 
 const wchar_t kEndTimeValueName[] = L"EndTime";
 const wchar_t kStartTimeValueName[] = L"StartTime";
-
-const char kExtendedSafeBrowsingEnabledSwitch[] =
-    "extended-safebrowsing-enabled";
-
-const base::Feature kSwReporterExtendedSafeBrowsingFeature{
-    "SwReporterExtendedSafeBrowsingFeature", base::FEATURE_DISABLED_BY_DEFAULT};
 
 namespace {
 
@@ -253,7 +247,7 @@ class UMAHistogramReporter {
       return;
     }
 
-    rappor::RapporService* rappor_service = nullptr;
+    rappor::RapporServiceImpl* rappor_service = nullptr;
     if (use_rappor)
       rappor_service = g_browser_process->rappor_service();
 
@@ -264,19 +258,18 @@ class UMAHistogramReporter {
       if (base::StringToUint(uws_string, &uws_id)) {
         RecordSparseHistogram(kFoundUwsMetricName, uws_id);
         if (rappor_service) {
-          rappor_service->RecordSample(kFoundUwsMetricName,
-                                       rappor::COARSE_RAPPOR_TYPE,
-                                       base::UTF16ToUTF8(uws_string));
+          rappor_service->RecordSampleString(kFoundUwsMetricName,
+                                             rappor::COARSE_RAPPOR_TYPE,
+                                             base::UTF16ToUTF8(uws_string));
         }
       } else {
         parse_error = true;
       }
-
-      // Clean up the old value.
-      reporter_key.DeleteValue(kFoundUwsValueName);
-
-      RecordBooleanHistogram(kFoundUwsReadErrorMetricName, parse_error);
     }
+
+    // Clean up the old value.
+    reporter_key.DeleteValue(kFoundUwsValueName);
+    RecordBooleanHistogram(kFoundUwsReadErrorMetricName, parse_error);
   }
 
   // Reports to UMA the memory usage of the software reporter tool as reported
@@ -544,7 +537,7 @@ void DisplaySRTPrompt(const base::FilePath& download_path) {
 
   // Ownership of |global_error| is passed to the service. The error removes
   // itself from the service and self-destructs when done.
-  global_error_service->AddGlobalError(global_error);
+  global_error_service->AddGlobalError(base::WrapUnique(global_error));
 
   bool show_bubble = true;
   PrefService* local_state = g_browser_process->local_state();
@@ -565,21 +558,6 @@ void DisplaySRTPrompt(const base::FilePath& download_path) {
   }
   if (show_bubble)
     global_error->ShowBubbleView(browser);
-}
-
-bool SafeBrowsingExtendedEnabledForBrowser(const Browser* browser) {
-  const Profile* profile = browser->profile();
-  return profile && !profile->IsOffTheRecord() &&
-         IsExtendedReportingEnabled(*profile->GetPrefs());
-}
-
-// Returns true if there is a profile that is not in incognito mode and the user
-// has opted into Safe Browsing extended reporting.
-bool SafeBrowsingExtendedReportingEnabled() {
-  BrowserList* browser_list = BrowserList::GetInstance();
-  return std::any_of(browser_list->begin_last_active(),
-                     browser_list->end_last_active(),
-                     &SafeBrowsingExtendedEnabledForBrowser);
 }
 
 // This function is called from a worker thread to launch the SwReporter and
@@ -632,8 +610,8 @@ class SRTFetcher : public net::URLFetcherDelegate {
     ProfileIOData* io_data = ProfileIOData::FromResourceContext(
         profile_->GetResourceContext());
     net::HttpRequestHeaders headers;
-    // Note: It's fine to pass in |is_signed_in| false, which does not affect
-    // transmission of experiment ids coming from the variations server.
+    // Note: It's OK to pass |is_signed_in| false if it's unknown, as it does
+    // not affect transmission of experiments coming from the variations server.
     bool is_signed_in = false;
     variations::AppendVariationHeaders(
         url_fetcher_->GetOriginalURL(), io_data->IsOffTheRecord(),
@@ -949,11 +927,9 @@ class ReporterRunner : public chrome::BrowserListObserver {
   // Returns true if the experiment to send reporter logs is enabled, the user
   // opted into Safe Browsing extended reporting, and logs have been sent at
   // least |kSwReporterLastTimeSentReport| days ago.
-  bool ShouldSendReporterLogs(const PrefService& local_state) {
-    if (!base::FeatureList::IsEnabled(kSwReporterExtendedSafeBrowsingFeature))
-      return false;
-
-    UMAHistogramReporter uma;
+  bool ShouldSendReporterLogs(const std::string& suffix,
+                              const PrefService& local_state) {
+    UMAHistogramReporter uma(suffix);
     if (!SafeBrowsingExtendedReportingEnabled()) {
       uma.RecordLogsUploadEnabled(REPORTER_LOGS_UPLOADS_SBER_DISABLED);
       return false;
@@ -988,7 +964,8 @@ class ReporterRunner : public chrome::BrowserListObserver {
     PrefService* local_state = g_browser_process->local_state();
     if (next_invocation->BehaviourIsSupported(
             SwReporterInvocation::BEHAVIOUR_ALLOW_SEND_REPORTER_LOGS) &&
-        local_state && ShouldSendReporterLogs(*local_state)) {
+        local_state &&
+        ShouldSendReporterLogs(next_invocation->suffix, *local_state)) {
       next_invocation->logs_upload_enabled = true;
       AddSwitchesForExtendedReportingUser(next_invocation);
       // Set the local state value before the first attempt to run the

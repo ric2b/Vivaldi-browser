@@ -13,6 +13,7 @@
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/numerics/safe_conversions.h"
@@ -228,7 +229,8 @@ AudioOutputResampler::AudioOutputResampler(AudioManager* audio_manager,
                           close_delay_,
                           base::Bind(&AudioOutputResampler::Reinitialize,
                                      base::Unretained(this)),
-                          false) {
+                          false),
+      weak_factory_(this) {
   DCHECK(input_params.IsValid());
   DCHECK(output_params.IsValid());
   DCHECK_EQ(output_params_.format(), AudioParameters::AUDIO_PCM_LOW_LATENCY);
@@ -240,7 +242,10 @@ AudioOutputResampler::AudioOutputResampler(AudioManager* audio_manager,
 }
 
 AudioOutputResampler::~AudioOutputResampler() {
-  DCHECK(callbacks_.empty());
+  for (const auto& item : callbacks_) {
+    if (item.second->started())
+      StopStreamInternal(item);
+  }
 }
 
 void AudioOutputResampler::Reinitialize() {
@@ -255,7 +260,6 @@ void AudioOutputResampler::Reinitialize() {
   // Log a trace event so we can get feedback in the field when this happens.
   TRACE_EVENT0("audio", "AudioOutputResampler::Reinitialize");
 
-  dispatcher_->Shutdown();
   output_params_ = original_output_params_;
   streams_opened_ = false;
   Initialize();
@@ -264,8 +268,13 @@ void AudioOutputResampler::Reinitialize() {
 void AudioOutputResampler::Initialize() {
   DCHECK(!streams_opened_);
   DCHECK(callbacks_.empty());
-  dispatcher_ = new AudioOutputDispatcherImpl(
+  dispatcher_ = base::MakeUnique<AudioOutputDispatcherImpl>(
       audio_manager_, output_params_, device_id_, close_delay_);
+}
+
+AudioOutputProxy* AudioOutputResampler::CreateStreamProxy() {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  return new AudioOutputProxy(weak_factory_.GetWeakPtr());
 }
 
 bool AudioOutputResampler::OpenStream() {
@@ -333,9 +342,10 @@ bool AudioOutputResampler::StartStream(
   CallbackMap::iterator it = callbacks_.find(stream_proxy);
   if (it == callbacks_.end()) {
     resampler_callback = new OnMoreDataConverter(params_, output_params_);
-    callbacks_[stream_proxy] = resampler_callback;
+    callbacks_[stream_proxy] =
+        base::WrapUnique<OnMoreDataConverter>(resampler_callback);
   } else {
-    resampler_callback = it->second;
+    resampler_callback = it->second.get();
   }
 
   resampler_callback->Start(callback);
@@ -353,34 +363,20 @@ void AudioOutputResampler::StreamVolumeSet(AudioOutputProxy* stream_proxy,
 
 void AudioOutputResampler::StopStream(AudioOutputProxy* stream_proxy) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  dispatcher_->StopStream(stream_proxy);
 
-  // Now that StopStream() has completed the underlying physical stream should
-  // be stopped and no longer calling OnMoreData(), making it safe to Stop() the
-  // OnMoreDataConverter.
   CallbackMap::iterator it = callbacks_.find(stream_proxy);
-  if (it != callbacks_.end()) {
-    it->second->Stop();
-
-    // Destroy idle streams if any errors occurred during output; this ensures
-    // bad streams will not be reused.  Note: Errors may occur during the Stop()
-    // call above.
-    if (it->second->error_occurred())
-      dispatcher_->CloseAllIdleStreams();
-  }
+  DCHECK(it != callbacks_.end());
+  StopStreamInternal(*it);
 }
 
 void AudioOutputResampler::CloseStream(AudioOutputProxy* stream_proxy) {
   DCHECK(task_runner_->BelongsToCurrentThread());
+
   dispatcher_->CloseStream(stream_proxy);
 
   // We assume that StopStream() is always called prior to CloseStream(), so
   // that it is safe to delete the OnMoreDataConverter here.
-  CallbackMap::iterator it = callbacks_.find(stream_proxy);
-  if (it != callbacks_.end()) {
-    delete it->second;
-    callbacks_.erase(it);
-  }
+  callbacks_.erase(stream_proxy);
 
   // Start the reinitialization timer if there are no active proxies and we're
   // not using the originally requested output parameters.  This allows us to
@@ -391,15 +387,25 @@ void AudioOutputResampler::CloseStream(AudioOutputProxy* stream_proxy) {
   }
 }
 
-void AudioOutputResampler::Shutdown() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+void AudioOutputResampler::StopStreamInternal(
+    const CallbackMap::value_type& item) {
+  AudioOutputProxy* stream_proxy = item.first;
+  OnMoreDataConverter* callback = item.second.get();
+  DCHECK(callback->started());
 
-  // No AudioOutputProxy objects should hold a reference to us when we get
-  // to this stage.
-  DCHECK(HasOneRef()) << "Only the AudioManager should hold a reference";
+  // Stop the underlying physical stream.
+  dispatcher_->StopStream(stream_proxy);
 
-  dispatcher_->Shutdown();
-  DCHECK(callbacks_.empty());
+  // Now that StopStream() has completed the underlying physical stream should
+  // be stopped and no longer calling OnMoreData(), making it safe to Stop() the
+  // OnMoreDataConverter.
+  callback->Stop();
+
+  // Destroy idle streams if any errors occurred during output; this ensures
+  // bad streams will not be reused.  Note: Errors may occur during the Stop()
+  // call above.
+  if (callback->error_occurred())
+    dispatcher_->CloseAllIdleStreams();
 }
 
 OnMoreDataConverter::OnMoreDataConverter(const AudioParameters& input_params,

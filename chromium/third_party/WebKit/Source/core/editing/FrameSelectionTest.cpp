@@ -4,7 +4,7 @@
 
 #include "core/editing/FrameSelection.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Text.h"
@@ -39,6 +39,10 @@ class FrameSelectionTest : public EditingTestBase {
   Text* appendTextNode(const String& data);
   int layoutCount() const {
     return dummyPageHolder().frameView().layoutCount();
+  }
+
+  bool isCaretBoundsDirty() const {
+    return selection().m_frameCaret->m_caretRectDirty;
   }
 
   bool shouldPaintCaretForTesting() const {
@@ -79,16 +83,16 @@ TEST_F(FrameSelectionTest, InvalidateCaretRect) {
   selection().setSelection(
       SelectionInDOMTree::Builder().collapse(Position(text, 0)).build());
   selection().setCaretRectNeedsUpdate();
-  EXPECT_TRUE(selection().isCaretBoundsDirty());
+  EXPECT_TRUE(isCaretBoundsDirty());
   selection().invalidateCaretRect();
-  EXPECT_FALSE(selection().isCaretBoundsDirty());
+  EXPECT_FALSE(isCaretBoundsDirty());
 
   document().body()->removeChild(text);
   document().updateStyleAndLayoutIgnorePendingStylesheets();
   selection().setCaretRectNeedsUpdate();
-  EXPECT_TRUE(selection().isCaretBoundsDirty());
+  EXPECT_TRUE(isCaretBoundsDirty());
   selection().invalidateCaretRect();
-  EXPECT_FALSE(selection().isCaretBoundsDirty());
+  EXPECT_FALSE(isCaretBoundsDirty());
 }
 
 TEST_F(FrameSelectionTest, PaintCaretShouldNotLayout) {
@@ -141,10 +145,10 @@ TEST_F(FrameSelectionTest, InvalidatePreviousCaretAfterRemovingLastCharacter) {
   selection().setSelection(
       SelectionInDOMTree::Builder().collapse(selection().end()).build());
   selection().setCaretRectNeedsUpdate();
-  EXPECT_TRUE(selection().isCaretBoundsDirty());
+  EXPECT_TRUE(isCaretBoundsDirty());
   EXPECT_FALSE(isPreviousCaretDirtyForTesting());
   selection().invalidateCaretRect();
-  EXPECT_FALSE(selection().isCaretBoundsDirty());
+  EXPECT_FALSE(isCaretBoundsDirty());
   EXPECT_TRUE(isPreviousCaretDirtyForTesting());
 
   // Simulate to remove all except for "H".
@@ -153,11 +157,11 @@ TEST_F(FrameSelectionTest, InvalidatePreviousCaretAfterRemovingLastCharacter) {
   selection().setSelection(
       SelectionInDOMTree::Builder().collapse(selection().end()).build());
   selection().setCaretRectNeedsUpdate();
-  EXPECT_TRUE(selection().isCaretBoundsDirty());
+  EXPECT_TRUE(isCaretBoundsDirty());
   // "H" remains so early previousCaret invalidation isn't needed.
   EXPECT_TRUE(isPreviousCaretDirtyForTesting());
   selection().invalidateCaretRect();
-  EXPECT_FALSE(selection().isCaretBoundsDirty());
+  EXPECT_FALSE(isCaretBoundsDirty());
   EXPECT_TRUE(isPreviousCaretDirtyForTesting());
 
   // Simulate to remove the last character.
@@ -168,10 +172,10 @@ TEST_F(FrameSelectionTest, InvalidatePreviousCaretAfterRemovingLastCharacter) {
   EXPECT_FALSE(isPreviousCaretDirtyForTesting());
   document().updateStyleAndLayoutIgnorePendingStylesheets();
   selection().setCaretRectNeedsUpdate();
-  EXPECT_TRUE(selection().isCaretBoundsDirty());
+  EXPECT_TRUE(isCaretBoundsDirty());
   EXPECT_FALSE(isPreviousCaretDirtyForTesting());
   selection().invalidateCaretRect();
-  EXPECT_FALSE(selection().isCaretBoundsDirty());
+  EXPECT_FALSE(isCaretBoundsDirty());
   EXPECT_TRUE(isPreviousCaretDirtyForTesting());
 }
 
@@ -198,6 +202,19 @@ TEST_F(FrameSelectionTest, SelectWordAroundPosition) {
   EXPECT_TRUE(selection().selectWordAroundPosition(
       createVisiblePosition(Position(text, 22))));
   EXPECT_EQ_SELECTED_TEXT("Baz");
+}
+
+// crbug.com/657996
+TEST_F(FrameSelectionTest, SelectWordAroundPosition2) {
+  setBodyContent(
+      "<p style='width:70px; font-size:14px'>foo bar<em>+</em> baz</p>");
+  // "foo bar
+  //  b|az"
+  Node* const baz = document().body()->firstChild()->lastChild();
+  EXPECT_TRUE(selection().selectWordAroundPosition(
+      createVisiblePosition(Position(baz, 2))));
+  // TODO(yoichio): We should select only "baz".
+  EXPECT_EQ_SELECTED_TEXT(" baz");
 }
 
 TEST_F(FrameSelectionTest, ModifyExtendWithFlatTree) {

@@ -38,7 +38,7 @@
 namespace blink {
 
 DOMWindowQuota::DOMWindowQuota(LocalDOMWindow& window)
-    : DOMWindowProperty(window.frame()) {}
+    : Supplement<LocalDOMWindow>(window) {}
 
 const char* DOMWindowQuota::supplementName() {
   return "DOMWindowQuota";
@@ -61,7 +61,7 @@ DeprecatedStorageInfo* DOMWindowQuota::webkitStorageInfo(DOMWindow& window) {
 }
 
 DeprecatedStorageInfo* DOMWindowQuota::webkitStorageInfo() const {
-  if (!m_storageInfo && frame())
+  if (!m_storageInfo)
     m_storageInfo = DeprecatedStorageInfo::create();
   return m_storageInfo.get();
 }
@@ -69,7 +69,6 @@ DeprecatedStorageInfo* DOMWindowQuota::webkitStorageInfo() const {
 DEFINE_TRACE(DOMWindowQuota) {
   visitor->trace(m_storageInfo);
   Supplement<LocalDOMWindow>::trace(visitor);
-  DOMWindowProperty::trace(visitor);
 }
 
 }  // namespace blink

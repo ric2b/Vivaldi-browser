@@ -26,7 +26,7 @@
 
 #include "core/html/parser/HTMLTreeBuilder.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/MathMLNames.h"
 #include "core/SVGNames.h"
@@ -37,6 +37,7 @@
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/frame/UseCounter.h"
+#include "core/html/HTMLFormControlElement.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLTemplateElement.h"
 #include "core/html/parser/AtomicHTMLToken.h"
@@ -65,13 +66,13 @@ static TextPosition uninitializedPositionValue1() {
                       OrdinalNumber::first());
 }
 
-static inline bool isAllWhitespace(const String& string) {
-  return string.isAllSpecialCharacters<isHTMLSpace<UChar>>();
+static inline bool isAllWhitespace(const StringView& stringView) {
+  return stringView.isAllSpecialCharacters<isHTMLSpace<UChar>>();
 }
 
 static inline bool isAllWhitespaceOrReplacementCharacters(
-    const String& string) {
-  return string.isAllSpecialCharacters<isHTMLSpaceOrReplacementCharacter>();
+    const StringView& stringView) {
+  return stringView.isAllSpecialCharacters<isHTMLSpaceOrReplacementCharacter>();
 }
 
 static bool isNumberedHeaderTag(const AtomicString& tagName) {
@@ -137,18 +138,19 @@ class HTMLTreeBuilder::CharacterTokenBuffer {
 
   void skipLeadingWhitespace() { skipLeading<isHTMLSpace<UChar>>(); }
 
-  String takeLeadingWhitespace() { return takeLeading<isHTMLSpace<UChar>>(); }
+  StringView takeLeadingWhitespace() {
+    return takeLeading<isHTMLSpace<UChar>>();
+  }
 
   void skipLeadingNonWhitespace() { skipLeading<isNotHTMLSpace<UChar>>(); }
 
   void skipRemaining() { m_current = m_end; }
 
-  String takeRemaining() {
+  StringView takeRemaining() {
     ASSERT(!isEmpty());
     unsigned start = m_current;
     m_current = m_end;
-    // Notice that substring is smart enough to return *this when start == 0.
-    return String(m_characters->substring(start, m_end - start));
+    return StringView(m_characters.get(), start, m_end - start);
   }
 
   void giveRemainingTo(StringBuilder& recipient) {
@@ -201,13 +203,11 @@ class HTMLTreeBuilder::CharacterTokenBuffer {
   }
 
   template <bool characterPredicate(UChar)>
-  String takeLeading() {
+  StringView takeLeading() {
     ASSERT(!isEmpty());
     const unsigned start = m_current;
     skipLeading<characterPredicate>();
-    if (start == m_current)
-      return String();
-    return String(m_characters->substring(start, m_current - start));
+    return StringView(m_characters.get(), start, m_current - start);
   }
 
   RefPtr<StringImpl> m_characters;
@@ -220,9 +220,6 @@ HTMLTreeBuilder::HTMLTreeBuilder(HTMLDocumentParser* parser,
                                  ParserContentPolicy parserContentPolicy,
                                  const HTMLParserOptions& options)
     : m_framesetOk(true),
-#if ENABLE(ASSERT)
-      m_isAttached(true),
-#endif
       m_tree(parser->reentryPermit(), document, parserContentPolicy),
       m_insertionMode(InitialMode),
       m_originalInsertionMode(InitialMode),
@@ -254,7 +251,7 @@ HTMLTreeBuilder::HTMLTreeBuilder(HTMLDocumentParser* parser,
       fragment, HTMLStackItem::ItemForDocumentFragmentNode));
 
   if (isHTMLTemplateElement(*contextElement))
-    m_templateInsertionModes.append(TemplateContentsMode);
+    m_templateInsertionModes.push_back(TemplateContentsMode);
 
   resetInsertionModeAppropriately();
 }
@@ -283,7 +280,7 @@ DEFINE_TRACE(HTMLTreeBuilder) {
 }
 
 void HTMLTreeBuilder::detach() {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   // This call makes little sense in fragment mode, but for consistency
   // DocumentParser expects detach() to always be called before it's destroyed.
   m_isAttached = false;
@@ -480,8 +477,7 @@ static void adjustAttributes(AtomicHTMLToken* token) {
     mapLoweredLocalNameToName(caseMap, attrs.get(), length);
   }
 
-  for (unsigned i = 0; i < token->attributes().size(); ++i) {
-    Attribute& tokenAttribute = token->attributes().at(i);
+  for (auto& tokenAttribute : token->attributes()) {
     const QualifiedName& casedName = caseMap->get(tokenAttribute.localName());
     if (!casedName.localName().isNull())
       tokenAttribute.parserSetName(casedName);
@@ -852,7 +848,7 @@ void HTMLTreeBuilder::processTemplateStartTag(AtomicHTMLToken* token) {
   m_tree.activeFormattingElements()->appendMarker();
   m_tree.insertHTMLElement(token);
   m_framesetOk = false;
-  m_templateInsertionModes.append(TemplateContentsMode);
+  m_templateInsertionModes.push_back(TemplateContentsMode);
   setInsertionMode(TemplateContentsMode);
 }
 
@@ -1349,8 +1345,8 @@ void HTMLTreeBuilder::processStartTag(AtomicHTMLToken* token) {
         insertionMode = InBodyMode;
 
       ASSERT(insertionMode != TemplateContentsMode);
-      ASSERT(m_templateInsertionModes.last() == TemplateContentsMode);
-      m_templateInsertionModes.last() = insertionMode;
+      ASSERT(m_templateInsertionModes.back() == TemplateContentsMode);
+      m_templateInsertionModes.back() = insertionMode;
       setInsertionMode(insertionMode);
 
       processStartTag(token);
@@ -1526,7 +1522,7 @@ void HTMLTreeBuilder::resetInsertionModeAppropriately() {
         item = m_fragmentContext.contextElementStackItem();
     }
     if (item->hasTagName(templateTag))
-      return setInsertionMode(m_templateInsertionModes.last());
+      return setInsertionMode(m_templateInsertionModes.back());
     if (item->hasTagName(selectTag)) {
       if (!last) {
         while (item->node() != m_tree.openElements()->rootNode() &&
@@ -2213,7 +2209,7 @@ ReprocessBuffer:
     }
     case InHeadMode: {
       ASSERT(getInsertionMode() == InHeadMode);
-      String leadingWhitespace = buffer.takeLeadingWhitespace();
+      StringView leadingWhitespace = buffer.takeLeadingWhitespace();
       if (!leadingWhitespace.isEmpty())
         m_tree.insertTextNode(leadingWhitespace, AllWhitespace);
       if (buffer.isEmpty())
@@ -2223,7 +2219,7 @@ ReprocessBuffer:
     }
     case AfterHeadMode: {
       ASSERT(getInsertionMode() == AfterHeadMode);
-      String leadingWhitespace = buffer.takeLeadingWhitespace();
+      StringView leadingWhitespace = buffer.takeLeadingWhitespace();
       if (!leadingWhitespace.isEmpty())
         m_tree.insertTextNode(leadingWhitespace, AllWhitespace);
       if (buffer.isEmpty())
@@ -2271,7 +2267,7 @@ ReprocessBuffer:
     }
     case InColumnGroupMode: {
       ASSERT(getInsertionMode() == InColumnGroupMode);
-      String leadingWhitespace = buffer.takeLeadingWhitespace();
+      StringView leadingWhitespace = buffer.takeLeadingWhitespace();
       if (!leadingWhitespace.isEmpty())
         m_tree.insertTextNode(leadingWhitespace, AllWhitespace);
       if (buffer.isEmpty())
@@ -2300,7 +2296,7 @@ ReprocessBuffer:
     }
     case InHeadNoscriptMode: {
       ASSERT(getInsertionMode() == InHeadNoscriptMode);
-      String leadingWhitespace = buffer.takeLeadingWhitespace();
+      StringView leadingWhitespace = buffer.takeLeadingWhitespace();
       if (!leadingWhitespace.isEmpty())
         m_tree.insertTextNode(leadingWhitespace, AllWhitespace);
       if (buffer.isEmpty())
@@ -2343,7 +2339,7 @@ ReprocessBuffer:
 void HTMLTreeBuilder::processCharacterBufferForInBody(
     CharacterTokenBuffer& buffer) {
   m_tree.reconstructTheActiveFormattingElements();
-  const String& characters = buffer.takeRemaining();
+  StringView characters = buffer.takeRemaining();
   m_tree.insertTextNode(characters);
   if (m_framesetOk && !isAllWhitespaceOrReplacementCharacters(characters))
     m_framesetOk = false;
@@ -2432,17 +2428,21 @@ void HTMLTreeBuilder::processEndOfFile(AtomicHTMLToken* token) {
       defaultForInTableText();
       processEndOfFile(token);
       return;
-    case TextMode:
+    case TextMode: {
       parseError(token);
       if (m_tree.currentStackItem()->hasTagName(scriptTag)) {
         // Mark the script element as "already started".
         DVLOG(1) << "Not implemented.";
       }
+      Element* el = m_tree.openElements()->top();
+      if (isHTMLTextAreaElement(el))
+        toHTMLFormControlElement(el)->setBlocksFormSubmission(true);
       m_tree.openElements()->pop();
       ASSERT(m_originalInsertionMode != TextMode);
       setInsertionMode(m_originalInsertionMode);
       processEndOfFile(token);
       return;
+    }
     case TemplateContentsMode:
       if (processEndOfFileForInTemplateContents(token))
         return;

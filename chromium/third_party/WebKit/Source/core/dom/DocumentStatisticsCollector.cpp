@@ -64,7 +64,7 @@ bool isVisible(const Element& element) {
   if (!style)
     return false;
   return (style->display() != EDisplay::None &&
-          style->visibility() != EVisibility::Hidden && style->opacity() != 0);
+          style->visibility() != EVisibility::kHidden && style->opacity() != 0);
 }
 
 bool matchAttributes(const Element& element, const Vector<String>& words) {
@@ -89,14 +89,14 @@ bool isGoodForScoring(const WebDistillabilityFeatures& features,
         "share",   "shoutbox",   "sidebar", "skyscraper", "sponsor", "ad-break",
         "agegate", "pagination", "pager",   "popup"};
     for (auto word : words) {
-      unlikelyCandidates.append(word);
+      unlikelyCandidates.push_back(word);
     }
   }
   DEFINE_STATIC_LOCAL(Vector<String>, highlyLikelyCandidates, ());
   if (highlyLikelyCandidates.isEmpty()) {
     auto words = {"and", "article", "body", "column", "main", "shadow"};
     for (auto word : words) {
-      highlyLikelyCandidates.append(word);
+      highlyLikelyCandidates.push_back(word);
     }
   }
 

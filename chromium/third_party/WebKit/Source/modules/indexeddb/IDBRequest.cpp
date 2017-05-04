@@ -29,7 +29,6 @@
 #include "modules/indexeddb/IDBRequest.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "bindings/modules/v8/ToV8ForModules.h"
 #include "bindings/modules/v8/V8BindingForModules.h"
 #include "core/dom/DOMException.h"
@@ -66,8 +65,7 @@ IDBRequest* IDBRequest::create(ScriptState* scriptState,
 IDBRequest::IDBRequest(ScriptState* scriptState,
                        IDBAny* source,
                        IDBTransaction* transaction)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(scriptState->getExecutionContext()),
+    : SuspendableObject(scriptState->getExecutionContext()),
       m_transaction(transaction),
       m_source(source) {}
 
@@ -86,7 +84,7 @@ DEFINE_TRACE(IDBRequest) {
   visitor->trace(m_cursorKey);
   visitor->trace(m_cursorPrimaryKey);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  SuspendableObject::trace(visitor);
 }
 
 ScriptValue IDBRequest::result(ScriptState* scriptState,
@@ -255,8 +253,7 @@ void IDBRequest::onSuccess(const Vector<String>& stringList) {
   if (!shouldEnqueueEvent())
     return;
 
-  DOMStringList* domStringList =
-      DOMStringList::create(DOMStringList::IndexedDB);
+  DOMStringList* domStringList = DOMStringList::create();
   for (size_t i = 0; i < stringList.size(); ++i)
     domStringList->append(stringList[i]);
   onSuccessInternal(IDBAny::create(domStringList));
@@ -388,7 +385,7 @@ bool IDBRequest::hasPendingActivity() const {
   return m_hasPendingActivity && getExecutionContext();
 }
 
-void IDBRequest::contextDestroyed() {
+void IDBRequest::contextDestroyed(ExecutionContext*) {
   if (m_readyState == PENDING) {
     m_readyState = EarlyDeath;
     if (m_transaction) {
@@ -415,7 +412,7 @@ const AtomicString& IDBRequest::interfaceName() const {
 }
 
 ExecutionContext* IDBRequest::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return SuspendableObject::getExecutionContext();
 }
 
 DispatchEventResult IDBRequest::dispatchEventInternal(Event* event) {
@@ -432,14 +429,14 @@ DispatchEventResult IDBRequest::dispatchEventInternal(Event* event) {
   dequeueEvent(event);
 
   HeapVector<Member<EventTarget>> targets;
-  targets.append(this);
+  targets.push_back(this);
   if (m_transaction && !m_preventPropagation) {
-    targets.append(m_transaction);
+    targets.push_back(m_transaction);
     // If there ever are events that are associated with a database but
     // that do not have a transaction, then this will not work and we need
     // this object to actually hold a reference to the database (to ensure
     // it stays alive).
-    targets.append(m_transaction->db());
+    targets.push_back(m_transaction->db());
   }
 
   // Cursor properties should not be updated until the success event is being
@@ -488,7 +485,7 @@ DispatchEventResult IDBRequest::dispatchEventInternal(Event* event) {
         dispatchResult == DispatchEventResult::NotCanceled &&
         !m_requestAborted) {
       m_transaction->setError(m_error);
-      m_transaction->abort(IGNORE_EXCEPTION);
+      m_transaction->abort(IGNORE_EXCEPTION_FOR_TESTING);
     }
 
     // If this was the last request in the transaction's list, it may commit
@@ -512,7 +509,7 @@ void IDBRequest::uncaughtExceptionInEventHandler() {
   if (m_transaction && !m_requestAborted) {
     m_transaction->setError(DOMException::create(
         AbortError, "Uncaught exception in event handler."));
-    m_transaction->abort(IGNORE_EXCEPTION);
+    m_transaction->abort(IGNORE_EXCEPTION_FOR_TESTING);
   }
 }
 
@@ -547,7 +544,7 @@ void IDBRequest::enqueueEvent(Event* event) {
   // in which case these must be cancelled. If the events not dispatched for
   // other reasons they must be removed from this list via dequeueEvent().
   if (eventQueue->enqueueEvent(event))
-    m_enqueuedEvents.append(event);
+    m_enqueuedEvents.push_back(event);
 }
 
 void IDBRequest::dequeueEvent(Event* event) {

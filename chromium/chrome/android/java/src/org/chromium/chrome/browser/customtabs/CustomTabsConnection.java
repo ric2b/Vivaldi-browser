@@ -19,6 +19,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Process;
 import android.os.StrictMode;
+import android.os.SystemClock;
 import android.support.customtabs.CustomTabsCallback;
 import android.support.customtabs.CustomTabsIntent;
 import android.support.customtabs.CustomTabsService;
@@ -31,6 +32,8 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.TimeUtils;
+import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.ProcessInitException;
@@ -42,6 +45,7 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
+import org.chromium.chrome.browser.metrics.PageLoadMetrics;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.prerender.ExternalPrerenderHandler;
@@ -129,6 +133,10 @@ public class CustomTabsConnection {
     private final AtomicBoolean mWarmupHasBeenFinished = new AtomicBoolean();
     private ExternalPrerenderHandler mExternalPrerenderHandler;
 
+    // Conversion between native TimeTicks and SystemClock.uptimeMillis().
+    private long mNativeTickOffsetUs;
+    private boolean mNativeTickOffsetUsComputed;
+
     /**
      * <strong>DO NOT CALL</strong>
      * Public to be instanciable from {@link ChromeApplication}. This is however
@@ -175,6 +183,7 @@ public class CustomTabsConnection {
     }
 
     private boolean newSessionInternal(CustomTabsSessionToken session) {
+        if (session == null) return false;
         ClientManager.DisconnectCallback onDisconnect = new ClientManager.DisconnectCallback() {
             @Override
             public void run(CustomTabsSessionToken session) {
@@ -213,9 +222,14 @@ public class CustomTabsConnection {
     }
 
     public boolean warmup(long flags) {
-        boolean success = warmupInternal(true);
-        logCall("warmup()", success);
-        return success;
+        try {
+            TraceEvent.begin("CustomTabsConnection.warmup");
+            boolean success = warmupInternal(true);
+            logCall("warmup()", success);
+            return success;
+        } finally {
+            TraceEvent.end("CustomTabsConnection.warmup");
+        }
     }
 
     /**
@@ -241,17 +255,38 @@ public class CustomTabsConnection {
         ThreadUtils.postOnUiThread(new Runnable() {
             @Override
             public void run() {
-                if (!initialized) initializeBrowser(mApplication);
-                if (mayCreateSpareWebContents && mSpeculation == null
-                        && !SysUtils.isLowEndDevice()) {
-                    WarmupManager.getInstance().createSpareWebContents();
-                    // The throttling database uses shared preferences, that can cause a StrictMode
-                    // violation on the first access. Make sure that this access is not in
-                    // mayLauchUrl.
-                    RequestThrottler.getForUid(mApplication, uid);
+                try {
+                    TraceEvent.begin("CustomTabsConnection.warmupInternal");
+                    // Ordering of actions here:
+                    // 1. Initializing the browser needs to be done once, and first.
+                    // 2. Creating a spare renderer takes time, in other threads and processes, so
+                    //    start it sooner rather than later. Can be done several times.
+                    // 3. Initializing the ResourcePrefetchPredictor is done once, and triggers
+                    //    work on other threads, start it early.
+                    // 4. RequestThrottler first access has to be done only once.
 
-                    Profile profile = Profile.getLastUsedProfile();
-                    new ResourcePrefetchPredictor(profile).startInitialization();
+                    // (1)
+                    if (!initialized) initializeBrowser(mApplication);
+
+                    // (2)
+                    if (mayCreateSpareWebContents && mSpeculation == null
+                            && !SysUtils.isLowEndDevice()) {
+                        WarmupManager.getInstance().createSpareWebContents();
+                    }
+
+                    if (!initialized) {
+                        // (3)
+                        Profile profile = Profile.getLastUsedProfile();
+                        new ResourcePrefetchPredictor(profile).startInitialization();
+
+                        // (4)
+                        // The throttling database uses shared preferences, that can cause a
+                        // StrictMode violation on the first access. Make sure that this access is
+                        // not in mayLauchUrl.
+                        RequestThrottler.getForUid(mApplication, uid);
+                    }
+                } finally {
+                    TraceEvent.end("CustomTabsConnection.warmupInternal");
                 }
                 mWarmupHasBeenFinished.set(true);
             }
@@ -342,9 +377,14 @@ public class CustomTabsConnection {
 
     public boolean mayLaunchUrl(CustomTabsSessionToken session, Uri url, Bundle extras,
             List<Bundle> otherLikelyBundles) {
-        boolean success = mayLaunchUrlInternal(session, url, extras, otherLikelyBundles);
-        logCall("mayLaunchUrl()", success);
-        return success;
+        try {
+            TraceEvent.begin("CustomTabsConnection.mayLaunchUrl");
+            boolean success = mayLaunchUrlInternal(session, url, extras, otherLikelyBundles);
+            logCall("mayLaunchUrl()", success);
+            return success;
+        } finally {
+            TraceEvent.end("CustomTabsConnection.mayLaunchUrl");
+        }
     }
 
     private boolean mayLaunchUrlInternal(final CustomTabsSessionToken session, Uri url,
@@ -362,18 +402,23 @@ public class CustomTabsConnection {
         if (!warmupInternal(false)) return false; // Also does the foreground check.
 
         final int uid = Binder.getCallingUid();
-        // TODO(lizeb): Also throttle low-confidence mode.
-        if (!lowConfidence
-                && !mClientManager.updateStatsAndReturnWhetherAllowed(session, uid, urlString)) {
+        if (!mClientManager.updateStatsAndReturnWhetherAllowed(
+                    session, uid, urlString, otherLikelyBundles != null)) {
             return false;
         }
         ThreadUtils.postOnUiThread(new Runnable() {
             @Override
             public void run() {
-                if (lowConfidence) {
-                    lowConfidenceMayLaunchUrl(otherLikelyBundles);
-                } else {
-                    highConfidenceMayLaunchUrl(session, uid, urlString, extras, otherLikelyBundles);
+                try {
+                    TraceEvent.begin("CustomTabsConnection.mayLaunchUrlInternal");
+                    if (lowConfidence) {
+                        lowConfidenceMayLaunchUrl(otherLikelyBundles);
+                    } else {
+                        highConfidenceMayLaunchUrl(
+                                session, uid, urlString, extras, otherLikelyBundles);
+                    }
+                } finally {
+                    TraceEvent.end("CustomTabsConnection.mayLaunchUrlInternal");
                 }
             }
         });
@@ -430,21 +475,22 @@ public class CustomTabsConnection {
         return result;
     }
 
-    /**
-     * Sends a request to look for a valid postMessage origin that is associated with the app
-     * owning the given {@link CustomTabsSessionToken}.
-     * @param session The session that the request is associated with
-     * @return Whether the validation request was accepted.
-     */
-    public boolean validatePostMessageOrigin(CustomTabsSessionToken session) {
-        boolean success = validatePostMessageOriginInternal(session);
-        logCall("validatePostMessageOrigin()", success);
+    public boolean requestPostMessageChannel(CustomTabsSessionToken session,
+            Uri postMessageOrigin) {
+        boolean success = requestPostMessageChannelInternal(session, postMessageOrigin);
+        logCall("requestPostMessageChannel() with origin "
+                + (postMessageOrigin != null ? postMessageOrigin.toString() : ""), success);
         return success;
     }
 
-    private boolean validatePostMessageOriginInternal(final CustomTabsSessionToken session) {
+    private boolean requestPostMessageChannelInternal(final CustomTabsSessionToken session,
+            final Uri postMessageOrigin) {
         if (!mWarmupHasBeenCalled.get()) return false;
-        if (!isCallerForegroundOrSelf()) return false;
+        if (!isCallerForegroundOrSelf() && !CustomTabActivity.isActiveSession(session)) {
+            return false;
+        }
+        if (!mClientManager.bindToPostMessageServiceForSession(session)) return false;
+
         final int uid = Binder.getCallingUid();
         ThreadUtils.postOnUiThread(new Runnable() {
             @Override
@@ -452,8 +498,8 @@ public class CustomTabsConnection {
                 // If the API is not enabled, we don't set the post message origin, which will
                 // avoid PostMessageHandler initialization and disallow postMessage calls.
                 if (!ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_POST_MESSAGE_API)) return;
-                mClientManager.setPostMessageOriginForSession(
-                        session, acquireOriginForSession(session, uid));
+                mClientManager.initializeWithPostMessageOriginForSession(
+                        session, verifyOriginForSession(session, uid, postMessageOrigin));
             }
         });
         return true;
@@ -462,11 +508,14 @@ public class CustomTabsConnection {
     /**
      * Acquire the origin for the client that owns the given session.
      * @param session The session to use for getting client information.
-     * @param clientUID The UID for the client controlling the session.
+     * @param clientUid The UID for the client controlling the session.
+     * @param origin The origin that is suggested by the client. The validated origin may be this or
+     *               a derivative of this.
      * @return The validated origin {@link Uri} for the given session's client.
      */
-    protected Uri acquireOriginForSession(CustomTabsSessionToken session, int clientUID) {
-        if (clientUID == Process.myUid()) return Uri.EMPTY;
+    protected Uri verifyOriginForSession(
+            CustomTabsSessionToken session, int clientUid, Uri origin) {
+        if (clientUid == Process.myUid()) return Uri.EMPTY;
         return null;
     }
 
@@ -688,12 +737,26 @@ public class CustomTabsConnection {
      *
      * @param session Session identifier.
      * @param metricName Name of the page load metric.
+     * @param navigationStartTick Absolute navigation start time, as TimeTicks taken from native.
+     *
      * @param offsetMs Offset in ms from navigationStart.
      */
-    boolean notifyPageLoadMetric(CustomTabsSessionToken session, String metricName, long offsetMs) {
+    boolean notifyPageLoadMetric(CustomTabsSessionToken session, String metricName,
+            long navigationStartTick, long offsetMs) {
         CustomTabsCallback callback = mClientManager.getCallbackForSession(session);
         if (callback == null) return false;
+
+        if (!mNativeTickOffsetUsComputed) {
+            // Compute offset from time ticks to uptimeMillis.
+            mNativeTickOffsetUsComputed = true;
+            long nativeNowUs = TimeUtils.nativeGetTimeTicksNowUs();
+            long javaNowUs = SystemClock.uptimeMillis() * 1000;
+            mNativeTickOffsetUs = nativeNowUs - javaNowUs;
+        }
+
         Bundle args = new Bundle();
+        args.putLong(PageLoadMetrics.NAVIGATION_START,
+                (navigationStartTick - mNativeTickOffsetUs) / 1000);
         args.putLong(metricName, offsetMs);
         try {
             callback.extraCallback(PAGE_LOAD_METRICS_CALLBACK, args);
@@ -879,8 +942,7 @@ public class CustomTabsConnection {
             mExternalPrerenderHandler = new ExternalPrerenderHandler();
         }
         Rect contentBounds = ExternalPrerenderHandler.estimateContentSize(mApplication, true);
-        Context context = mApplication.getApplicationContext();
-        String referrer = IntentHandler.getReferrerUrlIncludingExtraHeaders(extrasIntent, context);
+        String referrer = IntentHandler.getReferrerUrlIncludingExtraHeaders(extrasIntent);
         if (referrer == null && getReferrerForSession(session) != null) {
             referrer = getReferrerForSession(session).getUrl();
         }

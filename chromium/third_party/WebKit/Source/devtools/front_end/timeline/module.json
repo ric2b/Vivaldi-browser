@@ -37,11 +37,19 @@
             "iconClass": "largeicon-start-recording",
             "toggledIconClass": "largeicon-stop-recording",
             "toggleWithRedColor": true,
-            "contextTypes": ["Timeline.TimelinePanel"],
+            "contextTypes": [
+                "Timeline.TimelinePanel"
+            ],
             "className": "Timeline.TimelinePanel.ActionDelegate",
             "options": [
-                { "value": true, "title": "Record" },
-                { "value": false, "title": "Stop" }
+                {
+                    "value": true,
+                    "title": "Record"
+                },
+                {
+                    "value": false,
+                    "title": "Stop"
+                }
             ],
             "bindings": [
                 {
@@ -58,9 +66,11 @@
             "type": "@UI.ActionDelegate",
             "category": "Timeline",
             "actionId": "timeline.save-to-file",
-            "contextTypes": ["Timeline.TimelinePanel"],
+            "contextTypes": [
+                "Timeline.TimelinePanel"
+            ],
             "className": "Timeline.TimelinePanel.ActionDelegate",
-            "title": "Save Timeline data\u2026",
+            "title": "Save profile\u2026",
             "bindings": [
                 {
                     "platform": "windows,linux",
@@ -76,10 +86,12 @@
             "type": "@UI.ActionDelegate",
             "category": "Timeline",
             "actionId": "timeline.load-from-file",
-            "contextTypes": ["Timeline.TimelinePanel"],
+            "contextTypes": [
+                "Timeline.TimelinePanel"
+            ],
             "order": "10",
             "className": "Timeline.TimelinePanel.ActionDelegate",
-            "title": "Load Timeline data\u2026",
+            "title": "Load profile\u2026",
             "bindings": [
                 {
                     "platform": "windows,linux",
@@ -94,7 +106,9 @@
         {
             "type": "@UI.ActionDelegate",
             "actionId": "timeline.jump-to-previous-frame",
-            "contextTypes": ["Timeline.TimelinePanel"],
+            "contextTypes": [
+                "Timeline.TimelinePanel"
+            ],
             "className": "Timeline.TimelinePanel.ActionDelegate",
             "bindings": [
                 {
@@ -105,7 +119,9 @@
         {
             "type": "@UI.ActionDelegate",
             "actionId": "timeline.jump-to-next-frame",
-            "contextTypes": ["Timeline.TimelinePanel"],
+            "contextTypes": [
+                "Timeline.TimelinePanel"
+            ],
             "className": "Timeline.TimelinePanel.ActionDelegate",
             "bindings": [
                 {
@@ -116,18 +132,23 @@
     ],
     "dependencies": [
         "components",
-        "components_lazy",
         "layer_viewer",
         "timeline_model",
-        "ui_lazy"
+        "perf_ui",
+        "extensions",
+        "data_grid"
     ],
     "scripts": [
         "CountersGraph.js",
+        "ExtensionTracingSession.js",
         "MemoryCountersGraph.js",
         "TimelineController.js",
+        "TimelineDetailsView.js",
         "TimelineLoader.js",
         "TimelineEventOverview.js",
+        "TimelineFlameChartView.js",
         "TimelineFlameChart.js",
+        "TimelineNetworkFlameChart.js",
         "TimelineTreeView.js",
         "TimelineUIUtils.js",
         "TimelineLayersView.js",

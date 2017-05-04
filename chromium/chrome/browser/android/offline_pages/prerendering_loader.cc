@@ -34,24 +34,45 @@ namespace offline_pages {
 Offliner::RequestStatus ClassifyFinalStatus(
     prerender::FinalStatus final_status) {
   switch (final_status) {
-
-    // Identify aborted/canceled operations
+    // Identify aborted/canceled operations.
 
     case prerender::FINAL_STATUS_CANCELLED:
     // TODO(dougarnett): Reconsider if/when get better granularity (642768)
     case prerender::FINAL_STATUS_UNSUPPORTED_SCHEME:
-      return Offliner::PRERENDERING_CANCELED;
+      return Offliner::LOADING_CANCELED;
 
-    // Identify non-retryable failues.
+    // Identify non-retryable failures. These are a hard type failures
+    // associated with the page and so are expected to occur again if retried.
 
     case prerender::FINAL_STATUS_SAFE_BROWSING:
     case prerender::FINAL_STATUS_CREATING_AUDIO_STREAM:
     case prerender::FINAL_STATUS_JAVASCRIPT_ALERT:
-      return Offliner::RequestStatus::PRERENDERING_FAILED_NO_RETRY;
+    case prerender::FINAL_STATUS_CREATE_NEW_WINDOW:
+    case prerender::FINAL_STATUS_INVALID_HTTP_METHOD:
+    case prerender::FINAL_STATUS_OPEN_URL:
+      return Offliner::RequestStatus::LOADING_FAILED_NO_RETRY;
+
+    // Identify failures that indicate we should stop further processing
+    // for now. These may be current resource issues or app closing.
+
+    case prerender::FINAL_STATUS_MEMORY_LIMIT_EXCEEDED:
+    case prerender::FINAL_STATUS_RATE_LIMIT_EXCEEDED:
+    case prerender::FINAL_STATUS_RENDERER_CRASHED:
+    case prerender::FINAL_STATUS_TOO_MANY_PROCESSES:
+    case prerender::FINAL_STATUS_TIMED_OUT:
+    case prerender::FINAL_STATUS_APP_TERMINATING:
+    case prerender::FINAL_STATUS_PROFILE_DESTROYED:
+      return Offliner::RequestStatus::LOADING_FAILED_NO_NEXT;
 
     // Otherwise, assume retryable failure.
+
+    case prerender::FINAL_STATUS_NEW_NAVIGATION_ENTRY:
+    case prerender::FINAL_STATUS_CACHE_OR_HISTORY_CLEARED:
+    case prerender::FINAL_STATUS_SSL_ERROR:
+    case prerender::FINAL_STATUS_SSL_CLIENT_CERTIFICATE_REQUESTED:
+    case prerender::FINAL_STATUS_WINDOW_PRINT:
     default:
-      return Offliner::RequestStatus::PRERENDERING_FAILED;
+      return Offliner::RequestStatus::LOADING_FAILED;
   }
 }
 
@@ -74,8 +95,6 @@ bool PrerenderingLoader::LoadPage(const GURL& url,
         << "WARNING: Existing request in progress or waiting for StopLoading()";
     return false;
   }
-  if (!CanPrerender())
-    return false;
 
   // Create a WebContents instance to define and hold a SessionStorageNamespace
   // for this load request.
@@ -105,11 +124,6 @@ bool PrerenderingLoader::LoadPage(const GURL& url,
 void PrerenderingLoader::StopLoading() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   CancelPrerender();
-}
-
-bool PrerenderingLoader::CanPrerender() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  return adapter_->CanPrerender();
 }
 
 bool PrerenderingLoader::IsIdle() {
@@ -201,7 +215,7 @@ void PrerenderingLoader::HandleLoadingStopped() {
     if (IsLoaded()) {
       // If page already loaded, then prerender is telling us that it is
       // canceling (and we should stop using the loaded WebContents).
-      request_status = Offliner::RequestStatus::PRERENDERING_CANCELED;
+      request_status = Offliner::RequestStatus::LOADING_CANCELED;
     } else {
       // Otherwise, get the available FinalStatus to classify the outcome.
       prerender::FinalStatus final_status = adapter_->GetFinalStatus();
@@ -224,7 +238,7 @@ void PrerenderingLoader::HandleLoadingStopped() {
     adapter_->DestroyActive();
   } else {
     // No access to FinalStatus so classify as retryable failure.
-    request_status = Offliner::RequestStatus::PRERENDERING_FAILED;
+    request_status = Offliner::RequestStatus::LOADING_FAILED;
   }
 
   snapshot_controller_.reset(nullptr);

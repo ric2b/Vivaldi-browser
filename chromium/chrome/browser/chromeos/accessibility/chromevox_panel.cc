@@ -2,16 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/aura/wm_window_aura.h"
+#include "chrome/browser/chromeos/accessibility/chromevox_panel.h"
+
 #include "ash/common/accessibility_types.h"
 #include "ash/common/shelf/shelf_layout_manager.h"
 #include "ash/common/shelf/wm_shelf.h"
+#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
-#include "chrome/browser/chromeos/accessibility/chromevox_panel.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/data_use_measurement/data_use_web_contents_observer.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -28,6 +30,8 @@ namespace {
 
 const int kPanelHeight = 35;
 const char kChromeVoxPanelRelativeUrl[] = "/cvox2/background/panel.html";
+const char kChromeVoxPanelBlockedUserSessionQuery[] =
+    "?blockedUserSession=true";
 const char kFullscreenURLFragment[] = "fullscreen";
 const char kDisableSpokenFeedbackURLFragment[] = "close";
 const char kFocusURLFragment[] = "focus";
@@ -67,11 +71,20 @@ class ChromeVoxPanelWebContentsObserver : public content::WebContentsObserver {
   DISALLOW_COPY_AND_ASSIGN(ChromeVoxPanelWebContentsObserver);
 };
 
-ChromeVoxPanel::ChromeVoxPanel(content::BrowserContext* browser_context)
-    : widget_(nullptr), web_view_(nullptr), panel_fullscreen_(false) {
+ChromeVoxPanel::ChromeVoxPanel(content::BrowserContext* browser_context,
+                               bool for_blocked_user_session)
+    : widget_(nullptr),
+      web_view_(nullptr),
+      panel_fullscreen_(false),
+      for_blocked_user_session_(for_blocked_user_session) {
   std::string url("chrome-extension://");
   url += extension_misc::kChromeVoxExtensionId;
   url += kChromeVoxPanelRelativeUrl;
+  if (for_blocked_user_session ||
+      chromeos::ProfileHelper::IsSigninProfile(
+          Profile::FromBrowserContext(browser_context))) {
+    url += kChromeVoxPanelBlockedUserSessionQuery;
+  }
 
   views::WebView* web_view = new views::WebView(browser_context);
   content::WebContents* contents = web_view->GetWebContents();
@@ -96,7 +109,7 @@ ChromeVoxPanel::ChromeVoxPanel(content::BrowserContext* browser_context)
   params.bounds = gfx::Rect(0, 0, root_window->bounds().width(),
                             root_window->bounds().height());
   widget_->Init(params);
-  SetShadowType(widget_->GetNativeWindow(), wm::SHADOW_TYPE_RECTANGULAR);
+  SetShadowElevation(widget_->GetNativeWindow(), wm::ShadowElevation::MEDIUM);
 
   display::Screen::GetScreen()->AddObserver(this);
 }
@@ -120,7 +133,7 @@ void ChromeVoxPanel::DidFirstVisuallyNonEmptyPaint() {
 
 void ChromeVoxPanel::UpdatePanelHeight() {
   ash::WmShelf* shelf =
-      ash::WmShelf::ForWindow(ash::WmWindowAura::Get(GetRootWindow()));
+      ash::WmShelf::ForWindow(ash::WmWindow::Get(GetRootWindow()));
   if (!shelf->IsShelfInitialized())
     return;
 

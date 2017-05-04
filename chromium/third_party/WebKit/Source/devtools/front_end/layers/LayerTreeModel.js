@@ -48,7 +48,7 @@ Layers.LayerTreeModel = class extends SDK.SDKModel {
     if (!target.hasDOMCapability())
       return null;
 
-    var model = /** @type {?Layers.LayerTreeModel} */ (target.model(Layers.LayerTreeModel));
+    var model = target.model(Layers.LayerTreeModel);
     if (!model)
       model = new Layers.LayerTreeModel(target);
     return model;
@@ -161,11 +161,11 @@ Layers.AgentLayerTree = class extends SDK.LayerTreeBase {
     var idsToResolve = new Set();
     for (var i = 0; i < payload.length; ++i) {
       var backendNodeId = payload[i].backendNodeId;
-      if (!backendNodeId || this._backendNodeIdToNode.has(backendNodeId))
+      if (!backendNodeId || this.backendNodeIdToNode().has(backendNodeId))
         continue;
       idsToResolve.add(backendNodeId);
     }
-    this._resolveBackendNodeIds(idsToResolve, onBackendNodeIdsResolved.bind(this));
+    this.resolveBackendNodeIds(idsToResolve, onBackendNodeIdsResolved.bind(this));
 
     /**
      * @this {Layers.AgentLayerTree}
@@ -194,11 +194,11 @@ Layers.AgentLayerTree = class extends SDK.LayerTreeBase {
       if (layer)
         layer._reset(layers[i]);
       else
-        layer = new Layers.AgentLayer(this._target, layers[i]);
+        layer = new Layers.AgentLayer(this.target(), layers[i]);
       this._layersById[layerId] = layer;
       var backendNodeId = layers[i].backendNodeId;
       if (backendNodeId)
-        layer._setNode(this._backendNodeIdToNode.get(backendNodeId));
+        layer._setNode(this.backendNodeIdToNode().get(backendNodeId));
       if (!this.contentRoot() && layer.drawsContent())
         this.setContentRoot(layer);
       var parentId = layer.parentId();
@@ -414,7 +414,7 @@ Layers.AgentLayer = class {
       return;
     }
 
-    var wrappedCallback = InspectorBackend.wrapClientCallback(
+    var wrappedCallback = Protocol.inspectorBackend.wrapClientCallback(
         callback, 'Protocol.LayerTree.reasonsForCompositingLayer(): ', undefined, []);
     this._target.layerTreeAgent().compositingReasons(this.id(), wrappedCallback);
   }
@@ -496,10 +496,10 @@ Layers.AgentLayer = class {
 
     if (this._layerPayload.transform) {
       var transformMatrix = this._matrixFromArray(this._layerPayload.transform);
-      var anchorVector = new Common.Geometry.Vector(
+      var anchorVector = new UI.Geometry.Vector(
           this._layerPayload.width * this.anchorPoint()[0], this._layerPayload.height * this.anchorPoint()[1],
           this.anchorPoint()[2]);
-      var anchorPoint = Common.Geometry.multiplyVectorByMatrixAndNormalize(anchorVector, matrix);
+      var anchorPoint = UI.Geometry.multiplyVectorByMatrixAndNormalize(anchorVector, matrix);
       var anchorMatrix = new WebKitCSSMatrix().translate(-anchorPoint.x, -anchorPoint.y, -anchorPoint.z);
       matrix = anchorMatrix.inverse().multiply(transformMatrix.multiply(anchorMatrix.multiply(matrix)));
     }
@@ -525,8 +525,8 @@ Layers.AgentLayer = class {
     this._quad = [];
     var vertices = this._createVertexArrayForRect(this._layerPayload.width, this._layerPayload.height);
     for (var i = 0; i < 4; ++i) {
-      var point = Common.Geometry.multiplyVectorByMatrixAndNormalize(
-          new Common.Geometry.Vector(vertices[i * 3], vertices[i * 3 + 1], vertices[i * 3 + 2]), matrix);
+      var point = UI.Geometry.multiplyVectorByMatrixAndNormalize(
+          new UI.Geometry.Vector(vertices[i * 3], vertices[i * 3 + 1], vertices[i * 3 + 2]), matrix);
       this._quad.push(point.x, point.y);
     }
 

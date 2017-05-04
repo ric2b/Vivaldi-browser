@@ -20,8 +20,6 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 
-struct RendererContentSettingRules;
-
 namespace guest_view {
 
 // Vivaldi helper functions that is declared here and defined multiple places.
@@ -214,6 +212,10 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   // BrowserPluginGuestDelegate implementation.
   content::RenderWidgetHost* GetOwnerRenderWidgetHost() override;
   content::SiteInstance* GetOwnerSiteInstance() override;
+
+  // NOTE(andre@vivaldi.com): This is used in Vivaldi to make sure the lifecycle
+  // of webcontents is working for webcontents owned by multiple guests.
+  bool web_contents_is_owned_by_this_ = true;
 
  protected:
   explicit GuestViewBase(content::WebContents* owner_web_contents);

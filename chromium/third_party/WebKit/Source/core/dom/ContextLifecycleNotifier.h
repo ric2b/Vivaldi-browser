@@ -34,7 +34,7 @@
 
 namespace blink {
 
-class ActiveDOMObject;
+class SuspendableObject;
 class ContextLifecycleObserver;
 class ExecutionContext;
 
@@ -43,10 +43,10 @@ class CORE_EXPORT ContextLifecycleNotifier
   WTF_MAKE_NONCOPYABLE(ContextLifecycleNotifier);
 
  public:
-  void notifyResumingActiveDOMObjects();
-  void notifySuspendingActiveDOMObjects();
+  void notifyResumingSuspendableObjects();
+  void notifySuspendingSuspendableObjects();
 
-  unsigned activeDOMObjectCount() const;
+  unsigned suspendableObjectCount() const;
 
  protected:
   // Need a default constructor to link core and modules separately.
@@ -57,7 +57,7 @@ class CORE_EXPORT ContextLifecycleNotifier
   ContextLifecycleNotifier() {}
 
 #if DCHECK_IS_ON()
-  bool contains(ActiveDOMObject*) const;
+  bool contains(SuspendableObject*) const;
 #endif
 };
 

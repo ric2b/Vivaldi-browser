@@ -68,7 +68,17 @@ class WTF_EXPORT ArrayBufferContents {
 
   void neuter();
 
-  void* data() const { return m_holder ? m_holder->data() : nullptr; }
+  void* data() const {
+    DCHECK(!isShared());
+    return dataMaybeShared();
+  }
+  void* dataShared() const {
+    DCHECK(isShared());
+    return dataMaybeShared();
+  }
+  void* dataMaybeShared() const {
+    return m_holder ? m_holder->data() : nullptr;
+  }
   unsigned sizeInBytes() const {
     return m_holder ? m_holder->sizeInBytes() : 0;
   }
@@ -128,7 +138,7 @@ class WTF_EXPORT ArrayBufferContents {
     void checkIfAdjustAmountOfExternalAllocatedMemoryIsConsistent() {
       DCHECK(s_adjustAmountOfExternalAllocatedMemoryFunction);
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
       // Make sure that the function actually used is always the same.
       // Shouldn't be updated during its use.
       if (!s_lastUsedAdjustAmountOfExternalAllocatedMemoryFunction) {
@@ -148,7 +158,7 @@ class WTF_EXPORT ArrayBufferContents {
   RefPtr<DataHolder> m_holder;
   static AdjustAmountOfExternalAllocatedMemoryFunction
       s_adjustAmountOfExternalAllocatedMemoryFunction;
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   static AdjustAmountOfExternalAllocatedMemoryFunction
       s_lastUsedAdjustAmountOfExternalAllocatedMemoryFunction;
 #endif

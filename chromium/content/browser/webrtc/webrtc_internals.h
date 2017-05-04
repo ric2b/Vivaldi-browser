@@ -19,6 +19,7 @@
 #include "base/values.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/render_process_host_observer.h"
+#include "media/media_features.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
 namespace device {
@@ -109,8 +110,8 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
   bool IsEventLogRecordingsEnabled() const;
   const base::FilePath& GetEventLogFilePath() const;
 
-  int num_open_connections() { return num_open_connections_; }
-  bool IsPowerSavingBlocked() { return !!power_save_blocker_; }
+  int num_open_connections() const { return num_open_connections_; }
+  bool IsPowerSavingBlocked() const { return !!power_save_blocker_; }
 
  protected:
   // Constructor/Destructor are protected to allow tests to derive from the
@@ -136,7 +137,9 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
                   std::unique_ptr<base::Value> value);
 
   // RenderProcessHostObserver implementation.
-  void RenderProcessHostDestroyed(RenderProcessHost* host) override;
+  void RenderProcessExited(RenderProcessHost* host,
+                           base::TerminationStatus status,
+                           int exit_code) override;
 
   // ui::SelectFileDialog::Listener implementation.
   void FileSelected(const base::FilePath& path,
@@ -147,7 +150,7 @@ class CONTENT_EXPORT WebRTCInternals : public RenderProcessHostObserver,
   // Called when a renderer exits (including crashes).
   void OnRendererExit(int render_process_id);
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   // Enables diagnostic audio recordings on all render process hosts using
   // |audio_debug_recordings_file_path_|.
   void EnableAudioDebugRecordingsOnAllRenderProcessHosts();

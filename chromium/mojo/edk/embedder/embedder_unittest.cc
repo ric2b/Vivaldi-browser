@@ -23,13 +23,13 @@
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
+#include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/named_platform_handle.h"
 #include "mojo/edk/embedder/named_platform_handle_utils.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/test_embedder.h"
 #include "mojo/edk/system/test_utils.h"
 #include "mojo/edk/test/mojo_test_base.h"
-#include "mojo/edk/test/scoped_ipc_support.h"
 #include "mojo/public/c/system/core.h"
 #include "mojo/public/cpp/system/handle.h"
 #include "mojo/public/cpp/system/message_pipe.h"
@@ -579,13 +579,7 @@ void CreateClientHandleOnIoThread(const NamedPlatformHandle& named_handle,
   *output = CreateClientHandle(named_handle);
 }
 
-#if defined(OS_ANDROID)
-// Disabled on Android as suspected source of flake. https://crbug.com/666356.
-#define MAYBE_ClosePendingPeerConnection DISABLED_ClosePendingPeerConnection
-#else
-#define MAYBE_ClosePendingPeerConnection ClosePendingPeerConnection
-#endif
-TEST_F(EmbedderTest, MAYBE_ClosePendingPeerConnection) {
+TEST_F(EmbedderTest, ClosePendingPeerConnection) {
   NamedPlatformHandle named_handle = GenerateChannelName();
   std::string peer_token = GenerateRandomToken();
   ScopedMessagePipeHandle server_pipe =
@@ -601,7 +595,7 @@ TEST_F(EmbedderTest, MAYBE_ClosePendingPeerConnection) {
   // work. By the time the local message pipe has been observerd as closed,
   // that task will have been posted. Therefore, a task to create the client
   // connection should be handled after the channel is closed.
-  test::GetIoTaskRunner()->PostTaskAndReply(
+  GetIOTaskRunner()->PostTaskAndReply(
       FROM_HERE,
       base::Bind(&CreateClientHandleOnIoThread, named_handle, &client_handle),
       run_loop.QuitClosure());
@@ -611,13 +605,7 @@ TEST_F(EmbedderTest, MAYBE_ClosePendingPeerConnection) {
 
 #if !defined(OS_IOS)
 
-#if defined(OS_ANDROID)
-// Disabled on Android as suspected source of flake. https://crbug.com/666356.
-#define MAYBE_ClosePipeToConnectedPeer DISABLED_ClosePipeToConnectedPeer
-#else
-#define MAYBE_ClosePipeToConnectedPeer ClosePipeToConnectedPeer
-#endif
-TEST_F(EmbedderTest, MAYBE_ClosePipeToConnectedPeer) {
+TEST_F(EmbedderTest, ClosePipeToConnectedPeer) {
   set_launch_type(LaunchType::PEER);
   auto& controller = StartClient("ClosePipeToConnectedPeerClient");
   MojoHandle server_mp = controller.pipe();
@@ -648,13 +636,7 @@ DEFINE_TEST_CLIENT_TEST_WITH_PIPE(ClosePipeToConnectedPeerClient, EmbedderTest,
                       MOJO_DEADLINE_INDEFINITE, nullptr));
 }
 
-#if defined(OS_ANDROID)
-// Disabled on Android as suspected source of flake. https://crbug.com/666356.
-#define MAYBE_ClosePipeToConnectingPeer DISABLED_ClosePipeToConnectingPeer
-#else
-#define MAYBE_ClosePipeToConnectingPeer ClosePipeToConnectingPeer
-#endif
-TEST_F(EmbedderTest, MAYBE_ClosePipeToConnectingPeer) {
+TEST_F(EmbedderTest, ClosePipeToConnectingPeer) {
   set_launch_type(LaunchType::PEER);
   auto& controller = StartClient("ClosePipeToConnectingPeerClient");
   controller.ClosePeerConnection();

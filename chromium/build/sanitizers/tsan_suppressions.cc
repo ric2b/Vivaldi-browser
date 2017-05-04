@@ -245,9 +245,6 @@ char kTSanDefaultSuppressions[] =
 // https://crbug.com/430533
 "race:TileTaskGraphRunner::Run\n"
 
-// https://crbug.com/448203
-"race:blink::RemoteFrame::detach\n"
-
 // Lock inversion in third party code, won't fix.
 // https://crbug.com/455638
 "deadlock:dbus::Bus::ShutdownAndBlock\n"
@@ -267,11 +264,11 @@ char kTSanDefaultSuppressions[] =
 // http://crbug.com/633145
 "race:third_party/libjpeg_turbo/simd/jsimd_x86_64.c\n"
 
-// http://crbug.com/638378
-"race:~TaskSchedulerWorkerPoolCheckTlsReuse\n"
-
 // http://crbug.com/638583
 "race:webrtc/modules/audio_processing/aec/aec_rdft.cc\n"
+
+// http://crbug.com/587199
+"race:base::TimerTest_OneShotTimer_CustomTaskRunner_Test::TestBody\n"
 
 // End of suppressions.
 ;  // Please keep this semicolon.

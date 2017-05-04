@@ -1,0 +1,64 @@
+# Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
+
+source_set("sync") {
+  sources = [
+    "vivaldi_sync_model.cc",
+    "vivaldi_sync_model.h",
+    "vivaldi_sync_model_observer.h",
+    "internal_api/notes_delete_journal.cpp",
+    "internal_api/notes_delete_journal.h",
+  ]
+  deps = [
+    "//components/sync/protocol",
+    "//components/translate/content/common",
+    "//skia",
+    "//third_party/icu",
+    "//third_party/cacheinvalidation",
+  ]
+  public_deps = [
+    #"//vivaldi/sync/undo",
+    #"//vivaldi/sync/glue",
+    #"//chrome/browser",
+  ]
+}
+
+source_set("browser") {
+  sources = [
+    "vivaldi_invalidation_service.cc",
+    "vivaldi_invalidation_service.h",
+    "vivaldi_sync_client.cc",
+    "vivaldi_sync_client.h",
+    "vivaldi_sync_model_factory.cc",
+    "vivaldi_sync_model_factory.h",
+    "vivaldi_sync_model_observer.h",
+    "vivaldi_syncmanager.cpp",
+    "vivaldi_syncmanager.h",
+    "vivaldi_syncmanager_factory.h",
+    "vivaldi_syncmanager_factory.cc",
+    "vivaldi_signin_manager.cc",
+    "vivaldi_signin_manager.h",
+    "vivaldi_signin_manager_factory.cc",
+    "vivaldi_signin_manager_factory.h",
+    "vivaldi_signin_client_factory.cc",
+    "vivaldi_signin_client_factory.h",
+    "vivaldi_signin_client.cc",
+    "vivaldi_signin_client.h",
+    "vivaldi_profile_oauth2_token_service.cc",
+    "vivaldi_profile_oauth2_token_service.h",
+    "vivaldi_profile_oauth2_token_service_factory.cc",
+    "vivaldi_profile_oauth2_token_service_factory.h",
+  ]
+  deps = [
+    "//components/sync/protocol",
+    "//components/translate/content/common",
+    "//skia",
+    "//third_party/icu",
+    "//third_party/cacheinvalidation",
+  ]
+  public_deps = [
+    ":sync",
+    "//vivaldi/sync/glue",
+    "//chrome/browser",
+    "//components/sync/protocol",
+  ]
+}

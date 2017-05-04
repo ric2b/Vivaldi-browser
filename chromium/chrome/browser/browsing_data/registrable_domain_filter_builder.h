@@ -63,15 +63,6 @@ class RegistrableDomainFilterBuilder : public BrowsingDataFilterBuilder {
   // or aren't in the blacklist.
   base::Callback<bool(const GURL&)> BuildGeneralFilter() const override;
 
-  // Builds a filter that calls ContentSettingsPattern::Compare on the given
-  // pattern and a new pattern constructed by each domain in this filter. The
-  // domain pattern A and given pattern B match when A.Compare(B) is IDENTITY
-  // or PREDECESSOR. This means we only match patterns that are the same pattern
-  // or a more specific pattern than our domain (so we shouldn't be matching
-  // wildcard patterns like "*" or "*:80").
-  base::Callback<bool(const ContentSettingsPattern& pattern)>
-      BuildWebsiteSettingsPatternMatchesFilter() const override;
-
   // We do a direct comparison to the registerable domain of the cookie. A
   // whitelist filter will return true if any of its domains match the cookie,
   // and a blacklist filter will return true only if none of its domains match
@@ -97,48 +88,9 @@ class RegistrableDomainFilterBuilder : public BrowsingDataFilterBuilder {
   bool IsEmpty() const override;
 
  private:
-  // True if the domain of |url| is in the whitelist, or isn't in the blacklist.
-  // The whitelist or blacklist is represented as |registerable_domains|
-  // and |mode|.
-  static bool MatchesURL(std::set<std::string>* registerable_domains,
-                         Mode mode,
-                         const GURL& url);
-
-  // True if the pattern something in the whitelist, or doesn't match something
-  // in the blacklist.
-  // The whitelist or blacklist is represented as |patterns|,  and |mode|.
-  static bool MatchesWebsiteSettingsPattern(
-      std::vector<ContentSettingsPattern>* patterns,
-      Mode mode,
-      const ContentSettingsPattern& pattern);
-
-  // True if no domains can see the given cookie and we're a blacklist, or any
-  // domains can see the cookie and we're a whitelist.
-  // The whitelist or blacklist is represented as |domains_and_ips| and |mode|.
-  static bool MatchesCookieForRegisterableDomainsAndIPs(
-      std::set<std::string>* domains_and_ips,
-      Mode mode,
-      const net::CanonicalCookie& cookie);
-
-  // True if none of the supplied domains matches this Channel ID's server ID
-  // and we're a blacklist, or one of them does and we're a whitelist.
-  // The whitelist or blacklist is represented as |domains_and_ips| and |mode|.
-  static bool MatchesChannelIDForRegisterableDomainsAndIPs(
-      std::set<std::string>* domains_and_ips,
-      Mode mode,
-      const std::string& channel_id_server_id);
-
-  // True if none of the supplied domains matches this plugin's |site| and we're
-  // a blacklist, or one of them does and we're a whitelist. The whitelist or
-  // blacklist is represented by |domains_and_ips| and |mode|.
-  static bool MatchesPluginSiteForRegisterableDomainsAndIPs(
-      std::set<std::string>* domains_and_ips,
-      Mode mode,
-      const std::string& site);
-
-  // The list of domains and whether they should be interpreted as a whitelist
-  // or blacklist.
-  std::set<std::string> domain_list_;
+  // The set of domains that constitute the whitelist or the blacklist,
+  // depending on mode().
+  std::set<std::string> domains_;
 
   DISALLOW_COPY_AND_ASSIGN(RegistrableDomainFilterBuilder);
 };

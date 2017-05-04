@@ -12,22 +12,22 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
 #include "content/browser/indexed_db/indexed_db_database.h"
+#include "content/browser/indexed_db/indexed_db_transaction.h"
 #include "content/common/indexed_db/indexed_db_key_range.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h"
 
 namespace content {
 
-class IndexedDBTransaction;
-
-class CONTENT_EXPORT IndexedDBCursor
-    : NON_EXPORTED_BASE(public base::RefCounted<IndexedDBCursor>) {
+class CONTENT_EXPORT IndexedDBCursor {
  public:
   IndexedDBCursor(std::unique_ptr<IndexedDBBackingStore::Cursor> cursor,
                   indexed_db::CursorType cursor_type,
                   blink::WebIDBTaskType task_type,
                   IndexedDBTransaction* transaction);
+  ~IndexedDBCursor();
 
   void Advance(uint32_t count, scoped_refptr<IndexedDBCallbacks> callbacks);
   void Continue(std::unique_ptr<IndexedDBKey> key,
@@ -43,28 +43,30 @@ class CONTENT_EXPORT IndexedDBCursor
     return (cursor_type_ == indexed_db::CURSOR_KEY_ONLY) ? NULL
                                                          : cursor_->value();
   }
+
+  void RemoveCursorFromTransaction();
   void Close();
 
-  void CursorIterationOperation(std::unique_ptr<IndexedDBKey> key,
-                                std::unique_ptr<IndexedDBKey> primary_key,
-                                scoped_refptr<IndexedDBCallbacks> callbacks,
-                                IndexedDBTransaction* transaction);
-  void CursorAdvanceOperation(uint32_t count,
-                              scoped_refptr<IndexedDBCallbacks> callbacks,
-                              IndexedDBTransaction* transaction);
-  void CursorPrefetchIterationOperation(
+  leveldb::Status CursorIterationOperation(
+      std::unique_ptr<IndexedDBKey> key,
+      std::unique_ptr<IndexedDBKey> primary_key,
+      scoped_refptr<IndexedDBCallbacks> callbacks,
+      IndexedDBTransaction* transaction);
+  leveldb::Status CursorAdvanceOperation(
+      uint32_t count,
+      scoped_refptr<IndexedDBCallbacks> callbacks,
+      IndexedDBTransaction* transaction);
+  leveldb::Status CursorPrefetchIterationOperation(
       int number_to_fetch,
       scoped_refptr<IndexedDBCallbacks> callbacks,
       IndexedDBTransaction* transaction);
 
  private:
-  friend class base::RefCounted<IndexedDBCursor>;
-
-  ~IndexedDBCursor();
-
   blink::WebIDBTaskType task_type_;
   indexed_db::CursorType cursor_type_;
-  const scoped_refptr<IndexedDBTransaction> transaction_;
+
+  // We rely on the transaction calling Close() to clear this.
+  IndexedDBTransaction* transaction_;
 
   // Must be destroyed before transaction_.
   std::unique_ptr<IndexedDBBackingStore::Cursor> cursor_;
@@ -72,6 +74,8 @@ class CONTENT_EXPORT IndexedDBCursor
   std::unique_ptr<IndexedDBBackingStore::Cursor> saved_cursor_;
 
   bool closed_;
+
+  base::WeakPtrFactory<IndexedDBCursor> ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(IndexedDBCursor);
 };

@@ -37,11 +37,11 @@ public final class ApplicationData {
      *
      * @param targetContext the target Context.
      */
-    public static void clearAppData(Context targetContext) throws InterruptedException {
+    public static void clearAppData(Context targetContext) {
         final String appDir = getAppDirFromTargetContext(targetContext);
         CriteriaHelper.pollInstrumentationThread(
                 new Criteria() {
-                    private boolean mDataRemoved = false;
+                    private boolean mDataRemoved;
 
                     @Override
                     public boolean isSatisfied() {

@@ -19,6 +19,7 @@
 
 namespace sync_pb {
 class BookmarkSpecifics;
+class NotesSpecifics;
 class EntitySpecifics;
 class NigoriSpecifics;
 class PasswordSpecificsData;
@@ -27,7 +28,6 @@ class TypedUrlSpecifics;
 
 namespace syncer {
 
-class Cryptographer;
 class WriteTransaction;
 
 namespace syncable {
@@ -68,8 +68,16 @@ class WriteNode : public BaseNode {
   // a null |predecessor| to indicate that this is to be the first child.
   // |predecessor| must be a child of |new_parent| or null. Returns false on
   // failure.
+  bool InitNodeByCreation(const BaseNode& parent,
+                              const BaseNode* predecessor, ModelType model_type);
   bool InitBookmarkByCreation(const BaseNode& parent,
-                              const BaseNode* predecessor);
+                              const BaseNode* predecessor){
+    return InitNodeByCreation(parent, predecessor, BOOKMARKS);
+  };
+  bool InitNotesByCreation(const BaseNode& parent,
+                              const BaseNode* predecessor){
+    return InitNodeByCreation(parent, predecessor, NOTES);
+  };
 
   // Create nodes using this function if they're unique items that
   // you want to fetch using client_tag. Note that the behavior of these
@@ -117,6 +125,10 @@ class WriteNode : public BaseNode {
   // Set the bookmark specifics (url and favicon).
   // Should only be called if GetModelType() == BOOKMARK.
   void SetBookmarkSpecifics(const sync_pb::BookmarkSpecifics& specifics);
+
+  // Set the notes specifics.
+  // Should only be called if GetModelType() == NOTES.
+  void SetNotesSpecifics(const sync_pb::NotesSpecifics& specifics);
 
   // Generic set specifics method. Will extract the model type from |specifics|.
   void SetEntitySpecifics(const sync_pb::EntitySpecifics& specifics);

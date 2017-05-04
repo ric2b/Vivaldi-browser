@@ -74,6 +74,7 @@
 <translation id="1680732992526857724"><ph name="NAME" />، في وضع التشغيل</translation>
 <translation id="1692077714702418899">خط تنظيمي</translation>
 <translation id="1700517974991662022">تم الانتقال إليه</translation>
+<translation id="1714116687360794776">متر</translation>
 <translation id="1722567105086139392">رابط</translation>
 <translation id="1727806147743597030">ftr</translation>
 <translation id="174268867904053074">الرسم التالي</translation>
@@ -123,6 +124,7 @@
 <translation id="2344193891939537199">التحكم في الوقت والتاريخ</translation>
 <translation id="2347456970887948350">رابط</translation>
 <translation id="2359897517538099099">ليس في وضع الجدول.</translation>
+<translation id="2390264819538553347">‏للتقدم، اضغط على Enter، وللرجوع للخلف، اضغط على Backspace.</translation>
 <translation id="241124561063364910">يليه</translation>
 <translation id="2416512023405990736">مربع اختيار غير محدد</translation>
 <translation id="2417569100218200841">معلومات المحتوى</translation>
@@ -177,6 +179,7 @@
 <translation id="2899328121302785497">{COUNT,plural, =1{قوس كبير أيسر واحد}zero{# left braces}two{قوسان كبيران أيسران (#)}few{# أقواس كبيرة يسرى}many{# قوسًا كبيرًا أيسرًا}other{# من الأقواس الكبيرة اليسرى}}</translation>
 <translation id="2911433807131383493">‏فتح برنامج ChromeVox التعليمي</translation>
 <translation id="2932083475399492303">تبديل نوع الخط بين تنظيمي أو تخطيطي</translation>
+<translation id="2944762337049891859">يمكنك قراءة الصفحة تلقائيًا بعد انتهاء التحميل.</translation>
 <translation id="2964026537669811554">مجموعة عناوين</translation>
 <translation id="296951647852255825">{COUNT,plural, =1{علامة جدولة واحدة}zero{# tabs}two{علامتا جدولة}few{# علامات جدولة}many{# علامة جدولة}other{# من علامات الجدولة}}</translation>
 <translation id="2972078295414139404">ليس هناك رابط سابق تم الانتقال إليه.</translation>
@@ -188,6 +191,7 @@
 <translation id="3012414509011670858">ليس هناك قسم سابق.</translation>
 <translation id="3030432017085518523">زر اختيار عنصر القائمة</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{فاصلة عليا واحدة}zero{# apostrophes}two{فاصلتان علويتان (}few{# فواصل علوية}many{# فاصلة علوية}other{# من الفواصل العلوية}}</translation>
+<translation id="3040901448410802366">مؤشر التقدم</translation>
 <translation id="3046838483509668188">‏خيارات ChromeVox</translation>
 <translation id="3047143736589213134">مخطط مفاتيح تجريبي</translation>
 <translation id="3060756054951570867">تم فتح القائمة <ph name="TITLE" /></translation>
@@ -230,7 +234,7 @@
 <translation id="3321460131042519426">تمكين التفاف الكلمات</translation>
 <translation id="3322936298410871309">عنوان المستوى الأول السابق</translation>
 <translation id="3323447499041942178">مربع نص</translation>
-<translation id="3329854757664111426">‏للتقدم، اضغط على Enter.</translation>
+<translation id="3338224621010291843">شريط تمرير <ph name="VALUE" /> <ph name="NAME" /></translation>
 <translation id="3353420241558113817">‏{"ar": "العربية"،
         "bg": "البلغارية"،
         "ca": "الكتالانية"،
@@ -307,6 +311,7 @@
 <translation id="3712520970944678024">التحكم في النطق</translation>
 <translation id="3716845769494773620">متعدد الأسطر</translation>
 <translation id="3731746171184829332">ليس هناك عنوان سابق.</translation>
+<translation id="3735039640698208086">عند تشغيل الصوت...</translation>
 <translation id="3762198587642264450">الانتقال إلى نهاية الصف الحالي</translation>
 <translation id="3777255250339039212">h1</translation>
 <translation id="3793710123303304873">تم إنهاء مربع الحوار.</translation>
@@ -547,6 +552,7 @@
 <translation id="5876817486144482042">خفض مستوى صوت النطق</translation>
 <translation id="5887397643266327462">تم تمكين تسميات برايل التوضيحية.</translation>
 <translation id="5891934789323004067">جدول</translation>
+<translation id="5899860758576822363">‏التشغيل بصوت منخفض أثناء تحدُّث ChromeVox</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{علامة تساوي واحدة}zero{# equal signs}two{علامتا تساوي (#)}few{# علامات تساوي}many{# علامة تساوي}other{# من علامات التساوي}}</translation>
 <translation id="5939518447894949180">إعادة</translation>
 <translation id="5948123859135882163">تبديل تفسير مصطلحات الرياضيات بين البنيوية والدلالية</translation>
@@ -569,6 +575,7 @@
 <translation id="6132506484792346370">مربع القائمة أو مربع التحرير والسرد</translation>
 <translation id="6138576064440631958">$1 متآلفة</translation>
 <translation id="6142308968191113180">العنوان الرابع</translation>
+<translation id="6164829606128959761">متر</translation>
 <translation id="6169420925157477918">الصورة بها وصف مطول</translation>
 <translation id="6186305613600865047">انتقال إلى أسفل الصفحة</translation>
 <translation id="6193330012414963395">صباحًا/مساءً</translation>
@@ -579,6 +586,7 @@
 <translation id="6281876499889881039">العنصر المماثل التالي.</translation>
 <translation id="6282062888058716985">nav</translation>
 <translation id="6290434000785343030">ليس هناك مربع تحرير وسرد تالٍ.</translation>
+<translation id="6305702903308659374">‏التشغيل بصوت عادي حتى أثناء تحدُّث ChromeVox</translation>
 <translation id="6307969636681130414">مضغوط</translation>
 <translation id="6322856989298155004">الأصوات</translation>
 <translation id="6324551002951139333">تم اكتشاف خطأ نحوي</translation>
@@ -691,7 +699,6 @@
 <translation id="7492049978501397201">مربع حوار تم الدخول إليه</translation>
 <translation id="7518543783849163354">‏لإيقاف ChromeVox مؤقتًا عن التحدث، اضغط على مفتاح Control.</translation>
 <translation id="7532613204005497612">حزيران (يونيو)</translation>
-<translation id="7540083713905917247">شريط التمرير <ph name="NAME" />، بالقيمة <ph name="VALUE" /></translation>
 <translation id="7552432549459840808">‏اختصارات Chrome المفيدة</translation>
 <translation id="7579911500627256166">نقطة <ph name="DOT" /></translation>
 <translation id="7596919493010894443">تم مسح التحديد</translation>
@@ -769,6 +776,7 @@
 <translation id="8455868257606149352">الحد الأقصى <ph name="X" /></translation>
 <translation id="84575901236241018">لديه مفتاح دخول، <ph name="KEY" /></translation>
 <translation id="847154984256717791">مشغول</translation>
+<translation id="8476408756881832830">‏إيقاف التشغيل مؤقتًا أثناء تحدُّث ChromeVox</translation>
 <translation id="8476508772960940536">نظرة عامة للنافذة</translation>
 <translation id="8503360654911991865">خفض دقة التنقل</translation>
 <translation id="8520472399088452386">زر الدوران</translation>

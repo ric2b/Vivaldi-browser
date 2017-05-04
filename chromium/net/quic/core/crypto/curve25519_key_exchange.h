@@ -2,17 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_CRYPTO_CURVE25519_KEY_EXCHANGE_H_
-#define NET_QUIC_CRYPTO_CURVE25519_KEY_EXCHANGE_H_
+#ifndef NET_QUIC_CORE_CRYPTO_CURVE25519_KEY_EXCHANGE_H_
+#define NET_QUIC_CORE_CRYPTO_CURVE25519_KEY_EXCHANGE_H_
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/strings/string_piece.h"
-#include "net/base/net_export.h"
 #include "net/quic/core/crypto/key_exchange.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
 
@@ -20,7 +19,7 @@ class QuicRandom;
 
 // Curve25519KeyExchange implements a KeyExchange using elliptic-curve
 // Diffie-Hellman on curve25519. See http://cr.yp.to/ecdh.html
-class NET_EXPORT_PRIVATE Curve25519KeyExchange : public KeyExchange {
+class QUIC_EXPORT_PRIVATE Curve25519KeyExchange : public KeyExchange {
  public:
   ~Curve25519KeyExchange() override;
 
@@ -48,4 +47,4 @@ class NET_EXPORT_PRIVATE Curve25519KeyExchange : public KeyExchange {
 
 }  // namespace net
 
-#endif  // NET_QUIC_CRYPTO_CURVE25519_KEY_EXCHANGE_H_
+#endif  // NET_QUIC_CORE_CRYPTO_CURVE25519_KEY_EXCHANGE_H_

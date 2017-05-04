@@ -222,6 +222,11 @@ const GUID GUID_IAccessibleContentDocument = {
 
 const base::char16 BrowserAccessibilityWin::kEmbeddedCharacter = L'\xfffc';
 
+void AddAccessibilityModeFlags(AccessibilityMode mode_flags) {
+  BrowserAccessibilityStateImpl::GetInstance()->AddAccessibilityModeFlags(
+      mode_flags);
+}
+
 //
 // BrowserAccessibilityRelation
 //
@@ -421,7 +426,7 @@ HRESULT BrowserAccessibilityWin::accDoDefaultAction(VARIANT var_id) {
     return E_INVALIDARG;
 
   // Return an error if it's not clickable.
-  if (!target->HasStringAttribute(ui::AX_ATTR_ACTION))
+  if (!target->HasIntAttribute(ui::AX_ATTR_ACTION))
     return DISP_E_MEMBERNOTFOUND;
 
   manager()->DoDefaultAction(*target);
@@ -577,8 +582,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_accDefaultAction(VARIANT var_id,
   if (!target)
     return E_INVALIDARG;
 
-  return target->GetStringAttributeAsBstr(
-      ui::AX_ATTR_ACTION, def_action);
+  return target->get_localizedName(0, def_action);
 }
 
 STDMETHODIMP BrowserAccessibilityWin::get_accDescription(VARIANT var_id,
@@ -899,6 +903,7 @@ STDMETHODIMP BrowserAccessibilityWin::role(LONG* role) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_attributes(BSTR* attributes) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_IA2_GET_ATTRIBUTES);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!attributes)
     return E_INVALIDARG;
   *attributes = nullptr;
@@ -920,6 +925,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_attributes(BSTR* attributes) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_states(AccessibleStates* states) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_STATES);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -973,6 +979,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_indexInParent(LONG* index_in_parent) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_nRelations(LONG* n_relations) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_RELATIONS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -987,6 +994,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_relation(
     LONG relation_index,
     IAccessibleRelation** relation) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_RELATION);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1008,6 +1016,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_relations(
     IAccessibleRelation** relations,
     LONG* n_relations) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_RELATIONS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1097,6 +1106,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_groupPosition(
     LONG* similar_items_in_group,
     LONG* position_in_group) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_GROUP_POSITION);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1118,17 +1128,20 @@ STDMETHODIMP BrowserAccessibilityWin::get_groupPosition(
 
 STDMETHODIMP BrowserAccessibilityWin::get_extendedRole(BSTR* extended_role) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_EXTENDED_ROLE);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return E_NOTIMPL;
 }
 STDMETHODIMP
 BrowserAccessibilityWin::get_localizedExtendedRole(
     BSTR* localized_extended_role) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_LOCALIZED_EXTENDED_ROLE);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return E_NOTIMPL;
 }
 STDMETHODIMP
 BrowserAccessibilityWin::get_nExtendedStates(LONG* n_extended_states) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_EXTENDED_STATES);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return E_NOTIMPL;
 }
 STDMETHODIMP
@@ -1136,6 +1149,7 @@ BrowserAccessibilityWin::get_extendedStates(LONG max_extended_states,
                                             BSTR** extended_states,
                                             LONG* n_extended_states) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_EXTENDED_STATES);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return E_NOTIMPL;
 }
 STDMETHODIMP
@@ -1144,10 +1158,12 @@ BrowserAccessibilityWin::get_localizedExtendedStates(
     BSTR** localized_extended_states,
     LONG* n_localized_extended_states) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_LOCALIZED_EXTENDED_STATES);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return E_NOTIMPL;
 }
 STDMETHODIMP BrowserAccessibilityWin::get_locale(IA2Locale* locale) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_LOCALE);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return E_NOTIMPL;
 }
 
@@ -1300,6 +1316,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_accessibleAt(
     long column,
     IUnknown** accessible) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ACCESSIBLE_AT);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1337,6 +1354,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_accessibleAt(
 
 STDMETHODIMP BrowserAccessibilityWin::get_caption(IUnknown** accessible) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_CAPTION);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1351,6 +1369,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_childIndex(long row,
                                                      long column,
                                                      long* cell_index) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_CHILD_INDEX);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1390,6 +1409,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_childIndex(long row,
 STDMETHODIMP BrowserAccessibilityWin::get_columnDescription(long column,
                                                             BSTR* description) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_COLUMN_DESCRIPTION);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1437,6 +1457,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_columnExtentAt(
     long column,
     long* n_columns_spanned) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_COLUMN_EXTENT_AT);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1476,6 +1497,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_columnHeader(
     IAccessibleTable** accessible_table,
     long* starting_row_index) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_COLUMN_HEADER);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   // TODO(dmazzoni): implement
   return E_NOTIMPL;
 }
@@ -1483,6 +1505,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_columnHeader(
 STDMETHODIMP BrowserAccessibilityWin::get_columnIndex(long cell_index,
                                                       long* column_index) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_COLUMN_INDEX);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1512,6 +1535,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_columnIndex(long cell_index,
 
 STDMETHODIMP BrowserAccessibilityWin::get_nColumns(long* column_count) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_COLUMNS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1530,6 +1554,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_nColumns(long* column_count) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_nRows(long* row_count) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_ROWS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1547,6 +1572,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_nRows(long* row_count) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_nSelectedChildren(long* cell_count) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_SELECTED_CHILDREN);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1560,6 +1586,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_nSelectedChildren(long* cell_count) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_nSelectedColumns(long* column_count) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_SELECTED_COLUMNS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1572,6 +1599,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_nSelectedColumns(long* column_count) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_nSelectedRows(long* row_count) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_SELECTED_ROWS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1585,6 +1613,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_nSelectedRows(long* row_count) {
 STDMETHODIMP BrowserAccessibilityWin::get_rowDescription(long row,
                                                          BSTR* description) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ROW_DESCRIPTION);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1631,6 +1660,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_rowExtentAt(long row,
                                                       long column,
                                                       long* n_rows_spanned) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ROW_EXTENT_AT);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1670,6 +1700,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_rowHeader(
     IAccessibleTable** accessible_table,
     long* starting_column_index) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ROW_HEADER);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   // TODO(dmazzoni): implement
   return E_NOTIMPL;
 }
@@ -1677,6 +1708,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_rowHeader(
 STDMETHODIMP BrowserAccessibilityWin::get_rowIndex(long cell_index,
                                                    long* row_index) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ROW_INDEX);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1708,6 +1740,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_selectedChildren(long max_children,
                                                            long** children,
                                                            long* n_children) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_SELECTED_CHILDREN);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1723,6 +1756,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_selectedColumns(long max_columns,
                                                           long** columns,
                                                           long* n_columns) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_SELECTED_COLUMNS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1738,6 +1772,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_selectedRows(long max_rows,
                                                        long** rows,
                                                        long* n_rows) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_SELECTED_ROWS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1751,6 +1786,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_selectedRows(long max_rows,
 
 STDMETHODIMP BrowserAccessibilityWin::get_summary(IUnknown** accessible) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_SUMMARY);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1765,6 +1801,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_isColumnSelected(
     long column,
     boolean* is_selected) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_IS_COLUMN_SELECTED);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1779,6 +1816,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_isColumnSelected(
 STDMETHODIMP BrowserAccessibilityWin::get_isRowSelected(long row,
                                                         boolean* is_selected) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_IS_ROW_SELECTED);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1794,6 +1832,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_isSelected(long row,
                                                      long column,
                                                      boolean* is_selected) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_IS_SELECTED);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1813,6 +1852,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_rowColumnExtentsAtIndex(
     long* column_extents,
     boolean* is_selected) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ROW_COLUMN_EXTENTS_AT_INDEX);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1848,21 +1888,25 @@ STDMETHODIMP BrowserAccessibilityWin::get_rowColumnExtentsAtIndex(
 
 STDMETHODIMP BrowserAccessibilityWin::selectRow(long row) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_SELECT_ROW);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return E_NOTIMPL;
 }
 
 STDMETHODIMP BrowserAccessibilityWin::selectColumn(long column) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_SELECT_COLUMN);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return E_NOTIMPL;
 }
 
 STDMETHODIMP BrowserAccessibilityWin::unselectRow(long row) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_UNSELECT_ROW);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return E_NOTIMPL;
 }
 
 STDMETHODIMP BrowserAccessibilityWin::unselectColumn(long column) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_UNSELECT_COLUMN);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return E_NOTIMPL;
 }
 
@@ -1879,11 +1923,13 @@ STDMETHODIMP BrowserAccessibilityWin::get_cellAt(long row,
                                                  long column,
                                                  IUnknown** cell) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_CELL_AT);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return get_accessibleAt(row, column, cell);
 }
 
 STDMETHODIMP BrowserAccessibilityWin::get_nSelectedCells(long* cell_count) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_SELECTED_CELLS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return get_nSelectedChildren(cell_count);
 }
 
@@ -1891,6 +1937,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_selectedCells(
     IUnknown*** cells,
     long* n_selected_cells) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_SELECTED_CELLS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1905,6 +1952,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_selectedCells(
 STDMETHODIMP BrowserAccessibilityWin::get_selectedColumns(long** columns,
                                                           long* n_columns) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TABLE2_GET_SELECTED_COLUMNS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1919,6 +1967,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_selectedColumns(long** columns,
 STDMETHODIMP BrowserAccessibilityWin::get_selectedRows(long** rows,
                                                        long* n_rows) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TABLE2_GET_SELECTED_ROWS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1938,6 +1987,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_selectedRows(long** rows,
 STDMETHODIMP BrowserAccessibilityWin::get_columnExtent(
     long* n_columns_spanned) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_COLUMN_EXTENT);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -1959,6 +2009,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_columnHeaderCells(
     IUnknown*** cell_accessibles,
     long* n_column_header_cells) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_COLUMN_HEADER_CELLS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2020,6 +2071,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_columnHeaderCells(
 
 STDMETHODIMP BrowserAccessibilityWin::get_columnIndex(long* column_index) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TABLECELL_GET_COLUMN_INDEX);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2038,6 +2090,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_columnIndex(long* column_index) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_rowExtent(long* n_rows_spanned) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ROW_EXTENT);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2059,6 +2112,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_rowHeaderCells(
     IUnknown*** cell_accessibles,
     long* n_row_header_cells) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ROW_HEADER_CELLS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2120,6 +2174,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_rowHeaderCells(
 
 STDMETHODIMP BrowserAccessibilityWin::get_rowIndex(long* row_index) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TABLECELL_GET_ROW_INDEX);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2136,6 +2191,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_rowIndex(long* row_index) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_isSelected(boolean* is_selected) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TABLECELL_GET_IS_SELECTED);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2153,6 +2209,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_rowColumnExtents(
     long* column_extents,
     boolean* is_selected) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ROW_COLUMN_EXTENTS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2188,6 +2245,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_rowColumnExtents(
 
 STDMETHODIMP BrowserAccessibilityWin::get_table(IUnknown** table) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_TABLE);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2220,6 +2278,8 @@ STDMETHODIMP BrowserAccessibilityWin::get_table(IUnknown** table) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_nCharacters(LONG* n_characters) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_CHARACTERS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER |
+                            ACCESSIBILITY_MODE_FLAG_INLINE_TEXT_BOXES);
   if (!instance_active())
     return E_FAIL;
 
@@ -2232,6 +2292,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_nCharacters(LONG* n_characters) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_caretOffset(LONG* offset) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_CARET_OFFSET);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2259,6 +2320,8 @@ STDMETHODIMP BrowserAccessibilityWin::get_characterExtents(
     LONG* out_width,
     LONG* out_height) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_CHARACTER_EXTENTS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER |
+                            ACCESSIBILITY_MODE_FLAG_INLINE_TEXT_BOXES);
   if (!instance_active())
     return E_FAIL;
 
@@ -2292,6 +2355,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_characterExtents(
 
 STDMETHODIMP BrowserAccessibilityWin::get_nSelections(LONG* n_selections) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_SELECTIONS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2313,6 +2377,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_selection(LONG selection_index,
                                                     LONG* start_offset,
                                                     LONG* end_offset) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_SELECTION);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2346,6 +2411,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_text(LONG start_offset,
                                                LONG end_offset,
                                                BSTR* text) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_TEXT);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2389,6 +2455,8 @@ STDMETHODIMP BrowserAccessibilityWin::get_textAtOffset(
     LONG* end_offset,
     BSTR* text) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_TEXT_AT_OFFSET);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER |
+                            ACCESSIBILITY_MODE_FLAG_INLINE_TEXT_BOXES);
   if (!instance_active())
     return E_FAIL;
 
@@ -2440,6 +2508,8 @@ STDMETHODIMP BrowserAccessibilityWin::get_textBeforeOffset(
     LONG* end_offset,
     BSTR* text) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_TEXT_BEFORE_OFFSET);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER |
+                            ACCESSIBILITY_MODE_FLAG_INLINE_TEXT_BOXES);
   if (!instance_active())
     return E_FAIL;
 
@@ -2470,6 +2540,8 @@ STDMETHODIMP BrowserAccessibilityWin::get_textAfterOffset(
     LONG* end_offset,
     BSTR* text) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_TEXT_AFTER_OFFSET);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER |
+                            ACCESSIBILITY_MODE_FLAG_INLINE_TEXT_BOXES);
   if (!instance_active())
     return E_FAIL;
 
@@ -2495,6 +2567,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_textAfterOffset(
 
 STDMETHODIMP BrowserAccessibilityWin::get_newText(IA2TextSegment* new_text) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_NEW_TEXT);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2518,6 +2591,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_newText(IA2TextSegment* new_text) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_oldText(IA2TextSegment* old_text) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_OLD_TEXT);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2546,6 +2620,8 @@ STDMETHODIMP BrowserAccessibilityWin::get_offsetAtPoint(
     IA2CoordinateType coord_type,
     LONG* offset) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_OFFSET_AT_POINT);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER |
+                            ACCESSIBILITY_MODE_FLAG_INLINE_TEXT_BOXES);
   if (!instance_active())
     return E_FAIL;
 
@@ -2564,6 +2640,8 @@ STDMETHODIMP BrowserAccessibilityWin::scrollSubstringTo(
     LONG end_index,
     IA2ScrollType scroll_type) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_SCROLL_SUBSTRING_TO);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER |
+                            ACCESSIBILITY_MODE_FLAG_INLINE_TEXT_BOXES);
   // TODO(dmazzoni): adjust this for the start and end index, too.
   return scrollTo(scroll_type);
 }
@@ -2575,13 +2653,16 @@ STDMETHODIMP BrowserAccessibilityWin::scrollSubstringToPoint(
     LONG x,
     LONG y) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_SCROLL_SUBSTRING_TO_POINT);
-  // TODO(dmazzoni): adjust this for the start and end index, too.
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER |
+                            ACCESSIBILITY_MODE_FLAG_INLINE_TEXT_BOXES);
+ // TODO(dmazzoni): adjust this for the start and end index, too.
   return scrollToPoint(coordinate_type, x, y);
 }
 
 STDMETHODIMP BrowserAccessibilityWin::addSelection(LONG start_offset,
                                                    LONG end_offset) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_ADD_SELECTION);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2595,6 +2676,7 @@ STDMETHODIMP BrowserAccessibilityWin::addSelection(LONG start_offset,
 
 STDMETHODIMP BrowserAccessibilityWin::removeSelection(LONG selection_index) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_REMOVE_SELECTION);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2607,6 +2689,7 @@ STDMETHODIMP BrowserAccessibilityWin::removeSelection(LONG selection_index) {
 
 STDMETHODIMP BrowserAccessibilityWin::setCaretOffset(LONG offset) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_SET_CARET_OFFSET);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2620,6 +2703,7 @@ STDMETHODIMP BrowserAccessibilityWin::setSelection(LONG selection_index,
                                                    LONG start_offset,
                                                    LONG end_offset) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_SET_SELECTION);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2639,6 +2723,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_attributes(LONG offset,
                                                      LONG* end_offset,
                                                      BSTR* text_attributes) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_IATEXT_GET_ATTRIBUTES);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!start_offset || !end_offset || !text_attributes)
     return E_INVALIDARG;
 
@@ -2677,6 +2762,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_attributes(LONG offset,
 
 STDMETHODIMP BrowserAccessibilityWin::get_nHyperlinks(long* hyperlink_count) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_N_HYPERLINKS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2691,6 +2777,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_hyperlink(
     long index,
     IAccessibleHyperlink** hyperlink) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_HYPERLINK);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2714,6 +2801,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_hyperlinkIndex(
     long char_index,
     long* hyperlink_index) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_HYPERLINK_INDEX);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2742,6 +2830,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_hyperlinkIndex(
 // Currently, only text links are supported.
 STDMETHODIMP BrowserAccessibilityWin::get_anchor(long index, VARIANT* anchor) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ANCHOR);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active() || !IsHyperlink())
     return E_FAIL;
 
@@ -2766,6 +2855,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_anchor(long index, VARIANT* anchor) {
 STDMETHODIMP BrowserAccessibilityWin::get_anchorTarget(long index,
                                                        VARIANT* anchor_target) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ANCHOR_TARGET);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active() || !IsHyperlink())
     return E_FAIL;
 
@@ -2793,6 +2883,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_anchorTarget(long index,
 
 STDMETHODIMP BrowserAccessibilityWin::get_startIndex(long* index) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_START_INDEX);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active() || !IsHyperlink())
     return E_FAIL;
 
@@ -2811,6 +2902,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_startIndex(long* index) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_endIndex(long* index) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_END_INDEX);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   LONG start_index;
   HRESULT hr = get_startIndex(&start_index);
   if (hr == S_OK)
@@ -2821,6 +2913,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_endIndex(long* index) {
 // This method is deprecated in the IA2 Spec.
 STDMETHODIMP BrowserAccessibilityWin::get_valid(boolean* valid) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_VALID);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return E_NOTIMPL;
 }
 
@@ -2830,6 +2923,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_valid(boolean* valid) {
 
 STDMETHODIMP BrowserAccessibilityWin::nActions(long* n_actions) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_N_ACTIONS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2839,7 +2933,7 @@ STDMETHODIMP BrowserAccessibilityWin::nActions(long* n_actions) {
   // |IsHyperlink| is required for |IAccessibleHyperlink::anchor/anchorTarget|
   // to work properly because the |IAccessibleHyperlink| interface inherits from
   // |IAccessibleAction|.
-  if (IsHyperlink() || HasStringAttribute(ui::AX_ATTR_ACTION)) {
+  if (IsHyperlink() || HasIntAttribute(ui::AX_ATTR_ACTION)) {
     *n_actions = 1;
   } else {
     *n_actions = 0;
@@ -2850,10 +2944,11 @@ STDMETHODIMP BrowserAccessibilityWin::nActions(long* n_actions) {
 
 STDMETHODIMP BrowserAccessibilityWin::doAction(long action_index) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_DO_ACTION);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
-  if (!HasStringAttribute(ui::AX_ATTR_ACTION) || action_index != 0)
+  if (!HasIntAttribute(ui::AX_ATTR_ACTION) || action_index != 0)
     return E_INVALIDARG;
 
   manager()->DoDefaultAction(*this);
@@ -2863,6 +2958,7 @@ STDMETHODIMP BrowserAccessibilityWin::doAction(long action_index) {
 STDMETHODIMP
 BrowserAccessibilityWin::get_description(long action_index, BSTR* description) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_IAACTION_GET_DESCRIPTION);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return E_NOTIMPL;
 }
 
@@ -2871,22 +2967,30 @@ STDMETHODIMP BrowserAccessibilityWin::get_keyBinding(long action_index,
                                                      BSTR** key_bindings,
                                                      long* n_bindings) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_KEY_BINDING);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   return E_NOTIMPL;
 }
 
 STDMETHODIMP BrowserAccessibilityWin::get_name(long action_index, BSTR* name) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_NAME);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
   if (!name)
     return E_INVALIDARG;
 
-  base::string16 action_verb;
-  if (!GetString16Attribute(ui::AX_ATTR_ACTION, &action_verb) ||
-      action_index != 0) {
+  int action;
+  if (!GetIntAttribute(ui::AX_ATTR_ACTION, &action) || action_index != 0) {
     *name = nullptr;
     return E_INVALIDARG;
+  }
+
+  base::string16 action_verb =
+      ui::ActionToUnlocalizedString(static_cast<ui::AXSupportedAction>(action));
+  if (action_verb.empty() || action_verb == L"none") {
+    *name = nullptr;
+    return S_FALSE;
   }
 
   *name = SysAllocString(action_verb.c_str());
@@ -2898,7 +3002,29 @@ STDMETHODIMP
 BrowserAccessibilityWin::get_localizedName(long action_index,
                                            BSTR* localized_name) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_LOCALIZED_NAME);
-  return E_NOTIMPL;
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
+  if (!instance_active())
+    return E_FAIL;
+
+  if (!localized_name)
+    return E_INVALIDARG;
+
+  int action;
+  if (!GetIntAttribute(ui::AX_ATTR_ACTION, &action) || action_index != 0) {
+    *localized_name = nullptr;
+    return E_INVALIDARG;
+  }
+
+  base::string16 action_verb =
+      ui::ActionToString(static_cast<ui::AXSupportedAction>(action));
+  if (action_verb.empty()) {
+    *localized_name = nullptr;
+    return S_FALSE;
+  }
+
+  *localized_name = SysAllocString(action_verb.c_str());
+  DCHECK(localized_name);
+  return S_OK;
 }
 
 //
@@ -2907,6 +3033,7 @@ BrowserAccessibilityWin::get_localizedName(long action_index,
 
 STDMETHODIMP BrowserAccessibilityWin::get_currentValue(VARIANT* value) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_CURRENT_VALUE);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2927,6 +3054,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_currentValue(VARIANT* value) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_minimumValue(VARIANT* value) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_MINIMUM_VALUE);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2947,6 +3075,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_minimumValue(VARIANT* value) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_maximumValue(VARIANT* value) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_MAXIMUM_VALUE);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -2967,6 +3096,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_maximumValue(VARIANT* value) {
 
 STDMETHODIMP BrowserAccessibilityWin::setCurrentValue(VARIANT new_value) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_SET_CURRENT_VALUE);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   // TODO(dmazzoni): Implement this.
   return E_NOTIMPL;
 }
@@ -3076,6 +3206,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_nodeInfo(
     unsigned int* unique_id,
     unsigned short* node_type) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_NODE_INFO);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_HTML);
   if (!instance_active())
     return E_FAIL;
 
@@ -3114,6 +3245,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_attributes(
     BSTR* attrib_values,
     unsigned short* num_attribs) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_ISIMPLEDOMNODE_GET_ATTRIBUTES);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_HTML);
   if (!instance_active())
     return E_FAIL;
 
@@ -3140,6 +3272,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_attributesForNames(
     short* name_space_id,
     BSTR* attrib_values) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_ATTRIBUTES_FOR_NAMES);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_HTML);
   if (!instance_active())
     return E_FAIL;
 
@@ -3172,6 +3305,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_computedStyle(
     BSTR* style_values,
     unsigned short *num_style_properties)  {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_COMPUTED_STYLE);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_HTML);
   if (!instance_active())
     return E_FAIL;
 
@@ -3200,6 +3334,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_computedStyleForProperties(
     BSTR* style_properties,
     BSTR* style_values) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_COMPUTED_STYLE_FOR_PROPERTIES);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_HTML);
   if (!instance_active())
     return E_FAIL;
 
@@ -3341,17 +3476,20 @@ STDMETHODIMP BrowserAccessibilityWin::get_childAt(
 
 STDMETHODIMP BrowserAccessibilityWin::get_innerHTML(BSTR* innerHTML) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_INNER_HTML);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_HTML);
   return E_NOTIMPL;
 }
 
 STDMETHODIMP
 BrowserAccessibilityWin::get_localInterface(void** local_interface) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_LOCAL_INTERFACE);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_HTML);
   return E_NOTIMPL;
 }
 
 STDMETHODIMP BrowserAccessibilityWin::get_language(BSTR* language) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_LANGUAGE);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!language)
     return E_INVALIDARG;
   *language = nullptr;
@@ -3374,6 +3512,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_language(BSTR* language) {
 
 STDMETHODIMP BrowserAccessibilityWin::get_domText(BSTR* dom_text) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_DOM_TEXT);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!instance_active())
     return E_FAIL;
 
@@ -3392,6 +3531,8 @@ STDMETHODIMP BrowserAccessibilityWin::get_clippedSubstringBounds(
     int* out_width,
     int* out_height) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_CLIPPED_SUBSTRING_BOUNDS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER |
+                            ACCESSIBILITY_MODE_FLAG_INLINE_TEXT_BOXES);
   // TODO(dmazzoni): fully support this API by intersecting the
   // rect with the container's rect.
   return get_unclippedSubstringBounds(
@@ -3406,6 +3547,8 @@ STDMETHODIMP BrowserAccessibilityWin::get_unclippedSubstringBounds(
     int* out_width,
     int* out_height) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_UNCLIPPED_SUBSTRING_BOUNDS);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER |
+                            ACCESSIBILITY_MODE_FLAG_INLINE_TEXT_BOXES);
   if (!instance_active())
     return E_FAIL;
 
@@ -3431,6 +3574,8 @@ STDMETHODIMP BrowserAccessibilityWin::scrollToSubstring(
     unsigned int start_index,
     unsigned int end_index) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_SCROLL_TO_SUBSTRING);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER |
+                            ACCESSIBILITY_MODE_FLAG_INLINE_TEXT_BOXES);
   if (!instance_active())
     return E_FAIL;
 
@@ -3449,6 +3594,7 @@ STDMETHODIMP BrowserAccessibilityWin::scrollToSubstring(
 
 STDMETHODIMP BrowserAccessibilityWin::get_fontFamily(BSTR* font_family) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_FONT_FAMILY);
+  AddAccessibilityModeFlags(ACCESSIBILITY_MODE_FLAG_SCREEN_READER);
   if (!font_family)
     return E_INVALIDARG;
   *font_family = nullptr;
@@ -3476,12 +3622,6 @@ STDMETHODIMP BrowserAccessibilityWin::QueryService(REFGUID guid_service,
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_QUERY_SERVICE);
   if (!instance_active())
     return E_FAIL;
-
-  // The system uses IAccessible APIs for many purposes, but only
-  // assistive technology like screen readers uses IAccessible2.
-  // Enable full accessibility support when IAccessible2 APIs are queried.
-  if (riid == IID_IAccessible2)
-    BrowserAccessibilityStateImpl::GetInstance()->EnableAccessibility();
 
   if (guid_service == GUID_IAccessibleContentDocument) {
     // Special Mozilla extension: return the accessible for the root document.
@@ -3822,6 +3962,19 @@ void BrowserAccessibilityWin::UpdateStep1ComputeWinAttributes() {
     }
   }
 
+  // Expose aria-colcount and aria-rowcount in a table, grid or treegrid.
+  if (IsTableOrGridOrTreeGridRole()) {
+    IntAttributeToIA2(ui::AX_ATTR_ARIA_COL_COUNT, "colcount");
+    IntAttributeToIA2(ui::AX_ATTR_ARIA_ROW_COUNT, "rowcount");
+  }
+
+  // Expose aria-colindex and aria-rowindex in a cell or row.
+  if (IsCellOrTableHeaderRole() || GetRole() == ui::AX_ROLE_ROW) {
+    if (GetRole() != ui::AX_ROLE_ROW)
+      IntAttributeToIA2(ui::AX_ATTR_ARIA_COL_INDEX, "colindex");
+    IntAttributeToIA2(ui::AX_ATTR_ARIA_ROW_INDEX, "rowindex");
+  }
+
   // Expose row or column header sort direction.
   int32_t sort_direction;
   if ((ia_role() == ROLE_SYSTEM_COLUMNHEADER ||
@@ -3847,6 +4000,7 @@ void BrowserAccessibilityWin::UpdateStep1ComputeWinAttributes() {
 
   win_attributes_->name = GetString16Attribute(ui::AX_ATTR_NAME);
   win_attributes_->description = GetString16Attribute(ui::AX_ATTR_DESCRIPTION);
+  StringAttributeToIA2(ui::AX_ATTR_PLACEHOLDER, "placeholder");
 
   base::string16 value = GetValue();
   // On Windows, the value of a document should be its url.
@@ -3875,6 +4029,15 @@ void BrowserAccessibilityWin::UpdateStep1ComputeWinAttributes() {
   int member_of_id;
   if (GetIntAttribute(ui::AX_ATTR_MEMBER_OF_ID, &member_of_id))
     AddRelation(IA2_RELATION_MEMBER_OF, member_of_id);
+
+  // Expose slider value.
+  if (ia_role() == ROLE_SYSTEM_PROGRESSBAR ||
+      ia_role() == ROLE_SYSTEM_SCROLLBAR ||
+      ia_role() == ROLE_SYSTEM_SLIDER) {
+    base::string16 value_text = GetValueText();
+    SanitizeStringAttributeForIA2(value_text, &value_text);
+    win_attributes_->ia2_attributes.push_back(L"valuetext:" + value_text);
+  }
 
   UpdateRequiredAttributes();
   // If this is a web area for a presentational iframe, give it a role of
@@ -4890,13 +5053,19 @@ void BrowserAccessibilityWin::RemoveTargetFromRelation(
 }
 
 void BrowserAccessibilityWin::UpdateRequiredAttributes() {
-  // Expose slider value.
-  if (ia_role() == ROLE_SYSTEM_PROGRESSBAR ||
-      ia_role() == ROLE_SYSTEM_SCROLLBAR ||
-      ia_role() == ROLE_SYSTEM_SLIDER) {
-    base::string16 value_text = GetValueText();
-    SanitizeStringAttributeForIA2(value_text, &value_text);
-    win_attributes_->ia2_attributes.push_back(L"valuetext:" + value_text);
+  if (IsCellOrTableHeaderRole()) {
+    // Expose colspan attribute.
+    base::string16 colspan;
+    if (GetHtmlAttribute("aria-colspan", &colspan)) {
+      SanitizeStringAttributeForIA2(colspan, &colspan);
+      win_attributes_->ia2_attributes.push_back(L"colspan:" + colspan);
+    }
+    // Expose rowspan attribute.
+    base::string16 rowspan;
+    if (GetHtmlAttribute("aria-rowspan", &rowspan)) {
+      SanitizeStringAttributeForIA2(rowspan, &rowspan);
+      win_attributes_->ia2_attributes.push_back(L"rowspan:" + rowspan);
+    }
   }
 
   // Expose dropeffect attribute.
@@ -5174,6 +5343,9 @@ void BrowserAccessibilityWin::InitRoleAndState() {
     case ui::AX_ROLE_FIGURE:
       ia_role = ROLE_SYSTEM_GROUPING;
       break;
+    case ui::AX_ROLE_FEED:
+      ia_role = ROLE_SYSTEM_GROUPING;
+      break;
     case ui::AX_ROLE_FORM:
       role_name = L"form";
       ia2_role = IA2_ROLE_FORM;
@@ -5430,6 +5602,10 @@ void BrowserAccessibilityWin::InitRoleAndState() {
       break;
     case ui::AX_ROLE_TAB_PANEL:
       ia_role = ROLE_SYSTEM_PROPERTYPAGE;
+      break;
+    case ui::AX_ROLE_TERM:
+      ia_role = ROLE_SYSTEM_LISTITEM;
+      ia_state |= STATE_SYSTEM_READONLY;
       break;
     case ui::AX_ROLE_TOGGLE_BUTTON:
       ia_role = ROLE_SYSTEM_PUSHBUTTON;

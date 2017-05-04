@@ -254,6 +254,10 @@ Output.ROLE_INFO_ = {
   menuListPopup: {
     msgId: 'role_menu'
   },
+  meter: {
+    msgId: 'role_meter',
+    inherits: 'abstractRange'
+  },
   navigation: {
     msgId: 'role_navigation',
     inherits: 'abstractContainer'
@@ -261,6 +265,10 @@ Output.ROLE_INFO_ = {
   note: {
     msgId: 'role_note',
     inherits: 'abstractContainer'
+  },
+  progressIndicator: {
+    msgId: 'role_progress_indicator',
+    inherits: 'abstractRange'
   },
   popUpButton: {
     msgId: 'role_button',
@@ -285,6 +293,7 @@ Output.ROLE_INFO_ = {
   },
   scrollBar: {
     msgId: 'role_scrollbar',
+    inherits: 'abstractRange'
   },
   search: {
     msgId: 'role_search',
@@ -294,8 +303,14 @@ Output.ROLE_INFO_ = {
     msgId: 'role_separator',
     inherits: 'abstractContainer'
   },
+  slider: {
+    msgId: 'role_slider',
+    inherits: 'abstractRange',
+    earconId: 'SLIDER'
+  },
   spinButton: {
     msgId: 'role_spinbutton',
+    inherits: 'abstractRange',
     earconId: 'LISTBOX'
   },
   status: {
@@ -395,6 +410,13 @@ Output.RULES = {
     abstractContainer: {
       enter: '$nameFromNode $role $state $description',
       leave: '@exited_container($role)'
+    },
+    abstractRange: {
+      speak:
+          '$if($valueForRange, $valueForRange, $value) ' +
+          '$if($minValueForRange, @aria_value_min($minValueForRange)) ' +
+          '$if($maxValueForRange, @aria_value_max($maxValueForRange)) ' +
+          '$name $role $description $state'
     },
     alert: {
       enter: '$name $role $state',
@@ -527,10 +549,6 @@ Output.RULES = {
     rowHeader: {
       speak: '$nameOrTextContent $state'
     },
-    slider: {
-      speak: '$earcon(SLIDER) @describe_slider($value, $name) $description ' +
-          '$state'
-    },
     staticText: {
       speak: '$name='
     },
@@ -628,13 +646,16 @@ Output.Action.prototype = {
 /**
  * Action to play an earcon.
  * @param {string} earconId
+ * @param {chrome.automation.Rect=} opt_location
  * @constructor
  * @extends {Output.Action}
  */
-Output.EarconAction = function(earconId) {
+Output.EarconAction = function(earconId, opt_location) {
   Output.Action.call(this);
   /** @type {string} */
   this.earconId = earconId;
+  /** @type {chrome.automation.Rect|undefined} */
+  this.location = opt_location;
 };
 
 Output.EarconAction.prototype = {
@@ -642,7 +663,13 @@ Output.EarconAction.prototype = {
 
   /** @override */
   run: function() {
-    cvox.ChromeVox.earcons.playEarcon(cvox.Earcon[this.earconId]);
+    cvox.ChromeVox.earcons.playEarcon(
+        cvox.Earcon[this.earconId], this.location);
+  },
+
+  /** @override */
+  toJSON: function() {
+    return {earconId: this.earconId};
   }
 };
 
@@ -1058,7 +1085,7 @@ Output.prototype = {
             }
           }
           options.annotation.push(token);
-          if (selectedText) {
+          if (selectedText && !this.formatOptions_.braille) {
             this.append_(buff, selectedText, options);
             this.append_(buff, Msgs.getMsg('selected'));
           } else {
@@ -1069,7 +1096,13 @@ Output.prototype = {
           var earcon = node ? this.findEarcon_(node, opt_prevNode) : null;
           if (earcon)
             options.annotation.push(earcon);
-          this.append_(buff, node.name, options);
+          this.append_(buff, node.name || '', options);
+        } else if (token == 'description') {
+          if (node.name == node.description)
+            return;
+
+          options.annotation.push(token);
+          this.append_(buff, node.description || '', options);
         } else if (token == 'urlFilename') {
           options.annotation.push('name');
           var url = node.url;
@@ -1252,7 +1285,7 @@ Output.prototype = {
             return;
           if (this.formatOptions_.speech && resolvedInfo.earconId) {
             options.annotation.push(
-                new Output.EarconAction(resolvedInfo.earconId));
+                new Output.EarconAction(resolvedInfo.earconId), node.location);
           }
           var msgId =
               this.formatOptions_.braille ? resolvedInfo.msgId + '_brl' :
@@ -1264,7 +1297,7 @@ Output.prototype = {
           if (token == 'if') {
             var cond = tree.firstChild;
             var attrib = cond.value.slice(1);
-            if (node[attrib] || node.state[attrib])
+            if (node[attrib] !== undefined || node.state[attrib])
               this.format_(node, cond.nextSibling, buff);
             else
               this.format_(node, cond.nextSibling.nextSibling, buff);
@@ -1274,7 +1307,7 @@ Output.prototype = {
               return;
 
             options.annotation.push(
-                new Output.EarconAction(tree.firstChild.value));
+                new Output.EarconAction(tree.firstChild.value, node.location));
             this.append_(buff, '', options);
           } else if (token == 'countChildren') {
             var role = tree.firstChild.value;
@@ -1407,7 +1440,7 @@ Output.prototype = {
       return buff;
     }.bind(this);
 
-    var unit = range.isInlineText() ? cursors.Unit.LINE : cursors.Unit.NODE;
+    var unit = range.isInlineText() ? cursors.Unit.TEXT : cursors.Unit.NODE;
     while (cursor.node &&
         range.end.node &&
         AutomationUtil.getDirection(cursor.node, range.end.node) ==
@@ -1725,6 +1758,7 @@ Output.prototype = {
   mergeBraille_: function(spans) {
     var separator = '';  // Changes to space as appropriate.
     var prevHasInlineNode = false;
+    var prevIsName = false;
     return spans.reduce(function(result, cur) {
       // Ignore empty spans except when they contain a selection.
       var hasSelection = cur.getSpanInstanceOf(Output.SelectionSpan);
@@ -1750,15 +1784,18 @@ Output.prototype = {
                 s.node.role == RoleType.inlineTextBox;
           });
 
+      var isName = cur.hasSpan('name');
+
       // Now, decide whether we should include separators between the previous
       // span and |cur|.
       // Never separate chunks without something already there at this point.
 
       // The only case where we know for certain that a separator is not needed
-      // is when the previous and current node are in-lined. In all other cases,
-      // use the surrounding whitespace to ensure we only have one separator
-      // between the node text.
-      if (result.length == 0 || (hasInlineNode && prevHasInlineNode))
+      // is when the previous and current values are in-lined and part of the
+      // node's name. In all other cases, use the surrounding whitespace to
+      // ensure we only have one separator between the node text.
+      if (result.length == 0 ||
+          (hasInlineNode && prevHasInlineNode && isName && prevIsName))
         separator = '';
       else if (result.toString()[result.length - 1] == Output.SPACE ||
           cur.toString()[0] == Output.SPACE)
@@ -1767,6 +1804,7 @@ Output.prototype = {
         separator = Output.SPACE;
 
       prevHasInlineNode = hasInlineNode;
+      prevIsName = isName;
       result.append(separator);
       result.append(cur);
       return result;
@@ -1794,7 +1832,7 @@ Output.prototype = {
       while (earconFinder = ancestors.pop()) {
         var info = Output.ROLE_INFO_[earconFinder.role];
         if (info && info.earconId) {
-          return new Output.EarconAction(info.earconId);
+          return new Output.EarconAction(info.earconId, node.location);
           break;
         }
         earconFinder = earconFinder.parent;

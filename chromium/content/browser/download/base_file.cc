@@ -18,9 +18,9 @@
 #include "content/browser/download/download_interrupt_reasons_impl.h"
 #include "content/browser/download/download_net_log_parameters.h"
 #include "content/browser/download/download_stats.h"
-#include "content/browser/download/quarantine.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/common/quarantine.h"
 #include "crypto/secure_hash.h"
 #include "net/base/net_errors.h"
 #include "net/log/net_log.h"
@@ -116,9 +116,6 @@ DownloadInterruptReason BaseFile::AppendDataToFile(const char* data,
   }
   net_log_.EndEvent(net::NetLogEventType::DOWNLOAD_FILE_WRITTEN,
                     net::NetLog::Int64Callback("bytes", data_len));
-
-  RecordDownloadWriteSize(data_len);
-  RecordDownloadWriteLoopCount(write_count);
 
   if (secure_hash_)
     secure_hash_->Update(data, data_len);

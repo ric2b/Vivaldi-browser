@@ -7,12 +7,12 @@
 #include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
-#include "base/strings/string_number_conversions.h"
 #include "net/quic/core/quic_connection.h"
 #include "net/quic/core/quic_utils.h"
 #include "net/quic/core/quic_write_blocked_list.h"
 #include "net/quic/core/spdy_utils.h"
+#include "net/quic/platform/api/quic_ptr_util.h"
+#include "net/quic/platform/api/quic_text_utils.h"
 #include "net/quic/test_tools/quic_flow_controller_peer.h"
 #include "net/quic/test_tools/quic_session_peer.h"
 #include "net/quic/test_tools/quic_stream_peer.h"
@@ -21,7 +21,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 
 using base::StringPiece;
-using std::min;
 using std::string;
 using testing::AnyNumber;
 using testing::Invoke;
@@ -104,10 +103,10 @@ class QuicSpdyStreamTest : public ::testing::TestWithParam<QuicVersion> {
     session_.reset(new testing::StrictMock<MockQuicSpdySession>(connection_));
     stream_ = new TestStream(kClientDataStreamId1, session_.get(),
                              stream_should_process_data);
-    session_->ActivateStream(base::WrapUnique(stream_));
+    session_->ActivateStream(QuicWrapUnique(stream_));
     stream2_ = new TestStream(kClientDataStreamId2, session_.get(),
                               stream_should_process_data);
-    session_->ActivateStream(base::WrapUnique(stream2_));
+    session_->ActivateStream(QuicWrapUnique(stream2_));
   }
 
   QuicHeaderList ProcessHeaders(bool fin, const SpdyHeaderBlock& headers) {
@@ -145,7 +144,7 @@ TEST_P(QuicSpdyStreamTest, ProcessHeaderList) {
 }
 
 TEST_P(QuicSpdyStreamTest, ProcessTooLargeHeaderList) {
-  FLAGS_quic_limit_uncompressed_headers = true;
+  FLAGS_quic_reloadable_flag_quic_limit_uncompressed_headers = true;
   Initialize(kShouldProcessData);
 
   QuicHeaderList headers;
@@ -180,10 +179,18 @@ TEST_P(QuicSpdyStreamTest, ParseHeaderStatusCode) {
   Initialize(kShouldProcessData);
   int status_code = 0;
 
-  // Valid status code.
+  // Valid status codes.
   headers_[":status"] = "404";
   EXPECT_TRUE(stream_->ParseHeaderStatusCode(headers_, &status_code));
   EXPECT_EQ(404, status_code);
+
+  headers_[":status"] = "100";
+  EXPECT_TRUE(stream_->ParseHeaderStatusCode(headers_, &status_code));
+  EXPECT_EQ(100, status_code);
+
+  headers_[":status"] = "599";
+  EXPECT_TRUE(stream_->ParseHeaderStatusCode(headers_, &status_code));
+  EXPECT_EQ(599, status_code);
 
   // Invalid status codes.
   headers_[":status"] = "010";
@@ -202,6 +209,12 @@ TEST_P(QuicSpdyStreamTest, ParseHeaderStatusCode) {
   EXPECT_FALSE(stream_->ParseHeaderStatusCode(headers_, &status_code));
 
   headers_[":status"] = "+20";
+  EXPECT_FALSE(stream_->ParseHeaderStatusCode(headers_, &status_code));
+
+  headers_[":status"] = "-10";
+  EXPECT_FALSE(stream_->ParseHeaderStatusCode(headers_, &status_code));
+
+  headers_[":status"] = "-100";
   EXPECT_FALSE(stream_->ParseHeaderStatusCode(headers_, &status_code));
 
   // Leading or trailing spaces are also invalid.
@@ -255,7 +268,7 @@ TEST_P(QuicSpdyStreamTest, ProcessHeadersAndBodyFragments) {
     for (size_t offset = 0; offset < body.size(); offset += fragment_size) {
       size_t remaining_data = body.size() - offset;
       StringPiece fragment(body.data() + offset,
-                           min(fragment_size, remaining_data));
+                           std::min(fragment_size, remaining_data));
       QuicStreamFrame frame(kClientDataStreamId1, false, offset,
                             StringPiece(fragment));
       stream_->OnStreamFrame(frame);
@@ -388,9 +401,8 @@ TEST_P(QuicSpdyStreamTest, StreamFlowControlBlocked) {
 
   // Try to send more data than the flow control limit allows.
   string headers = SpdyUtils::SerializeUncompressedHeaders(headers_);
-  string body;
   const uint64_t kOverflow = 15;
-  GenerateBody(&body, kWindow + kOverflow);
+  string body(kWindow + kOverflow, 'a');
 
   EXPECT_CALL(*connection_, SendBlocked(kClientDataStreamId1));
   EXPECT_CALL(*session_, WritevData(_, _, _, _, _, _))
@@ -427,8 +439,8 @@ TEST_P(QuicSpdyStreamTest, StreamFlowControlNoWindowUpdateIfNotConsumed) {
                          stream_->flow_controller()));
 
   // Stream receives enough data to fill a fraction of the receive window.
-  string body;
-  GenerateBody(&body, kWindow / 3);
+  string body(kWindow / 3, 'a');
+  auto headers = AsHeaderList(headers_);
   ProcessHeaders(false, headers_);
 
   QuicStreamFrame frame1(kClientDataStreamId1, false, 0, StringPiece(body));
@@ -463,8 +475,7 @@ TEST_P(QuicSpdyStreamTest, StreamFlowControlWindowUpdate) {
                          stream_->flow_controller()));
 
   // Stream receives enough data to fill a fraction of the receive window.
-  string body;
-  GenerateBody(&body, kWindow / 3);
+  string body(kWindow / 3, 'a');
   ProcessHeaders(false, headers_);
   stream_->ConsumeHeaderList();
 
@@ -521,8 +532,7 @@ TEST_P(QuicSpdyStreamTest, ConnectionFlowControlWindowUpdate) {
 
   // Each stream gets a quarter window of data. This should not trigger a
   // WINDOW_UPDATE for either stream, nor for the connection.
-  string body;
-  GenerateBody(&body, kWindow / 4);
+  string body(kWindow / 4, 'a');
   QuicStreamFrame frame1(kClientDataStreamId1, false, 0, StringPiece(body));
   stream_->OnStreamFrame(frame1);
   QuicStreamFrame frame2(kClientDataStreamId2, false, 0, StringPiece(body));
@@ -534,9 +544,10 @@ TEST_P(QuicSpdyStreamTest, ConnectionFlowControlWindowUpdate) {
   EXPECT_CALL(*connection_, SendWindowUpdate(kClientDataStreamId1, _)).Times(0);
   EXPECT_CALL(*connection_, SendWindowUpdate(kClientDataStreamId2, _)).Times(0);
   EXPECT_CALL(*connection_,
-              SendWindowUpdate(0, QuicFlowControllerPeer::ReceiveWindowOffset(
-                                      session_->flow_controller()) +
-                                      1 + kWindow / 2));
+              SendWindowUpdate(0,
+                               QuicFlowControllerPeer::ReceiveWindowOffset(
+                                   session_->flow_controller()) +
+                                   1 + kWindow / 2));
   QuicStreamFrame frame3(kClientDataStreamId1, false, (kWindow / 4),
                          StringPiece("a"));
   stream_->OnStreamFrame(frame3);
@@ -558,8 +569,7 @@ TEST_P(QuicSpdyStreamTest, StreamFlowControlViolation) {
   ProcessHeaders(false, headers_);
 
   // Receive data to overflow the window, violating flow control.
-  string body;
-  GenerateBody(&body, kWindow + 1);
+  string body(kWindow + 1, 'a');
   QuicStreamFrame frame(kClientDataStreamId1, false, 0, StringPiece(body));
   EXPECT_CALL(*connection_,
               CloseConnection(QUIC_FLOW_CONTROL_RECEIVED_TOO_MUCH_DATA, _, _));
@@ -596,8 +606,7 @@ TEST_P(QuicSpdyStreamTest, ConnectionFlowControlViolation) {
   ProcessHeaders(false, headers_);
 
   // Send enough data to overflow the connection level flow control window.
-  string body;
-  GenerateBody(&body, kConnectionWindow + 1);
+  string body(kConnectionWindow + 1, 'a');
   EXPECT_LT(body.size(), kStreamWindow);
   QuicStreamFrame frame(kClientDataStreamId1, false, 0, StringPiece(body));
 
@@ -768,7 +777,8 @@ TEST_P(QuicSpdyStreamTest, ReceivingTrailersWithOffset) {
   trailers_block["key1"] = "value1";
   trailers_block["key2"] = "value2";
   trailers_block["key3"] = "value3";
-  trailers_block[kFinalOffsetHeaderKey] = base::IntToString(body.size());
+  trailers_block[kFinalOffsetHeaderKey] =
+      QuicTextUtils::Uint64ToString(body.size());
 
   QuicHeaderList trailers = ProcessHeaders(true, trailers_block);
 
@@ -850,7 +860,8 @@ TEST_P(QuicSpdyStreamTest, WritingTrailersFinalOffset) {
   SpdyHeaderBlock trailers;
   trailers["trailer key"] = "trailer value";
   SpdyHeaderBlock trailers_with_offset(trailers.Clone());
-  trailers_with_offset[kFinalOffsetHeaderKey] = base::Uint64ToString(kBodySize);
+  trailers_with_offset[kFinalOffsetHeaderKey] =
+      QuicTextUtils::Uint64ToString(kBodySize);
   EXPECT_CALL(*session_, WriteHeadersMock(_, _, true, _, _));
   stream_->WriteTrailers(std::move(trailers), nullptr);
   EXPECT_EQ(trailers_with_offset, session_->GetWriteHeaders());

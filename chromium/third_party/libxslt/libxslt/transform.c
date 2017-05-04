@@ -89,10 +89,9 @@ static xmlNsPtr
 xsltCopyNamespaceListInternal(xmlNodePtr node, xmlNsPtr cur);
 
 static xmlNodePtr
-xsltCopyTreeInternal(xsltTransformContextPtr ctxt,
-		     xmlNodePtr invocNode,
-		     xmlNodePtr node,
-		     xmlNodePtr insert, int isLRE, int topElemVisited);
+xsltCopyTree(xsltTransformContextPtr ctxt, xmlNodePtr invocNode,
+	     xmlNodePtr node, xmlNodePtr insert, int isLRE,
+	     int topElemVisited);
 
 static void
 xsltApplySequenceConstructor(xsltTransformContextPtr ctxt,
@@ -468,7 +467,7 @@ xsltGetXIncludeDefault(void) {
     return(xsltDoXIncludeDefault);
 }
 
-unsigned long xsltDefaultTrace = (unsigned long) XSLT_TRACE_ALL;
+static unsigned long xsltDefaultTrace = (unsigned long) XSLT_TRACE_ALL;
 
 /**
  * xsltDebugSetDefaultTrace:
@@ -767,9 +766,6 @@ xsltFreeTransformContext(xsltTransformContextPtr ctxt) {
  *									*
  ************************************************************************/
 
-xmlNodePtr xsltCopyTree(xsltTransformContextPtr ctxt,
-                        xmlNodePtr node, xmlNodePtr insert, int literal);
-
 /**
  * xsltAddChild:
  * @parent:  the parent node
@@ -817,13 +813,32 @@ xsltAddTextString(xsltTransformContextPtr ctxt, xmlNodePtr target,
         return(target);
 
     if (ctxt->lasttext == target->content) {
+        int minSize;
 
-	if (ctxt->lasttuse + len >= ctxt->lasttsize) {
+        /* Check for integer overflow accounting for NUL terminator. */
+        if (len >= INT_MAX - ctxt->lasttuse) {
+            xsltTransformError(ctxt, NULL, target,
+                "xsltCopyText: text allocation failed\n");
+            return(NULL);
+        }
+        minSize = ctxt->lasttuse + len + 1;
+
+        if (ctxt->lasttsize < minSize) {
 	    xmlChar *newbuf;
 	    int size;
+            int extra;
 
-	    size = ctxt->lasttsize + len + 100;
-	    size *= 2;
+            /* Double buffer size but increase by at least 100 bytes. */
+            extra = minSize < 100 ? 100 : minSize;
+
+            /* Check for integer overflow. */
+            if (extra > INT_MAX - ctxt->lasttsize) {
+                size = INT_MAX;
+            }
+            else {
+                size = ctxt->lasttsize + extra;
+            }
+
 	    newbuf = (xmlChar *) xmlRealloc(target->content,size);
 	    if (newbuf == NULL) {
 		xsltTransformError(ctxt, NULL, target,
@@ -1124,7 +1139,7 @@ exit:
  *
  * Do a copy of an attribute.
  * Called by:
- *  - xsltCopyTreeInternal()
+ *  - xsltCopyTree()
  *  - xsltCopyOf()
  *  - xsltCopy()
  *
@@ -1225,7 +1240,7 @@ xsltShallowCopyAttr(xsltTransformContextPtr ctxt, xmlNodePtr invocNode,
  * @target element node.
  *
  * Called by:
- *  - xsltCopyTreeInternal()
+ *  - xsltCopyTree()
  *
  * Returns 0 on success and -1 on errors and internal errors.
  */
@@ -1347,7 +1362,7 @@ xsltShallowCopyElem(xsltTransformContextPtr ctxt, xmlNodePtr node,
 	    *  copy over all namespace nodes in scope.
 	    *  The damn thing about this is, that we would need to
 	    *  use the xmlGetNsList(), for every single node; this is
-	    *  also done in xsltCopyTreeInternal(), but only for the top node.
+	    *  also done in xsltCopyTree(), but only for the top node.
 	    */
 	    if (node->ns != NULL) {
 		if (isLRE) {
@@ -1405,7 +1420,7 @@ xsltCopyTreeList(xsltTransformContextPtr ctxt, xmlNodePtr invocNode,
     xmlNodePtr copy, ret = NULL;
 
     while (list != NULL) {
-	copy = xsltCopyTreeInternal(ctxt, invocNode,
+	copy = xsltCopyTree(ctxt, invocNode,
 	    list, insert, isLRE, topElemVisited);
 	if (copy != NULL) {
 	    if (ret == NULL) {
@@ -1425,7 +1440,7 @@ xsltCopyTreeList(xsltTransformContextPtr ctxt, xmlNodePtr invocNode,
  * Do a copy of a namespace list. If @node is non-NULL the
  * new namespaces are added automatically.
  * Called by:
- *   xsltCopyTreeInternal()
+ *   xsltCopyTree()
  *
  * QUESTION: What is the exact difference between this function
  *  and xsltCopyNamespaceList() in "namespaces.c"?
@@ -1583,7 +1598,7 @@ occupied:
 }
 
 /**
- * xsltCopyTreeInternal:
+ * xsltCopyTree:
  * @ctxt:  the XSLT transformation context
  * @invocNode: responsible node in the stylesheet; used for error reports
  * @node:  the element node in the source tree
@@ -1602,10 +1617,9 @@ occupied:
  * Returns a pointer to the new tree, or NULL in case of error
  */
 static xmlNodePtr
-xsltCopyTreeInternal(xsltTransformContextPtr ctxt,
-		     xmlNodePtr invocNode,
-		     xmlNodePtr node,
-		     xmlNodePtr insert, int isLRE, int topElemVisited)
+xsltCopyTree(xsltTransformContextPtr ctxt, xmlNodePtr invocNode,
+	     xmlNodePtr node, xmlNodePtr insert, int isLRE,
+	     int topElemVisited)
 {
     xmlNodePtr copy;
 
@@ -1661,7 +1675,7 @@ xsltCopyTreeInternal(xsltTransformContextPtr ctxt,
 	copy = xsltAddChild(insert, copy);
         if (copy == NULL) {
             xsltTransformError(ctxt, NULL, invocNode,
-            "xsltCopyTreeInternal: Copying of '%s' failed.\n", node->name);
+            "xsltCopyTree: Copying of '%s' failed.\n", node->name);
             return (copy);
         }
 	/*
@@ -1792,32 +1806,9 @@ xsltCopyTreeInternal(xsltTransformContextPtr ctxt,
 	}
     } else {
 	xsltTransformError(ctxt, NULL, invocNode,
-	    "xsltCopyTreeInternal: Copying of '%s' failed.\n", node->name);
+	    "xsltCopyTree: Copying of '%s' failed.\n", node->name);
     }
     return(copy);
-}
-
-/**
- * xsltCopyTree:
- * @ctxt:  the XSLT transformation context
- * @node:  the element node in the source tree
- * @insert:  the parent in the result tree
- * @literal:  indicates if @node is a Literal Result Element
- *
- * Make a copy of the full tree under the element node @node
- * and insert it as last child of @insert
- * For literal result element, some of the namespaces may not be copied
- * over according to section 7.1.
- * TODO: Why is this a public function?
- *
- * Returns a pointer to the new tree, or NULL in case of error
- */
-xmlNodePtr
-xsltCopyTree(xsltTransformContextPtr ctxt, xmlNodePtr node,
-	     xmlNodePtr insert, int literal)
-{
-    return(xsltCopyTreeInternal(ctxt, node, node, insert, literal, 0));
-
 }
 
 /************************************************************************
@@ -4428,8 +4419,7 @@ xsltCopyOf(xsltTransformContextPtr ctxt, xmlNodePtr node,
 			xsltShallowCopyAttr(ctxt, inst,
 			    ctxt->insert, (xmlAttrPtr) cur);
 		    } else {
-			xsltCopyTreeInternal(ctxt, inst,
-			    cur, ctxt->insert, 0, 0);
+			xsltCopyTree(ctxt, inst, cur, ctxt->insert, 0, 0);
 		    }
 		}
 	    }

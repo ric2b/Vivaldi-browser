@@ -30,6 +30,12 @@
 #include "components/sync/syncable/parent_child_index.h"
 #include "components/sync/syncable/syncable_delete_journal.h"
 
+namespace base {
+namespace trace_event {
+class ProcessMemoryDump;
+}
+}
+
 namespace syncer {
 
 class Cryptographer;
@@ -94,6 +100,8 @@ class Directory {
 
     // Whether a valid progress marker exists for |model_type|.
     bool HasEmptyDownloadProgress(ModelType model_type);
+
+    size_t EstimateMemoryUsage() const;
 
     // Last sync timestamp fetched from the server.
     sync_pb::DataTypeProgressMarker download_progress[MODEL_TYPE_COUNT];
@@ -281,6 +289,9 @@ class Directory {
   // Gets the total number of entries in the directory.
   size_t GetEntriesCount() const;
 
+  // Adds memory statistics to |pmd| for chrome://tracing.
+  void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd);
+
   // Gets/Increments transaction version of a model type. Must be called when
   // holding kernel mutex.
   int64_t GetTransactionVersion(ModelType type) const;
@@ -453,11 +464,9 @@ class Directory {
   // Note: "Purge" is just meant to distinguish from "deleting" entries, which
   // means something different in the syncable namespace.
   // WARNING! This can be real slow, as it iterates over all entries.
-  // WARNING! Performs synchronous I/O.
-  // Returns: true on success, false if an error was encountered.
-  virtual bool PurgeEntriesWithTypeIn(ModelTypeSet disabled_types,
-                                      ModelTypeSet types_to_journal,
-                                      ModelTypeSet types_to_unapply);
+  void PurgeEntriesWithTypeIn(ModelTypeSet disabled_types,
+                              ModelTypeSet types_to_journal,
+                              ModelTypeSet types_to_unapply);
 
   // Resets the base_versions and server_versions of all synced entities
   // associated with |type| to 1.
@@ -517,6 +526,12 @@ class Directory {
   // number of classes that call these should be limited.
   Kernel* kernel();
   const Kernel* kernel() const;
+
+  // Delete the directory database files from the sync data folder to cleanup
+  // backend data. This should happen the first time sync is enabled for a user,
+  // to prevent accidentally reusing old sync data, as well as shutdown when the
+  // user is no longer syncing.
+  static void DeleteDirectoryFiles(const base::FilePath& directory_path);
 
  private:
   friend class SyncableDirectoryTest;

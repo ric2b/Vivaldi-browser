@@ -106,7 +106,10 @@ void GetDesiredMinAndMaxAspectRatio(
     }
   }
   for (const auto& constraint_set : constraints.advanced()) {
-    if (constraint_set.aspectRatio.hasMax()) {
+    // Advanced constraint sets with max aspect ratio 0 are unsatisfiable and
+    // must be ignored.
+    if (constraint_set.aspectRatio.hasMax() &&
+        constraint_set.aspectRatio.max() > 0) {
       *max_aspect_ratio = constraint_set.aspectRatio.max();
       break;
     }
@@ -500,7 +503,12 @@ bool MediaStreamVideoSource::FindBestFormatWithConstraints(
 
     // A request with constraints that can be fulfilled.
     *fulfilled_constraints = track_constraints;
-    *best_format = GetBestCaptureFormat(filtered_formats, track_constraints);
+    media::VideoCaptureFormat best_format_candidate =
+        GetBestCaptureFormat(filtered_formats, track_constraints);
+    if (!best_format_candidate.IsValid())
+      continue;
+
+    *best_format = best_format_candidate;
     DVLOG(3) << "Found a track that matches the constraints";
     return true;
   }

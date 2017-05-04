@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.payments;
 
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
@@ -37,8 +37,7 @@ public class PaymentRequestCcCanMakePaymentQueryNoCardTest extends PaymentReques
     @Feature({"Payments"})
     public void testCannotMakePayment() throws InterruptedException, ExecutionException,
             TimeoutException {
-        installPaymentApp(HAVE_INSTRUMENTS, DELAYED_RESPONSE);
-        triggerUIAndWait(mCanMakePaymentQueryResponded);
+        openPageAndClickBuyAndWait(mCanMakePaymentQueryResponded);
         expectResultContains(new String[]{"false"});
     }
 }

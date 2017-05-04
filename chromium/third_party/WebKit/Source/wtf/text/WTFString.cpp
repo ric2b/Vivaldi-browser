@@ -22,6 +22,7 @@
 
 #include "wtf/text/WTFString.h"
 
+#include "base/strings/string_util.h"
 #include "wtf/ASCIICType.h"
 #include "wtf/DataLog.h"
 #include "wtf/HexNumber.h"
@@ -40,6 +41,31 @@
 namespace WTF {
 
 using namespace Unicode;
+
+namespace {
+
+Vector<char> asciiDebug(StringImpl* impl) {
+  if (!impl)
+    return asciiDebug(String("[null]").impl());
+
+  Vector<char> buffer;
+  for (unsigned i = 0; i < impl->length(); ++i) {
+    UChar ch = (*impl)[i];
+    if (isASCIIPrintable(ch)) {
+      if (ch == '\\')
+        buffer.push_back('\\');
+      buffer.push_back(static_cast<char>(ch));
+    } else {
+      buffer.push_back('\\');
+      buffer.push_back('u');
+      appendUnsignedAsHexFixedSize(ch, buffer, 4);
+    }
+  }
+  buffer.push_back('\0');
+  return buffer;
+}
+
+}  // namespace
 
 // Construct a string with UTF-16 data.
 String::String(const UChar* characters, unsigned length)
@@ -167,7 +193,7 @@ PassRefPtr<StringImpl> insertInternal(PassRefPtr<StringImpl> impl,
   if (!lengthToInsert)
     return impl;
 
-  ASSERT(charactersToInsert);
+  DCHECK(charactersToInsert);
   UChar* data;  // FIXME: We should be able to create an 8 bit string here.
   RELEASE_ASSERT(lengthToInsert <=
                  std::numeric_limits<unsigned>::max() - impl->length());
@@ -316,39 +342,39 @@ String String::foldCase() const {
 
 String String::format(const char* format, ...) {
   va_list args;
-  va_start(args, format);
 
-// Do the format once to get the length.
-#if COMPILER(MSVC)
-  int result = _vscprintf(format, args);
-#else
-  char ch;
-  int result = vsnprintf(&ch, 1, format, args);
-// We need to call va_end() and then va_start() again here, as the
-// contents of args is undefined after the call to vsnprintf
-// according to http://man.cx/snprintf(3)
-//
-// Not calling va_end/va_start here happens to work on lots of
-// systems, but fails e.g. on 64bit Linux.
-#endif
+  // TODO(esprehn): base uses 1024, maybe we should use a bigger size too.
+  static const unsigned kDefaultSize = 256;
+  Vector<char, kDefaultSize> buffer(kDefaultSize);
+
+  va_start(args, format);
+  int length = base::vsnprintf(buffer.data(), buffer.size(), format, args);
   va_end(args);
 
-  if (result == 0)
-    return String("");
-  if (result < 0)
+  // TODO(esprehn): This can only happen if there's an encoding error, what's
+  // the locale set to inside blink? Can this happen? We should probably CHECK
+  // instead.
+  if (length < 0)
     return String();
 
-  Vector<char, 256> buffer;
-  unsigned len = result;
-  buffer.grow(len + 1);
+  if (static_cast<unsigned>(length) >= buffer.size()) {
+    // vsnprintf doesn't include the NUL terminator in the length so we need to
+    // add space for it when growing.
+    buffer.grow(length + 1);
 
-  va_start(args, format);
-  // Now do the formatting again, guaranteed to fit.
-  vsnprintf(buffer.data(), buffer.size(), format, args);
+    // We need to call va_end() and then va_start() each time we use args, as
+    // the contents of args is undefined after the call to vsnprintf according
+    // to http://man.cx/snprintf(3)
+    //
+    // Not calling va_end/va_start here happens to work on lots of systems, but
+    // fails e.g. on 64bit Linux.
+    va_start(args, format);
+    length = base::vsnprintf(buffer.data(), buffer.size(), format, args);
+    va_end(args);
+  }
 
-  va_end(args);
-
-  return StringImpl::create(reinterpret_cast<const LChar*>(buffer.data()), len);
+  CHECK_LT(static_cast<unsigned>(length), buffer.size());
+  return String(reinterpret_cast<const LChar*>(buffer.data()), length);
 }
 
 template <typename IntegerType>
@@ -496,7 +522,7 @@ bool String::isSafeToSendToAnotherThread() const {
   return !m_impl || m_impl->isSafeToSendToAnotherThread();
 }
 
-void String::split(const String& separator,
+void String::split(const StringView& separator,
                    bool allowEmptyEntries,
                    Vector<String>& result) const {
   result.clear();
@@ -505,11 +531,11 @@ void String::split(const String& separator,
   size_t endPos;
   while ((endPos = find(separator, startPos)) != kNotFound) {
     if (allowEmptyEntries || startPos != endPos)
-      result.append(substring(startPos, endPos - startPos));
+      result.push_back(substring(startPos, endPos - startPos));
     startPos = endPos + separator.length();
   }
   if (allowEmptyEntries || startPos != length())
-    result.append(substring(startPos));
+    result.push_back(substring(startPos));
 }
 
 void String::split(UChar separator,
@@ -521,11 +547,11 @@ void String::split(UChar separator,
   size_t endPos;
   while ((endPos = find(separator, startPos)) != kNotFound) {
     if (allowEmptyEntries || startPos != endPos)
-      result.append(substring(startPos, endPos - startPos));
+      result.push_back(substring(startPos, endPos - startPos));
     startPos = endPos + 1;
   }
   if (allowEmptyEntries || startPos != length())
-    result.append(substring(startPos));
+    result.push_back(substring(startPos));
 }
 
 CString String::ascii() const {
@@ -594,7 +620,7 @@ CString String::latin1() const {
 // Helper to write a three-byte UTF-8 code point to the buffer, caller must
 // check room is available.
 static inline void putUTF8Triple(char*& buffer, UChar ch) {
-  ASSERT(ch >= 0x0800);
+  DCHECK_GE(ch, 0x0800);
   *buffer++ = static_cast<char>(((ch >> 12) & 0x0F) | 0xE0);
   *buffer++ = static_cast<char>(((ch >> 6) & 0x3F) | 0x80);
   *buffer++ = static_cast<char>((ch & 0x3F) | 0x80);
@@ -640,15 +666,16 @@ CString String::utf8(UTF8ConversionMode mode) const {
         // Use strict conversion to detect unpaired surrogates.
         ConversionResult result = convertUTF16ToUTF8(&characters, charactersEnd,
                                                      &buffer, bufferEnd, true);
-        ASSERT(result != targetExhausted);
+        DCHECK_NE(result, targetExhausted);
         // Conversion fails when there is an unpaired surrogate.  Put
         // replacement character (U+FFFD) instead of the unpaired
         // surrogate.
         if (result != conversionOK) {
-          ASSERT((0xD800 <= *characters && *characters <= 0xDFFF));
+          DCHECK_LE(0xD800, *characters);
+          DCHECK_LE(*characters, 0xDFFF);
           // There should be room left, since one UChar hasn't been
           // converted.
-          ASSERT((buffer + 3) <= bufferEnd);
+          DCHECK_LE(buffer + 3, bufferEnd);
           putUTF8Triple(buffer, replacementCharacter);
           ++characters;
         }
@@ -659,11 +686,11 @@ CString String::utf8(UTF8ConversionMode mode) const {
           convertUTF16ToUTF8(&characters, characters + length, &buffer,
                              buffer + bufferVector.size(), strict);
       // (length * 3) should be sufficient for any conversion
-      ASSERT(result != targetExhausted);
+      DCHECK_NE(result, targetExhausted);
 
       // Only produced from strict conversion.
       if (result == sourceIllegal) {
-        ASSERT(strict);
+        DCHECK(strict);
         return CString();
       }
 
@@ -675,11 +702,12 @@ CString String::utf8(UTF8ConversionMode mode) const {
         // was as an unpaired high surrogate would have been handled in
         // the middle of a string with non-strict conversion - which is
         // to say, simply encode it to UTF-8.
-        ASSERT((characters + 1) == (this->characters16() + length));
-        ASSERT((*characters >= 0xD800) && (*characters <= 0xDBFF));
+        DCHECK_EQ(characters + 1, this->characters16() + length);
+        DCHECK_GE(*characters, 0xD800);
+        DCHECK_LE(*characters, 0xDBFF);
         // There should be room left, since one UChar hasn't been
         // converted.
-        ASSERT((buffer + 3) <= (buffer + bufferVector.size()));
+        DCHECK_LE(buffer + 3, buffer + bufferVector.size());
         putUTF8Triple(buffer, *characters);
       }
     }
@@ -735,7 +763,7 @@ String String::fromUTF8(const LChar* stringStart, size_t length) {
     return String();
 
   unsigned utf16Length = bufferCurrent - bufferStart;
-  ASSERT(utf16Length < length);
+  DCHECK_LT(utf16Length, length);
   return StringImpl::create(bufferStart, utf16Length);
 }
 
@@ -808,46 +836,10 @@ std::ostream& operator<<(std::ostream& out, const String& string) {
   return out << '"';
 }
 
-}  // namespace WTF
-
 #ifndef NDEBUG
-// For use in the debugger
-String* string(const char*);
-Vector<char> asciiDebug(StringImpl*);
-Vector<char> asciiDebug(String&);
-
 void String::show() const {
   dataLogF("%s\n", asciiDebug(impl()).data());
 }
-
-String* string(const char* s) {
-  // leaks memory!
-  return new String(s);
-}
-
-Vector<char> asciiDebug(StringImpl* impl) {
-  if (!impl)
-    return asciiDebug(String("[null]").impl());
-
-  Vector<char> buffer;
-  for (unsigned i = 0; i < impl->length(); ++i) {
-    UChar ch = (*impl)[i];
-    if (isASCIIPrintable(ch)) {
-      if (ch == '\\')
-        buffer.append('\\');
-      buffer.append(static_cast<char>(ch));
-    } else {
-      buffer.append('\\');
-      buffer.append('u');
-      appendUnsignedAsHexFixedSize(ch, buffer, 4);
-    }
-  }
-  buffer.append('\0');
-  return buffer;
-}
-
-Vector<char> asciiDebug(String& string) {
-  return asciiDebug(string.impl());
-}
-
 #endif
+
+}  // namespace WTF

@@ -10,6 +10,7 @@
 #include "platform/geometry/IntPoint.h"
 #include "platform/graphics/Color.h"
 #include "third_party/skia/include/core/SkScalar.h"
+#include "wtf/text/WTFString.h"
 
 class SkImageFilter;
 
@@ -40,10 +41,16 @@ class PLATFORM_EXPORT CompositorFilterOperations {
   void clear();
   bool isEmpty() const;
 
+  // For reference filters, this equality operator compares pointers of the
+  // image_filter fields instead of their values.
   bool operator==(const CompositorFilterOperations&) const;
   bool operator!=(const CompositorFilterOperations& o) const {
     return !(*this == o);
   }
+
+  bool equalsIgnoringReferenceFilters(const CompositorFilterOperations&) const;
+
+  String toString() const;
 
  private:
   cc::FilterOperations m_filterOperations;

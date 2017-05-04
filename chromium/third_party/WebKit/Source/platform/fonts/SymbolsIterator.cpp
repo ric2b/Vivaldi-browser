@@ -13,7 +13,7 @@ namespace blink {
 using namespace WTF::Unicode;
 
 SymbolsIterator::SymbolsIterator(const UChar* buffer, unsigned bufferSize)
-    : m_utf16Iterator(makeUnique<UTF16TextIterator>(buffer, bufferSize)),
+    : m_utf16Iterator(WTF::makeUnique<UTF16TextIterator>(buffer, bufferSize)),
       m_bufferSize(bufferSize),
       m_nextChar(0),
       m_atEnd(bufferSize == 0),
@@ -86,7 +86,8 @@ bool SymbolsIterator::consume(unsigned* symbolsLimit,
         m_currentFontFallbackPriority = FontFallbackPriority::EmojiText;
       }
 
-      if (m_currentFontFallbackPriority == FontFallbackPriority::EmojiText &&
+      if ((m_currentFontFallbackPriority == FontFallbackPriority::EmojiText ||
+           Character::isEmojiKeycapBase(m_nextChar)) &&
           peekChar == variationSelector16Character) {
         m_currentFontFallbackPriority = FontFallbackPriority::EmojiEmoji;
       }

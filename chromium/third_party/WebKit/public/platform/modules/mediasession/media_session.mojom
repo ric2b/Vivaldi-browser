@@ -4,7 +4,7 @@
 
 module blink.mojom;
 
-import "mojo/common/common_custom_types.mojom";
+import "mojo/common/string16.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 import "url/mojo/url.mojom";
 
@@ -12,11 +12,18 @@ import "url/mojo/url.mojom";
 enum MediaSessionAction {
      PLAY,
      PAUSE,
-     PLAY_PAUSE,
      PREVIOUS_TRACK,
      NEXT_TRACK,
-     SEEK_FORWARD,
      SEEK_BACKWARD,
+     SEEK_FORWARD,
+
+     LAST = SEEK_FORWARD,
+};
+
+enum MediaSessionPlaybackState {
+     NONE,
+     PAUSED,
+     PLAYING,
 };
 
 // Album art in MediaMetadata
@@ -46,6 +53,9 @@ interface MediaSessionService {
   // MediaSessionClient interface is used to notify Blink MediaSession of
   // media control actions.
   SetClient(MediaSessionClient client);
+
+  // Notifies the browser that the page specified its current playback state.
+  SetPlaybackState(MediaSessionPlaybackState state);
 
   // Notifies the browser that the metadata is set, |metadata| will be displayed
   // on the UI.

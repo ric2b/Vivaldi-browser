@@ -38,7 +38,7 @@ NSString* GetStatusMsg(remoting::protocol::ConnectionToHost::State code) {
     case remoting::protocol::ConnectionToHost::FAILED:
       // TODO(nicholss): This says "Authentication failed. Please sign in to
       // Chrome again."
-      return CRD_LOCALIZED_STRING(IDS_ERROR_AUTHENTICATION_FAILED );
+      return CRD_LOCALIZED_STRING(IDS_ERROR_AUTHENTICATION_FAILED);
     case remoting::protocol::ConnectionToHost::CLOSED:
       return CRD_LOCALIZED_STRING(IDS_MESSAGE_SESSION_FINISHED);
   }
@@ -122,7 +122,7 @@ void ClientProxy::CommitPairingCredentials(const std::string& host_id,
   host.pairId = nsPairId;
   host.pairSecret = nsPairSecret;
 
-  [host saveToSSOKeychain];
+  [host saveToKeychain];
 }
 
 void ClientProxy::RedrawCanvas(webrtc::DesktopFrame* buffer) {

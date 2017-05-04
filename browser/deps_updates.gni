@@ -10,7 +10,7 @@ post_process_target("//chrome:main_dll") {
   ]
 }
 
-post_process_template("//chrome/browser:browser") {
+post_process_target("//chrome:browser_dependencies") {
   public_deps += [
     "//vivaldi/browser:browser",
   ]
@@ -20,6 +20,7 @@ post_process_template("//chrome/browser/ui:ui") {
   public_deps += [
     "//components/sessions:sessions",
     "//vivaldi/browser:browser",
+    "//vivaldi/browser:init_sparkle",
   ]
 }
 

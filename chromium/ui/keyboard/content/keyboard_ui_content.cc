@@ -26,6 +26,7 @@
 #include "ui/keyboard/keyboard_switches.h"
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/wm/core/shadow.h"
+#include "ui/wm/core/shadow_types.h"
 
 namespace {
 
@@ -57,10 +58,12 @@ class KeyboardContentsDelegate : public content::WebContentsDelegate,
 
   bool ShouldCreateWebContents(
       content::WebContents* web_contents,
-      int route_id,
-      int main_frame_route_id,
-      int main_frame_widget_route_id,
+      content::SiteInstance* source_site_instance,
+      int32_t route_id,
+      int32_t main_frame_route_id,
+      int32_t main_frame_widget_route_id,
       WindowContainerType window_container_type,
+      const GURL& opener_url,
       const std::string& frame_name,
       const GURL& target_url,
       const std::string& partition_id,
@@ -279,7 +282,7 @@ void KeyboardUIContent::OnWindowBoundsChanged(aura::Window* window,
                                               const gfx::Rect& new_bounds) {
   if (!shadow_) {
     shadow_.reset(new wm::Shadow());
-    shadow_->Init(wm::Shadow::STYLE_ACTIVE);
+    shadow_->Init(wm::ShadowElevation::LARGE);
     shadow_->layer()->SetVisible(true);
     DCHECK(keyboard_contents_->GetNativeView()->parent());
     keyboard_contents_->GetNativeView()->parent()->layer()->Add(

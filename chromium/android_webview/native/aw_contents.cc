@@ -61,6 +61,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/favicon_status.h"
+#include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/message_port_provider.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
@@ -95,6 +96,7 @@ using base::android::ScopedJavaLocalRef;
 using navigation_interception::InterceptNavigationDelegate;
 using content::BrowserThread;
 using content::ContentViewCore;
+using content::RenderFrameHost;
 using content::WebContents;
 
 namespace android_webview {
@@ -177,6 +179,19 @@ AwBrowserPermissionRequestDelegate* AwBrowserPermissionRequestDelegate::FromID(
   return aw_contents;
 }
 
+// static
+AwSafeBrowsingUIManager::UIManagerClient*
+AwSafeBrowsingUIManager::UIManagerClient::FromWebContents(
+    WebContents* web_contents) {
+  return AwContents::FromWebContents(web_contents);
+}
+
+// static
+AwRenderProcessGoneDelegate* AwRenderProcessGoneDelegate::FromWebContents(
+    content::WebContents* web_contents) {
+  return AwContents::FromWebContents(web_contents);
+}
+
 AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
     : content::WebContentsObserver(web_contents.get()),
       functor_(nullptr),
@@ -196,7 +211,8 @@ AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
   if (web_contents_->GetRenderProcessHost() &&
       web_contents_->GetRenderViewHost()) {
     compositor_id.process_id = web_contents_->GetRenderProcessHost()->GetID();
-    compositor_id.routing_id = web_contents_->GetRoutingID();
+    compositor_id.routing_id =
+        web_contents_->GetRenderViewHost()->GetRoutingID();
   }
 
   browser_view_renderer_.SetActiveCompositorID(compositor_id);
@@ -400,13 +416,13 @@ void AwContents::DocumentHasImages(JNIEnv* env,
 }
 
 namespace {
-void GenerateMHTMLCallback(ScopedJavaGlobalRef<jobject>* callback,
+void GenerateMHTMLCallback(const JavaRef<jobject>& callback,
                            const base::FilePath& path,
                            int64_t size) {
   JNIEnv* env = AttachCurrentThread();
   // Android files are UTF8, so the path conversion below is safe.
   Java_AwContents_generateMHTMLCallback(
-      env, ConvertUTF8ToJavaString(env, path.AsUTF8Unsafe()), size, *callback);
+      env, ConvertUTF8ToJavaString(env, path.AsUTF8Unsafe()), size, callback);
 }
 }  // namespace
 
@@ -415,12 +431,11 @@ void AwContents::GenerateMHTML(JNIEnv* env,
                                const JavaParamRef<jstring>& jpath,
                                const JavaParamRef<jobject>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  ScopedJavaGlobalRef<jobject>* j_callback = new ScopedJavaGlobalRef<jobject>();
-  j_callback->Reset(env, callback);
   base::FilePath target_path(ConvertJavaStringToUTF8(env, jpath));
   web_contents_->GenerateMHTML(
       content::MHTMLGenerationParams(target_path),
-      base::Bind(&GenerateMHTMLCallback, base::Owned(j_callback), target_path));
+      base::Bind(&GenerateMHTMLCallback,
+                 ScopedJavaGlobalRef<jobject>(env, callback), target_path));
 }
 
 void AwContents::CreatePdfExporter(JNIEnv* env,
@@ -1137,13 +1152,13 @@ void AwContents::EnableOnNewPicture(JNIEnv* env,
 namespace {
 void InvokeVisualStateCallback(const JavaObjectWeakGlobalRef& java_ref,
                                jlong request_id,
-                               ScopedJavaGlobalRef<jobject>* callback,
+                               const JavaRef<jobject>& callback,
                                bool result) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref.get(env);
   if (obj.is_null())
      return;
-  Java_AwContents_invokeVisualStateCallback(env, obj, *callback, request_id);
+  Java_AwContents_invokeVisualStateCallback(env, obj, callback, request_id);
 }
 }  // namespace
 
@@ -1153,11 +1168,9 @@ void AwContents::InsertVisualStateCallback(
     jlong request_id,
     const JavaParamRef<jobject>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  ScopedJavaGlobalRef<jobject>* j_callback = new ScopedJavaGlobalRef<jobject>();
-  j_callback->Reset(env, callback);
   web_contents_->GetMainFrame()->InsertVisualStateCallback(
       base::Bind(&InvokeVisualStateCallback, java_ref_, request_id,
-                 base::Owned(j_callback)));
+                 ScopedJavaGlobalRef<jobject>(env, callback)));
 }
 
 void AwContents::ClearView(JNIEnv* env, const JavaParamRef<jobject>& obj) {
@@ -1268,12 +1281,66 @@ void AwContents::RenderViewHostChanged(content::RenderViewHost* old_host,
 
   int process_id = new_host->GetProcess()->GetID();
   int routing_id = new_host->GetRoutingID();
+
   // At this point, the current RVH may or may not contain a compositor. So
   // compositor_ may be nullptr, in which case
   // BrowserViewRenderer::DidInitializeCompositor() callback is time when the
   // new compositor is constructed.
   browser_view_renderer_.SetActiveCompositorID(
       CompositorID(process_id, routing_id));
+}
+
+void AwContents::DidAttachInterstitialPage() {
+  CompositorID compositor_id;
+  RenderFrameHost* rfh = web_contents_->GetInterstitialPage()->GetMainFrame();
+  compositor_id.process_id = rfh->GetProcess()->GetID();
+  compositor_id.routing_id = rfh->GetRenderViewHost()->GetRoutingID();
+  browser_view_renderer_.SetActiveCompositorID(compositor_id);
+}
+
+void AwContents::DidDetachInterstitialPage() {
+  CompositorID compositor_id;
+  if (!web_contents_)
+    return;
+  if (web_contents_->GetRenderProcessHost() &&
+      web_contents_->GetRenderViewHost()) {
+    compositor_id.process_id = web_contents_->GetRenderProcessHost()->GetID();
+    compositor_id.routing_id =
+        web_contents_->GetRenderViewHost()->GetRoutingID();
+  } else {
+    LOG(WARNING) << "failed setting the compositor on detaching interstitital";
+  }
+  browser_view_renderer_.SetActiveCompositorID(compositor_id);
+}
+
+bool AwContents::CanShowInterstitial() {
+  JNIEnv* env = AttachCurrentThread();
+  const ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
+  if (obj.is_null())
+    return false;
+  return Java_AwContents_canShowInterstitial(env, obj);
+}
+
+void AwContents::OnRenderProcessGone(int child_process_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
+  if (obj.is_null())
+    return;
+
+  Java_AwContents_onRenderProcessGone(env, obj, child_process_id);
+}
+
+bool AwContents::OnRenderProcessGoneDetail(int child_process_id,
+                                           bool crashed) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
+  if (obj.is_null())
+    return false;
+
+  return Java_AwContents_onRenderProcessGoneDetail(env, obj,
+      child_process_id, crashed);
 }
 
 }  // namespace android_webview

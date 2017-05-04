@@ -5,6 +5,7 @@
 #include "public/web/WebFrame.h"
 
 #include "bindings/core/v8/WindowProxyManager.h"
+#include "core/HTMLNames.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -104,6 +105,9 @@ bool WebFrame::swap(WebFrame* frame) {
                                                      uniqueName);
   }
 
+  if (m_parent && oldFrame->hasReceivedUserGesture())
+    frame->toImplBase()->frame()->setDocumentHasReceivedUserGesture();
+
   frame->toImplBase()->frame()->getWindowProxyManager()->setGlobals(globals);
 
   m_parent = nullptr;
@@ -138,6 +142,17 @@ void WebFrame::setFrameOwnerProperties(
   // for frames with a remote owner.
   RemoteFrameOwner* owner = toRemoteFrameOwner(toImplBase()->frame()->owner());
   DCHECK(owner);
+
+  Frame* frame = toImplBase()->frame();
+  DCHECK(frame);
+
+  if (frame->isLocalFrame()) {
+    toLocalFrame(frame)->document()->willChangeFrameOwnerProperties(
+        properties.marginWidth, properties.marginHeight,
+        static_cast<ScrollbarMode>(properties.scrollingMode));
+  }
+
+  owner->setBrowsingContextContainerName(properties.name);
   owner->setScrollingMode(properties.scrollingMode);
   owner->setMarginWidth(properties.marginWidth);
   owner->setMarginHeight(properties.marginHeight);
@@ -276,16 +291,6 @@ WebFrame::~WebFrame() {
   m_openedFrameTracker.reset(0);
 }
 
-ALWAYS_INLINE bool WebFrame::isFrameAlive(const WebFrame* frame) {
-  if (!frame)
-    return true;
-
-  if (frame->isWebLocalFrame())
-    return ThreadHeap::isHeapObjectAlive(toWebLocalFrameImpl(frame));
-
-  return ThreadHeap::isHeapObjectAlive(toWebRemoteFrameImpl(frame));
-}
-
 template <typename VisitorDispatcher>
 ALWAYS_INLINE void WebFrame::traceFrameImpl(VisitorDispatcher visitor,
                                             WebFrame* frame) {
@@ -306,14 +311,10 @@ ALWAYS_INLINE void WebFrame::traceFramesImpl(VisitorDispatcher visitor,
   for (WebFrame* child = frame->firstChild(); child;
        child = child->nextSibling())
     traceFrame(visitor, child);
-  // m_opener is a weak reference.
-  frame->m_openedFrameTracker->traceFrames(visitor);
 }
 
-template <typename VisitorDispatcher>
-ALWAYS_INLINE void WebFrame::clearWeakFramesImpl(VisitorDispatcher visitor) {
-  if (!isFrameAlive(m_opener))
-    m_opener = nullptr;
+void WebFrame::close() {
+  m_openedFrameTracker->dispose();
 }
 
 #define DEFINE_VISITOR_METHOD(VisitorDispatcher)                           \
@@ -323,9 +324,6 @@ ALWAYS_INLINE void WebFrame::clearWeakFramesImpl(VisitorDispatcher visitor) {
   void WebFrame::traceFrames(VisitorDispatcher visitor, WebFrame* frame) { \
     traceFramesImpl(visitor, frame);                                       \
   }                                                                        \
-  void WebFrame::clearWeakFrames(VisitorDispatcher visitor) {              \
-    clearWeakFramesImpl(visitor);                                          \
-  }
 
 DEFINE_VISITOR_METHOD(Visitor*)
 DEFINE_VISITOR_METHOD(InlinedGlobalMarkingVisitor)

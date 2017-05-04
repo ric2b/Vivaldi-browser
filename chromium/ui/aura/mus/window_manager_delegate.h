@@ -14,7 +14,7 @@
 
 #include "base/callback_forward.h"
 #include "services/ui/public/interfaces/cursor.mojom.h"
-#include "services/ui/public/interfaces/event_matcher.mojom.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/aura_export.h"
@@ -48,9 +48,9 @@ class AURA_EXPORT WindowManagerClient {
   virtual void SetNonClientCursor(Window* window,
                                   ui::mojom::Cursor non_client_cursor) = 0;
 
-  virtual void AddAccelerator(uint32_t id,
-                              ui::mojom::EventMatcherPtr event_matcher,
-                              const base::Callback<void(bool)>& callback) = 0;
+  virtual void AddAccelerators(
+      std::vector<ui::mojom::AcceleratorPtr> accelerators,
+      const base::Callback<void(bool)>& callback) = 0;
   virtual void RemoveAccelerator(uint32_t id) = 0;
   virtual void AddActivationParent(Window* window) = 0;
   virtual void RemoveActivationParent(Window* window) = 0;
@@ -59,6 +59,11 @@ class AURA_EXPORT WindowManagerClient {
       Window* window,
       const gfx::Vector2d& offset,
       const gfx::Insets& hit_area) = 0;
+
+  // Requests the client embedded in |window| to close the window. Only
+  // applicable to top-level windows. If a client is not embedded in |window|,
+  // this does nothing.
+  virtual void RequestClose(Window* window) = 0;
 
  protected:
   virtual ~WindowManagerClient() {}
@@ -94,8 +99,11 @@ class AURA_EXPORT WindowManagerDelegate {
   // supplied properties from the client requesting the new window. The
   // delegate may modify |properties| before calling NewWindow(), but the
   // delegate does *not* own |properties|, they are valid only for the life
-  // of OnWmCreateTopLevelWindow().
+  // of OnWmCreateTopLevelWindow(). |window_type| is the type of window
+  // requested by the client. Use SetWindowType() with |window_type| (in
+  // property_utils.h) to configure the type on the newly created window.
   virtual Window* OnWmCreateTopLevelWindow(
+      ui::mojom::WindowType window_type,
       std::map<std::string, std::vector<uint8_t>>* properties) = 0;
 
   // Called when a Mus client's jankiness changes. |windows| is the set of
@@ -104,14 +112,21 @@ class AURA_EXPORT WindowManagerDelegate {
       const std::set<Window*>& client_windows,
       bool janky) = 0;
 
+  // When a new display is added OnWmWillCreateDisplay() is called, and then
+  // OnWmNewDisplay(). OnWmWillCreateDisplay() is intended to add the display
+  // to the set of displays (see Screen).
+  virtual void OnWmWillCreateDisplay(const display::Display& display) = 0;
+
+  // Called when a WindowTreeHostMus is created for a new display
   // Called when a display is added. |window_tree_host| is the WindowTreeHost
   // for the new display.
   virtual void OnWmNewDisplay(
       std::unique_ptr<WindowTreeHostMus> window_tree_host,
       const display::Display& display) = 0;
 
-  // Called when a display is removed. |window| is the root of the display.
-  virtual void OnWmDisplayRemoved(Window* window) = 0;
+  // Called when a display is removed. |window_tree_host| is the WindowTreeHost
+  // for the display.
+  virtual void OnWmDisplayRemoved(WindowTreeHostMus* window_tree_host) = 0;
 
   // Called when a display is modified.
   virtual void OnWmDisplayModified(const display::Display& display) = 0;
@@ -126,6 +141,19 @@ class AURA_EXPORT WindowManagerDelegate {
       const base::Callback<void(bool)>& on_done) = 0;
 
   virtual void OnWmCancelMoveLoop(Window* window) = 0;
+
+  // Called when then client changes the client area of a window.
+  virtual void OnWmSetClientArea(
+      Window* window,
+      const gfx::Insets& insets,
+      const std::vector<gfx::Rect>& additional_client_areas) = 0;
+
+  // Returns whether |window| is the current active window.
+  virtual bool IsWindowActive(Window* window) = 0;
+
+  // Called when a client requests that its activation be given to another
+  // window.
+  virtual void OnWmDeactivateWindow(Window* window) = 0;
 
  protected:
   virtual ~WindowManagerDelegate() {}

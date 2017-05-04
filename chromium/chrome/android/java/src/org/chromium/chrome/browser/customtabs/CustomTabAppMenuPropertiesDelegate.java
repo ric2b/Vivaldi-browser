@@ -16,7 +16,11 @@ import org.chromium.base.BuildInfo;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.appmenu.AppMenuPropertiesDelegate;
+import org.chromium.chrome.browser.banners.AppBannerManager;
+import org.chromium.chrome.browser.download.DownloadUtils;
+import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.tab.Tab;
 
@@ -33,6 +37,8 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
 
     private final boolean mShowShare;
     private final boolean mIsMediaViewer;
+    private final boolean mShowStar;
+    private final boolean mShowDownload;
 
     private final List<String> mMenuEntries;
     private final Map<MenuItem, Integer> mItemToIndexMap = new HashMap<MenuItem, Integer>();
@@ -45,11 +51,13 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
      */
     public CustomTabAppMenuPropertiesDelegate(final ChromeActivity activity,
             List<String> menuEntries, boolean showShare, final boolean isOpenedByChrome,
-            final boolean isMediaViewer) {
+            final boolean isMediaViewer, boolean showStar, boolean showDownload) {
         super(activity);
         mMenuEntries = menuEntries;
         mShowShare = showShare;
         mIsMediaViewer = isMediaViewer;
+        mShowStar = showStar;
+        mShowDownload = showDownload;
 
         mDefaultBrowserFetcher = new AsyncTask<Void, Void, String>() {
             @Override
@@ -96,10 +104,23 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
 
             MenuItem iconRow = menu.findItem(R.id.icon_row_menu_id);
             MenuItem openInChromeItem = menu.findItem(R.id.open_in_browser_id);
+            MenuItem bookmarkItem = menu.findItem(R.id.bookmark_this_page_id);
+            MenuItem downloadItem = menu.findItem(R.id.offline_page_id);
+            MenuItem addToHomeScreenItem = menu.findItem(R.id.add_to_homescreen_id);
+            addToHomeScreenItem.setTitle(AppBannerManager.getHomescreenLanguageOption());
+
+            // Hide request desktop site on all chrome:// pages except for the NTP. Check request
+            // desktop site if it's activated on this page.
+            MenuItem requestItem = menu.findItem(R.id.request_desktop_site_id);
+            updateRequestDesktopSiteMenuItem(requestItem, currentTab);
+
             if (mIsMediaViewer) {
                 // Most of the menu items don't make sense when viewing media.
                 iconRow.setVisible(false);
                 openInChromeItem.setVisible(false);
+                menu.findItem(R.id.find_in_page_id).setVisible(false);
+                menu.findItem(R.id.request_desktop_site_id).setVisible(false);
+                addToHomeScreenItem.setVisible(false);
             } else {
                 try {
                     openInChromeItem.setTitle(mDefaultBrowserFetcher.get());
@@ -107,6 +128,24 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                     openInChromeItem.setTitle(
                             mActivity.getString(R.string.menu_open_in_product_default));
                 }
+                updateBookmarkMenuItem(bookmarkItem, currentTab);
+            }
+            bookmarkItem.setVisible(mShowStar);
+            downloadItem.setVisible(mShowDownload);
+            if (!FirstRunStatus.getFirstRunFlowComplete()) {
+                openInChromeItem.setVisible(false);
+                bookmarkItem.setVisible(false);
+                downloadItem.setVisible(false);
+                addToHomeScreenItem.setVisible(false);
+            }
+
+            downloadItem.setEnabled(DownloadUtils.isAllowedToDownloadPage(currentTab));
+
+            String url = currentTab.getUrl();
+            boolean isChromeScheme = url.startsWith(UrlConstants.CHROME_SCHEME)
+                    || url.startsWith(UrlConstants.CHROME_NATIVE_SCHEME);
+            if (isChromeScheme) {
+                addToHomeScreenItem.setVisible(false);
             }
 
             // Add custom menu items. Make sure they are only added once.

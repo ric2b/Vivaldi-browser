@@ -9,6 +9,7 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -78,14 +79,15 @@ void CreateProxyResolverFactory(
                           std::move(request));
 }
 
-class ResourceUsageReporterImpl : public mojom::ResourceUsageReporter {
+class ResourceUsageReporterImpl : public chrome::mojom::ResourceUsageReporter {
  public:
   ResourceUsageReporterImpl() {}
   ~ResourceUsageReporterImpl() override {}
 
  private:
   void GetUsageData(const GetUsageDataCallback& callback) override {
-    mojom::ResourceUsageDataPtr data = mojom::ResourceUsageData::New();
+    chrome::mojom::ResourceUsageDataPtr data =
+        chrome::mojom::ResourceUsageData::New();
     size_t total_heap_size = net::ProxyResolverV8::GetTotalHeapSize();
     if (total_heap_size) {
       data->reports_v8_stats = true;
@@ -97,7 +99,7 @@ class ResourceUsageReporterImpl : public mojom::ResourceUsageReporter {
 };
 
 void CreateResourceUsageReporter(
-    mojo::InterfaceRequest<mojom::ResourceUsageReporter> request) {
+    mojo::InterfaceRequest<chrome::mojom::ResourceUsageReporter> request) {
   mojo::MakeStrongBinding(base::MakeUnique<ResourceUsageReporterImpl>(),
                           std::move(request));
 }
@@ -112,12 +114,8 @@ std::unique_ptr<service_manager::Service> CreateImageDecoderService() {
 
 ChromeContentUtilityClient::ChromeContentUtilityClient()
     : filter_messages_(false) {
-#if !defined(OS_ANDROID)
-  handlers_.push_back(new ProfileImportHandler());
-#endif
-
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  handlers_.push_back(new extensions::ExtensionsHandler(this));
+  handlers_.push_back(new extensions::ExtensionsHandler());
   handlers_.push_back(new image_writer::ImageWriterHandler());
 #endif
 
@@ -194,19 +192,24 @@ bool ChromeContentUtilityClient::OnMessageReceived(
 
 void ChromeContentUtilityClient::ExposeInterfacesToBrowser(
     service_manager::InterfaceRegistry* registry) {
-  // When the utility process is running with elevated privileges, we need to
-  // filter messages so that only a whitelist of IPCs can run. In Mojo, there's
-  // no way of filtering individual messages. Instead, we can avoid adding
-  // non-whitelisted Mojo services to the service_manager::InterfaceRegistry.
-  // TODO(amistry): Use a whitelist once the whistlisted IPCs have been
-  // converted to Mojo.
-  if (filter_messages_)
+  const bool running_elevated =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kUtilityProcessRunningElevated);
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  ChromeContentUtilityClient* utility_client = this;
+  extensions::ExtensionsHandler::ExposeInterfacesToBrowser(
+      registry, utility_client, running_elevated);
+#endif
+  // If our process runs with elevated privileges, only add elevated Mojo
+  // services to the interface registry.
+  if (running_elevated)
     return;
 
 #if !defined(OS_ANDROID)
   registry->AddInterface<net::interfaces::ProxyResolverFactory>(
       base::Bind(CreateProxyResolverFactory));
   registry->AddInterface(base::Bind(CreateResourceUsageReporter));
+  registry->AddInterface(base::Bind(&ProfileImportHandler::Create));
 #endif
   registry->AddInterface(
       base::Bind(&safe_json::SafeJsonParserMojoImpl::Create));
@@ -267,33 +270,26 @@ void ChromeContentUtilityClient::OnCreateZipFile(
 #endif  // defined(OS_CHROMEOS)
 
 void ChromeContentUtilityClient::OnPatchFileBsdiff(
-    const base::FilePath& input_file,
-    const base::FilePath& patch_file,
-    const base::FilePath& output_file) {
-  if (input_file.empty() || patch_file.empty() || output_file.empty()) {
-    Send(new ChromeUtilityHostMsg_PatchFile_Finished(-1));
-  } else {
-    const int patch_status = bsdiff::ApplyBinaryPatch(input_file,
-                                                      patch_file,
-                                                      output_file);
-    Send(new ChromeUtilityHostMsg_PatchFile_Finished(patch_status));
-  }
+    const IPC::PlatformFileForTransit& input_file,
+    const IPC::PlatformFileForTransit& patch_file,
+    const IPC::PlatformFileForTransit& output_file) {
+  const int patch_status = bsdiff::ApplyBinaryPatch(
+      IPC::PlatformFileForTransitToFile(input_file),
+      IPC::PlatformFileForTransitToFile(patch_file),
+      IPC::PlatformFileForTransitToFile(output_file));
+  Send(new ChromeUtilityHostMsg_PatchFile_Finished(patch_status));
   ReleaseProcessIfNeeded();
 }
 
 void ChromeContentUtilityClient::OnPatchFileCourgette(
-    const base::FilePath& input_file,
-    const base::FilePath& patch_file,
-    const base::FilePath& output_file) {
-  if (input_file.empty() || patch_file.empty() || output_file.empty()) {
-    Send(new ChromeUtilityHostMsg_PatchFile_Finished(-1));
-  } else {
-    const int patch_status = courgette::ApplyEnsemblePatch(
-        input_file.value().c_str(),
-        patch_file.value().c_str(),
-        output_file.value().c_str());
-    Send(new ChromeUtilityHostMsg_PatchFile_Finished(patch_status));
-  }
+    const IPC::PlatformFileForTransit& input_file,
+    const IPC::PlatformFileForTransit& patch_file,
+    const IPC::PlatformFileForTransit& output_file) {
+  const int patch_status = courgette::ApplyEnsemblePatch(
+      IPC::PlatformFileForTransitToFile(input_file),
+      IPC::PlatformFileForTransitToFile(patch_file),
+      IPC::PlatformFileForTransitToFile(output_file));
+  Send(new ChromeUtilityHostMsg_PatchFile_Finished(patch_status));
   ReleaseProcessIfNeeded();
 }
 

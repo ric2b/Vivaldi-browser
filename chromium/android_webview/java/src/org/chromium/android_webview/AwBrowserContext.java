@@ -7,6 +7,8 @@ package org.chromium.android_webview;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import org.chromium.components.safe_browsing.SafeBrowsingApiBridge;
+import org.chromium.components.safe_browsing.SafeBrowsingApiHandler;
 import org.chromium.content.browser.AppWebMessagePortService;
 import org.chromium.content.browser.ContentViewStatics;
 
@@ -19,19 +21,22 @@ import org.chromium.content.browser.ContentViewStatics;
  * AwBrowserContext instance, so at this point the class mostly exists for conceptual clarity.
  */
 public class AwBrowserContext {
+    private static final String TAG = "AwBrowserContext";
     private final SharedPreferences mSharedPreferences;
 
     private AwGeolocationPermissions mGeolocationPermissions;
     private AwFormDatabase mFormDatabase;
     private AppWebMessagePortService mMessagePortService;
-    private AwMetricsServiceClient mMetricsServiceClient;
     private AwServiceWorkerController mServiceWorkerController;
     private Context mApplicationContext;
 
     public AwBrowserContext(SharedPreferences sharedPreferences, Context applicationContext) {
         mSharedPreferences = sharedPreferences;
-        mMetricsServiceClient = new AwMetricsServiceClient(applicationContext);
         mApplicationContext = applicationContext;
+
+        if (AwContentsStatics.getSafeBrowsingEnabled()) {
+            initSafeBrowsingApiHandler();
+        }
     }
 
     public AwGeolocationPermissions getGeolocationPermissions() {
@@ -55,10 +60,6 @@ public class AwBrowserContext {
         return mMessagePortService;
     }
 
-    public AwMetricsServiceClient getMetricsServiceClient() {
-        return mMetricsServiceClient;
-    }
-
     public AwServiceWorkerController getServiceWorkerController() {
         if (mServiceWorkerController == null) {
             mServiceWorkerController = new AwServiceWorkerController(mApplicationContext, this);
@@ -78,5 +79,20 @@ public class AwBrowserContext {
      */
     public void resumeTimers() {
         ContentViewStatics.setWebKitSharedTimersSuspended(false);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void initSafeBrowsingApiHandler() {
+        final String safeBrowsingApiHandler =
+                "com.android.webview.chromium.AwSafeBrowsingApiHandler";
+
+        // Try to get a specialized service bridge.
+        try {
+            Class<? extends SafeBrowsingApiHandler> cls =
+                    (Class<? extends SafeBrowsingApiHandler>) Class.forName(safeBrowsingApiHandler);
+            SafeBrowsingApiBridge.setSafeBrowingHandlerType(cls);
+        } catch (ClassNotFoundException e) {
+            // This is not an error; it just means this device doesn't have specialized services.
+        }
     }
 }

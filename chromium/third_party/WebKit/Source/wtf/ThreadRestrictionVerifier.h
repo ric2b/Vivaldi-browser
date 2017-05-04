@@ -33,7 +33,7 @@
 
 #include "wtf/Assertions.h"
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 
 #include "wtf/Threading.h"
 
@@ -48,14 +48,10 @@ class ThreadRestrictionVerifier {
  public:
   ThreadRestrictionVerifier() : m_shared(false), m_owningThread(0) {}
 
-  void checkSafeToUse() const {
-    // If this assert fires, it either indicates a thread safety issue or
-    // that the verification needs to change.
-    SECURITY_DCHECK(isSafeToUse());
-  }
-
-  // Call onRef() before refCount is incremented in ref().
-  void onRef(int refCount) {
+  // Call onRef() before refCount is incremented in ref(). Returns whether the
+  // ref() is safe.
+  template <typename COUNTERTYPE>
+  bool onRef(COUNTERTYPE refCount) {
     // Start thread verification as soon as the ref count gets to 2. This
     // heuristic reflects the fact that items are often created on one
     // thread and then given to another thread to be used.
@@ -66,17 +62,24 @@ class ThreadRestrictionVerifier {
     // explicit.
     if (refCount == 1)
       setShared(true);
-    checkSafeToUse();
+    return isSafeToUse();
   }
 
-  // Call onDeref() before refCount is decremented in deref().
-  void onDeref(int refCount) {
-    checkSafeToUse();
-
+  // Call onDeref() before refCount is decremented in deref(). Returns whether
+  // the deref() is safe.
+  template <typename COUNTERTYPE>
+  bool onDeref(COUNTERTYPE refCount) {
+    bool safe = isSafeToUse();
     // Stop thread verification when the ref goes to 1 because it
     // is safe to be passed to another thread at this point.
     if (refCount == 2)
       setShared(false);
+    return safe;
+  }
+
+  // Is it OK to use the object at this moment on the current thread?
+  bool isSafeToUse() const {
+    return !m_shared || m_owningThread == currentThread();
   }
 
  private:
@@ -94,14 +97,6 @@ class ThreadRestrictionVerifier {
     m_owningThread = currentThread();
   }
 
-  // Is it OK to use the object at this moment on the current thread?
-  bool isSafeToUse() const {
-    if (!m_shared)
-      return true;
-
-    return m_owningThread == currentThread();
-  }
-
   bool m_shared;
 
   ThreadIdentifier m_owningThread;
@@ -109,5 +104,5 @@ class ThreadRestrictionVerifier {
 
 }  // namespace WTF
 
-#endif  // ENABLE(ASSERT)
+#endif  // DCHECK_IS_ON()
 #endif  // ThreadRestrictionVerifier_h

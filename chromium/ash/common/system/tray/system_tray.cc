@@ -14,46 +14,6 @@
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
-#include "ash/common/system/date/tray_date.h"
-#include "ash/common/system/date/tray_system_info.h"
-#include "ash/common/system/tiles/tray_tiles.h"
-#include "ash/common/system/tray/system_tray_controller.h"
-#include "ash/common/system/tray/system_tray_delegate.h"
-#include "ash/common/system/tray/system_tray_item.h"
-#include "ash/common/system/tray/tray_bubble_wrapper.h"
-#include "ash/common/system/tray/tray_constants.h"
-#include "ash/common/system/tray_accessibility.h"
-#include "ash/common/system/update/tray_update.h"
-#include "ash/common/system/user/tray_user.h"
-#include "ash/common/system/user/tray_user_separator.h"
-#include "ash/common/system/web_notification/web_notification_tray.h"
-#include "ash/common/wm/container_finder.h"
-#include "ash/common/wm_activation_observer.h"
-#include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
-#include "ash/common/wm_shell.h"
-#include "ash/common/wm_window.h"
-#include "ash/public/cpp/shell_window_ids.h"
-#include "base/logging.h"
-#include "base/metrics/histogram.h"
-#include "base/strings/utf_string_conversions.h"
-#include "base/timer/timer.h"
-#include "grit/ash_strings.h"
-#include "ui/base/accelerators/accelerator.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/compositor/layer.h"
-#include "ui/display/display.h"
-#include "ui/display/screen.h"
-#include "ui/events/event_constants.h"
-#include "ui/gfx/canvas.h"
-#include "ui/gfx/skia_util.h"
-#include "ui/message_center/message_center_style.h"
-#include "ui/views/border.h"
-#include "ui/views/controls/label.h"
-#include "ui/views/view.h"
-#include "ui/views/widget/widget.h"
-
-#if defined(OS_CHROMEOS)
 #include "ash/common/system/chromeos/audio/tray_audio.h"
 #include "ash/common/system/chromeos/bluetooth/tray_bluetooth.h"
 #include "ash/common/system/chromeos/brightness/tray_brightness.h"
@@ -72,9 +32,46 @@
 #include "ash/common/system/chromeos/supervised/tray_supervised_user.h"
 #include "ash/common/system/chromeos/tray_caps_lock.h"
 #include "ash/common/system/chromeos/tray_tracing.h"
+#include "ash/common/system/date/tray_date.h"
+#include "ash/common/system/date/tray_system_info.h"
 #include "ash/common/system/ime/tray_ime_chromeos.h"
+#include "ash/common/system/tiles/tray_tiles.h"
+#include "ash/common/system/tray/system_tray_controller.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/system/tray/system_tray_item.h"
+#include "ash/common/system/tray/tray_bubble_wrapper.h"
+#include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray_accessibility.h"
+#include "ash/common/system/update/tray_update.h"
+#include "ash/common/system/user/tray_user.h"
+#include "ash/common/system/user/tray_user_separator.h"
+#include "ash/common/system/web_notification/web_notification_tray.h"
+#include "ash/common/wm/container_finder.h"
+#include "ash/common/wm_activation_observer.h"
+#include "ash/common/wm_lookup.h"
+#include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
+#include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
+#include "base/logging.h"
+#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram.h"
+#include "base/timer/timer.h"
+#include "grit/ash_strings.h"
+#include "ui/base/accelerators/accelerator.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/compositor/layer.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
+#include "ui/events/event_constants.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/skia_util.h"
 #include "ui/message_center/message_center.h"
-#endif
+#include "ui/message_center/message_center_style.h"
+#include "ui/views/border.h"
+#include "ui/views/controls/label.h"
+#include "ui/views/view.h"
+#include "ui/views/widget/widget.h"
 
 using views::TrayBubbleView;
 
@@ -216,6 +213,7 @@ SystemTray::SystemTray(WmShelf* wm_shelf)
       tray_audio_(nullptr),
       tray_cast_(nullptr),
       tray_date_(nullptr),
+      tray_network_(nullptr),
       tray_tiles_(nullptr),
       tray_system_info_(nullptr),
       tray_update_(nullptr),
@@ -225,8 +223,9 @@ SystemTray::SystemTray(WmShelf* wm_shelf)
     SetInkDropMode(InkDropMode::ON);
     SetContentsBackground(false);
 
-    // Since |system_tray| locates on the right most position, no separator is
-    // required on its right side.
+    // Since user avatar is on the right hand side of System tray of a
+    // horizontal shelf and that is sufficient to indicate separation, no
+    // separator is required.
     set_separator_visibility(false);
   } else {
     SetContentsBackground(true);
@@ -239,10 +238,8 @@ SystemTray::~SystemTray() {
   key_event_watcher_.reset();
   system_bubble_.reset();
   notification_bubble_.reset();
-  for (std::vector<SystemTrayItem*>::iterator it = items_.begin();
-       it != items_.end(); ++it) {
-    (*it)->DestroyTrayView();
-  }
+  for (const auto& item : items_)
+    item->DestroyTrayView();
 }
 
 void SystemTray::InitializeTrayItems(
@@ -261,108 +258,106 @@ void SystemTray::Shutdown() {
 
 void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
   const bool use_md = MaterialDesignController::IsSystemTrayMenuMaterial();
-#if !defined(OS_WIN)
+
   // Create user items for each possible user.
   int maximum_user_profiles = WmShell::Get()
                                   ->GetSessionStateDelegate()
                                   ->GetMaximumNumberOfLoggedInUsers();
   for (int i = 0; i < maximum_user_profiles; i++)
-    AddTrayItem(new TrayUser(this, i));
+    AddTrayItem(base::MakeUnique<TrayUser>(this, i));
 
   // Crucially, this trailing padding has to be inside the user item(s).
   // Otherwise it could be a main axis margin on the tray's box layout.
   if (use_md)
-    AddTrayItem(new PaddingTrayItem());
+    AddTrayItem(base::MakeUnique<PaddingTrayItem>());
 
   if (!use_md && maximum_user_profiles > 1) {
     // Add a special double line separator between users and the rest of the
     // menu if more than one user is logged in.
-    AddTrayItem(new TrayUserSeparator(this));
+    AddTrayItem(base::MakeUnique<TrayUserSeparator>(this));
   }
-#endif
 
   tray_accessibility_ = new TrayAccessibility(this);
   if (!use_md)
     tray_date_ = new TrayDate(this);
   tray_update_ = new TrayUpdate(this);
 
-#if defined(OS_CHROMEOS)
-  AddTrayItem(new TraySessionLengthLimit(this));
-  AddTrayItem(new TrayEnterprise(this));
-  AddTrayItem(new TraySupervisedUser(this));
-  AddTrayItem(new TrayIME(this));
-  AddTrayItem(tray_accessibility_);
-  AddTrayItem(new TrayTracing(this));
-  AddTrayItem(new TrayPower(this, message_center::MessageCenter::Get()));
-  AddTrayItem(new TrayNetwork(this));
-  AddTrayItem(new TrayVPN(this));
-  AddTrayItem(new TraySms(this));
-  AddTrayItem(new TrayBluetooth(this));
+  AddTrayItem(base::MakeUnique<TraySessionLengthLimit>(this));
+  AddTrayItem(base::MakeUnique<TrayEnterprise>(this));
+  AddTrayItem(base::MakeUnique<TraySupervisedUser>(this));
+  AddTrayItem(base::MakeUnique<TrayIME>(this));
+  AddTrayItem(base::WrapUnique(tray_accessibility_));
+  AddTrayItem(base::MakeUnique<TrayTracing>(this));
+  AddTrayItem(
+      base::MakeUnique<TrayPower>(this, message_center::MessageCenter::Get()));
+  tray_network_ = new TrayNetwork(this);
+  AddTrayItem(base::WrapUnique(tray_network_));
+  AddTrayItem(base::MakeUnique<TrayVPN>(this));
+  AddTrayItem(base::MakeUnique<TraySms>(this));
+  AddTrayItem(base::MakeUnique<TrayBluetooth>(this));
   tray_cast_ = new TrayCast(this);
-  AddTrayItem(tray_cast_);
+  AddTrayItem(base::WrapUnique(tray_cast_));
   screen_capture_tray_item_ = new ScreenCaptureTrayItem(this);
-  AddTrayItem(screen_capture_tray_item_);
+  AddTrayItem(base::WrapUnique(screen_capture_tray_item_));
   screen_share_tray_item_ = new ScreenShareTrayItem(this);
-  AddTrayItem(screen_share_tray_item_);
-  AddTrayItem(new MultiProfileMediaTrayItem(this));
+  AddTrayItem(base::WrapUnique(screen_share_tray_item_));
+  AddTrayItem(base::MakeUnique<MultiProfileMediaTrayItem>(this));
   tray_audio_ = new TrayAudio(this);
-  AddTrayItem(tray_audio_);
-  AddTrayItem(new TrayBrightness(this));
-  AddTrayItem(new TrayCapsLock(this));
+  AddTrayItem(base::WrapUnique(tray_audio_));
+  AddTrayItem(base::MakeUnique<TrayBrightness>(this));
+  AddTrayItem(base::MakeUnique<TrayCapsLock>(this));
   // TODO(jamescook): Remove this when mus has support for display management
   // and we have a DisplayManager equivalent. See http://crbug.com/548429
   std::unique_ptr<SystemTrayItem> tray_rotation_lock =
       delegate->CreateRotationLockTrayItem(this);
   if (tray_rotation_lock)
-    AddTrayItem(tray_rotation_lock.release());
+    AddTrayItem(std::move(tray_rotation_lock));
   if (!use_md)
-    AddTrayItem(new TraySettings(this));
-  AddTrayItem(tray_update_);
+    AddTrayItem(base::MakeUnique<TraySettings>(this));
+  AddTrayItem(base::WrapUnique(tray_update_));
   if (use_md) {
     tray_tiles_ = new TrayTiles(this);
-    AddTrayItem(tray_tiles_);
+    AddTrayItem(base::WrapUnique(tray_tiles_));
     tray_system_info_ = new TraySystemInfo(this);
-    AddTrayItem(tray_system_info_);
+    AddTrayItem(base::WrapUnique(tray_system_info_));
+    // Leading padding.
+    AddTrayItem(base::MakeUnique<PaddingTrayItem>());
   } else {
-    AddTrayItem(tray_date_);
+    AddTrayItem(base::WrapUnique(tray_date_));
   }
-#elif defined(OS_WIN)
-  AddTrayItem(tray_accessibility_);
-  AddTrayItem(tray_update_);
-  if (!use_md)
-    AddTrayItem(tray_date_);
-#endif
-  // Leading padding.
-  if (use_md)
-    AddTrayItem(new PaddingTrayItem());
 }
 
-void SystemTray::AddTrayItem(SystemTrayItem* item) {
-  items_.push_back(item);
+void SystemTray::AddTrayItem(std::unique_ptr<SystemTrayItem> item) {
+  SystemTrayItem* item_ptr = item.get();
+  items_.push_back(std::move(item));
 
   SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
-  views::View* tray_item = item->CreateTrayView(delegate->GetUserLoginStatus());
-  item->UpdateAfterShelfAlignmentChange(shelf_alignment());
+  views::View* tray_item =
+      item_ptr->CreateTrayView(delegate->GetUserLoginStatus());
+  item_ptr->UpdateAfterShelfAlignmentChange(shelf_alignment());
 
   if (tray_item) {
     tray_container()->AddChildViewAt(tray_item, 0);
     PreferredSizeChanged();
-    tray_item_map_[item] = tray_item;
+    tray_item_map_[item_ptr] = tray_item;
   }
 }
 
-const std::vector<SystemTrayItem*>& SystemTray::GetTrayItems() const {
-  return items_.get();
+std::vector<SystemTrayItem*> SystemTray::GetTrayItems() const {
+  std::vector<SystemTrayItem*> result;
+  for (const auto& item : items_)
+    result.push_back(item.get());
+  return result;
 }
 
 void SystemTray::ShowDefaultView(BubbleCreationType creation_type) {
   if (creation_type != BUBBLE_USE_EXISTING)
     WmShell::Get()->RecordUserMetricsAction(UMA_STATUS_AREA_MENU_OPENED);
-  ShowItems(items_.get(), false, true, creation_type, false);
+  ShowItems(GetTrayItems(), false, true, creation_type, false);
 }
 
 void SystemTray::ShowPersistentDefaultView() {
-  ShowItems(items_.get(), false, false, BUBBLE_CREATE_NEW, true);
+  ShowItems(GetTrayItems(), false, false, BUBBLE_CREATE_NEW, true);
 }
 
 void SystemTray::ShowDetailedView(SystemTrayItem* item,
@@ -414,7 +409,7 @@ void SystemTray::ShowNotificationView(SystemTrayItem* item) {
 }
 
 void SystemTray::HideNotificationView(SystemTrayItem* item) {
-  std::vector<SystemTrayItem*>::iterator found_iter =
+  auto found_iter =
       std::find(notification_items_.begin(), notification_items_.end(), item);
   if (found_iter == notification_items_.end())
     return;
@@ -428,7 +423,7 @@ void SystemTray::UpdateAfterLoginStatusChange(LoginStatus login_status) {
   DestroySystemBubble();
   UpdateNotificationBubble();
 
-  for (SystemTrayItem* item : items_)
+  for (const auto& item : items_)
     item->UpdateAfterLoginStatusChange(login_status);
 
   // Items default to SHELF_ALIGNMENT_BOTTOM. Update them if the initial
@@ -441,7 +436,7 @@ void SystemTray::UpdateAfterLoginStatusChange(LoginStatus login_status) {
 }
 
 void SystemTray::UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) {
-  for (SystemTrayItem* item : items_)
+  for (const auto& item : items_)
     item->UpdateAfterShelfAlignmentChange(alignment);
 }
 
@@ -529,10 +524,7 @@ void SystemTray::DestroyNotificationBubble() {
 
 base::string16 SystemTray::GetAccessibleNameForTray() {
   base::string16 time = GetAccessibleTimeString(base::Time::Now());
-  base::string16 battery = base::ASCIIToUTF16("");
-#if defined(OS_CHROMEOS)
-  battery = PowerStatus::Get()->GetAccessibleNameString(false);
-#endif
+  base::string16 battery = PowerStatus::Get()->GetAccessibleNameString(false);
   return l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_ACCESSIBLE_DESCRIPTION,
                                     time, battery);
 }
@@ -696,7 +688,7 @@ void SystemTray::UpdateWebNotifications() {
             ->GetDisplayNearestWindow(bubble_view->GetWidget()->GetNativeView())
             .work_area();
     height =
-        std::max(0, work_area.height() - bubble_view->GetBoundsInScreen().y());
+        std::max(0, work_area.bottom() - bubble_view->GetBoundsInScreen().y());
   }
   if (web_notification_tray_)
     web_notification_tray_->SetTrayBubbleHeight(height);
@@ -812,16 +804,16 @@ TrayDate* SystemTray::GetTrayDateForTesting() const {
   return tray_date_;
 }
 
+TrayNetwork* SystemTray::GetTrayNetworkForTesting() const {
+  return tray_network_;
+}
+
 TraySystemInfo* SystemTray::GetTraySystemInfoForTesting() const {
   return tray_system_info_;
 }
 
 TrayTiles* SystemTray::GetTrayTilesForTesting() const {
   return tray_tiles_;
-}
-
-TrayUpdate* SystemTray::GetTrayUpdateForTesting() const {
-  return tray_update_;
 }
 
 void SystemTray::CloseBubble(const ui::KeyEvent& key_event) {

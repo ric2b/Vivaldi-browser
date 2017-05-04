@@ -50,7 +50,6 @@ class FullscreenLowPowerCoordinatorCocoa;
 @class InfoBarContainerController;
 class LocationBarViewMac;
 @class OverlayableContentsController;
-class PermissionBubbleCocoa;
 class StatusBubbleMac;
 @class TabStripController;
 @class TabStripView;
@@ -184,6 +183,10 @@ class Command;
   // used in fullscreen transition to prevent spurious resize messages from
   // being sent to the renderer, which causes the transition to be janky.
   BOOL blockLayoutSubviews_;
+
+  // Set when AppKit invokes -windowWillClose: to protect against possible
+  // crashes. See http://crbug.com/671213.
+  BOOL didWindowWillClose_;
 
   // The Extension Command Registry used to determine which keyboard events to
   // handle.

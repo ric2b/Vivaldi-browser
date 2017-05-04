@@ -39,7 +39,6 @@ Still reading?
     <ignore regexp="third_party/cacheinvalidation/src/java/com/google/ipc/invalidation/ticl/android2/channel/AndroidChannelPreferences.java"/>
   </issue>
   <issue id="ContentDescription" severity="Error">
-    <ignore regexp="blimp/client/app/android/java/res/layout/blimp_main.xml"/>
     <ignore regexp="chromecast/internal"/>
   </issue>
   <issue id="DefaultLocale">
@@ -177,8 +176,6 @@ Still reading?
     <ignore regexp="chrome/android/java/src/org/chromium/chrome/browser/widget/selection/SelectionToolbar.java"/>
   </issue>
   <issue id="MissingTranslation">
-    <ignore regexp="blimp/client/app/android/java/res/values/arrays.xml"/>
-    <ignore regexp="blimp/client/core/resources/android/java/res/values/arrays.xml" />
     <!-- http://crbug.com/450548 -->
     <ignore regexp="chromecast/internal"/>
     <ignore regexp="restriction_values.xml.*"/>
@@ -216,8 +213,6 @@ Still reading?
   <issue id="Overdraw" severity="ignore"/>
   <issue id="Override">
     <!-- TODO(crbug.com/635567): Fix this properly. -->
-    <ignore regexp="org/chromium/content/browser/input/ReplicaInputConnection.class"/>
-    <!-- TODO(crbug.com/635567): Fix this properly. -->
     <ignore regexp="org/chromium/content/browser/input/ThreadedInputConnection.class"/>
     <!-- TODO(crbug.com/635567): Fix this properly. -->
     <ignore regexp="com/android/webview/chromium/ContentSettingsAdapter.class"/>
@@ -251,6 +246,7 @@ Still reading?
     <ignore regexp="chromecast/internal"/>
   </issue>
   <issue id="StringFormatCount" severity="Error">
+    <ignore regexp="gen/chrome/android/chrome_strings_grd.resources.zip/values-cs/android_chrome_strings.xml"/>
     <ignore regexp="gen/chrome/android/chrome_strings_grd.resources.zip/values-pl/android_chrome_strings.xml"/>
     <ignore regexp="gen/chrome/android/chrome_strings_grd.resources.zip/values/android_chrome_strings.xml"/>
   </issue>
@@ -258,6 +254,7 @@ Still reading?
     <ignore regexp="gen/chrome/android/chrome_strings_grd.resources.zip/values-cs/android_chrome_strings.xml"/>
     <ignore regexp="gen/chrome/android/chrome_strings_grd.resources.zip/values-da/android_chrome_strings.xml"/>
     <ignore regexp="gen/chrome/android/chrome_strings_grd.resources.zip/values-pl/android_chrome_strings.xml"/>
+    <ignore regexp="gen/chrome/android/chrome_strings_grd.resources.zip/values-pt-rBR/android_chrome_strings.xml"/>
     <ignore regexp="gen/chrome/android/chrome_strings_grd.resources.zip/values-sv/android_chrome_strings.xml"/>
     <ignore regexp="gen/chrome/android/chrome_strings_grd.resources.zip/values-tl/android_chrome_strings.xml"/>
   </issue>
@@ -267,12 +264,8 @@ Still reading?
   <issue id="TypographyDashes" severity="Error">
     <ignore regexp="chrome/app/policy/android/values-v21/restriction_values.xml"/>
   </issue>
-  <issue id="Typos" severity="Error">
-    <ignore regexp="gen/chrome/android/chrome_strings_grd.resources.zip/values-pt-rBR/android_chrome_strings.xml"/>
-    <ignore regexp="gen/chrome/android/chrome_strings_grd.resources.zip/values-pt-rPT/android_chrome_strings.xml"/>
-    <ignore regexp="gen/chrome/android/chrome_strings_grd.resources.zip/values-tr/android_chrome_strings.xml"/>
-    <ignore regexp="gen/chrome/android/chrome_strings_grd.resources.zip/values/android_chrome_strings.xml"/>
-  </issue>
+  <!-- Typos check disabled due to lint bug: http://crbug.com/671170 -->
+  <issue id="Typos" severity="ignore" />
   <issue id="UnusedAttribute" severity="ignore"/>
   <issue id="UnusedIds" severity="ignore"/>
   <issue id="UnusedQuantity" severity="Error">
@@ -299,31 +292,11 @@ Still reading?
     <ignore regexp="android_webview/test/shell/res/raw/resource_file.html"/>
     <ignore regexp="android_webview/test/shell/res/raw/resource_icon.png"/>
     <ignore regexp="android_webview/tools/automated_ui_tests/java/res/"/>
-    <ignore regexp="blimp/client/app/android/java/res/drawable/dotted_line.xml"/>
-    <ignore regexp="blimp/client/app/android/java/res/drawable-hdpi/btn_menu.png"/>
-    <ignore regexp="blimp/client/app/android/java/res/drawable-hdpi/btn_reload.png"/>
-    <ignore regexp="blimp/client/app/android/java/res/drawable-hdpi/textbox.9.png"/>
-    <ignore regexp="blimp/client/app/android/java/res/drawable-hdpi/web_input_background.9.png"/>
-    <ignore regexp="blimp/client/app/android/java/res/layout/blimp_main.xml"/>
-    <ignore regexp="blimp/client/app/android/java/res/layout/debug_stats_overlay.xml"/>
-    <ignore regexp="blimp/client/app/android/java/res/layout/text_input_popup.xml"/>
-    <ignore regexp="blimp/client/app/android/java/res/layout/toolbar_popup_item.xml"/>
-    <ignore regexp="blimp/client/app/android/java/res/layout/web_input_bottom_panel.xml"/>
-    <ignore regexp="blimp/client/app/android/java/res/mipmap-hdpi/app_icon.png"/>
-    <ignore regexp="blimp/client/app/android/java/res/values/arrays.xml"/>
-    <ignore regexp="blimp/client/app/android/java/res/values/colors.xml"/>
-    <ignore regexp="blimp/client/app/android/java/res/values/dimens.xml"/>
-    <ignore regexp="blimp/client/app/android/java/res/xml/about_blimp_preferences.xml"/>
-    <ignore regexp="blimp/client/app/android/java/res/xml/blimp_preferences.xml"/>
-    <ignore regexp="blimp/client/core/resources/android/java/res/*" />    
     <!-- TODO(crbug.com/635567): Fix this properly. -->
     <ignore regexp="chrome/android/java/res/drawable-hdpi/*"/>
-    <ignore regexp="chrome/android/java/res/drawable-hdpi/amex_card.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/bubble_white.9.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/cvc_icon.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/cvc_icon_amex.png"/>
-    <ignore regexp="chrome/android/java/res/drawable-hdpi/discover_card.png"/>
-    <ignore regexp="chrome/android/java/res/drawable-hdpi/generic_card.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/ic_folder_white_24dp.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/ic_settings.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/infobar_3d_blocked.png"/>
@@ -340,7 +313,7 @@ Still reading?
     <ignore regexp="chrome/android/java/res/drawable-hdpi/infobar_restore.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/infobar_screen_share.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/infobar_subresource_filtering.png"/>
-    <ignore regexp="chrome/android/java/res/drawable-hdpi/mc_card.png"/>
+    <ignore regexp="chrome/android/java/res/drawable-hdpi/mir_card.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/pageinfo_bad.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/pageinfo_good.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/pageinfo_warning.png"/>
@@ -350,7 +323,6 @@ Still reading?
     <ignore regexp="chrome/android/java/res/drawable-hdpi/shortcut_incognito.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/shortcut_newtab.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/signin_promo_illustration.png"/>
-    <ignore regexp="chrome/android/java/res/drawable-hdpi/visa_card.png"/>
     <ignore regexp="chrome/android/java/res/drawable-nodpi/missing.png"/>
     <ignore regexp="chrome/android/java/res/values-v17/styles.xml"/>
     <!--
@@ -365,8 +337,6 @@ Still reading?
     <ignore regexp="content/shell/android/java/res/mipmap-hdpi/app_icon.png"/>
     <ignore regexp="gen/android_webview/locale_paks.resources.zip/*"/>
     <ignore regexp="gen/android_webview/strings_grd.resources.zip/values/android_webview_strings.xml"/>
-    <ignore regexp="gen/blimp/client/app/blimp_strings_grd.resources.zip/values/android_blimp_strings.xml" />
-    <ignore regexp="gen/blimp/client/core/resources/strings_grd.resources.zip/values/blimp_strings.xml" />
     <ignore regexp="gen/components/strings/components_strings_grd.resources.zip/values.*/components_strings.xml"/>
     <ignore regexp="gen/remoting/resources/strings_java.resources.zip/values/remoting_strings.xml"/>
     <ignore regexp="remoting/android/java/res/drawable-hdpi/ic_backspace.png"/>
@@ -459,6 +429,10 @@ Still reading?
     <!-- TODO(crbug.com/635567): Fix this properly. -->
     <ignore regexp="content/shell/android/shell_apk/res/values/strings.xml"/>
   </issue>
+  <!-- TODO(crbug.com/669629): Remove this when the Chromecast dependency on old layout code is removed. -->
+  <issue id="UseCompoundDrawables">
+    <ignore regexp="chromecast/internal/android/prebuilt/settings/res/layout-v17/setup_activity_progress.xml"/>
+  </issue>
   <issue id="UselessParent">
     <ignore regexp="android_webview/tools/system_webview_shell/apk/res/layout/activity_webview_browser.xml"/>
     <ignore regexp="chrome/android/java/res/layout/data_reduction_promo_screen.xml"/>
@@ -469,8 +443,6 @@ Still reading?
     <ignore regexp="AndroidManifest.xml"/>
   </issue>
   <issue id="ValidFragment" severity="Error">
-    <ignore regexp="blimp/client/app/android/javatests/src/org/chromium/blimp/core/settings/BlimpPreferencesTest.java"/>
-    <ignore regexp="blimp/client/app/android/javatests/src/org/chromium/blimp/core/settings/MockPreferences.java"/>
     <ignore regexp="chrome/android/java/src/org/chromium/chrome/browser/media/router/BaseMediaRouteDialogManager.java"/>
     <ignore regexp="chrome/android/java/src/org/chromium/chrome/browser/media/router/MediaRouteChooserDialogManager.java"/>
     <ignore regexp="chrome/android/java/src/org/chromium/chrome/browser/media/router/MediaRouteControllerDialogManager.java"/>

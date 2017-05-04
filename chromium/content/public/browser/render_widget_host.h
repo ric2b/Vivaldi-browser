@@ -28,6 +28,7 @@ class Rect;
 
 namespace blink {
 class WebMouseEvent;
+class WebMouseWheelEvent;
 }
 
 namespace content {
@@ -243,12 +244,13 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   virtual void AddMouseEventCallback(const MouseEventCallback& callback) = 0;
   virtual void RemoveMouseEventCallback(const MouseEventCallback& callback) = 0;
 
-  // Observer for WebInputEvents (but not input event acks).
+  // Observer for WebInputEvents.
   class InputEventObserver {
    public:
     virtual ~InputEventObserver() {}
 
-    virtual void OnInputEvent(const blink::WebInputEvent&) = 0;
+    virtual void OnInputEvent(const blink::WebInputEvent&) {};
+    virtual void OnInputEventAck(const blink::WebInputEvent&) {};
   };
 
   // Add/remove an input event observer.
@@ -257,9 +259,6 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
 
   // Get the screen info corresponding to this render widget.
   virtual void GetScreenInfo(ScreenInfo* result) = 0;
-
-  // Sends a compositor proto to the render widget.
-  virtual void HandleCompositorProto(const std::vector<uint8_t>& proto) = 0;
 
   // Drag-and-drop drop target messages that get sent to Blink.
   virtual void DragTargetDragEnter(

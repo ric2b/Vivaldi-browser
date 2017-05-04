@@ -30,10 +30,8 @@
 
 #include "platform/image-decoders/ico/ICOImageDecoder.h"
 
-#include "platform/Histogram.h"
 #include "platform/image-decoders/png/PNGImageDecoder.h"
 #include "wtf/PtrUtil.h"
-#include "wtf/Threading.h"
 #include <algorithm>
 
 namespace blink {
@@ -45,13 +43,13 @@ static const size_t sizeOfDirectory = 6;
 static const size_t sizeOfDirEntry = 16;
 
 ICOImageDecoder::ICOImageDecoder(AlphaOption alphaOption,
-                                 ColorSpaceOption colorOptions,
+                                 const ColorBehavior& colorBehavior,
                                  size_t maxDecodedBytes)
-    : ImageDecoder(alphaOption, colorOptions, maxDecodedBytes),
+    : ImageDecoder(alphaOption, colorBehavior, maxDecodedBytes),
       m_fastReader(nullptr),
       m_decodedOffset(0),
       m_dirEntriesCount(0),
-      m_colorSpaceOption(colorOptions) {}
+      m_colorBehavior(colorBehavior) {}
 
 ICOImageDecoder::~ICOImageDecoder() {}
 
@@ -197,8 +195,8 @@ bool ICOImageDecoder::decodeAtIndex(size_t index) {
 
   if (imageType == BMP) {
     if (!m_bmpReaders[index]) {
-      m_bmpReaders[index] =
-          wrapUnique(new BMPImageReader(this, dirEntry.m_imageOffset, 0, true));
+      m_bmpReaders[index] = WTF::wrapUnique(
+          new BMPImageReader(this, dirEntry.m_imageOffset, 0, true));
       m_bmpReaders[index]->setData(m_data.get());
     }
     // Update the pointer to the buffer as it could change after
@@ -213,8 +211,8 @@ bool ICOImageDecoder::decodeAtIndex(size_t index) {
   if (!m_pngDecoders[index]) {
     AlphaOption alphaOption =
         m_premultiplyAlpha ? AlphaPremultiplied : AlphaNotPremultiplied;
-    m_pngDecoders[index] = wrapUnique(
-        new PNGImageDecoder(alphaOption, m_colorSpaceOption, m_maxDecodedBytes,
+    m_pngDecoders[index] = WTF::wrapUnique(
+        new PNGImageDecoder(alphaOption, m_colorBehavior, m_maxDecodedBytes,
                             dirEntry.m_imageOffset));
     setDataForPNGDecoderAtIndex(index);
   }
@@ -271,17 +269,11 @@ bool ICOImageDecoder::processDirectoryEntries() {
       return setFailed();
   }
 
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(
-      blink::CustomCountHistogram, dimensionsLocationHistogram,
-      new blink::CustomCountHistogram(
-          "Blink.DecodedImage.EffectiveDimensionsLocation.ICO", 0, 50000, 50));
-  dimensionsLocationHistogram.count(m_decodedOffset - 1);
-
   // Arrange frames in decreasing quality order.
   std::sort(m_dirEntries.begin(), m_dirEntries.end(), compareEntries);
 
   // The image size is the size of the largest entry.
-  const IconDirectoryEntry& dirEntry = m_dirEntries.first();
+  const IconDirectoryEntry& dirEntry = m_dirEntries.front();
   // Technically, this next call shouldn't be able to fail, since the width
   // and height here are each <= 256, and |m_frameSize| is empty.
   return setSize(dirEntry.m_size.width(), dirEntry.m_size.height());

@@ -39,7 +39,6 @@
 #include "WebVector.h"
 
 class SkMatrix44;
-class SkImageFilter;
 
 namespace cc {
 class Layer;
@@ -146,7 +145,7 @@ class WebLayer {
   virtual void setBackgroundFilters(const cc::FilterOperations&) = 0;
 
   // Returns true if this layer has any active animations - useful for tests.
-  virtual bool hasActiveAnimationForTesting() = 0;
+  virtual bool hasTickingAnimationForTesting() = 0;
 
   // If a scroll parent is set, this layer will inherit its parent's scroll
   // delta and offset even though it will not be a descendant of the scroll

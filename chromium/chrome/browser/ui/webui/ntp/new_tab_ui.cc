@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/i18n/rtl.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -14,9 +15,9 @@
 #include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/browser/ui/webui/ntp/app_launcher_handler.h"
 #include "chrome/browser/ui/webui/ntp/core_app_launcher_handler.h"
-#include "chrome/browser/ui/webui/ntp/favicon_webui_handler.h"
 #include "chrome/browser/ui/webui/ntp/ntp_resource_cache.h"
 #include "chrome/browser/ui/webui/ntp/ntp_resource_cache_factory.h"
+#include "chrome/browser/ui/webui/theme_handler.h"
 #include "chrome/common/url_constants.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -29,10 +30,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
-
-#if defined(ENABLE_THEMES)
-#include "chrome/browser/ui/webui/theme_handler.h"
-#endif
 
 using content::BrowserThread;
 using content::WebUIController;
@@ -62,22 +59,20 @@ NewTabUI::NewTabUI(content::WebUI* web_ui)
 
   Profile* profile = GetProfile();
   if (!profile->IsOffTheRecord()) {
-    web_ui->AddMessageHandler(new MetricsHandler());
-    web_ui->AddMessageHandler(new FaviconWebUIHandler());
-    web_ui->AddMessageHandler(new CoreAppLauncherHandler());
+    web_ui->AddMessageHandler(base::MakeUnique<MetricsHandler>());
+    web_ui->AddMessageHandler(base::MakeUnique<CoreAppLauncherHandler>());
 
     ExtensionService* service =
         extensions::ExtensionSystem::Get(profile)->extension_service();
     // We might not have an ExtensionService (on ChromeOS when not logged in
     // for example).
-    if (service)
-      web_ui->AddMessageHandler(new AppLauncherHandler(service));
+    if (service) {
+      web_ui->AddMessageHandler(base::MakeUnique<AppLauncherHandler>(service));
+    }
   }
 
-#if defined(ENABLE_THEMES)
   if (!profile->IsGuestSession())
-    web_ui->AddMessageHandler(new ThemeHandler());
-#endif
+    web_ui->AddMessageHandler(base::MakeUnique<ThemeHandler>());
 
   std::unique_ptr<NewTabHTMLSource> html_source(
       new NewTabHTMLSource(profile->GetOriginalProfile()));

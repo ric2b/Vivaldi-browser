@@ -364,6 +364,13 @@ void WebViewGuest::ShowPageInfo(gfx::Point pos) {
   auto security_info = security_state::GetVisibleSecurityState(web_contents());
   DCHECK(security_info);
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+
+  // Happens for WebContents not in a tabstrip.
+  if (!browser) {
+    browser = chrome::FindLastActiveWithProfile(profile);
+  }
 
   if (browser->window()) {
     security_state::SecurityInfo security_state;
@@ -371,11 +378,9 @@ void WebViewGuest::ShowPageInfo(gfx::Point pos) {
         false,
         base::Bind(&content::IsOriginSecure),
         &security_state);
-    browser->window()->VivaldiShowWebsiteSettingsAt(
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext()),
-      web_contents(), url, security_state, pos);
+    browser->window()->VivaldiShowWebsiteSettingsAt(profile, web_contents(),
+                                                    url, security_state, pos);
   }
-
 }
 
 void WebViewGuest::UpdateMediaState(TabAlertState state) {
@@ -467,21 +472,21 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
 #ifdef ROCKER_GESTURES
   if (IsRockerGesturesEnabled()) {
     if (has_left_mousebutton_down_ &&
-        mouse_event.type == blink::WebInputEvent::MouseUp &&
+        mouse_event.type() == blink::WebInputEvent::MouseUp &&
         mouse_event.button == blink::WebMouseEvent::Button::Left) {
       has_left_mousebutton_down_ = false;
     }
-    else if (mouse_event.type == blink::WebInputEvent::MouseDown &&
+    else if (mouse_event.type() == blink::WebInputEvent::MouseDown &&
         mouse_event.button == blink::WebMouseEvent::Button::Left) {
       has_left_mousebutton_down_ = true;
     }
 
     if (has_right_mousebutton_down_ &&
-        mouse_event.type == blink::WebInputEvent::MouseUp &&
+        mouse_event.type() == blink::WebInputEvent::MouseUp &&
         mouse_event.button == blink::WebMouseEvent::Button::Right) {
       has_right_mousebutton_down_ = false;
     }
-    else if (mouse_event.type == blink::WebInputEvent::MouseDown &&
+    else if (mouse_event.type() == blink::WebInputEvent::MouseDown &&
         mouse_event.button == blink::WebMouseEvent::Button::Right) {
       has_right_mousebutton_down_ = true;
     }
@@ -492,7 +497,7 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
     }
 
     if (has_left_mousebutton_down_ &&
-        (mouse_event.type == blink::WebInputEvent::MouseDown &&
+        (mouse_event.type() == blink::WebInputEvent::MouseDown &&
         mouse_event.button == blink::WebMouseEvent::Button::Right)) {
       eat_next_right_mouseup_ = true;
       Go(1);
@@ -500,7 +505,7 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
     }
 
     if (has_right_mousebutton_down_ &&
-        (mouse_event.type == blink::WebInputEvent::MouseDown &&
+        (mouse_event.type() == blink::WebInputEvent::MouseDown &&
         mouse_event.button == blink::WebMouseEvent::Button::Left)) {
       Go(-1);
       eat_next_right_mouseup_ = true;
@@ -508,7 +513,7 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
     }
 
     if (eat_next_right_mouseup_ &&
-        mouse_event.type == blink::WebInputEvent::MouseUp &&
+        mouse_event.type() == blink::WebInputEvent::MouseUp &&
         mouse_event.button == blink::WebMouseEvent::Button::Right) {
       eat_next_right_mouseup_ = false;
       return true;
@@ -522,9 +527,9 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
   }
 
   // Record the gesture
-  if (mouse_event.type == blink::WebInputEvent::MouseDown &&
+  if (mouse_event.type() == blink::WebInputEvent::MouseDown &&
     mouse_event.button == blink::WebMouseEvent::Button::Right &&
-    !(mouse_event.modifiers & blink::WebInputEvent::LeftButtonDown) &&
+    !(mouse_event.modifiers() & blink::WebInputEvent::LeftButtonDown) &&
     !gesture_recording_) {
     gesture_recording_ = true;
     mousedown_x_ = mouse_event.x;
@@ -532,8 +537,8 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
     fire_context_menu_ = true;
     return true;
   } else if (gesture_recording_ &&
-      (mouse_event.type == blink::WebInputEvent::MouseMove ||
-      mouse_event.type == blink::WebInputEvent::MouseUp)) {
+      (mouse_event.type() == blink::WebInputEvent::MouseMove ||
+      mouse_event.type() == blink::WebInputEvent::MouseUp)) {
 
     int dx = mouse_event.x - mousedown_x_;
     int dy = mouse_event.y - mousedown_y_;
@@ -546,7 +551,7 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
     }
 
     // Copy event and fire
-    if (mouse_event.type == blink::WebInputEvent::MouseUp &&
+    if (mouse_event.type() == blink::WebInputEvent::MouseUp &&
       mouse_event.button == blink::WebMouseEvent::Button::Right) {
       blink::WebMouseEvent event_copy(mouse_event);
       content::RenderViewHost *render_view_host =
@@ -554,7 +559,7 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
 
       if (fire_context_menu_) {
         // Send the originally-culled right mouse down at original coords
-        event_copy.type = blink::WebInputEvent::MouseDown;
+        event_copy.setType(blink::WebInputEvent::MouseDown);
         event_copy.windowX -= (mouse_event.x - mousedown_x_);
         event_copy.windowY -= (mouse_event.y - mousedown_y_);
         event_copy.x = mousedown_x_;
@@ -565,13 +570,14 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
       gesture_recording_ = false;
       return fire_context_menu_;
     }
-    else if (mouse_event.type == blink::WebInputEvent::MouseDown &&
+    else if (mouse_event.type() == blink::WebInputEvent::MouseDown &&
       mouse_event.button == blink::WebMouseEvent::Button::Left) {
       fire_context_menu_ = true;
       gesture_recording_ = false;
     }
 
-    if ((mouse_event.modifiers & blink::WebInputEvent::RightButtonDown) == 0) {
+    if ((mouse_event.modifiers() & blink::WebInputEvent::RightButtonDown) ==
+        0) {
       gesture_recording_ = false;
     }
   }
@@ -738,7 +744,7 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
 
   if (navigate_params.target_contents) {
     navigate_params.target_contents->Send(new ChromeViewMsg_SetWindowFeatures(
-        navigate_params.target_contents->GetRoutingID(),
+        navigate_params.target_contents->GetRenderViewHost()->GetRoutingID(),
         blink::WebWindowFeatures()));
   }
 }

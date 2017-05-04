@@ -134,6 +134,15 @@ class LayoutTestBluetoothAdapterProvider {
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetUnicodeDeviceAdapter();
 
+  // |GetDeviceNameLongerThan29BytesAdapter|
+  // Inherits from |EmptyAdapter|
+  // Internal structure
+  //  - DeviceNameLongerThan29Bytes
+  //    - Mock Functions:
+  //      - GetName(): Returns "a_device_name_that_is_longer_than_29_bytes_but_shorter_than_240_bytes"
+  static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
+  GetDeviceNameLongerThan29BytesAdapter();
+
   // |SecondDiscoveryFindsHeartRateAdapter|
   // Inherits from |PoweredAdapter|
   // Mock Functions:
@@ -332,6 +341,13 @@ class LayoutTestBluetoothAdapterProvider {
   //           - StartNotifySession: Run success callback.
   //           - GetProperties: Returns
   //               BluetoothRemoteGattCharacteristic::PROPERTY_READ
+  //           - Descriptors
+  //             - User Description (2901)
+  //             - Client Characteristic Configuration (2902)
+  //                 Note: This descriptor is blocklisted for writes.
+  //             - bad2ddcf-60db-45cd-bef9-fd72b153cf7c
+  //                 A test descriptor that is blocklisted.
+
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetDisconnectingHealthThermometer();
 

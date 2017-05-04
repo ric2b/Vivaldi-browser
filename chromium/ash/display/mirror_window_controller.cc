@@ -32,7 +32,7 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/layout.h"
 #include "ui/compositor/reflector.h"
-#include "ui/display/manager/display_layout.h"
+#include "ui/display/display_layout.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/display/screen.h"
@@ -192,6 +192,7 @@ void MirrorWindowController::UpdateWindow(
       // TODO(oshima): TouchHUD is using idkey.
       InitRootWindowSettings(host->window())->display_id = display_info.id();
       host->InitHost();
+      host->window()->Show();
 #if defined(USE_X11)
       if (!display_manager->IsInUnifiedMode()) {
         // Mirror window shouldn't handle input events.
@@ -199,7 +200,6 @@ void MirrorWindowController::UpdateWindow(
       }
 #endif
 
-#if defined(OS_CHROMEOS)
       if (display_manager->IsInUnifiedMode()) {
         host_info->ash_host->ConfineCursorToRootWindow();
         AshWindowTreeHost* unified_ash_host =
@@ -211,7 +211,6 @@ void MirrorWindowController::UpdateWindow(
         aura::client::SetScreenPositionClient(host->window(),
                                               screen_position_client_.get());
       }
-#endif
 
       aura::client::SetCaptureClient(host->window(), new NoneCaptureClient());
       host->Show();
@@ -227,9 +226,11 @@ void MirrorWindowController::UpdateWindow(
         reflector_->AddMirroringLayer(mirror_window->layer());
       } else {
         reflector_ =
-            aura::Env::GetInstance()->context_factory()->CreateReflector(
-                Shell::GetPrimaryRootWindow()->GetHost()->compositor(),
-                mirror_window->layer());
+            aura::Env::GetInstance()
+                ->context_factory_private()
+                ->CreateReflector(
+                    Shell::GetPrimaryRootWindow()->GetHost()->compositor(),
+                    mirror_window->layer());
       }
     } else {
       AshWindowTreeHost* ash_host =
@@ -237,7 +238,7 @@ void MirrorWindowController::UpdateWindow(
       aura::WindowTreeHost* host = ash_host->AsWindowTreeHost();
       GetRootWindowSettings(host->window())->display_id = display_info.id();
       ash_host->SetRootWindowTransformer(std::move(transformer));
-      host->SetBounds(display_info.bounds_in_native());
+      host->SetBoundsInPixels(display_info.bounds_in_native());
     }
   }
 
@@ -283,7 +284,7 @@ void MirrorWindowController::Close(bool delay_host_deletion) {
 
   mirroring_host_info_map_.clear();
   if (reflector_) {
-    aura::Env::GetInstance()->context_factory()->RemoveReflector(
+    aura::Env::GetInstance()->context_factory_private()->RemoveReflector(
         reflector_.get());
     reflector_.reset();
   }
@@ -293,9 +294,9 @@ void MirrorWindowController::OnHostResized(const aura::WindowTreeHost* host) {
   for (auto& pair : mirroring_host_info_map_) {
     MirroringHostInfo* info = pair.second;
     if (info->ash_host->AsWindowTreeHost() == host) {
-      if (info->mirror_window_host_size == host->GetBounds().size())
+      if (info->mirror_window_host_size == host->GetBoundsInPixels().size())
         return;
-      info->mirror_window_host_size = host->GetBounds().size();
+      info->mirror_window_host_size = host->GetBoundsInPixels().size();
       reflector_->OnMirroringCompositorResized();
       // No need to update the transformer as new transformer is already set
       // in UpdateWindow.

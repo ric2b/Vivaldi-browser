@@ -75,6 +75,8 @@ BrowserSavePasswordProgressLogger::BrowserSavePasswordProgressLogger(
   DCHECK(log_manager_);
 }
 
+BrowserSavePasswordProgressLogger::~BrowserSavePasswordProgressLogger() {}
+
 void BrowserSavePasswordProgressLogger::LogFormSignatures(
     SavePasswordProgressLogger::StringID label,
     const autofill::PasswordForm& form) {
@@ -110,11 +112,24 @@ void BrowserSavePasswordProgressLogger::LogFormStructure(
   SendLog(message);
 }
 
+void BrowserSavePasswordProgressLogger::LogSuccessiveOrigins(
+    StringID label,
+    const GURL& old_origin,
+    const GURL& new_origin) {
+  std::string message = GetStringFromID(label) + ": {\n";
+  message +=
+      GetStringFromID(STRING_ORIGIN) + ": " + ScrubURL(old_origin) + "\n";
+  message +=
+      GetStringFromID(STRING_ORIGIN) + ": " + ScrubURL(new_origin) + "\n";
+  message += "}";
+  SendLog(message);
+}
+
 std::string BrowserSavePasswordProgressLogger::FormStructureToFieldsLogString(
     const autofill::FormStructure& form_structure) {
   std::string result;
   result += GetStringFromID(STRING_FIELDS) + ": " + "\n";
-  for (const autofill::AutofillField* field : form_structure) {
+  for (const auto& field : form_structure) {
     std::string field_info = ScrubElementID(field->name) + ": " +
                              ScrubNonDigit(field->FieldSignatureAsStr()) +
                              ", " + ScrubElementID(field->form_control_type);
@@ -144,7 +159,10 @@ std::string BrowserSavePasswordProgressLogger::FormStructureToFieldsLogString(
   return result;
 }
 
-BrowserSavePasswordProgressLogger::~BrowserSavePasswordProgressLogger() {}
+void BrowserSavePasswordProgressLogger::LogString(StringID label,
+                                                  const std::string& s) {
+  LogValue(label, base::StringValue(s));
+}
 
 void BrowserSavePasswordProgressLogger::SendLog(const std::string& log) {
   log_manager_->LogSavePasswordProgress(log);

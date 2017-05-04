@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// https://slightlyoff.github.io/ServiceWorker/spec/service_worker/index.html#fetch-event-interface
+// https://w3c.github.io/ServiceWorker/#fetch-event-interface
 [
     Constructor(DOMString type, FetchEventInit eventInitDict),
     ConstructorCallWith=ScriptState,
@@ -13,5 +13,5 @@
     readonly attribute boolean isReload;
 
     [CallWith=ScriptState, RaisesException] void respondWith(Promise<Response> r);
-    [RuntimeEnabled=ServiceWorkerNavigationPreload, CallWith=ScriptState] readonly attribute Promise<Response> preloadResponse;
+    [OriginTrialEnabled=ServiceWorkerNavigationPreload, CallWith=ScriptState] readonly attribute Promise<any> preloadResponse;
 };

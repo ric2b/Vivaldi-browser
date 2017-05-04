@@ -13,6 +13,7 @@ from __future__ import print_function
 import argparse
 import os
 import sys
+import warnings
 import zipfile
 
 
@@ -20,7 +21,6 @@ def main():
   parser = argparse.ArgumentParser(description="Generate fuzzer config.")
   parser.add_argument('--corpus', required=True)
   parser.add_argument('--output', required=True)
-  parser.add_argument('--fuzzer', required=True)
   args = parser.parse_args()
 
   corpus_files = []
@@ -31,8 +31,13 @@ def main():
       corpus_files.append(full_filename)
 
   with zipfile.ZipFile(args.output, 'w') as z:
-    for corpus_file in corpus_files:
-        z.write(corpus_file, os.path.basename(corpus_file))
+    # Turn warnings into errors to interrupt the build: crbug.com/653920.
+    with warnings.catch_warnings():
+      warnings.simplefilter("error")
+      for i, corpus_file in enumerate(corpus_files):
+        # To avoid duplication of filenames inside the archive, use numbers.
+        arcname = '%016d' % i
+        z.write(corpus_file, arcname)
 
 
 if __name__ == '__main__':

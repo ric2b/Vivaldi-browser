@@ -27,7 +27,7 @@ class CachingWordShaperTest : public ::testing::Test {
     font.update(nullptr);
     ASSERT_TRUE(font.canShapeWordByWord());
     fallbackFonts = nullptr;
-    cache = makeUnique<ShapeCache>();
+    cache = WTF::makeUnique<ShapeCache>();
   }
 
   FontCachePurgePreventer fontCachePurgePreventer;
@@ -120,7 +120,7 @@ TEST_F(CachingWordShaperTest, CommonAccentLeftToRightFillGlyphBuffer) {
   GlyphBuffer glyphBuffer;
   shaper.fillGlyphBuffer(&font, textRun, fallbackFonts, &glyphBuffer, 0, 3);
 
-  std::unique_ptr<ShapeCache> referenceCache = makeUnique<ShapeCache>();
+  std::unique_ptr<ShapeCache> referenceCache = WTF::makeUnique<ShapeCache>();
   CachingWordShaper referenceShaper(referenceCache.get());
   GlyphBuffer referenceGlyphBuffer;
   font.setCanShapeWordByWordForTesting(false);
@@ -138,13 +138,13 @@ TEST_F(CachingWordShaperTest, CommonAccentRightToLeftFillGlyphBuffer) {
   // "[] []" with an accent mark over the last square bracket.
   const UChar str[] = {0x5B, 0x5D, 0x20, 0x5B, 0x301, 0x5D, 0x0};
   TextRun textRun(str, 6);
-  textRun.setDirection(RTL);
+  textRun.setDirection(TextDirection::kRtl);
 
   CachingWordShaper shaper(cache.get());
   GlyphBuffer glyphBuffer;
   shaper.fillGlyphBuffer(&font, textRun, fallbackFonts, &glyphBuffer, 1, 6);
 
-  std::unique_ptr<ShapeCache> referenceCache = makeUnique<ShapeCache>();
+  std::unique_ptr<ShapeCache> referenceCache = WTF::makeUnique<ShapeCache>();
   CachingWordShaper referenceShaper(referenceCache.get());
   GlyphBuffer referenceGlyphBuffer;
   font.setCanShapeWordByWordForTesting(false);
@@ -296,6 +296,22 @@ TEST_F(CachingWordShaperTest, SegmentEmojiZWJCommon) {
 
   ASSERT_TRUE(iterator.next(&wordResult));
   EXPECT_EQ(22u, wordResult->numCharacters());
+
+  ASSERT_FALSE(iterator.next(&wordResult));
+}
+
+TEST_F(CachingWordShaperTest, SegmentEmojiPilotJudgeSequence) {
+  // A family followed by a couple with heart emoji sequence,
+  // the latter including a variation selector.
+  const UChar str[] = {0xD83D, 0xDC68, 0xD83C, 0xDFFB, 0x200D, 0x2696, 0xFE0F,
+                       0xD83D, 0xDC68, 0xD83C, 0xDFFB, 0x200D, 0x2708, 0xFE0F};
+  TextRun textRun(str, ARRAY_SIZE(str));
+
+  RefPtr<const ShapeResult> wordResult;
+  CachingWordShapeIterator iterator(cache.get(), textRun, &font);
+
+  ASSERT_TRUE(iterator.next(&wordResult));
+  EXPECT_EQ(ARRAY_SIZE(str), wordResult->numCharacters());
 
   ASSERT_FALSE(iterator.next(&wordResult));
 }

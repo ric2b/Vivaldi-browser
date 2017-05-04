@@ -36,7 +36,7 @@ void NotesSubMenuObserver::InitMenu(
 
   Profile* profile = Profile::FromBrowserContext(browser_context);
   vivaldi::Notes_Model* model = NotesModelFactory::GetForProfile(profile);
-  AddMenuItems(model->root());
+  AddMenuItems(model->main_node());
 
   proxy_->AddSubMenu(
       IDC_VIV_CONTENT_INSERT_NOTE,
@@ -118,7 +118,7 @@ void NotesSubMenuObserver::ExecuteCommand(int command_id) {
   DCHECK(profile);
 
   vivaldi::Notes_Model* model = NotesModelFactory::GetForProfile(profile);
-  vivaldi::Notes_Node* root = model->root();
+  vivaldi::Notes_Node* root = model->root_node();
 
   vivaldi::Notes_Node* node = GetNodeFromId(root, command_id);
   if (node) {

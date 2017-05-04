@@ -6,8 +6,7 @@ found in the LICENSE file.
 <!DOCTYPE html>
 <meta charset="utf-8">
 <if expr="is_android or is_ios">
-<meta name="viewport" content="width=device-width, initial-scale=1.0,
-    maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 </if>
 <title>Snippets Internals</title>
 <link rel="stylesheet" href="chrome://resources/css/text_defaults.css">
@@ -31,6 +30,9 @@ found in the LICENSE file.
         <td class="name">Recent Tab Suggestions enabled
         <td id="flag-recent-offline-tab-suggestions" class="value">
       <tr>
+        <td class="name">Offlining Recent Tabs enabled
+        <td id="flag-offlining-recent-pages-feature" class="value">
+      <tr>
         <td class="name">Asset Download Suggestions enabled
         <td id="flag-asset-download-suggestions" class="value">
       <tr>
@@ -42,6 +44,9 @@ found in the LICENSE file.
       <tr>
         <td class="name">Physical Web Page Suggestions enabled
         <td id="flag-physical-web-page-suggestions" class="value">
+      <tr>
+        <td class="name">Physical Web enabled
+        <td id="flag-physical-web" class="value">
       <tr>
         <td class="name">Snippets type
         <td id="switch-personalized" class="value">
@@ -76,11 +81,7 @@ found in the LICENSE file.
     <h2>NTPSnippetsService</h2>
     <div class="forms">
       <button id="submit-download" type="button">Add snippets</button>
-      <span id="hosts-restrict">from hosts:
-        <textarea id="hosts-input" placeholder="www.wired.com www.bbc.co.uk"
-            rows="5" autocapitalize="none"></textarea>
-      </span>
-      <span id="hosts-status" class="detail"></span>
+      <span id="remote-status" class="detail"></span>
     </div>
   </div>
 
@@ -91,6 +92,17 @@ found in the LICENSE file.
       <div id="last-json-text"></div>
       <button id="last-json-dump" type="button">Dump the last JSON</button>
     </div>
+  </div>
+
+  <div id="remote-content-suggestions" class="">
+    <h2>Remote content suggestions</h2>
+    <div>
+      <span>Last Background Fetch Time: </span>
+      <span id="last-background-fetch-time-label"></span>
+    </div>
+    <button id="background-fetch-button" type="button">
+      Fetch remote suggestions in the background
+    </button>
   </div>
 
   <div id="content-suggestions">
@@ -135,11 +147,6 @@ found in the LICENSE file.
                   <td>URL
                   <td><a class="url" jsvalues="href:url" jscontent="url"></a>
                 <tr>
-                  <td>AMP URL
-                  <td>
-                    <a class="amp-url" jsvalues="href:ampUrl"
-                        jscontent="ampUrl"></a>
-                <tr>
                   <td>Snippet text
                   <td jscontent="snippetText">
                 <tr>
@@ -173,11 +180,6 @@ found in the LICENSE file.
                 <tr>
                   <td>URL
                   <td><a class="url" jsvalues="href:url" jscontent="url"></a>
-                <tr>
-                  <td>AMP URL
-                  <td>
-                    <a class="amp-url" jsvalues="href:ampUrl"
-                        jscontent="ampUrl"></a>
                 <tr>
                   <td>Snippet text
                   <td jscontent="snippetText">

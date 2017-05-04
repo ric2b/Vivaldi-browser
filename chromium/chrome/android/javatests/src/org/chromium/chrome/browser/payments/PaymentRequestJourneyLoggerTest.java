@@ -5,7 +5,7 @@
 package org.chromium.chrome.browser.payments;
 
 import android.content.DialogInterface;
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.Feature;
@@ -351,5 +351,28 @@ public class PaymentRequestJourneyLoggerTest extends PaymentRequestTestBase {
         assertEquals(
                 2, RecordHistogram.getHistogramValueCountForTesting(
                            "PaymentRequest.NumberOfSelectionEdits.ShippingAddress.Completed", 0));
+    }
+
+    /**
+     * Expect that no journey metrics are logged if the payment request was not shown to the user.
+     */
+    @MediumTest
+    @Feature({"Payments"})
+    public void testNoShow() throws InterruptedException, ExecutionException, TimeoutException {
+        // Android Pay is supported but no instruments are present.
+        installPaymentApp("https://android.com/pay", NO_INSTRUMENTS, DELAYED_RESPONSE);
+        openPageAndClickNodeAndWait("androidPayBuy", mShowFailed);
+        expectResultContains(new String[] {"The payment method is not supported"});
+
+        // Make sure that no journey metrics were logged.
+        assertEquals(0,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "PaymentRequest.NumberOfSuggestionsShown.ShippingAddress.UserAborted", 2));
+        assertEquals(0,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "PaymentRequest.NumberOfSuggestionsShown.ShippingAddress.OtherAborted", 2));
+        assertEquals(
+                0, RecordHistogram.getHistogramValueCountForTesting(
+                           "PaymentRequest.NumberOfSuggestionsShown.ShippingAddress.Completed", 2));
     }
 }

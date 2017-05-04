@@ -11,7 +11,6 @@
 #include "chrome/browser/android/compositor/layer/layer.h"
 
 namespace cc {
-class ImageLayer;
 class Layer;
 class NinePatchLayer;
 class SolidColorLayer;
@@ -25,8 +24,6 @@ class Size;
 namespace ui {
 class ResourceManager;
 }
-
-class SkBitmap;
 
 namespace android {
 
@@ -90,6 +87,7 @@ class TabLayer : public Layer {
                      int toolbar_background_color,
                      int close_button_color,
                      bool anonymize_toolbar,
+                     bool show_tab_title,
                      int toolbar_textbox_resource_id,
                      int toolbar_textbox_background_color,
                      float toolbar_textbox_alpha,

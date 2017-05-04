@@ -1,0 +1,10 @@
+# Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
+
+source_set("notes") {
+  sources = [
+    "notes_contenthelper.cpp",
+    "notes_contenthelper.h",
+  ]
+  deps = [
+  ]
+}

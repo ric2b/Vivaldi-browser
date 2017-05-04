@@ -5,6 +5,7 @@
 #include "content/test/test_render_frame_host.h"
 
 #include "base/guid.h"
+#include "base/run_loop.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
@@ -23,6 +24,7 @@
 #include "content/test/test_render_view_host.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/base/load_flags.h"
+#include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h"
 #include "third_party/WebKit/public/web/WebSandboxFlags.h"
@@ -117,6 +119,12 @@ void TestRenderFrameHost::SimulateNavigationStart(const GURL& url) {
 void TestRenderFrameHost::SimulateRedirect(const GURL& new_url) {
   if (IsBrowserSideNavigationEnabled()) {
     NavigationRequest* request = frame_tree_node_->navigation_request();
+    if (!request->loader_for_testing()) {
+      base::RunLoop loop;
+      request->set_on_start_checks_complete_closure_for_testing(
+          loop.QuitClosure());
+      loop.Run();
+    }
     TestNavigationURLLoader* url_loader =
         static_cast<TestNavigationURLLoader*>(request->loader_for_testing());
     CHECK(url_loader);
@@ -182,6 +190,12 @@ void TestRenderFrameHost::SimulateNavigationError(const GURL& url,
     if (request->state() == NavigationRequest::WAITING_FOR_RENDERER_RESPONSE) {
       static_cast<TestRenderFrameHost*>(frame_tree_node()->current_frame_host())
           ->SendBeforeUnloadACK(true);
+    }
+    if (!request->loader_for_testing()) {
+      base::RunLoop loop;
+      request->set_on_start_checks_complete_closure_for_testing(
+          loop.QuitClosure());
+      loop.Run();
     }
     TestNavigationURLLoader* url_loader =
         static_cast<TestNavigationURLLoader*>(request->loader_for_testing());
@@ -334,7 +348,7 @@ void TestRenderFrameHost::SendNavigateWithParameters(
   // When the user hits enter in the Omnibox without changing the URL, Blink
   // behaves similarly to a reload and does not change the item and document
   // sequence numbers. Simulate this behavior here too.
-  if (transition == ui::PAGE_TRANSITION_TYPED) {
+  if (PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_TYPED)) {
     const NavigationEntryImpl* entry =
         static_cast<NavigationEntryImpl*>(frame_tree_node()
                                               ->navigator()
@@ -396,9 +410,11 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
   InitializeRenderFrameIfNeeded();
 
   if (IsBrowserSideNavigationEnabled()) {
-    BeginNavigationParams begin_params(std::string(), net::LOAD_NORMAL,
-                                       has_user_gesture, false,
-                                       REQUEST_CONTEXT_TYPE_HYPERLINK);
+    // TODO(mkwst): The initiator origin here is incorrect.
+    BeginNavigationParams begin_params(
+        std::string(), net::LOAD_NORMAL, has_user_gesture, false,
+        REQUEST_CONTEXT_TYPE_HYPERLINK,
+        blink::WebMixedContentContextType::Blockable, url::Origin());
     CommonNavigationParams common_params;
     common_params.url = url;
     common_params.referrer = Referrer(GURL(), blink::WebReferrerPolicyDefault);
@@ -446,6 +462,13 @@ void TestRenderFrameHost::PrepareForCommitWithServerRedirect(
     return;  // |request| is destructed by now.
 
   CHECK(request->state() == NavigationRequest::STARTED);
+
+  if (!request->loader_for_testing()) {
+    base::RunLoop loop;
+    request->set_on_start_checks_complete_closure_for_testing(
+        loop.QuitClosure());
+    loop.Run();
+  }
 
   TestNavigationURLLoader* url_loader =
       static_cast<TestNavigationURLLoader*>(request->loader_for_testing());

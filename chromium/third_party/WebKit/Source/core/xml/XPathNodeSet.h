@@ -43,6 +43,12 @@ class NodeSet final : public GarbageCollected<NodeSet> {
   size_t size() const { return m_nodes.size(); }
   bool isEmpty() const { return !m_nodes.size(); }
   Node* operator[](unsigned i) const { return m_nodes.at(i).get(); }
+  HeapVector<Member<Node>>::iterator begin() { return m_nodes.begin(); }
+  HeapVector<Member<Node>>::iterator end() { return m_nodes.end(); }
+  HeapVector<Member<Node>>::const_iterator begin() const {
+    return m_nodes.begin();
+  }
+  HeapVector<Member<Node>>::const_iterator end() const { return m_nodes.end(); }
   void reserveCapacity(size_t newCapacity) {
     m_nodes.reserveCapacity(newCapacity);
   }
@@ -54,7 +60,7 @@ class NodeSet final : public GarbageCollected<NodeSet> {
   }
 
   // NodeSet itself does not verify that nodes in it are unique.
-  void append(Node* node) { m_nodes.append(node); }
+  void append(Node* node) { m_nodes.push_back(node); }
   void append(const NodeSet& nodeSet) { m_nodes.appendVector(nodeSet.m_nodes); }
 
   // Returns the set's first node in document order, or 0 if the set is empty.

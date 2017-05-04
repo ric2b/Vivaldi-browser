@@ -26,24 +26,24 @@ class CORE_EXPORT GestureManager
   WTF_MAKE_NONCOPYABLE(GestureManager);
 
  public:
-  GestureManager(LocalFrame*,
-                 ScrollManager*,
-                 MouseEventManager*,
-                 PointerEventManager*,
-                 SelectionController*);
+  GestureManager(LocalFrame&,
+                 ScrollManager&,
+                 MouseEventManager&,
+                 PointerEventManager&,
+                 SelectionController&);
   DECLARE_TRACE();
 
   void clear();
 
   HitTestRequest::HitTestRequestType getHitTypeForGestureType(
-      PlatformEvent::EventType);
+      WebInputEvent::Type);
   WebInputEventResult handleGestureEventInFrame(
       const GestureEventWithHitTestResults&);
 
   // TODO(nzolghadr): This can probably be hidden and the related logic
   // be moved to this class (see crrev.com/112023010). Since that might cause
   // regression it's better to move that logic in another change.
-  double getLastShowPressTimestamp() const;
+  TimeTicks getLastShowPressTimestamp() const;
 
  private:
   WebInputEventResult handleGestureShowPress();
@@ -80,7 +80,7 @@ class CORE_EXPORT GestureManager
 
   const Member<SelectionController> m_selectionController;
 
-  double m_lastShowPressTimestamp;
+  TimeTicks m_lastShowPressTimestamp;
 };
 
 }  // namespace blink

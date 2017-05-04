@@ -19,42 +19,38 @@ namespace device {
 
 class VRServiceImpl : public mojom::VRService {
  public:
+  DEVICE_VR_EXPORT VRServiceImpl();
   DEVICE_VR_EXPORT ~VRServiceImpl() override;
 
-  DEVICE_VR_EXPORT static void BindRequest(
+  DEVICE_VR_EXPORT static void Create(
       mojo::InterfaceRequest<mojom::VRService> request);
 
   mojom::VRServiceClient* client() { return client_.get(); }
 
-  VRDisplayImpl* GetVRDisplayImpl(VRDevice* device);
-
-  bool listening_for_activate() { return listening_for_activate_; }
-
- private:
-  friend class VRServiceTestBinding;
-  friend class VRDeviceManagerTest;
-  friend class VRDisplayImpl;
-
-  DEVICE_VR_EXPORT VRServiceImpl();
-
-  // Mojo connection handling.
-  DEVICE_VR_EXPORT void Bind(mojo::InterfaceRequest<mojom::VRService> request);
-  void RemoveFromDeviceManager();
-  void RemoveDevice(VRDevice* device);
+  DEVICE_VR_EXPORT VRDisplayImpl* GetVRDisplayImpl(VRDevice* device);
 
   // mojom::VRService implementation
   void SetClient(mojom::VRServiceClientPtr service_client,
                  const SetClientCallback& callback) override;
+
+  bool listening_for_activate() { return listening_for_activate_; }
+
+ private:
+  friend class FakeVRServiceClient;
+  friend class VRDeviceManagerTest;
+  friend class VRDisplayImpl;
+  friend class VRDisplayImplTest;
+  friend class VRServiceImplTest;
+
+  void RemoveDevice(VRDevice* device);
+
   void SetListeningForActivate(bool listening) override;
 
-  using DisplayImplMap = std::map<VRDevice*, std::unique_ptr<VRDisplayImpl>>;
-  DisplayImplMap displays_;
+  std::map<VRDevice*, std::unique_ptr<VRDisplayImpl>> displays_;
 
   mojom::VRServiceClientPtr client_;
 
   bool listening_for_activate_;
-
-  std::unique_ptr<mojo::Binding<mojom::VRService>> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(VRServiceImpl);
 };

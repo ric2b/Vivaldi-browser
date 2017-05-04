@@ -24,10 +24,10 @@
 #include "base/values.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_switches.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/variations/variations_associated_data.h"
+#include "content/public/common/content_switches.h"
 #include "net/base/hash_value.h"
 #include "net/base/url_util.h"
 #include "net/cert/x509_certificate.h"
@@ -301,7 +301,7 @@ void ChromeSSLHostStateDelegate::AllowCert(const std::string& host,
   std::unique_ptr<base::Value> value(map->GetWebsiteSetting(
       url, url, CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS, std::string(), NULL));
 
-  if (!value.get() || !value->IsType(base::Value::TYPE_DICTIONARY))
+  if (!value.get() || !value->IsType(base::Value::Type::DICTIONARY))
     value.reset(new base::DictionaryValue());
 
   base::DictionaryValue* dict;
@@ -369,7 +369,7 @@ ChromeSSLHostStateDelegate::QueryPolicy(const std::string& host,
   if (allow_localhost && net::IsLocalhost(url.host()))
     return ALLOWED;
 
-  if (!value.get() || !value->IsType(base::Value::TYPE_DICTIONARY))
+  if (!value.get() || !value->IsType(base::Value::Type::DICTIONARY))
     return DENIED;
 
   base::DictionaryValue* dict;  // Owned by value
@@ -445,7 +445,7 @@ bool ChromeSSLHostStateDelegate::HasAllowException(
   std::unique_ptr<base::Value> value(map->GetWebsiteSetting(
       url, url, CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS, std::string(), NULL));
 
-  if (!value.get() || !value->IsType(base::Value::TYPE_DICTIONARY))
+  if (!value.get() || !value->IsType(base::Value::Type::DICTIONARY))
     return false;
 
   base::DictionaryValue* dict;  // Owned by value

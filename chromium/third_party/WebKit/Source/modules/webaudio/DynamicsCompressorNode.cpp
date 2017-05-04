@@ -27,6 +27,7 @@
 #include "modules/webaudio/AudioNodeOutput.h"
 #include "modules/webaudio/DynamicsCompressorNode.h"
 #include "modules/webaudio/DynamicsCompressorOptions.h"
+#include "platform/audio/AudioUtilities.h"
 #include "platform/audio/DynamicsCompressor.h"
 #include "wtf/PtrUtil.h"
 
@@ -97,12 +98,25 @@ void DynamicsCompressorHandler::process(size_t framesToProcess) {
       m_dynamicsCompressor->parameterValue(DynamicsCompressor::ParamReduction);
 }
 
+void DynamicsCompressorHandler::processOnlyAudioParams(size_t framesToProcess) {
+  DCHECK(context()->isAudioThread());
+  DCHECK_LE(framesToProcess, AudioUtilities::kRenderQuantumFrames);
+
+  float values[AudioUtilities::kRenderQuantumFrames];
+
+  m_threshold->calculateSampleAccurateValues(values, framesToProcess);
+  m_knee->calculateSampleAccurateValues(values, framesToProcess);
+  m_ratio->calculateSampleAccurateValues(values, framesToProcess);
+  m_attack->calculateSampleAccurateValues(values, framesToProcess);
+  m_release->calculateSampleAccurateValues(values, framesToProcess);
+}
+
 void DynamicsCompressorHandler::initialize() {
   if (isInitialized())
     return;
 
   AudioHandler::initialize();
-  m_dynamicsCompressor = wrapUnique(
+  m_dynamicsCompressor = WTF::wrapUnique(
       new DynamicsCompressor(sampleRate(), defaultNumberOfOutputChannels));
 }
 

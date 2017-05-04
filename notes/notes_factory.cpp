@@ -1,4 +1,4 @@
-// Copyright (c) 2013 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2013-2017 Vivaldi Technologies AS. All rights reserved
 
 #include "base/deferred_sequenced_task_runner.h"
 #include "base/memory/singleton.h"
@@ -7,6 +7,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/bookmarks/browser/startup_task_runner_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "content/public/browser/browser_thread.h"
 
 #include "notes/notesnode.h"
 #include "notes/notes_model.h"
@@ -37,12 +38,11 @@ NotesModelFactory* NotesModelFactory::GetInstance() {
   return base::Singleton<NotesModelFactory>::get();
 }
 
-KeyedService *NotesModelFactory::BuildServiceInstanceFor(
-    content::BrowserContext *context) const {
-  Profile *profile = static_cast<Profile *>(context);
+KeyedService* NotesModelFactory::BuildServiceInstanceFor(
+      content::BrowserContext* context) const {
+  Profile *profile = Profile::FromBrowserContext(context);
   Notes_Model* notes_model = new Notes_Model(profile);
-  notes_model->Load(StartupTaskRunnerServiceFactory::GetForProfile(profile)->
-      GetBookmarkTaskRunner());
+  notes_model->Load(profile->GetIOTaskRunner());
   return notes_model;
 }
 

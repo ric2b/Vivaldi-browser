@@ -10,7 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "components/proximity_auth/connection.h"
+#include "components/cryptauth/connection.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_socket.h"
@@ -20,19 +20,21 @@ namespace net {
 class IOBuffer;
 }
 
-namespace proximity_auth {
-
+namespace cryptauth {
 struct RemoteDevice;
+}
+
+namespace proximity_auth {
 
 // Represents a Bluetooth connection with a remote device. The connection is a
 // persistent bidirectional channel for sending and receiving wire messages.
-class BluetoothConnection : public Connection,
+class BluetoothConnection : public cryptauth::Connection,
                             public device::BluetoothAdapter::Observer {
  public:
   // Constructs a Bluetooth connection to the service with |uuid| on the
   // |remote_device|. The |remote_device| must already be known to the system
   // Bluetooth daemon.
-  BluetoothConnection(const RemoteDevice& remote_device,
+  BluetoothConnection(const cryptauth::RemoteDevice& remote_device,
                       const device::BluetoothUUID& uuid);
   ~BluetoothConnection() override;
 
@@ -42,7 +44,8 @@ class BluetoothConnection : public Connection,
 
  protected:
   // Connection:
-  void SendMessageImpl(std::unique_ptr<WireMessage> message) override;
+  void SendMessageImpl(
+      std::unique_ptr<cryptauth::WireMessage> message) override;
 
   // BluetoothAdapter::Observer:
   void DeviceChanged(device::BluetoothAdapter* adapter,
@@ -78,7 +81,7 @@ class BluetoothConnection : public Connection,
 
   // The message that was sent over the backing |socket_|. NULL iff there is no
   // send operation in progress.
-  std::unique_ptr<WireMessage> pending_message_;
+  std::unique_ptr<cryptauth::WireMessage> pending_message_;
 
   base::WeakPtrFactory<BluetoothConnection> weak_ptr_factory_;
 

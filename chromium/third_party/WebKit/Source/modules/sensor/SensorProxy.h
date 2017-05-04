@@ -6,23 +6,28 @@
 #define SensorProxy_h
 
 #include "core/dom/ExceptionCode.h"
+#include "core/page/PageVisibilityObserver.h"
 #include "device/generic_sensor/public/cpp/sensor_reading.h"
 #include "device/generic_sensor/public/interfaces/sensor.mojom-blink.h"
 #include "device/generic_sensor/public/interfaces/sensor_provider.mojom-blink.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
+#include "wtf/Vector.h"
 
 namespace blink {
 
 class SensorProviderProxy;
 class SensorReading;
 class SensorReadingFactory;
+class SensorReadingUpdater;
 
 // This class wraps 'Sensor' mojo interface and used by multiple
 // JS sensor instances of the same type (within a single frame).
 class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
-                          public device::mojom::blink::SensorClient {
+                          public device::mojom::blink::SensorClient,
+                          public PageVisibilityObserver {
+  USING_GARBAGE_COLLECTED_MIXIN(SensorProxy);
   USING_PRE_FINALIZER(SensorProxy, dispose);
   WTF_MAKE_NONCOPYABLE(SensorProxy);
 
@@ -32,8 +37,13 @@ class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
     // Has valid 'Sensor' binding, {add, remove}Configuration()
     // methods can be called.
     virtual void onSensorInitialized() {}
-    // Platfrom sensort reading has changed (for 'ONCHANGE' reporting mode).
-    virtual void onSensorReadingChanged() {}
+    // Platfrom sensort reading has changed.
+    // |timestamp| Reference timestamp in seconds of the moment when
+    // sensor reading was updated from the buffer.
+    // Note: |timestamp| values are only used to calculate elapsed time
+    // between shared buffer readings. These values *do not* correspond
+    // to sensor reading timestamps which are obtained on platform side.
+    virtual void onSensorReadingChanged(double timestamp) {}
     // An error has occurred.
     virtual void onSensorError(ExceptionCode,
                                const String& sanitizedMessage,
@@ -52,10 +62,14 @@ class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
   bool isInitializing() const { return m_state == Initializing; }
   bool isInitialized() const { return m_state == Initialized; }
 
+  // Is watching new reading data (initialized, not suspended and has
+  // configurations added).
+  bool isActive() const;
+
   void addConfiguration(device::mojom::blink::SensorConfigurationPtr,
                         std::unique_ptr<Function<void(bool)>>);
-  void removeConfiguration(device::mojom::blink::SensorConfigurationPtr,
-                           std::unique_ptr<Function<void(bool)>>);
+
+  void removeConfiguration(device::mojom::blink::SensorConfigurationPtr);
 
   void suspend();
   void resume();
@@ -72,31 +86,49 @@ class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
 
   double maximumFrequency() const { return m_maximumFrequency; }
 
-  // Updates sensor reading from shared buffer.
-  void updateSensorReading();
+  Document* document() const { return m_document; }
+  const WTF::Vector<double>& frequenciesUsed() const {
+    return m_frequenciesUsed;
+  }
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   friend class SensorProviderProxy;
+  friend class SensorReadingUpdaterContinuous;
+  friend class SensorReadingUpdaterOnChange;
   SensorProxy(device::mojom::blink::SensorType,
               SensorProviderProxy*,
+              Document*,
               std::unique_ptr<SensorReadingFactory>);
+
+  // Updates sensor reading from shared buffer.
+  void updateSensorReading();
+  void notifySensorChanged(double timestamp);
 
   // device::mojom::blink::SensorClient overrides.
   void RaiseError() override;
   void SensorReadingChanged() override;
+
+  // PageVisibilityObserver overrides.
+  void pageVisibilityChanged() override;
 
   // Generic handler for a fatal error.
   // String parameters are intentionally copied.
   void handleSensorError(ExceptionCode = UnknownError,
                          String sanitizedMessage = String(),
                          String unsanitizedMessage = String());
-
+  // mojo call callbacks.
   void onSensorCreated(device::mojom::blink::SensorInitParamsPtr,
                        device::mojom::blink::SensorClientRequest);
+  void onAddConfigurationCompleted(
+      double frequency,
+      std::unique_ptr<Function<void(bool)>> callback,
+      bool result);
+  void onRemoveConfigurationCompleted(double frequency, bool result);
 
   bool tryReadFromBuffer(device::SensorReading& result);
+  void onAnimationFrame(double timestamp);
 
   device::mojom::blink::SensorType m_type;
   device::mojom::blink::ReportingMode m_mode;
@@ -113,9 +145,14 @@ class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
   mojo::ScopedSharedBufferHandle m_sharedBufferHandle;
   mojo::ScopedSharedBufferMapping m_sharedBuffer;
   bool m_suspended;
+  Member<Document> m_document;
   Member<SensorReading> m_reading;
   std::unique_ptr<SensorReadingFactory> m_readingFactory;
   double m_maximumFrequency;
+
+  Member<SensorReadingUpdater> m_readingUpdater;
+  WTF::Vector<double> m_frequenciesUsed;
+  double m_lastRafTimestamp;
 
   using ReadingBuffer = device::SensorReadingSharedBuffer;
   static_assert(

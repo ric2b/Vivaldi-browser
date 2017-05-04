@@ -6,6 +6,8 @@
 
 #include "core/css/CSSSelectorList.h"
 #include "core/css/StyleSheetContents.h"
+#include "core/css/parser/CSSParserContext.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/UseCounter.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/PtrUtil.h"
@@ -13,87 +15,10 @@
 
 namespace blink {
 
-static void recordSelectorStats(const CSSParserContext& context,
-                                const CSSSelectorList& selectorList) {
-  if (!context.useCounter())
-    return;
-
-  for (const CSSSelector* selector = selectorList.first(); selector;
-       selector = CSSSelectorList::next(*selector)) {
-    for (const CSSSelector* current = selector; current;
-         current = current->tagHistory()) {
-      UseCounter::Feature feature = UseCounter::NumberOfFeatures;
-      switch (current->getPseudoType()) {
-        case CSSSelector::PseudoAny:
-          feature = UseCounter::CSSSelectorPseudoAny;
-          break;
-        case CSSSelector::PseudoUnresolved:
-          feature = UseCounter::CSSSelectorPseudoUnresolved;
-          break;
-        case CSSSelector::PseudoDefined:
-          feature = UseCounter::CSSSelectorPseudoDefined;
-          break;
-        case CSSSelector::PseudoSlotted:
-          feature = UseCounter::CSSSelectorPseudoSlotted;
-          break;
-        case CSSSelector::PseudoContent:
-          feature = UseCounter::CSSSelectorPseudoContent;
-          break;
-        case CSSSelector::PseudoHost:
-          feature = UseCounter::CSSSelectorPseudoHost;
-          break;
-        case CSSSelector::PseudoHostContext:
-          feature = UseCounter::CSSSelectorPseudoHostContext;
-          break;
-        case CSSSelector::PseudoFullScreenAncestor:
-          feature = UseCounter::CSSSelectorPseudoFullScreenAncestor;
-          break;
-        case CSSSelector::PseudoFullScreen:
-          feature = UseCounter::CSSSelectorPseudoFullScreen;
-          break;
-        case CSSSelector::PseudoListBox:
-          if (context.mode() != UASheetMode)
-            feature = UseCounter::CSSSelectorInternalPseudoListBox;
-          break;
-        case CSSSelector::PseudoWebKitCustomElement:
-          if (context.mode() != UASheetMode) {
-            if (current->value() == "-internal-media-controls-cast-button")
-              feature = UseCounter::CSSSelectorInternalMediaControlsCastButton;
-            else if (current->value() ==
-                     "-internal-media-controls-overlay-cast-button")
-              feature =
-                  UseCounter::CSSSelectorInternalMediaControlsOverlayCastButton;
-          }
-          break;
-        case CSSSelector::PseudoSpatialNavigationFocus:
-          if (context.mode() != UASheetMode)
-            feature =
-                UseCounter::CSSSelectorInternalPseudoSpatialNavigationFocus;
-          break;
-        case CSSSelector::PseudoReadOnly:
-          if (context.mode() != UASheetMode)
-            feature = UseCounter::CSSSelectorPseudoReadOnly;
-          break;
-        case CSSSelector::PseudoReadWrite:
-          if (context.mode() != UASheetMode)
-            feature = UseCounter::CSSSelectorPseudoReadWrite;
-          break;
-        default:
-          break;
-      }
-      if (feature != UseCounter::NumberOfFeatures)
-        context.useCounter()->count(feature);
-      if (current->relation() == CSSSelector::IndirectAdjacent)
-        context.useCounter()->count(UseCounter::CSSSelectorIndirectAdjacent);
-      if (current->selectorList())
-        recordSelectorStats(context, *current->selectorList());
-    }
-  }
-}
-
+// static
 CSSSelectorList CSSSelectorParser::parseSelector(
     CSSParserTokenRange range,
-    const CSSParserContext& context,
+    const CSSParserContext* context,
     StyleSheetContents* styleSheet) {
   CSSSelectorParser parser(context, styleSheet);
   range.consumeWhitespace();
@@ -101,11 +26,11 @@ CSSSelectorList CSSSelectorParser::parseSelector(
   if (!range.atEnd())
     return CSSSelectorList();
 
-  recordSelectorStats(context, result);
+  parser.recordUsageAndDeprecations(result);
   return result;
 }
 
-CSSSelectorParser::CSSSelectorParser(const CSSParserContext& context,
+CSSSelectorParser::CSSSelectorParser(const CSSParserContext* context,
                                      StyleSheetContents* styleSheet)
     : m_context(context), m_styleSheet(styleSheet) {}
 
@@ -115,13 +40,13 @@ CSSSelectorList CSSSelectorParser::consumeComplexSelectorList(
   std::unique_ptr<CSSParserSelector> selector = consumeComplexSelector(range);
   if (!selector)
     return CSSSelectorList();
-  selectorList.append(std::move(selector));
+  selectorList.push_back(std::move(selector));
   while (!range.atEnd() && range.peek().type() == CommaToken) {
     range.consumeIncludingWhitespace();
     selector = consumeComplexSelector(range);
     if (!selector)
       return CSSSelectorList();
-    selectorList.append(std::move(selector));
+    selectorList.push_back(std::move(selector));
   }
 
   if (m_failedParsing)
@@ -137,14 +62,14 @@ CSSSelectorList CSSSelectorParser::consumeCompoundSelectorList(
   range.consumeWhitespace();
   if (!selector)
     return CSSSelectorList();
-  selectorList.append(std::move(selector));
+  selectorList.push_back(std::move(selector));
   while (!range.atEnd() && range.peek().type() == CommaToken) {
     range.consumeIncludingWhitespace();
     selector = consumeCompoundSelector(range);
     range.consumeWhitespace();
     if (!selector)
       return CSSSelectorList();
-    selectorList.append(std::move(selector));
+    selectorList.push_back(std::move(selector));
   }
 
   if (m_failedParsing)
@@ -190,7 +115,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::consumeComplexSelector(
 
   for (CSSParserSelector* simple = selector.get();
        simple && !previousCompoundFlags; simple = simple->tagHistory())
-    previousCompoundFlags |= extractCompoundFlags(*simple, m_context.mode());
+    previousCompoundFlags |= extractCompoundFlags(*simple, m_context->mode());
 
   while (CSSSelector::RelationType combinator = consumeCombinator(range)) {
     std::unique_ptr<CSSParserSelector> nextSelector =
@@ -201,10 +126,10 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::consumeComplexSelector(
     if (previousCompoundFlags & HasPseudoElementForRightmostCompound)
       return nullptr;
     CSSParserSelector* end = nextSelector.get();
-    unsigned compoundFlags = extractCompoundFlags(*end, m_context.mode());
+    unsigned compoundFlags = extractCompoundFlags(*end, m_context->mode());
     while (end->tagHistory()) {
       end = end->tagHistory();
-      compoundFlags |= extractCompoundFlags(*end, m_context.mode());
+      compoundFlags |= extractCompoundFlags(*end, m_context->mode());
     }
     end->setRelation(combinator);
     if (previousCompoundFlags & HasContentPseudoElement)
@@ -311,7 +236,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::consumeCompoundSelector(
     if (compoundSelector->match() == CSSSelector::PseudoElement)
       compoundPseudoElement = compoundSelector->pseudoType();
   }
-  if (m_context.isHTMLDocument())
+  if (m_context->isHTMLDocument())
     elementName = elementName.lower();
 
   while (std::unique_ptr<CSSParserSelector> simpleSelector =
@@ -320,7 +245,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::consumeCompoundSelector(
     // The UASheetMode check is a work-around to allow this selector in
     // mediaControls(New).css:
     // video::-webkit-media-text-track-region-container.scrolling
-    if (m_context.mode() != UASheetMode &&
+    if (m_context->mode() != UASheetMode &&
         !isSimpleSelectorValidAfterPseudoElement(*simpleSelector.get(),
                                                  compoundPseudoElement)) {
       m_failedParsing = true;
@@ -422,7 +347,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::consumeId(
   std::unique_ptr<CSSParserSelector> selector = CSSParserSelector::create();
   selector->setMatch(CSSSelector::Id);
   AtomicString value = range.consume().value().toAtomicString();
-  selector->setValue(value, isQuirksModeBehavior(m_context.matchMode()));
+  selector->setValue(value, isQuirksModeBehavior(m_context->matchMode()));
   return selector;
 }
 
@@ -436,7 +361,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::consumeClass(
   std::unique_ptr<CSSParserSelector> selector = CSSParserSelector::create();
   selector->setMatch(CSSSelector::Class);
   AtomicString value = range.consume().value().toAtomicString();
-  selector->setValue(value, isQuirksModeBehavior(m_context.matchMode()));
+  selector->setValue(value, isQuirksModeBehavior(m_context->matchMode()));
   return selector;
 }
 
@@ -452,7 +377,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::consumeAttribute(
     return nullptr;
   block.consumeWhitespace();
 
-  if (m_context.isHTMLDocument())
+  if (m_context->isHTMLDocument())
     attributeName = attributeName.lower();
 
   AtomicString namespaceURI = determineNamespace(namespacePrefix);
@@ -533,7 +458,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::consumePseudo(
       DisallowPseudoElementsScope scope(this);
 
       std::unique_ptr<CSSSelectorList> selectorList =
-          makeUnique<CSSSelectorList>();
+          WTF::makeUnique<CSSSelectorList>();
       *selectorList = consumeCompoundSelectorList(block);
       if (!selectorList->isValid() || !block.atEnd())
         return nullptr;
@@ -547,7 +472,7 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::consumePseudo(
       if (!innerSelector || !innerSelector->isSimple() || !block.atEnd())
         return nullptr;
       Vector<std::unique_ptr<CSSParserSelector>> selectorVector;
-      selectorVector.append(std::move(innerSelector));
+      selectorVector.push_back(std::move(innerSelector));
       selector->adoptSelectorVector(selectorVector);
       return selector;
     }
@@ -557,11 +482,10 @@ std::unique_ptr<CSSParserSelector> CSSSelectorParser::consumePseudo(
       std::unique_ptr<CSSParserSelector> innerSelector =
           consumeCompoundSelector(block);
       block.consumeWhitespace();
-      if (!innerSelector || !block.atEnd() ||
-          !RuntimeEnabledFeatures::shadowDOMV1Enabled())
+      if (!innerSelector || !block.atEnd())
         return nullptr;
       Vector<std::unique_ptr<CSSParserSelector>> selectorVector;
-      selectorVector.append(std::move(innerSelector));
+      selectorVector.push_back(std::move(innerSelector));
       selector->adoptSelectorVector(selectorVector);
       return selector;
     }
@@ -604,48 +528,53 @@ CSSSelector::RelationType CSSSelectorParser::consumeCombinator(
   if (range.peek().type() != DelimiterToken)
     return fallbackResult;
 
-  UChar delimiter = range.peek().delimiter();
-
-  if (delimiter == '+' || delimiter == '~') {
-    range.consumeIncludingWhitespace();
-    if (delimiter == '+')
-      return CSSSelector::DirectAdjacent;
-    return CSSSelector::IndirectAdjacent;
-  }
-
-  if (delimiter == '>') {
-    if (!RuntimeEnabledFeatures::shadowPiercingDescendantCombinatorEnabled() ||
-        m_context.isDynamicProfile() ||
-        range.peek(1).type() != DelimiterToken ||
-        range.peek(1).delimiter() != '>') {
+  switch (range.peek().delimiter()) {
+    case '+':
       range.consumeIncludingWhitespace();
-      return CSSSelector::Child;
-    }
-    range.consume();
+      return CSSSelector::DirectAdjacent;
 
-    // Check the 3rd '>'.
-    if (range.peek(1).type() != DelimiterToken ||
-        range.peek(1).delimiter() != '>') {
-      // TODO: Treat '>>' as a CSSSelector::Descendant here.
-      return CSSSelector::Child;
+    case '~':
+      range.consumeIncludingWhitespace();
+      return CSSSelector::IndirectAdjacent;
+
+    case '>':
+      if (!RuntimeEnabledFeatures::
+              shadowPiercingDescendantCombinatorEnabled() ||
+          m_context->isDynamicProfile() ||
+          range.peek(1).type() != DelimiterToken ||
+          range.peek(1).delimiter() != '>') {
+        range.consumeIncludingWhitespace();
+        return CSSSelector::Child;
+      }
+      range.consume();
+
+      // Check the 3rd '>'.
+      if (range.peek(1).type() != DelimiterToken ||
+          range.peek(1).delimiter() != '>') {
+        // TODO: Treat '>>' as a CSSSelector::Descendant here.
+        return CSSSelector::Child;
+      }
+      range.consume();
+      range.consumeIncludingWhitespace();
+      return CSSSelector::ShadowPiercingDescendant;
+
+    case '/': {
+      // Match /deep/
+      range.consume();
+      const CSSParserToken& ident = range.consume();
+      if (ident.type() != IdentToken ||
+          !equalIgnoringASCIICase(ident.value(), "deep"))
+        m_failedParsing = true;
+      const CSSParserToken& slash = range.consumeIncludingWhitespace();
+      if (slash.type() != DelimiterToken || slash.delimiter() != '/')
+        m_failedParsing = true;
+      return CSSSelector::ShadowDeep;
     }
-    range.consume();
-    range.consumeIncludingWhitespace();
-    return CSSSelector::ShadowPiercingDescendant;
+
+    default:
+      break;
   }
-
-  // Match /deep/
-  if (delimiter != '/')
-    return fallbackResult;
-  range.consume();
-  const CSSParserToken& ident = range.consume();
-  if (ident.type() != IdentToken ||
-      !equalIgnoringASCIICase(ident.value(), "deep"))
-    m_failedParsing = true;
-  const CSSParserToken& slash = range.consumeIncludingWhitespace();
-  if (slash.type() != DelimiterToken || slash.delimiter() != '/')
-    m_failedParsing = true;
-  return CSSSelector::ShadowDeep;
+  return fallbackResult;
 }
 
 CSSSelector::MatchType CSSSelectorParser::consumeAttributeMatch(
@@ -873,6 +802,115 @@ CSSSelectorParser::splitCompoundAtImplicitShadowCrossingCombinator(
           : CSSSelector::ShadowPseudo,
       std::move(compoundSelector));
   return secondCompound;
+}
+
+void CSSSelectorParser::recordUsageAndDeprecations(
+    const CSSSelectorList& selectorList) {
+  if (!m_context->useCounter())
+    return;
+
+  for (const CSSSelector* selector = selectorList.first(); selector;
+       selector = CSSSelectorList::next(*selector)) {
+    for (const CSSSelector* current = selector; current;
+         current = current->tagHistory()) {
+      UseCounter::Feature feature = UseCounter::NumberOfFeatures;
+      switch (current->getPseudoType()) {
+        case CSSSelector::PseudoAny:
+          feature = UseCounter::CSSSelectorPseudoAny;
+          break;
+        case CSSSelector::PseudoUnresolved:
+          feature = UseCounter::CSSSelectorPseudoUnresolved;
+          break;
+        case CSSSelector::PseudoDefined:
+          feature = UseCounter::CSSSelectorPseudoDefined;
+          break;
+        case CSSSelector::PseudoSlotted:
+          feature = UseCounter::CSSSelectorPseudoSlotted;
+          break;
+        case CSSSelector::PseudoContent:
+          feature = UseCounter::CSSSelectorPseudoContent;
+          break;
+        case CSSSelector::PseudoHost:
+          feature = UseCounter::CSSSelectorPseudoHost;
+          break;
+        case CSSSelector::PseudoHostContext:
+          feature = UseCounter::CSSSelectorPseudoHostContext;
+          break;
+        case CSSSelector::PseudoFullScreenAncestor:
+          feature = UseCounter::CSSSelectorPseudoFullScreenAncestor;
+          break;
+        case CSSSelector::PseudoFullScreen:
+          feature = UseCounter::CSSSelectorPseudoFullScreen;
+          break;
+        case CSSSelector::PseudoListBox:
+          if (m_context->mode() != UASheetMode)
+            feature = UseCounter::CSSSelectorInternalPseudoListBox;
+          break;
+        case CSSSelector::PseudoWebKitCustomElement:
+          if (m_context->mode() != UASheetMode) {
+            if (current->value() == "-internal-media-controls-cast-button") {
+              feature = UseCounter::CSSSelectorInternalMediaControlsCastButton;
+            } else if (current->value() ==
+                       "-internal-media-controls-overlay-cast-button") {
+              feature =
+                  UseCounter::CSSSelectorInternalMediaControlsOverlayCastButton;
+            } else if (current->value() ==
+                       "-internal-media-controls-text-track-list") {
+              feature =
+                  UseCounter::CSSSelectorInternalMediaControlsTextTrackList;
+            } else if (current->value() ==
+                       "-internal-media-controls-text-track-list-item") {
+              feature =
+                  UseCounter::CSSSelectorInternalMediaControlsTextTrackListItem;
+            } else if (current->value() ==
+                       "-internal-media-controls-text-track-list-item-input") {
+              feature = UseCounter::
+                  CSSSelectorInternalMediaControlsTextTrackListItemInput;
+            } else if (current->value() ==
+                       "-internal-media-controls-text-track-list-kind-"
+                       "captions") {
+              feature = UseCounter::
+                  CSSSelectorInternalMediaControlsTextTrackListKindCaptions;
+            } else if (current->value() ==
+                       "-internal-media-controls-text-track-list-kind-"
+                       "subtitles") {
+              feature = UseCounter::
+                  CSSSelectorInternalMediaControlsTextTrackListKindSubtitles;
+            }
+          }
+          break;
+        case CSSSelector::PseudoSpatialNavigationFocus:
+          if (m_context->mode() != UASheetMode) {
+            feature =
+                UseCounter::CSSSelectorInternalPseudoSpatialNavigationFocus;
+          }
+          break;
+        case CSSSelector::PseudoReadOnly:
+          if (m_context->mode() != UASheetMode)
+            feature = UseCounter::CSSSelectorPseudoReadOnly;
+          break;
+        case CSSSelector::PseudoReadWrite:
+          if (m_context->mode() != UASheetMode)
+            feature = UseCounter::CSSSelectorPseudoReadWrite;
+          break;
+        default:
+          break;
+      }
+      if (feature != UseCounter::NumberOfFeatures) {
+        if (!Deprecation::deprecationMessage(feature).isEmpty() &&
+            m_styleSheet->anyOwnerDocument()) {
+          Deprecation::countDeprecation(*m_styleSheet->anyOwnerDocument(),
+                                        feature);
+        } else {
+          m_context->useCounter()->count(feature);
+        }
+      }
+      if (current->relation() == CSSSelector::IndirectAdjacent)
+        m_context->useCounter()->count(UseCounter::CSSSelectorIndirectAdjacent);
+      if (current->selectorList())
+        recordUsageAndDeprecations(*current->selectorList());
+    }
+  }
 }
 
 }  // namespace blink

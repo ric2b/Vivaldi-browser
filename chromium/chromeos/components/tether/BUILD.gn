@@ -1,0 +1,82 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_chromeos, "Non-ChromeOS builds cannot depend on //chromeos")
+
+static_library("tether") {
+  sources = [
+    "ble_advertisement_device_queue.cc",
+    "ble_advertisement_device_queue.h",
+    "ble_advertiser.cc",
+    "ble_advertiser.h",
+    "ble_constants.cc",
+    "ble_constants.h",
+    "ble_scanner.cc",
+    "ble_scanner.h",
+    "host_scan_scheduler.cc",
+    "host_scan_scheduler.h",
+    "host_scanner.cc",
+    "host_scanner.h",
+    "initializer.cc",
+    "initializer.h",
+    "local_device_data_provider.cc",
+    "local_device_data_provider.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromeos",
+    "//components/cryptauth",
+    "//components/proximity_auth/logging",
+    "//device/bluetooth",
+  ]
+
+  public_deps = [
+    "//components/cryptauth/proto",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "mock_local_device_data_provider.cc",
+    "mock_local_device_data_provider.h",
+  ]
+
+  public_deps = [
+    ":tether",
+  ]
+
+  deps = [
+    "//base",
+    "//components/cryptauth",
+    "//testing/gmock",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "ble_advertisement_device_queue_unittest.cc",
+    "ble_advertiser_unittest.cc",
+    "ble_scanner_unittest.cc",
+    "host_scan_scheduler_unittest.cc",
+    "local_device_data_provider_unittest.cc",
+  ]
+
+  deps = [
+    ":test_support",
+    ":tether",
+    "//base/test:test_support",
+    "//chromeos",
+    "//components/cryptauth",
+    "//components/cryptauth:test_support",
+    "//device/bluetooth",
+    "//device/bluetooth:mocks",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}

@@ -9,11 +9,11 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "mojo/common/common_type_converters.h"
 #include "net/base/filename_util.h"
 #include "services/ui/public/interfaces/clipboard.mojom.h"
 #include "ui/base/dragdrop/file_info.h"
@@ -130,7 +130,7 @@ void OSExchangeDataProviderMus::SetPickledData(
       reinterpret_cast<const unsigned char*>(pickle.data());
 
   mime_data_[format.Serialize()] =
-      mojo::Array<uint8_t>(std::vector<uint8_t>(bytes, bytes + pickle.size()));
+      std::vector<uint8_t>(bytes, bytes + pickle.size());
 }
 
 bool OSExchangeDataProviderMus::GetString(base::string16* data) const {

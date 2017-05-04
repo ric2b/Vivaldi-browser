@@ -2,20 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// #include "ash/display/display_util.h"
-
 #include "ui/display/manager/display_manager_utilities.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
-
-//#include "ash/root_window_controller.h"
-//#include "ash/shell.h"
-//#include "ash/test/ash_test_base.h"
-//#include "ash/test/display_manager_test_api.h"
+#include "ui/display/display.h"
+#include "ui/display/types/display_constants.h"
 
 namespace display {
-
-// typedef test::AshTestBase DisplayUtilTest;
 
 namespace {
 
@@ -26,17 +19,17 @@ class ScopedSetInternalDisplayId {
 };
 
 ScopedSetInternalDisplayId::ScopedSetInternalDisplayId(int64_t id) {
-  display::Display::SetInternalDisplayId(id);
+  Display::SetInternalDisplayId(id);
 }
 
 ScopedSetInternalDisplayId::~ScopedSetInternalDisplayId() {
-  display::Display::SetInternalDisplayId(display::Display::kInvalidDisplayID);
+  Display::SetInternalDisplayId(kInvalidDisplayId);
 }
 
 }  // namespace
 
 TEST(DisplayUtilitiesTest, GenerateDisplayIdList) {
-  display::DisplayIdList list;
+  DisplayIdList list;
   {
     int64_t ids[] = {10, 1};
     list = GenerateDisplayIdList(std::begin(ids), std::end(ids));
@@ -106,15 +99,13 @@ TEST(DisplayUtilitiesTest, GenerateDisplayIdList) {
 TEST(DisplayUtilitiesTest, DisplayIdListToString) {
   {
     int64_t ids[] = {10, 1, 16};
-    display::DisplayIdList list =
-        GenerateDisplayIdList(std::begin(ids), std::end(ids));
+    DisplayIdList list = GenerateDisplayIdList(std::begin(ids), std::end(ids));
     EXPECT_EQ("1,10,16", DisplayIdListToString(list));
   }
   {
     ScopedSetInternalDisplayId set_internal(16);
     int64_t ids[] = {10, 1, 16};
-    display::DisplayIdList list =
-        GenerateDisplayIdList(std::begin(ids), std::end(ids));
+    DisplayIdList list = GenerateDisplayIdList(std::begin(ids), std::end(ids));
     EXPECT_EQ("16,1,10", DisplayIdListToString(list));
   }
 }

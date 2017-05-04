@@ -11,7 +11,6 @@
 #include "content/renderer/mus/compositor_mus_connection.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
-#include "services/ui/public/cpp/context_provider.h"
 #include "services/ui/public/cpp/window_compositor_frame_sink.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 
@@ -40,16 +39,16 @@ void RenderWidgetMusConnection::Bind(
 
 std::unique_ptr<cc::CompositorFrameSink>
 RenderWidgetMusConnection::CreateCompositorFrameSink(
-    scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
+    const cc::FrameSinkId& frame_sink_id,
+    scoped_refptr<cc::ContextProvider> context_provider,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!window_compositor_frame_sink_binding_);
 
   std::unique_ptr<cc::CompositorFrameSink> compositor_frame_sink(
       ui::WindowCompositorFrameSink::Create(
-          make_scoped_refptr(
-              new ui::ContextProvider(std::move(gpu_channel_host))),
-          gpu_memory_buffer_manager, &window_compositor_frame_sink_binding_));
+          frame_sink_id, std::move(context_provider), gpu_memory_buffer_manager,
+          &window_compositor_frame_sink_binding_));
   if (compositor_mus_connection_) {
     compositor_mus_connection_->AttachCompositorFrameSinkOnMainThread(
         std::move(window_compositor_frame_sink_binding_));
@@ -120,6 +119,7 @@ void RenderWidgetMusConnection::OnInputEventAck(
 
 void RenderWidgetMusConnection::NotifyInputEventHandled(
     blink::WebInputEvent::Type handled_type,
+    blink::WebInputEventResult result,
     InputEventAckState ack_result) {
   NOTIMPLEMENTED();
 }
@@ -130,9 +130,11 @@ void RenderWidgetMusConnection::SetInputHandler(
   input_handler_ = input_handler;
 }
 
-void RenderWidgetMusConnection::UpdateTextInputState(
-    ShowIme show_ime,
-    ChangeSource change_source) {
+void RenderWidgetMusConnection::ShowVirtualKeyboard() {
+  NOTIMPLEMENTED();
+}
+
+void RenderWidgetMusConnection::UpdateTextInputState() {
   NOTIMPLEMENTED();
 }
 
@@ -156,7 +158,7 @@ void RenderWidgetMusConnection::OnConnectionLost() {
 }
 
 void RenderWidgetMusConnection::OnWindowInputEvent(
-    ui::ScopedWebInputEvent input_event,
+    blink::WebScopedInputEvent input_event,
     const base::Callback<void(ui::mojom::EventResult)>& ack) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // If we don't yet have a RenderWidgetInputHandler then we don't yet have

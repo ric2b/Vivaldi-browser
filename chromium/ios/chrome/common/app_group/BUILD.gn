@@ -5,6 +5,7 @@
 import("//build/config/ios/ios_sdk.gni")
 
 source_set("app_group") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "app_group_constants.h",
     "app_group_constants.mm",
@@ -15,14 +16,14 @@ source_set("app_group") {
   deps = [
     "//base",
     "//components/version_info",
+    "//ios/chrome/common:ios_app_bundle_id_prefix_header",
   ]
-
-  defines = [ "IOS_BUNDLE_ID_PREFIX=\"$ios_app_bundle_id_prefix\"" ]
 }
 
 # This target will be included into application extensions and the list
 # of its dependencies must be kept as short as possible.
 source_set("client") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "app_group_metrics_client.h",
     "app_group_metrics_client.mm",
@@ -35,6 +36,7 @@ source_set("client") {
 }
 
 source_set("main_app") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "app_group_metrics_mainapp.h",
     "app_group_metrics_mainapp.mm",

@@ -18,6 +18,7 @@
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_web_graphics_context_3d.h"
 #include "cc/trees/layer_tree_host.h"
+#include "content/public/common/screen_info.h"
 #include "content/public/test/mock_render_thread.h"
 #include "content/renderer/render_widget.h"
 #include "content/test/fake_compositor_dependencies.h"
@@ -42,6 +43,7 @@ class StubRenderWidgetCompositorDelegate
                            float top_controls_delta) override {}
   void BeginMainFrame(double frame_time_sec) override {}
   std::unique_ptr<cc::CompositorFrameSink> CreateCompositorFrameSink(
+      const cc::FrameSinkId& frame_sink_id,
       bool fallback) override {
     return nullptr;
   }
@@ -49,7 +51,6 @@ class StubRenderWidgetCompositorDelegate
   void DidCommitCompositorFrame() override {}
   void DidCompletePageScaleAnimation() override {}
   void DidReceiveCompositorFrameAck() override {}
-  void ForwardCompositorProto(const std::vector<uint8_t>& proto) override {}
   bool IsClosing() const override { return false; }
   void RequestScheduleAnimation() override {}
   void UpdateVisualState() override {}
@@ -66,6 +67,7 @@ class FakeRenderWidgetCompositorDelegate
   FakeRenderWidgetCompositorDelegate() = default;
 
   std::unique_ptr<cc::CompositorFrameSink> CreateCompositorFrameSink(
+      const cc::FrameSinkId& frame_sink_id,
       bool fallback) override {
     EXPECT_EQ(num_requests_since_last_success_ >
                   RenderWidgetCompositor::
@@ -217,7 +219,9 @@ class RenderWidgetCompositorFrameSinkTest : public testing::Test {
  public:
   RenderWidgetCompositorFrameSinkTest()
       : render_widget_compositor_(&compositor_delegate_, &compositor_deps_) {
-    render_widget_compositor_.Initialize(1.f /* initial_device_scale_factor */);
+    ScreenInfo dummy_screen_info;
+    render_widget_compositor_.Initialize(1.f /* initial_device_scale_factor */,
+                                         dummy_screen_info);
   }
 
   void RunTest(bool use_null_compositor_frame_sink,

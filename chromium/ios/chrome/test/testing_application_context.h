@@ -41,7 +41,7 @@ class TestingApplicationContext : public ApplicationContext {
       override;
   metrics::MetricsService* GetMetricsService() override;
   variations::VariationsService* GetVariationsService() override;
-  rappor::RapporService* GetRapporService() override;
+  rappor::RapporServiceImpl* GetRapporServiceImpl() override;
   net_log::ChromeNetLog* GetNetLog() override;
   network_time::NetworkTimeTracker* GetNetworkTimeTracker() override;
   IOSChromeIOThread* GetIOSChromeIOThread() override;
@@ -49,7 +49,7 @@ class TestingApplicationContext : public ApplicationContext {
   component_updater::ComponentUpdateService* GetComponentUpdateService()
       override;
   CRLSetFetcher* GetCRLSetFetcher() override;
-  PhysicalWebDataSource* GetPhysicalWebDataSource() override;
+  physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() override;
 
  private:
   base::ThreadChecker thread_checker_;

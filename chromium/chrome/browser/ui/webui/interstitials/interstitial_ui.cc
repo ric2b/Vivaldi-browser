@@ -243,7 +243,7 @@ safe_browsing::SafeBrowsingBlockingPage* CreateSafeBrowsingBlockingPage(
   resource.is_subframe = false;
   resource.threat_type = threat_type;
   resource.web_contents_getter =
-      safe_browsing::SafeBrowsingUIManager::UnsafeResource::
+      security_interstitials::UnsafeResource::
           GetWebContentsGetter(web_contents->GetRenderProcessHost()->GetID(),
                                web_contents->GetMainFrame()->GetRoutingID());
   resource.threat_source = safe_browsing::ThreatSource::LOCAL_PVER3;
@@ -343,6 +343,11 @@ void InterstitialHTMLSource::StartDataRequest(
     const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
     const content::URLDataSource::GotDataCallback& callback) {
   content::WebContents* web_contents = wc_getter.Run();
+  if (!web_contents) {
+    // When browser-side navigation is enabled, web_contents can be null if
+    // the tab is closing. Nothing to do in this case.
+    return;
+  }
   std::unique_ptr<content::InterstitialPageDelegate> interstitial_delegate;
   if (base::StartsWith(path, "ssl", base::CompareCase::SENSITIVE)) {
     interstitial_delegate.reset(CreateSSLBlockingPage(web_contents));

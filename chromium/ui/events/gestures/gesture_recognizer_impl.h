@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/events_export.h"
 #include "ui/events/gestures/gesture_provider_aura.h"
@@ -71,9 +70,9 @@ class EVENTS_EXPORT GestureRecognizerImpl : public GestureRecognizer,
   bool ProcessTouchEventPreDispatch(TouchEvent* event,
                                     GestureConsumer* consumer) override;
 
-  Gestures* AckTouchEvent(uint32_t unique_event_id,
-                          ui::EventResult result,
-                          GestureConsumer* consumer) override;
+  Gestures AckTouchEvent(uint32_t unique_event_id,
+                         ui::EventResult result,
+                         GestureConsumer* consumer) override;
 
   bool CleanupStateForConsumer(GestureConsumer* consumer) override;
   void AddGestureEventHelper(GestureEventHelper* helper) override;

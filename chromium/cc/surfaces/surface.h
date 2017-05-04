@@ -17,8 +17,8 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "cc/output/copy_output_request.h"
-#include "cc/quads/render_pass_id.h"
 #include "cc/surfaces/frame_sink_id.h"
 #include "cc/surfaces/surface_factory.h"
 #include "cc/surfaces/surface_id.h"
@@ -52,17 +52,16 @@ class CC_SURFACES_EXPORT Surface {
   void SetPreviousFrameSurface(Surface* surface);
 
   void QueueFrame(CompositorFrame frame, const DrawCallback& draw_callback);
+  void EvictFrame();
   void RequestCopyOfOutput(std::unique_ptr<CopyOutputRequest> copy_request);
   // Adds each CopyOutputRequest in the current frame to copy_requests. The
-  // caller takes ownership of them.
+  // caller takes ownership of them. |copy_requests| is keyed by RenderPass ids.
   void TakeCopyOutputRequests(
-      std::multimap<RenderPassId, std::unique_ptr<CopyOutputRequest>>*
-          copy_requests);
+      std::multimap<int, std::unique_ptr<CopyOutputRequest>>* copy_requests);
 
   // Returns the most recent frame that is eligible to be rendered.
-  // If the CompositorFrame's DelegateFrameData is null then there is
-  // no eligible frame.
-  const CompositorFrame& GetEligibleFrame();
+  // You must check whether HasFrame() returns true before calling this method.
+  const CompositorFrame& GetEligibleFrame() const;
 
   // Returns a number that increments by 1 every time a new frame is enqueued.
   int frame_index() const { return frame_index_; }
@@ -89,18 +88,20 @@ class CC_SURFACES_EXPORT Surface {
     return referenced_surfaces_;
   }
 
+  bool HasFrame() const { return current_frame_.has_value(); }
+
   bool destroyed() const { return destroyed_; }
   void set_destroyed(bool destroyed) { destroyed_ = destroyed; }
 
  private:
-  void UnrefFrameResources(DelegatedFrameData* frame_data);
+  void UnrefFrameResources(const CompositorFrame& frame_data);
   void ClearCopyRequests();
 
   SurfaceId surface_id_;
   SurfaceId previous_frame_surface_id_;
   base::WeakPtr<SurfaceFactory> factory_;
   // TODO(jamesr): Support multiple frames in flight.
-  CompositorFrame current_frame_;
+  base::Optional<CompositorFrame> current_frame_;
   int frame_index_;
   bool destroyed_;
   std::vector<SurfaceSequence> destruction_dependencies_;

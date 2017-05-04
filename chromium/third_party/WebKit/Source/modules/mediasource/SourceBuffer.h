@@ -32,7 +32,7 @@
 #define SourceBuffer_h
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/SuspendableObject.h"
 #include "modules/EventTargetModules.h"
 #include "modules/mediasource/TrackDefaultList.h"
 #include "platform/AsyncMethodRunner.h"
@@ -54,8 +54,8 @@ class VideoTrackList;
 class WebSourceBuffer;
 
 class SourceBuffer final : public EventTargetWithInlineData,
-                           public ActiveScriptWrappable,
-                           public ActiveDOMObject,
+                           public ActiveScriptWrappable<SourceBuffer>,
+                           public SuspendableObject,
                            public WebSourceBufferClient {
   USING_GARBAGE_COLLECTED_MIXIN(SourceBuffer);
   DEFINE_WRAPPERTYPEINFO();
@@ -102,10 +102,10 @@ class SourceBuffer final : public EventTargetWithInlineData,
   // ScriptWrappable
   bool hasPendingActivity() const final;
 
-  // ActiveDOMObject
+  // SuspendableObject
   void suspend() override;
   void resume() override;
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   // EventTarget interface
   ExecutionContext* getExecutionContext() const override;
@@ -117,8 +117,6 @@ class SourceBuffer final : public EventTargetWithInlineData,
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  enum AppendError { NoDecodeError, DecodeError };
-
   SourceBuffer(std::unique_ptr<WebSourceBuffer>,
                MediaSource*,
                GenericEventQueue*);
@@ -131,7 +129,7 @@ class SourceBuffer final : public EventTargetWithInlineData,
   bool evictCodedFrames(size_t newDataSize);
   void appendBufferInternal(const unsigned char*, unsigned, ExceptionState&);
   void appendBufferAsyncPart();
-  void appendError(AppendError);
+  void appendError();
 
   void removeAsyncPart();
 

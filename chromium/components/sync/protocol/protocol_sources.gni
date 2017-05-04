@@ -51,4 +51,5 @@ sync_protocol_sources = [
   "//components/sync/protocol/typed_url_specifics.proto",
   "//components/sync/protocol/unique_position.proto",
   "//components/sync/protocol/wifi_credential_specifics.proto",
+  "//components/sync/protocol/notes_specifics.proto",
 ]

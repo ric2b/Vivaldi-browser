@@ -10,10 +10,9 @@ import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.os.Debug;
 import android.os.SystemClock;
-import android.test.suitebuilder.annotation.LargeTest;
-import android.test.suitebuilder.annotation.MediumTest;
-import android.test.suitebuilder.annotation.SmallTest;
-import android.test.suitebuilder.annotation.Smoke;
+import android.support.test.filters.LargeTest;
+import android.support.test.filters.MediumTest;
+import android.support.test.filters.SmallTest;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.View;
@@ -186,7 +185,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
         });
 
         final AtomicReference<JavascriptAppModalDialog> dialog =
-                new AtomicReference<JavascriptAppModalDialog>();
+                new AtomicReference<>();
 
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
@@ -641,7 +640,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
         // Check counts.
         LayoutManagerChromePhone layoutManager =
                 (LayoutManagerChromePhone) getActivity().getLayoutManager();
-        int drawnCount = layoutManager.getOverviewLayout().getLayoutTabsDrawnCount();
+        int drawnCount = layoutManager.getOverviewLayout().getLayoutTabsToRender().length;
         int drawnExpected = Math.min(tabCount, maxTabsDrawn);
         assertEquals("The number of drawn tab is wrong", drawnExpected, drawnCount);
     }
@@ -1685,7 +1684,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
         assertTrue("notifyChanged() was not called", mNotifyChangedCalled);
     }
 
-    @Smoke
+    @MediumTest
     @Feature({"Android-TabSwitcher"})
     @RetryOnFailure
     public void testTabsAreDestroyedOnModelDestruction() throws InterruptedException {

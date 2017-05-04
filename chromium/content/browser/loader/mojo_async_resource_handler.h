@@ -12,16 +12,19 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "content/browser/loader/resource_handler.h"
 #include "content/common/content_export.h"
 #include "content/common/url_loader.mojom.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/system/watcher.h"
 #include "net/base/io_buffer.h"
 #include "url/gurl.h"
 
 namespace net {
+class IOBufferWithSize;
 class URLRequest;
 }
 
@@ -73,6 +76,7 @@ class CONTENT_EXPORT MojoAsyncResourceHandler
   // These functions can be overriden only for tests.
   virtual MojoResult BeginWrite(void** data, uint32_t* available);
   virtual MojoResult EndWrite(uint32_t written);
+  virtual net::IOBufferWithSize* GetResponseMetadata(net::URLRequest* request);
 
  private:
   class SharedWriter;
@@ -90,8 +94,15 @@ class CONTENT_EXPORT MojoAsyncResourceHandler
   bool CheckForSufficientResource();
   void OnWritable(MojoResult result);
   void Cancel();
+  // Calculates the diff between URLRequest::GetTotalReceivedBytes() and
+  // |reported_total_received_bytes_|, returns it, and updates
+  // |reported_total_received_bytes_|.
+  int64_t CalculateRecentlyReceivedBytes();
   // This function can be overriden only for tests.
   virtual void ReportBadMessage(const std::string& error);
+
+  void OnTransfer(mojom::URLLoaderAssociatedRequest mojo_request,
+                  mojom::URLLoaderClientAssociatedPtr url_loader_client);
 
   ResourceDispatcherHostImpl* rdh_;
   mojo::AssociatedBinding<mojom::URLLoader> binding_;
@@ -111,7 +122,9 @@ class CONTENT_EXPORT MojoAsyncResourceHandler
   size_t buffer_offset_ = 0;
   size_t buffer_bytes_read_ = 0;
   scoped_refptr<SharedWriter> shared_writer_;
+  mojo::ScopedDataPipeConsumerHandle response_body_consumer_handle_;
 
+  base::WeakPtrFactory<MojoAsyncResourceHandler> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(MojoAsyncResourceHandler);
 };
 

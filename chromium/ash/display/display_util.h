@@ -16,7 +16,6 @@ class Window;
 
 namespace display {
 class DisplayManager;
-class ManagedDisplayInfo;
 }
 
 namespace gfx {
@@ -48,10 +47,10 @@ void MoveCursorTo(AshWindowTreeHost* ash_host,
                   const gfx::Point& point_in_screen,
                   bool update_last_location_now);
 
-#if defined(OS_CHROMEOS)
-// Shows the notification message for display related issues.
-void ShowDisplayErrorNotification(int message_id);
-#endif
+// Shows the notification message for display related issues, and optionally
+// adds a button to send a feedback report.
+void ShowDisplayErrorNotification(const base::string16& message,
+                                  bool allow_feedback);
 
 ASH_EXPORT base::string16 GetDisplayErrorNotificationMessageForTest();
 

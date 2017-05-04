@@ -13,14 +13,11 @@ class WebIDBDatabaseCallbacks;
 
 namespace content {
 
-class ThreadSafeSender;
-
 class IndexedDBDatabaseCallbacksImpl
     : public indexed_db::mojom::DatabaseCallbacks {
  public:
   explicit IndexedDBDatabaseCallbacksImpl(
-      std::unique_ptr<blink::WebIDBDatabaseCallbacks> callbacks,
-      scoped_refptr<ThreadSafeSender> thread_safe_sender);
+      std::unique_ptr<blink::WebIDBDatabaseCallbacks> callbacks);
   ~IndexedDBDatabaseCallbacksImpl() override;
 
   // indexed_db::mojom::DatabaseCallbacks implementation
@@ -30,10 +27,10 @@ class IndexedDBDatabaseCallbacksImpl
              int32_t code,
              const base::string16& message) override;
   void Complete(int64_t transaction_id) override;
+  void Changes(indexed_db::mojom::ObserverChangesPtr changes) override;
 
  private:
   scoped_refptr<base::SingleThreadTaskRunner> callback_runner_;
-  scoped_refptr<ThreadSafeSender> thread_safe_sender_;
   blink::WebIDBDatabaseCallbacks* callbacks_;
 
   DISALLOW_COPY_AND_ASSIGN(IndexedDBDatabaseCallbacksImpl);

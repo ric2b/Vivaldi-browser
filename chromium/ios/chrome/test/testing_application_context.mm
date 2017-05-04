@@ -9,7 +9,7 @@
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "components/network_time/network_time_tracker.h"
-#include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+#import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "net/url_request/url_request_context_getter.h"
 
 TestingApplicationContext::TestingApplicationContext()
@@ -111,7 +111,7 @@ TestingApplicationContext::GetVariationsService() {
   return nullptr;
 }
 
-rappor::RapporService* TestingApplicationContext::GetRapporService() {
+rappor::RapporServiceImpl* TestingApplicationContext::GetRapporServiceImpl() {
   DCHECK(thread_checker_.CalledOnValidThread());
   return nullptr;
 }
@@ -155,7 +155,8 @@ CRLSetFetcher* TestingApplicationContext::GetCRLSetFetcher() {
   return nullptr;
 }
 
-PhysicalWebDataSource* TestingApplicationContext::GetPhysicalWebDataSource() {
+physical_web::PhysicalWebDataSource*
+TestingApplicationContext::GetPhysicalWebDataSource() {
   DCHECK(thread_checker_.CalledOnValidThread());
   return nullptr;
 }

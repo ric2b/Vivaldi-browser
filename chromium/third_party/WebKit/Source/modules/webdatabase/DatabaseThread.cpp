@@ -43,7 +43,7 @@
 namespace blink {
 
 DatabaseThread::DatabaseThread()
-    : m_transactionClient(makeUnique<SQLTransactionClient>()),
+    : m_transactionClient(WTF::makeUnique<SQLTransactionClient>()),
       m_cleanupSync(nullptr),
       m_terminationRequested(false) {
   DCHECK(isMainThread());
@@ -60,8 +60,7 @@ void DatabaseThread::start() {
   ASSERT(isMainThread());
   if (m_thread)
     return;
-  m_thread = WebThreadSupportingGC::create("WebCore: Database",
-                                           BlinkGC::PerThreadHeapMode);
+  m_thread = WebThreadSupportingGC::create("WebCore: Database");
   m_thread->postTask(BLINK_FROM_HERE,
                      crossThreadBind(&DatabaseThread::setupDatabaseThread,
                                      wrapCrossThreadPersistent(this)));
@@ -139,7 +138,7 @@ void DatabaseThread::recordDatabaseOpen(Database* database) {
 void DatabaseThread::recordDatabaseClosed(Database* database) {
   ASSERT(isDatabaseThread());
   ASSERT(database);
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   {
     MutexLocker lock(m_terminationRequestedMutex);
     ASSERT(m_terminationRequested || m_openDatabaseSet.contains(database));
@@ -163,7 +162,7 @@ bool DatabaseThread::isDatabaseThread() const {
 
 void DatabaseThread::scheduleTask(std::unique_ptr<DatabaseTask> task) {
   ASSERT(m_thread);
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   {
     MutexLocker lock(m_terminationRequestedMutex);
     ASSERT(!m_terminationRequested);

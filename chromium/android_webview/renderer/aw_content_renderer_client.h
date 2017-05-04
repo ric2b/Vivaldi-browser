@@ -17,7 +17,6 @@
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
 class SpellCheck;
-class SpellCheckProvider;
 #endif
 
 namespace visitedlink {
@@ -50,7 +49,7 @@ class AwContentRendererClient : public content::ContentRendererClient {
 
   bool HandleNavigation(content::RenderFrame* render_frame,
                         bool is_content_initiated,
-                        int opener_id,
+                        bool render_view_was_created_by_renderer,
                         blink::WebFrame* frame,
                         const blink::WebURLRequest& request,
                         blink::WebNavigationType type,

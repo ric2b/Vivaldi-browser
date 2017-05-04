@@ -42,7 +42,7 @@ LayerViewer.PaintProfilerView = class extends UI.HBox {
     this._canvasContainer = this.contentElement.createChild('div', 'paint-profiler-canvas-container');
     this._progressBanner = this.contentElement.createChild('div', 'full-widget-dimmed-banner hidden');
     this._progressBanner.textContent = Common.UIString('Profiling\u2026');
-    this._pieChart = new UI.PieChart(55, this._formatPieChartTime.bind(this), true);
+    this._pieChart = new PerfUI.PieChart(55, this._formatPieChartTime.bind(this), true);
     this._pieChart.element.classList.add('paint-profiler-pie-chart');
     this.contentElement.appendChild(this._pieChart.element);
 
@@ -50,8 +50,8 @@ LayerViewer.PaintProfilerView = class extends UI.HBox {
 
     this._canvas = this._canvasContainer.createChild('canvas', 'fill');
     this._context = this._canvas.getContext('2d');
-    this._selectionWindow = new UI.OverviewGrid.Window(this._canvasContainer);
-    this._selectionWindow.addEventListener(UI.OverviewGrid.Events.WindowChanged, this._onWindowChanged, this);
+    this._selectionWindow = new PerfUI.OverviewGrid.Window(this._canvasContainer);
+    this._selectionWindow.addEventListener(PerfUI.OverviewGrid.Events.WindowChanged, this._onWindowChanged, this);
 
     this._innerBarWidth = 4 * window.devicePixelRatio;
     this._minBarHeight = window.devicePixelRatio;
@@ -363,7 +363,7 @@ LayerViewer.PaintProfilerCommandLogView = class extends UI.ThrottledWidget {
     this.setMinimumSize(100, 25);
     this.element.classList.add('overflow-auto');
 
-    this._treeOutline = new TreeOutlineInShadow();
+    this._treeOutline = new UI.TreeOutlineInShadow();
     this.element.appendChild(this._treeOutline.element);
 
     this._log = [];
@@ -434,7 +434,7 @@ LayerViewer.PaintProfilerCommandLogView = class extends UI.ThrottledWidget {
 /**
  * @unrestricted
  */
-LayerViewer.LogTreeElement = class extends TreeElement {
+LayerViewer.LogTreeElement = class extends UI.TreeElement {
   /**
    * @param {!LayerViewer.PaintProfilerCommandLogView} ownerView
    * @param {!SDK.PaintProfilerLogItem} logItem
@@ -506,7 +506,7 @@ LayerViewer.LogTreeElement = class extends TreeElement {
 /**
  * @unrestricted
  */
-LayerViewer.LogPropertyTreeElement = class extends TreeElement {
+LayerViewer.LogPropertyTreeElement = class extends UI.TreeElement {
   /**
    * @param {!{name: string, value}} property
    */
@@ -516,7 +516,7 @@ LayerViewer.LogPropertyTreeElement = class extends TreeElement {
   }
 
   /**
-   * @param {!TreeElement} element
+   * @param {!UI.TreeElement} element
    * @param {string} name
    * @param {*} value
    */

@@ -279,8 +279,6 @@ typedef unsigned long long GLuint64;
     void bufferSubData(GLenum target, GLintptr dstByteOffset, ArrayBufferView srcData, GLuint srcOffset, optional GLuint length = 0);
     void copyBufferSubData(GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size);
     void getBufferSubData(GLenum target, GLintptr srcByteOffset, ArrayBufferView dstData, optional GLuint dstOffset = 0, optional GLuint length = 0);
-    // TODO(kainino): Move getBufferSubDataAsync to an extension. http://crbug.com/616554
-    //[CallWith=ScriptState, RuntimeEnabled=ExperimentalCanvasFeatures] Promise<ArrayBufferView> getBufferSubDataAsync(GLenum target, GLintptr srcByteOffset, ArrayBufferView dstData, optional GLuint dstOffset = 0, optional GLuint length = 0);
 
     /* Framebuffer objects */
     void blitFramebuffer(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
@@ -339,6 +337,19 @@ typedef unsigned long long GLuint64;
     void compressedTexImage3D(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLint border, ArrayBufferView data, optional GLuint srcOffset = 0, optional GLuint srcLengthOverride = 0);
     void compressedTexSubImage3D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset, GLsizei width, GLsizei height, GLsizei depth, GLenum format, ArrayBufferView data, optional GLuint srcOffset = 0, optional GLuint srcLengthOverride = 0);
 
+    void compressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
+                              GLsizei width, GLsizei height, GLint border,
+                              GLsizei imageSize, GLintptr offset);
+    void compressedTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
+                                 GLsizei width, GLsizei height, GLenum format,
+                                 GLsizei imageSize, GLintptr offset);
+    void compressedTexImage3D(GLenum target, GLint level, GLenum internalformat,
+                              GLsizei width, GLsizei height, GLsizei depth, GLint border,
+                              GLsizei imageSize, GLintptr offset);
+    void compressedTexSubImage3D(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLint zoffset,
+                                 GLsizei width, GLsizei height, GLsizei depth, GLenum format,
+                                 GLsizei imageSize, GLintptr offset);
+
     /* Programs and shaders */
     GLint getFragDataLocation(WebGLProgram program, DOMString name);
 
@@ -347,26 +358,94 @@ typedef unsigned long long GLuint64;
     void uniform2ui(WebGLUniformLocation? location, GLuint v0, GLuint v1);
     void uniform3ui(WebGLUniformLocation? location, GLuint v0, GLuint v1, GLuint v2);
     void uniform4ui(WebGLUniformLocation? location, GLuint v0, GLuint v1, GLuint v2, GLuint v3);
-    void uniform1uiv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Uint32Array v);
-    void uniform1uiv(WebGLUniformLocation? location, sequence<GLuint> v);
-    void uniform2uiv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Uint32Array v);
-    void uniform2uiv(WebGLUniformLocation? location, sequence<GLuint> v);
-    void uniform3uiv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Uint32Array v);
-    void uniform3uiv(WebGLUniformLocation? location, sequence<GLuint> v);
-    void uniform4uiv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Uint32Array v);
-    void uniform4uiv(WebGLUniformLocation? location, sequence<GLuint> v);
-    void uniformMatrix2x3fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array value);
-    void uniformMatrix2x3fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> value);
-    void uniformMatrix3x2fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array value);
-    void uniformMatrix3x2fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> value);
-    void uniformMatrix2x4fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array value);
-    void uniformMatrix2x4fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> value);
-    void uniformMatrix4x2fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array value);
-    void uniformMatrix4x2fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> value);
-    void uniformMatrix3x4fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array value);
-    void uniformMatrix3x4fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> value);
-    void uniformMatrix4x3fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array value);
-    void uniformMatrix4x3fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> value);
+    // The WebGL1 uniform*v signatures are visible here, so srcOffset has to be non-optional
+    // to avoid conflicts. The effect is the same: if uniform*v is called with only two arguments,
+    // it goes to the WebGL1 signatures; if it's called with three or four arguments, it goes to
+    // the WebGL2 specific signatures.
+    void uniform1fv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Float32Array v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform1fv(WebGLUniformLocation? location, sequence<GLfloat> v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform2fv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Float32Array v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform2fv(WebGLUniformLocation? location, sequence<GLfloat> v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform3fv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Float32Array v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform3fv(WebGLUniformLocation? location, sequence<GLfloat> v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform4fv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Float32Array v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform4fv(WebGLUniformLocation? location, sequence<GLfloat> v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform1iv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Int32Array v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform1iv(WebGLUniformLocation? location, sequence<GLint> v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform2iv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Int32Array v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform2iv(WebGLUniformLocation? location, sequence<GLint> v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform3iv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Int32Array v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform3iv(WebGLUniformLocation? location, sequence<GLint> v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform4iv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Int32Array v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform4iv(WebGLUniformLocation? location, sequence<GLint> v,
+                    GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniform1uiv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Uint32Array v,
+                     optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniform1uiv(WebGLUniformLocation? location, sequence<GLuint> v,
+                     optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniform2uiv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Uint32Array v,
+                     optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniform2uiv(WebGLUniformLocation? location, sequence<GLuint> v,
+                     optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniform3uiv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Uint32Array v,
+                     optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniform3uiv(WebGLUniformLocation? location, sequence<GLuint> v,
+                     optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniform4uiv(WebGLUniformLocation? location, [FlexibleArrayBufferView] Uint32Array v,
+                     optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniform4uiv(WebGLUniformLocation? location, sequence<GLuint> v,
+                     optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniformMatrix2fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array array,
+                          GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniformMatrix2fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> array,
+                          GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniformMatrix3fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array array,
+                          GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniformMatrix3fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> array,
+                          GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniformMatrix4fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array array,
+                          GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniformMatrix4fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> array,
+                          GLuint srcOffset, optional GLuint srcLength = 0);
+    void uniformMatrix2x3fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array value,
+                            optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniformMatrix2x3fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> value,
+                            optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniformMatrix3x2fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array value,
+                            optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniformMatrix3x2fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> value,
+                            optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniformMatrix2x4fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array value,
+                            optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniformMatrix2x4fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> value,
+                            optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniformMatrix4x2fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array value,
+                            optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniformMatrix4x2fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> value,
+                            optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniformMatrix3x4fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array value,
+                            optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniformMatrix3x4fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> value,
+                            optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniformMatrix4x3fv(WebGLUniformLocation? location, GLboolean transpose, Float32Array value,
+                            optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
+    void uniformMatrix4x3fv(WebGLUniformLocation? location, GLboolean transpose, sequence<GLfloat> value,
+                            optional GLuint srcOffset = 0, optional GLuint srcLength = 0);
 
     void vertexAttribI4i(GLuint index, GLint x, GLint y, GLint z, GLint w);
     void vertexAttribI4iv(GLuint index, Int32Array v);
@@ -393,7 +472,7 @@ typedef unsigned long long GLuint64;
     void clearBufferfi(GLenum buffer, GLint drawbuffer, GLfloat depth, GLint stencil);
 
     /* Query Objects */
-    WebGLQuery createQuery();
+    WebGLQuery? createQuery();
     void deleteQuery(WebGLQuery? query);
     GLboolean isQuery(WebGLQuery? query);
     void beginQuery(GLenum target, WebGLQuery query);
@@ -402,7 +481,7 @@ typedef unsigned long long GLuint64;
     [CallWith=ScriptState] any getQueryParameter(WebGLQuery query, GLenum pname);
 
     /* Sampler Objects */
-    WebGLSampler createSampler();
+    WebGLSampler? createSampler();
     void deleteSampler(WebGLSampler? sampler);
     GLboolean isSampler(WebGLSampler? sampler);
     void bindSampler(GLuint unit, WebGLSampler? sampler);
@@ -411,7 +490,7 @@ typedef unsigned long long GLuint64;
     [CallWith=ScriptState] any getSamplerParameter(WebGLSampler sampler, GLenum pname);
 
     /* Sync objects */
-    WebGLSync fenceSync(GLenum condition, GLbitfield flags);
+    WebGLSync? fenceSync(GLenum condition, GLbitfield flags);
     GLboolean isSync(WebGLSync? sync);
     void deleteSync(WebGLSync? sync);
     GLenum clientWaitSync(WebGLSync sync, GLbitfield flags, GLuint64 timeout);
@@ -420,14 +499,14 @@ typedef unsigned long long GLuint64;
     [CallWith=ScriptState] any getSyncParameter(WebGLSync sync, GLenum pname);
 
     /* Transform Feedback */
-    WebGLTransformFeedback createTransformFeedback();
+    WebGLTransformFeedback? createTransformFeedback();
     void deleteTransformFeedback(WebGLTransformFeedback? feedback);
     GLboolean isTransformFeedback(WebGLTransformFeedback? feedback);
     void bindTransformFeedback(GLenum target, WebGLTransformFeedback? feedback);
     void beginTransformFeedback(GLenum primitiveMode);
     void endTransformFeedback();
     void transformFeedbackVaryings(WebGLProgram program, sequence<DOMString> varyings, GLenum bufferMode);
-    WebGLActiveInfo getTransformFeedbackVarying(WebGLProgram program, GLuint index);
+    WebGLActiveInfo? getTransformFeedbackVarying(WebGLProgram program, GLuint index);
     void pauseTransformFeedback();
     void resumeTransformFeedback();
 
@@ -443,7 +522,7 @@ typedef unsigned long long GLuint64;
     void uniformBlockBinding(WebGLProgram program, GLuint uniformBlockIndex, GLuint uniformBlockBinding);
 
     /* Vertex Array Objects */
-    WebGLVertexArrayObject createVertexArray();
+    WebGLVertexArrayObject? createVertexArray();
     void deleteVertexArray(WebGLVertexArrayObject? vertexArray);
     GLboolean isVertexArray(WebGLVertexArrayObject? vertexArray);
     void bindVertexArray(WebGLVertexArrayObject? vertexArray);

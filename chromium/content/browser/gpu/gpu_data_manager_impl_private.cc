@@ -28,6 +28,7 @@
 #include "content/public/browser/gpu_data_manager_observer.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/web_preferences.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
@@ -40,11 +41,15 @@
 #include "gpu/config/gpu_util.h"
 #include "gpu/ipc/common/memory_stats.h"
 #include "gpu/ipc/service/switches.h"
+#include "media/media_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/gpu_switching_manager.h"
 
+#if defined(USE_OZONE)
+#include "ui/ozone/public/ozone_switches.h"
+#endif
 #if defined(OS_MACOSX)
 #include <ApplicationServices/ApplicationServices.h>
 #endif  // OS_MACOSX
@@ -325,6 +330,7 @@ void GpuDataManagerImplPrivate::GetGpuProcessHandles(
 
 bool GpuDataManagerImplPrivate::GpuAccessAllowed(
     std::string* reason) const {
+
   if (use_swiftshader_)
     return true;
 
@@ -334,6 +340,9 @@ bool GpuDataManagerImplPrivate::GpuAccessAllowed(
     }
     return false;
   }
+
+  if (in_process_gpu_)
+    return true;
 
   if (card_blacklisted_) {
     if (reason) {
@@ -598,8 +607,7 @@ void GpuDataManagerImplPrivate::Initialize() {
                  gpu_driver_bug_list_string,
                  gpu_info);
 
-  if (command_line->HasSwitch(switches::kSingleProcess) ||
-      command_line->HasSwitch(switches::kInProcessGPU)) {
+  if (in_process_gpu_) {
     command_line->AppendSwitch(switches::kDisableGpuWatchdog);
     AppendGpuCommandLine(command_line, nullptr);
   }
@@ -689,10 +697,10 @@ void GpuDataManagerImplPrivate::AppendRendererCommandLine(
 
   if (ShouldDisableAcceleratedVideoDecode(command_line))
     command_line->AppendSwitch(switches::kDisableAcceleratedVideoDecode);
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   if (IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_ENCODE) &&
-      !command_line->HasSwitch(switches::kDisableWebRtcHWEncoding))
-    command_line->AppendSwitch(switches::kDisableWebRtcHWEncoding);
+      !command_line->HasSwitch(switches::kDisableWebRtcHWVP8Encoding))
+    command_line->AppendSwitch(switches::kDisableWebRtcHWVP8Encoding);
 #endif
 
 #if defined(USE_AURA)
@@ -764,6 +772,12 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
     command_line->AppendSwitch(switches::kCreateDefaultGLContext);
   }
 
+#if defined(USE_OZONE)
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableDrmAtomic)) {
+    command_line->AppendSwitch(switches::kEnableDrmAtomic);
+  }
+#endif
 #if defined(OS_WIN)
   if (IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_VPX_DECODE) &&
       gpu_preferences) {
@@ -772,15 +786,23 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
   }
 #endif
 
-#if defined(ENABLE_WEBRTC)
-  if (IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_ENCODE) &&
-      !command_line->HasSwitch(switches::kDisableWebRtcHWEncoding)) {
-    if (gpu_preferences) {
-      gpu_preferences->disable_web_rtc_hw_encoding = true;
-    } else {
+#if BUILDFLAG(ENABLE_WEBRTC)
+if (IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_ENCODE)) {
+#if defined (OS_ANDROID)
+  // On Android HW H264 is enabled by default behind a flag now, regardless of
+  // the blacklist. Disable HW encoding if every single HW codec is disabled.
+  // TODO(braveyao): remove this once the blacklist is removed
+  // (crbug.com/638664).
+  if (!base::FeatureList::IsEnabled(features::kWebRtcHWH264Encoding)) {
+#endif
+    if (!command_line->HasSwitch(switches::kDisableWebRtcHWEncoding))
       command_line->AppendSwitch(switches::kDisableWebRtcHWEncoding);
-    }
+    if (gpu_preferences)
+      gpu_preferences->disable_web_rtc_hw_encoding = true;
+#if defined (OS_ANDROID)
   }
+#endif
+}
 #endif
 
   if (gpu_preferences) { // enable_es3_apis
@@ -1102,15 +1124,20 @@ GpuDataManagerImplPrivate::GpuDataManagerImplPrivate(GpuDataManagerImpl* owner)
       owner_(owner),
       gpu_process_accessible_(true),
       is_initialized_(false),
-      finalized_(false) {
+      finalized_(false),
+      in_process_gpu_(false) {
   DCHECK(owner_);
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
-  swiftshader_path_ =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
-          switches::kSwiftShaderPath);
+  swiftshader_path_ = command_line->GetSwitchValuePath(
+      switches::kSwiftShaderPath);
   if (ShouldDisableHardwareAcceleration())
     DisableHardwareAcceleration();
+
+  if (command_line->HasSwitch(switches::kSingleProcess) ||
+      command_line->HasSwitch(switches::kInProcessGPU)) {
+    in_process_gpu_ = true;
+  }
 
 #if defined(OS_MACOSX)
   CGDisplayRegisterReconfigurationCallback(DisplayReconfigCallback, owner_);

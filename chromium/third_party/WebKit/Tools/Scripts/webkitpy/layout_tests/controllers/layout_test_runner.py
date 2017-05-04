@@ -126,15 +126,15 @@ class LayoutTestRunner(object):
                 if num_workers > 0:
                     with message_pool.get(self, self._worker_factory, num_workers, self._port.host) as pool:
                         pool.run(('test_list', shard.name, shard.test_inputs) for shard in self._shards_to_redo)
-        except TestRunInterruptedException as e:
-            _log.warning(e.reason)
+        except TestRunInterruptedException as error:
+            _log.warning(error.reason)
             run_results.interrupted = True
         except KeyboardInterrupt:
             self._printer.flush()
             self._printer.writeln('Interrupted, exiting ...')
             run_results.keyboard_interrupted = True
-        except Exception as e:
-            _log.debug('%s("%s") raised, exiting', e.__class__.__name__, str(e))
+        except Exception as error:
+            _log.debug('%s("%s") raised, exiting', error.__class__.__name__, error)
             raise
         finally:
             run_results.run_time = time.time() - start_time
@@ -199,6 +199,7 @@ class LayoutTestRunner(object):
             return method(source, *args)
         raise AssertionError('unknown message %s received from %s, args=%s' % (name, source, repr(args)))
 
+    # The _handle_* methods below are called indirectly by handle().
     def _handle_started_test(self, worker_name, test_input):
         self._printer.print_started_test(test_input.test_name)
 
@@ -286,7 +287,7 @@ class Worker(object):
         self._update_test_input(test_input)
         start = time.time()
 
-        _log.debug("%s %s started", self._name, test_input.test_name)
+        # TODO(qyearsley): Re-add logging if it doesn't create too much load (crbug.com/673207).
         self._caller.post('started_test', test_input)
         result = single_test_runner.run_single_test(
             self._port, self._options, self._results_directory, self._name,

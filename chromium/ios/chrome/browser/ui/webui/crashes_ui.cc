@@ -9,13 +9,12 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted_memory.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
 #include "base/values.h"
 #include "components/crash/core/browser/crashes_ui_util.h"
 #include "components/grit/components_resources.h"
-#include "components/grit/components_scaled_resources.h"
 #include "components/strings/grit/components_chromium_strings.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/version_info/version_info.h"
@@ -27,7 +26,6 @@
 #include "ios/web/public/web_ui_ios_data_source.h"
 #include "ios/web/public/webui/web_ui_ios.h"
 #include "ios/web/public/webui/web_ui_ios_message_handler.h"
-#include "ui/base/resource/resource_bundle.h"
 
 namespace {
 
@@ -149,16 +147,9 @@ void CrashesDOMHandler::UpdateUI() {
 ///////////////////////////////////////////////////////////////////////////////
 
 CrashesUI::CrashesUI(web::WebUIIOS* web_ui) : web::WebUIIOSController(web_ui) {
-  web_ui->AddMessageHandler(new CrashesDOMHandler());
+  web_ui->AddMessageHandler(base::MakeUnique<CrashesDOMHandler>());
 
   // Set up the chrome://crashes/ source.
   web::WebUIIOSDataSource::Add(ios::ChromeBrowserState::FromWebUIIOS(web_ui),
                                CreateCrashesUIHTMLSource());
-}
-
-// static
-base::RefCountedMemory* CrashesUI::GetFaviconResourceBytes(
-    ui::ScaleFactor scale_factor) {
-  return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
-      IDR_CRASH_SAD_FAVICON, scale_factor);
 }

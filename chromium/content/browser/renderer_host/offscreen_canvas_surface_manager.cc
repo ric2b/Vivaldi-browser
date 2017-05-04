@@ -27,6 +27,16 @@ OffscreenCanvasSurfaceManager* OffscreenCanvasSurfaceManager::GetInstance() {
   return g_manager.Pointer();
 }
 
+void OffscreenCanvasSurfaceManager::OnSurfaceCreated(
+    const cc::SurfaceInfo& surface_info) {
+  auto surface_iter =
+      registered_surface_instances_.find(surface_info.id().frame_sink_id());
+  if (surface_iter == registered_surface_instances_.end())
+    return;
+  OffscreenCanvasSurfaceImpl* surfaceImpl = surface_iter->second;
+  surfaceImpl->OnSurfaceCreated(surface_info);
+}
+
 void OffscreenCanvasSurfaceManager::RegisterOffscreenCanvasSurfaceInstance(
     cc::FrameSinkId frame_sink_id,
     OffscreenCanvasSurfaceImpl* surface_instance) {

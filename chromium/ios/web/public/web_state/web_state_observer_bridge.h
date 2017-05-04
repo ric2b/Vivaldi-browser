@@ -11,7 +11,7 @@
 
 #import "base/ios/weak_nsobject.h"
 #include "base/macros.h"
-#import "ios/web/public/web_state/web_state_observer.h"
+#include "ios/web/public/web_state/web_state_observer.h"
 
 class GURL;
 
@@ -30,7 +30,7 @@ class GURL;
         (const web::LoadCommittedDetails&)load_details;
 
 // Invoked by WebStateObserverBridge::PageLoaded.
-- (void)webStateDidLoadPage:(web::WebState*)webState;
+- (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success;
 
 // Invoked by WebStateObserverBridge::InterstitialDismissed.
 - (void)webStateDidDismissInterstitial:(web::WebState*)webState;
@@ -53,13 +53,15 @@ class GURL;
                                fieldName:(const std::string&)fieldName
                                     type:(const std::string&)type
                                    value:(const std::string&)value
-                                 keyCode:(int)keyCode
                             inputMissing:(BOOL)inputMissing;
 
 // Invoked by WebStateObserverBridge::FaviconUrlUpdated.
 - (void)webState:(web::WebState*)webState
     didUpdateFaviconURLCandidates:
         (const std::vector<web::FaviconURL>&)candidates;
+
+// Invoked by WebStateObserverBridge::RenderProcessGone.
+- (void)renderProcessGoneForWebState:(web::WebState*)webState;
 
 // Note: after |webStateDestroyed:| is invoked, the WebState being observed
 // is no longer valid.
@@ -102,9 +104,9 @@ class WebStateObserverBridge : public web::WebStateObserver {
                               const std::string& field_name,
                               const std::string& type,
                               const std::string& value,
-                              int key_code,
                               bool input_missing) override;
   void FaviconUrlUpdated(const std::vector<FaviconURL>& candidates) override;
+  void RenderProcessGone() override;
   void WebStateDestroyed() override;
   void DidStartLoading() override;
   void DidStopLoading() override;

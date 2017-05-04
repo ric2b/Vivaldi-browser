@@ -9,6 +9,7 @@
 
 import argparse
 import os
+import re
 import sys
 
 from util import build_utils
@@ -42,6 +43,14 @@ if __name__ == '__main__':
   sys.exit(main())
 """
 
+
+def _GenerateAdditionalApksErrorString(incremental_apks):
+  err_string = ('Apks that are listed as additional_apks for '
+      'another target cannot be incremental. Please add never_incremental to '
+      'the following apks: %s')
+  return err_string % ', '.join(a for a in incremental_apks)
+
+
 def main(args):
   parser = argparse.ArgumentParser()
   parser.add_argument('--script-output-path',
@@ -57,12 +66,16 @@ def main(args):
   group.add_argument('--additional-apk', action='append',
                      dest='additional_apks', default=[])
   group.add_argument('--additional-apk-list')
+  group.add_argument('--additional-apk-incremental', action='append',
+                     dest='additional_apks_incremental', default=[])
   group.add_argument('--apk-under-test')
   group.add_argument('--apk-under-test-incremental-install-script')
   group.add_argument('--executable-dist-dir')
   group.add_argument('--isolate-file-path')
   group.add_argument('--output-directory')
+  group.add_argument('--runtime-deps-path')
   group.add_argument('--test-apk')
+  group.add_argument('--test-jar')
   group.add_argument('--test-apk-incremental-install-script')
   group.add_argument('--coverage-dir')
   args, test_runner_args = parser.parse_known_args(
@@ -84,6 +97,11 @@ def main(args):
     test_runner_path_args.extend(
         ('--additional-apk', RelativizePathToScript(a))
         for a in args.additional_apks)
+  if args.additional_apks_incremental:
+    bad_additional_apks = [a for a in args.additional_apks_incremental
+                           if a != 'None']
+    if bad_additional_apks:
+      raise Exception(_GenerateAdditionalApksErrorString(bad_additional_apks))
   if args.apk_under_test:
     test_runner_path_args.append(
         ('--apk-under-test', RelativizePathToScript(args.apk_under_test)))
@@ -102,9 +120,15 @@ def main(args):
   if args.output_directory:
     test_runner_path_args.append(
         ('--output-directory', RelativizePathToScript(args.output_directory)))
+  if args.runtime_deps_path:
+    test_runner_path_args.append(
+        ('--runtime-deps-path', RelativizePathToScript(args.runtime_deps_path)))
   if args.test_apk:
     test_runner_path_args.append(
         ('--test-apk', RelativizePathToScript(args.test_apk)))
+  if args.test_jar:
+    test_runner_path_args.append(
+        ('--test-jar', RelativizePathToScript(args.test_jar)))
   if args.test_apk_incremental_install_script:
     test_runner_path_args.append(
         ('--test-apk-incremental-install-script',

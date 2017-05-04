@@ -1,13 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
 <grit-part>
+  <!-- Summary strings -->
+  <message name="IDS_PAGEINFO_SECURE_SUMMARY" desc="A short summary phrase at the top of the Page Info bubble (which shows when you click the lock icon) that indicates that the connection to the current website is secure.">
+    Secure connection
+  </message>
+  <message name="IDS_PAGEINFO_MIXED_CONTENT_SUMMARY" desc="A one-line summary at the top of the Page Info bubble (which shows when you click the security indicator) if the connection to the current website is using mainly using a secure connection but has some insecure parts (like insecurely loaded images).">
+    Your connection to this site is not fully secure
+  </message>
+  <message name="IDS_PAGEINFO_NOT_SECURE_SUMMARY" desc="A one-line summary at the top of the Page Info bubble (which shows when you click the security indicator) if the connection to the current website is secure.">
+    Your connection to this site is not secure
+  </message>
+  <message name="IDS_PAGEINFO_MALWARE_SUMMARY" desc="A one-line summary at the top of the Page Info bubble (which shows when you click the security indicator) if the current website has been flagged as containing malware.">
+    This site contains malware
+  </message>
+  <message name="IDS_PAGEINFO_SOCIAL_ENGINEERING_SUMMARY" desc="A one-line summary at the top of the Page Info bubble (which shows when you click the security indicator) if the current website has been flagged as social engineering.">
+    This site is deceptive
+  </message>
+  <message name="IDS_PAGEINFO_UNWANTED_SOFTWARE_SUMMARY" desc="A one-line summary at the top of the Page Info bubble (which shows when you click the security indicator) if the current website has been flagged as containing unwanted software.">
+    This site contains harmful programs
+  </message>
+
+  <!-- Detail strings -->
+  <message name="IDS_PAGEINFO_SECURE_DETAILS" desc="A short paragraph explaining a secure site to the user.">
+    Your information (for example, passwords or credit card numbers) is private when it is sent to this site.
+  </message>
+  <message name="IDS_PAGEINFO_MIXED_CONTENT_DETAILS" desc="A short paragraph explaining a partially insecure site to the user.">
+    Attackers might be able to see the images you’re looking at on this site and trick you by modifying them.
+  </message>
+  <message name="IDS_PAGEINFO_NOT_SECURE_DETAILS" desc="A short paragraph explaining a non-secure site to the user.">
+    You should not enter any sensitive information on this site (for example, passwords or credit cards), because it could be stolen by attackers.
+  </message>
+  <message name="IDS_PAGEINFO_INVALID_CERTIFICATE_DESCRIPTION" desc="A short paragraph to the user that security warnings are disabled. This is the case when the user has encountered a certificate error for the current site and chosen to override it.">
+    You have chosen to disable security warnings for this site.
+  </message>
+  <message name="IDS_PAGEINFO_MALWARE_DETAILS" desc="A short paragraph explaining to the user that the current website has been flagged as containing malware.">
+    Attackers on this site might attempt to install dangerous programs on your computer that steal or delete your information (for example, photos, passwords, messages, and credit cards).
+  </message>
+  <message name="IDS_PAGEINFO_SOCIAL_ENGINEERING_DETAILS" desc="A short paragraph explaining to the user that the current website has been flagged as social engineering.">
+    Attackers on this site may trick you into doing something dangerous like installing software or revealing your personal information (for example, passwords, phone numbers, or credit cards).
+  </message>
+  <message name="IDS_PAGEINFO_UNWANTED_SOFTWARE_DETAILS" desc="A short paragraph explaining to the user that the current website has been flagged as containing unwanted software.">
+    Attackers on this site might try to trick you into installing programs that harm your browsing experience (for example, by changing your homepage or showing extra ads on sites you visit).
+  </message>
+
   <message name="IDS_PAGE_INFO_HELP_CENTER_LINK" desc="This is the text of the link pointing to the Help Center. This appears at the bottom of the SSL dialog and 'this' refers to the sections within the bubble.">
     What do these mean?
   </message>
-  <message name="IDS_PAGE_INFO_SECURITY_TAB_DEPRECATED_SIGNATURE_ALGORITHM_MINOR" desc="The security summary phrase in the page information panel for a security problem where the site's certificate expires in 2016 and contains a SHA1 signature in the chain (as opposed to 2017 or later). Such certificates will not be supported in a future version of Chrome.">
-    The certificate for this site expires in 2016, and the certificate chain contains a certificate signed using SHA-1.
-  </message>
-  <message name="IDS_PAGE_INFO_SECURITY_TAB_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR" desc="The security summary phrase in the page information panel for a security problem where the site's certificate expires in 2017 or later and contains a SHA1 signature in the chain (as opposed to 2016). Such certificates will not be supported in a future version of Chrome.">
-    The certificate for this site expires in 2017 or later, and the certificate chain contains a certificate signed using SHA-1.
+  <message name="IDS_PAGE_INFO_SECURITY_TAB_DEPRECATED_SIGNATURE_ALGORITHM" desc="The security summary phrase in the page information panel for a security problem where the site's certificate chain contains a SHA1 signature. Such certificates are treated as errors except when a policy override is present.">
+    The certificate chain for this site contains a certificate signed using SHA-1.
   </message>
   <message name="IDS_PAGE_INFO_SECURITY_TAB_ENCRYPTED_CONNECTION_TEXT" desc="The text of the connection section when the connection is encrypted.">
     Your connection to <ph name="DOMAIN">$1<ex>www.google.com</ex></ph> is encrypted using a modern cipher suite.
@@ -38,9 +78,6 @@
   </message>
   <message name="IDS_PAGE_INFO_SECURITY_TAB_NO_REVOCATION_MECHANISM" desc="The text of the identity section when there is no certificate revocation mechanism.">
     The certificate does not specify a mechanism to check whether it has been revoked.
-  </message>
-  <message name="IDS_PAGE_INFO_SECURITY_TAB_RENEGOTIATION_MESSAGE" desc="This message is displayed when the server hasn't been updated to fix a recent security issues. TLS here is an acronym and need not be translated. 'renegotiation' is a technical term describing a process of agreeing on a new set of security parameters and secrets. 'extension' here should be taken to mean 'amendment' rather than elongation.">
-    The server does not support the TLS renegotiation extension.
   </message>
   <message name="IDS_PAGE_INFO_SECURITY_TAB_SSL_VERSION" desc="This message gives the version of the SSL protocol used to protect the HTTPS connection.">
     The connection uses <ph name="SSL_VERSION">$1<ex>TLS 1.0</ex></ph>.

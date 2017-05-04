@@ -12,6 +12,7 @@
 #include "ash/test/ash_md_test_base.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
@@ -134,7 +135,8 @@ TEST_P(WindowStateTest, SnapWindowMinimumSize) {
   delegate.set_maximum_size(gfx::Size(0, kWorkAreaBounds.height() - 1));
   EXPECT_FALSE(window_state->CanSnap());
   delegate.set_maximum_size(gfx::Size());
-  window->SetProperty(aura::client::kCanMaximizeKey, false);
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanResize);
   EXPECT_FALSE(window_state->CanSnap());
 }
 

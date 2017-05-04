@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/lazy_instance.h"
+#include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "content/browser/android/synchronous_compositor_host.h"
@@ -45,7 +46,8 @@ void SynchronousCompositorBrowserFilter::SyncStateAfterVSync(
   if (window_android_in_vsync_)
     return;
   window_android_in_vsync_ = window_android;
-  window_android_in_vsync_->AddObserver(this);
+  window_android_in_vsync_->AddVSyncCompleteCallback(
+      base::Bind(&SynchronousCompositorBrowserFilter::VSyncComplete, this));
 }
 
 bool SynchronousCompositorBrowserFilter::OnMessageReceived(
@@ -177,30 +179,8 @@ void SynchronousCompositorBrowserFilter::SignalAllFutures() {
   filter_ready_ = false;
 }
 
-void SynchronousCompositorBrowserFilter::OnCompositingDidCommit() {
-  NOTREACHED();
-}
-
-void SynchronousCompositorBrowserFilter::OnRootWindowVisibilityChanged(
-    bool visible) {
-  NOTREACHED();
-}
-
-void SynchronousCompositorBrowserFilter::OnAttachCompositor() {
-  NOTREACHED();
-}
-
-void SynchronousCompositorBrowserFilter::OnDetachCompositor() {
-  NOTREACHED();
-}
-
-void SynchronousCompositorBrowserFilter::OnVSync(base::TimeTicks frame_time,
-                                                 base::TimeDelta vsync_period) {
-  // This is called after DidSendBeginFrame for SynchronousCompositorHosts
-  // belonging to this WindowAndroid, since this is added as an Observer after
-  // the observer iteration has started.
+void SynchronousCompositorBrowserFilter::VSyncComplete() {
   DCHECK(window_android_in_vsync_);
-  window_android_in_vsync_->RemoveObserver(this);
   window_android_in_vsync_ = nullptr;
 
   std::vector<int> routing_ids;
@@ -227,14 +207,6 @@ void SynchronousCompositorBrowserFilter::OnVSync(base::TimeTicks frame_time,
     compositor_host_pending_renderer_state_[i]->ProcessCommonParams(params[i]);
   }
   compositor_host_pending_renderer_state_.clear();
-}
-
-void SynchronousCompositorBrowserFilter::OnActivityStopped() {
-  NOTREACHED();
-}
-
-void SynchronousCompositorBrowserFilter::OnActivityStarted() {
-  NOTREACHED();
 }
 
 }  // namespace content

@@ -32,7 +32,7 @@ public class JsonSanitizer {
      * The maximum nesting depth to which the native JSON parser restricts input in order to avoid
      * stack overflows.
      */
-    private static final int MAX_NESTING_DEPTH = 100;
+    private static final int MAX_NESTING_DEPTH = 200;
 
     /**
      * Validates input JSON string and returns the sanitized version of the string that's safe to
@@ -127,7 +127,7 @@ public class JsonSanitizer {
      * Helper class to check nesting depth of JSON expressions.
      */
     private static class StackChecker {
-        private int mStackDepth = 0;
+        private int mStackDepth;
 
         public void increaseAndCheck() {
             if (++mStackDepth >= MAX_NESTING_DEPTH) {

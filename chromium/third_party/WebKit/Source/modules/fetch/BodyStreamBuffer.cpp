@@ -22,7 +22,7 @@ namespace blink {
 
 class BodyStreamBuffer::LoaderClient final
     : public GarbageCollectedFinalized<LoaderClient>,
-      public ActiveDOMObject,
+      public ContextLifecycleObserver,
       public FetchDataLoader::Client {
   WTF_MAKE_NONCOPYABLE(LoaderClient);
   USING_GARBAGE_COLLECTED_MIXIN(LoaderClient);
@@ -31,9 +31,9 @@ class BodyStreamBuffer::LoaderClient final
   LoaderClient(ExecutionContext* executionContext,
                BodyStreamBuffer* buffer,
                FetchDataLoader::Client* client)
-      : ActiveDOMObject(executionContext), m_buffer(buffer), m_client(client) {
-    suspendIfNeeded();
-  }
+      : ContextLifecycleObserver(executionContext),
+        m_buffer(buffer),
+        m_client(client) {}
 
   void didFetchDataLoadedBlobHandle(
       PassRefPtr<BlobDataHandle> blobDataHandle) override {
@@ -64,12 +64,12 @@ class BodyStreamBuffer::LoaderClient final
   DEFINE_INLINE_TRACE() {
     visitor->trace(m_buffer);
     visitor->trace(m_client);
-    ActiveDOMObject::trace(visitor);
+    ContextLifecycleObserver::trace(visitor);
     FetchDataLoader::Client::trace(visitor);
   }
 
  private:
-  void contextDestroyed() override { m_buffer->stopLoading(); }
+  void contextDestroyed(ExecutionContext*) override { m_buffer->stopLoading(); }
 
   Member<BodyStreamBuffer> m_buffer;
   Member<FetchDataLoader::Client> m_client;
@@ -81,7 +81,7 @@ BodyStreamBuffer::BodyStreamBuffer(ScriptState* scriptState,
       m_scriptState(scriptState),
       m_consumer(consumer),
       m_madeFromReadableStream(false) {
-  v8::Local<v8::Value> bodyValue = toV8(this, scriptState);
+  v8::Local<v8::Value> bodyValue = ToV8(this, scriptState);
   DCHECK(!bodyValue.IsEmpty());
   DCHECK(bodyValue->IsObject());
   v8::Local<v8::Object> body = bodyValue.As<v8::Object>();
@@ -103,7 +103,7 @@ BodyStreamBuffer::BodyStreamBuffer(ScriptState* scriptState, ScriptValue stream)
       m_scriptState(scriptState),
       m_madeFromReadableStream(true) {
   DCHECK(ReadableStreamOperations::isReadableStream(scriptState, stream));
-  v8::Local<v8::Value> bodyValue = toV8(this, scriptState);
+  v8::Local<v8::Value> bodyValue = ToV8(this, scriptState);
   DCHECK(!bodyValue.IsEmpty());
   DCHECK(bodyValue->IsObject());
   v8::Local<v8::Object> body = bodyValue.As<v8::Object>();
@@ -116,7 +116,7 @@ BodyStreamBuffer::BodyStreamBuffer(ScriptState* scriptState, ScriptValue stream)
 
 ScriptValue BodyStreamBuffer::stream() {
   ScriptState::Scope scope(m_scriptState.get());
-  v8::Local<v8::Value> bodyValue = toV8(this, m_scriptState.get());
+  v8::Local<v8::Value> bodyValue = ToV8(this, m_scriptState.get());
   DCHECK(!bodyValue.IsEmpty());
   DCHECK(bodyValue->IsObject());
   v8::Local<v8::Object> body = bodyValue.As<v8::Object>();
@@ -214,7 +214,7 @@ ScriptPromise BodyStreamBuffer::cancel(ScriptState* scriptState,
 
 void BodyStreamBuffer::onStateChange() {
   if (!m_consumer || !getExecutionContext() ||
-      getExecutionContext()->activeDOMObjectsAreStopped())
+      getExecutionContext()->isContextDestroyed())
     return;
 
   switch (m_consumer->getPublicState()) {
@@ -236,9 +236,9 @@ bool BodyStreamBuffer::hasPendingActivity() const {
   return UnderlyingSourceBase::hasPendingActivity();
 }
 
-void BodyStreamBuffer::contextDestroyed() {
+void BodyStreamBuffer::contextDestroyed(ExecutionContext* destroyedContext) {
   cancelConsumer();
-  UnderlyingSourceBase::contextDestroyed();
+  UnderlyingSourceBase::contextDestroyed(destroyedContext);
 }
 
 bool BodyStreamBuffer::isStreamReadable() {

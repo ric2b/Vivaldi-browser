@@ -26,9 +26,7 @@
 class BrowserProcessImpl;
 class ChromeBrowserMainExtraParts;
 class FieldTrialSynchronizer;
-class MetricsService;
 class PrefService;
-class ProcessPowerCollector;
 class Profile;
 class StartupBrowserCreator;
 class StartupTimeBomb;
@@ -77,6 +75,7 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
   void PreMainMessageLoopRun() override;
   bool MainMessageLoopRun(int* result_code) override;
   void PostMainMessageLoopRun() override;
+  void PreShutdown() override;
   void PostDestroyThreads() override;
 
   // Additional stages for ChromeBrowserMainExtraParts. These stages are called
@@ -148,9 +147,6 @@ class ChromeBrowserMainParts : public content::BrowserMainParts {
   ChromeBrowserFieldTrials browser_field_trials_;
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
-  // A monitor for attributing power consumption to origins.
-  std::unique_ptr<ProcessPowerCollector> process_power_collector_;
-
   std::unique_ptr<WebUsbDetector> web_usb_detector_;
 #endif
 

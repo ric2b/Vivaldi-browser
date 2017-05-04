@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "components/sync/model/data_type_error_handler_mock.h"
 #include "components/sync/model/fake_model_type_change_processor.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/stub_model_type_sync_bridge.h"
@@ -17,7 +16,7 @@
 
 namespace syncer {
 
-// A mock MTCP that lets verify DisableSync and OnMetadataLoaded were called in
+// A mock MTCP that lets verify DisableSync and ModelReadyToSync were called in
 // the ways that we expect.
 class MockModelTypeChangeProcessor : public FakeModelTypeChangeProcessor {
  public:
@@ -27,18 +26,11 @@ class MockModelTypeChangeProcessor : public FakeModelTypeChangeProcessor {
 
   void DisableSync() override { disabled_callback_.Run(); }
 
-  void OnMetadataLoaded(SyncError error,
-                        std::unique_ptr<MetadataBatch> batch) override {
-    on_metadata_loaded_error_ = error;
-    on_metadata_loaded_batch_ = std::move(batch);
+  void ModelReadyToSync(std::unique_ptr<MetadataBatch> batch) override {
+    metadata_batch_ = std::move(batch);
   }
 
-  const SyncError& on_metadata_loaded_error() const {
-    return on_metadata_loaded_error_;
-  }
-  MetadataBatch* on_metadata_loaded_batch() {
-    return on_metadata_loaded_batch_.get();
-  }
+  MetadataBatch* metadata_batch() { return metadata_batch_.get(); }
 
  private:
   // This callback is invoked when DisableSync() is called, instead of
@@ -48,8 +40,7 @@ class MockModelTypeChangeProcessor : public FakeModelTypeChangeProcessor {
   // allows this information to reach somewhere safe instead.
   base::Closure disabled_callback_;
 
-  SyncError on_metadata_loaded_error_;
-  std::unique_ptr<MetadataBatch> on_metadata_loaded_batch_;
+  std::unique_ptr<MetadataBatch> metadata_batch_;
 };
 
 class MockModelTypeSyncBridge : public StubModelTypeSyncBridge {
@@ -90,7 +81,7 @@ class ModelTypeSyncBridgeTest : public ::testing::Test {
 
   void OnSyncStarting() {
     bridge_.OnSyncStarting(
-        base::MakeUnique<DataTypeErrorHandlerMock>(),
+        ModelErrorHandler(),
         base::Bind(&ModelTypeSyncBridgeTest::OnProcessorStarted,
                    base::Unretained(this)));
   }
@@ -100,7 +91,6 @@ class ModelTypeSyncBridgeTest : public ::testing::Test {
 
  private:
   void OnProcessorStarted(
-      SyncError error,
       std::unique_ptr<ActivationContext> activation_context) {
     start_callback_called_ = true;
   }
@@ -128,10 +118,7 @@ TEST_F(ModelTypeSyncBridgeTest, DisableSync) {
   // processor about this.
   EXPECT_TRUE(bridge()->processor_disable_sync_called());
 
-  EXPECT_FALSE(
-      bridge()->change_processor()->on_metadata_loaded_error().IsSet());
-  MetadataBatch* batch =
-      bridge()->change_processor()->on_metadata_loaded_batch();
+  MetadataBatch* batch = bridge()->change_processor()->metadata_batch();
   EXPECT_NE(nullptr, batch);
   EXPECT_EQ(sync_pb::ModelTypeState().SerializeAsString(),
             batch->GetModelTypeState().SerializeAsString());

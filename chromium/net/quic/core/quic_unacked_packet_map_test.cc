@@ -4,13 +4,8 @@
 
 #include "net/quic/core/quic_unacked_packet_map.h"
 
-#include "net/quic/core/quic_flags.h"
-#include "net/quic/core/quic_utils.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-using std::min;
-using std::vector;
 
 namespace net {
 namespace test {
@@ -37,7 +32,7 @@ class QuicUnackedPacketMapTest : public ::testing::Test {
       QuicStreamId stream_id) {
     SerializedPacket packet(kDefaultPathId, packet_number,
                             PACKET_1BYTE_PACKET_NUMBER, nullptr, kDefaultLength,
-                            0, false, false);
+                            false, false);
     QuicStreamFrame* frame = new QuicStreamFrame();
     frame->stream_id = stream_id;
     packet.retransmittable_frames.push_back(QuicFrame(frame));
@@ -48,7 +43,7 @@ class QuicUnackedPacketMapTest : public ::testing::Test {
       QuicPacketNumber packet_number) {
     return SerializedPacket(kDefaultPathId, packet_number,
                             PACKET_1BYTE_PACKET_NUMBER, nullptr, kDefaultLength,
-                            0, false, false);
+                            false, false);
   }
 
   void VerifyInFlightPackets(QuicPacketNumber* packets, size_t num_packets) {

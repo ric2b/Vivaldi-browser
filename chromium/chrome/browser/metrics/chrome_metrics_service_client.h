@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <deque>
 #include <memory>
 #include <queue>
 #include <string>
@@ -23,17 +24,13 @@
 #include "components/omnibox/browser/omnibox_event_global_tracker.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "ppapi/features/features.h"
 
 class AntiVirusMetricsProvider;
 class ChromeOSMetricsProvider;
 class GoogleUpdateMetricsProviderWin;
 class PluginMetricsProvider;
 class PrefRegistrySimple;
-class PrefService;
-
-#if !defined(OS_CHROMEOS)
-class SigninStatusMetricsProvider;
-#endif
 
 namespace browser_watcher {
 class WatcherMetricsProviderWin;
@@ -71,11 +68,13 @@ class ChromeMetricsServiceClient
   metrics::SystemProfileProto::Channel GetChannel() override;
   std::string GetVersionString() override;
   void OnEnvironmentUpdate(std::string* serialized_environment) override;
-  void OnLogUploadComplete() override;
+  void OnLogCleanShutdown() override;
   void InitializeSystemProfileMetrics(
       const base::Closure& done_callback) override;
   void CollectFinalMetricsForLog(const base::Closure& done_callback) override;
   std::unique_ptr<metrics::MetricsLogUploader> CreateUploader(
+      const std::string& server_url,
+      const std::string& mime_type,
       const base::Callback<void(int)>& on_upload_complete) override;
   base::TimeDelta GetStandardUploadInterval() override;
   base::string16 GetRegistryBackupKey() override;
@@ -177,7 +176,7 @@ class ChromeMetricsServiceClient
   // MetricsService. Has the same lifetime as |metrics_service_|.
   metrics::ProfilerMetricsProvider* profiler_metrics_provider_;
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   // The PluginMetricsProvider instance that was registered with
   // MetricsService. Has the same lifetime as |metrics_service_|.
   PluginMetricsProvider* plugin_metrics_provider_;

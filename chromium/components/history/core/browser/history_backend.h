@@ -36,11 +36,8 @@
 
 #include "db/vivaldi_history_types.h"
 
-class HistoryURLProvider;
-struct HistoryURLProviderParams;
 class SkBitmap;
 class TestingProfile;
-struct ThumbnailScore;
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -55,11 +52,11 @@ class HistoryBackendObserver;
 class HistoryBackendTest;
 class HistoryDatabase;
 struct HistoryDatabaseParams;
-struct HistoryDetails;
 class HistoryDBTask;
 class InMemoryHistoryBackend;
 class TypedUrlSyncableService;
 class HistoryBackendHelper;
+class URLDatabase;
 
 // The maximum number of icons URLs per page which can be stored in the
 // thumbnail database.
@@ -349,7 +346,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   uint32_t GetNextDownloadId();
   void QueryDownloads(std::vector<DownloadRow>* rows);
-  void UpdateDownload(const DownloadRow& data);
+  void UpdateDownload(const DownloadRow& data, bool should_commit_immediately);
   bool CreateDownload(const DownloadRow& history_info);
   void RemoveDownloads(const std::set<uint32_t>& ids);
 

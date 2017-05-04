@@ -6,8 +6,6 @@
 
 #include <utility>
 
-#include "media/base/media_keys.h"
-
 namespace media {
 
 CdmPromiseAdapter::CdmPromiseAdapter() : next_promise_id_(1) {
@@ -22,7 +20,7 @@ CdmPromiseAdapter::~CdmPromiseAdapter() {
 uint32_t CdmPromiseAdapter::SavePromise(std::unique_ptr<CdmPromise> promise) {
   DCHECK(thread_checker_.CalledOnValidThread());
   uint32_t promise_id = next_promise_id_++;
-  promises_.add(promise_id, std::move(promise));
+  promises_[promise_id] = std::move(promise);
   return promise_id;
 }
 
@@ -73,7 +71,9 @@ std::unique_ptr<CdmPromise> CdmPromiseAdapter::TakePromise(
   PromiseMap::iterator it = promises_.find(promise_id);
   if (it == promises_.end())
     return nullptr;
-  return promises_.take_and_erase(it);
+  std::unique_ptr<CdmPromise> result = std::move(it->second);
+  promises_.erase(it);
+  return result;
 }
 
 // Explicit instantiation of function templates.

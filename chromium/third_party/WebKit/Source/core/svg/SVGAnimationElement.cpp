@@ -60,7 +60,7 @@ bool SVGAnimationElement::parseValues(const String& value,
         goto fail;
     } else {
       parseList[i] = parseList[i].stripWhiteSpace();
-      result.append(parseList[i]);
+      result.push_back(parseList[i]);
     }
   }
 
@@ -86,11 +86,11 @@ static bool parseKeyTimes(const String& string,
       if (!n) {
         if (time)
           goto fail;
-      } else if (time < result.last()) {
+      } else if (time < result.back()) {
         goto fail;
       }
     }
-    result.append(time);
+    result.push_back(time);
   }
   return true;
 fail:
@@ -129,7 +129,7 @@ static bool parseKeySplinesInternal(const String& string,
       ptr++;
     skipOptionalSVGSpaces(ptr, end);
 
-    result.append(gfx::CubicBezier(posA, posB, posC, posD));
+    result.push_back(gfx::CubicBezier(posA, posB, posC, posD));
   }
 
   return ptr == end;
@@ -152,12 +152,13 @@ static bool parseKeySplines(const String& string,
   return true;
 }
 
-void SVGAnimationElement::parseAttribute(const QualifiedName& name,
-                                         const AtomicString& oldValue,
-                                         const AtomicString& value) {
+void SVGAnimationElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  const QualifiedName& name = params.name;
   if (name == SVGNames::valuesAttr) {
-    if (!parseValues(value, m_values)) {
-      reportAttributeParsingError(SVGParseStatus::ParsingFailed, name, value);
+    if (!parseValues(params.newValue, m_values)) {
+      reportAttributeParsingError(SVGParseStatus::ParsingFailed, name,
+                                  params.newValue);
       return;
     }
     updateAnimationMode();
@@ -165,8 +166,10 @@ void SVGAnimationElement::parseAttribute(const QualifiedName& name,
   }
 
   if (name == SVGNames::keyTimesAttr) {
-    if (!parseKeyTimes(value, m_keyTimes, true))
-      reportAttributeParsingError(SVGParseStatus::ParsingFailed, name, value);
+    if (!parseKeyTimes(params.newValue, m_keyTimes, true)) {
+      reportAttributeParsingError(SVGParseStatus::ParsingFailed, name,
+                                  params.newValue);
+    }
     return;
   }
 
@@ -174,20 +177,24 @@ void SVGAnimationElement::parseAttribute(const QualifiedName& name,
     if (isSVGAnimateMotionElement(*this)) {
       // This is specified to be an animateMotion attribute only but it is
       // simpler to put it here where the other timing calculatations are.
-      if (!parseKeyTimes(value, m_keyPoints, false))
-        reportAttributeParsingError(SVGParseStatus::ParsingFailed, name, value);
+      if (!parseKeyTimes(params.newValue, m_keyPoints, false)) {
+        reportAttributeParsingError(SVGParseStatus::ParsingFailed, name,
+                                    params.newValue);
+      }
     }
     return;
   }
 
   if (name == SVGNames::keySplinesAttr) {
-    if (!parseKeySplines(value, m_keySplines))
-      reportAttributeParsingError(SVGParseStatus::ParsingFailed, name, value);
+    if (!parseKeySplines(params.newValue, m_keySplines)) {
+      reportAttributeParsingError(SVGParseStatus::ParsingFailed, name,
+                                  params.newValue);
+    }
     return;
   }
 
   if (name == SVGNames::calcModeAttr) {
-    setCalcMode(value);
+    setCalcMode(params.newValue);
     return;
   }
 
@@ -197,7 +204,7 @@ void SVGAnimationElement::parseAttribute(const QualifiedName& name,
     return;
   }
 
-  SVGSMILElement::parseAttribute(name, oldValue, value);
+  SVGSMILElement::parseAttribute(params);
 }
 
 void SVGAnimationElement::svgAttributeChanged(const QualifiedName& attrName) {
@@ -343,14 +350,14 @@ void SVGAnimationElement::calculateKeyTimesForCalcModePaced() {
 
   Vector<float> keyTimesForPaced;
   float totalDistance = 0;
-  keyTimesForPaced.append(0);
+  keyTimesForPaced.push_back(0);
   for (unsigned n = 0; n < valuesCount - 1; ++n) {
     // Distance in any units
     float distance = calculateDistance(m_values[n], m_values[n + 1]);
     if (distance < 0)
       return;
     totalDistance += distance;
-    keyTimesForPaced.append(distance);
+    keyTimesForPaced.push_back(distance);
   }
   if (!totalDistance)
     return;
@@ -467,12 +474,8 @@ void SVGAnimationElement::currentValuesForValuesAnimation(
   CalcMode calcMode = this->getCalcMode();
   if (isSVGAnimateElement(*this)) {
     SVGAnimateElement& animateElement = toSVGAnimateElement(*this);
-    if (!animateElement.animatedPropertyTypeSupportsAddition()) {
-      ASSERT(animateElement.animatedPropertyType() != AnimatedTransformList ||
-             isSVGAnimateTransformElement(*this));
-      ASSERT(animateElement.animatedPropertyType() != AnimatedUnknown);
+    if (!animateElement.animatedPropertyTypeSupportsAddition())
       calcMode = CalcModeDiscrete;
-    }
   }
   if (!m_keyPoints.isEmpty() && calcMode != CalcModePaced)
     return currentValuesFromKeyPoints(percent, effectivePercent, from, to);
@@ -568,7 +571,7 @@ void SVGAnimationElement::startedActiveInterval() {
                                  fastHasAttribute(SVGNames::keyPointsAttr) ||
                                  (m_values.size() == m_keyTimes.size())) &&
         (calcMode == CalcModeDiscrete || !m_keyTimes.size() ||
-         m_keyTimes.last() == 1) &&
+         m_keyTimes.back() == 1) &&
         (calcMode != CalcModeSpline ||
          ((m_keySplines.size() &&
            (m_keySplines.size() == m_values.size() - 1)) ||
@@ -576,7 +579,7 @@ void SVGAnimationElement::startedActiveInterval() {
         (!fastHasAttribute(SVGNames::keyPointsAttr) ||
          (m_keyTimes.size() > 1 && m_keyTimes.size() == m_keyPoints.size()));
     if (m_animationValid)
-      m_animationValid = calculateToAtEndOfDurationValue(m_values.last());
+      m_animationValid = calculateToAtEndOfDurationValue(m_values.back());
     if (calcMode == CalcModePaced && m_animationValid)
       calculateKeyTimesForCalcModePaced();
   } else if (animationMode == PathAnimation) {

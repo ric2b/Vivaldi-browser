@@ -132,7 +132,7 @@ public class StripLayoutHelper {
 
     // Reorder State
     private int mReorderState = REORDER_SCROLL_NONE;
-    private boolean mInReorderMode = false;
+    private boolean mInReorderMode;
     private float mLastReorderX;
     private long mLastReorderScrollTime;
 
@@ -451,10 +451,16 @@ public class StripLayoutHelper {
     }
 
     /**
-     * Called when the tab model this StripLayoutHelper visually represents has been selected.
+     * Called when a new tab model is selected.
+     * @param selected If the new tab model selected is the model that this strip helper associated
+     * with.
      */
-    public void tabModelSelected() {
-        bringSelectedTabToVisibleArea(0, false);
+    public void tabModelSelected(boolean selected) {
+        if (selected) {
+            bringSelectedTabToVisibleArea(0, false);
+        } else {
+            mTabMenu.dismiss();
+        }
     }
 
     /**

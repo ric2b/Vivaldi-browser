@@ -35,7 +35,6 @@
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
-#include "platform/MIMETypeRegistry.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/ExpensiveCanvasHeuristicParameters.h"
@@ -50,6 +49,7 @@
 #include "platform/image-encoders/JPEGImageEncoder.h"
 #include "platform/image-encoders/PNGImageEncoder.h"
 #include "platform/image-encoders/WEBPImageEncoder.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "skia/ext/texture_handle.h"
@@ -72,7 +72,7 @@ std::unique_ptr<ImageBuffer> ImageBuffer::create(
     std::unique_ptr<ImageBufferSurface> surface) {
   if (!surface->isValid())
     return nullptr;
-  return wrapUnique(new ImageBuffer(std::move(surface)));
+  return WTF::wrapUnique(new ImageBuffer(std::move(surface)));
 }
 
 std::unique_ptr<ImageBuffer> ImageBuffer::create(
@@ -81,11 +81,11 @@ std::unique_ptr<ImageBuffer> ImageBuffer::create(
     ImageInitializationMode initializationMode,
     sk_sp<SkColorSpace> colorSpace) {
   std::unique_ptr<ImageBufferSurface> surface(
-      wrapUnique(new UnacceleratedImageBufferSurface(
+      WTF::wrapUnique(new UnacceleratedImageBufferSurface(
           size, opacityMode, initializationMode, std::move(colorSpace))));
   if (!surface->isValid())
     return nullptr;
-  return wrapUnique(new ImageBuffer(std::move(surface)));
+  return WTF::wrapUnique(new ImageBuffer(std::move(surface)));
 }
 
 ImageBuffer::ImageBuffer(std::unique_ptr<ImageBufferSurface> surface)
@@ -146,16 +146,6 @@ bool ImageBuffer::isDirty() {
   return m_client ? m_client->isDirty() : false;
 }
 
-void ImageBuffer::didDisableAcceleration() const {
-  DCHECK(m_gpuMemoryUsage);
-  DCHECK_GT(s_globalAcceleratedImageBufferCount, 0u);
-  if (m_client)
-    m_client->didDisableAcceleration();
-  s_globalAcceleratedImageBufferCount--;
-  s_globalGPUMemoryUsage -= m_gpuMemoryUsage;
-  m_gpuMemoryUsage = 0;
-}
-
 void ImageBuffer::didFinalizeFrame() {
   if (m_client)
     m_client->didFinalizeFrame();
@@ -208,7 +198,8 @@ WebLayer* ImageBuffer::platformLayer() const {
   return m_surface->layer();
 }
 
-bool ImageBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl,
+bool ImageBuffer::copyToPlatformTexture(SnapshotReason reason,
+                                        gpu::gles2::GLES2Interface* gl,
                                         GLuint texture,
                                         GLenum internalFormat,
                                         GLenum destType,
@@ -224,8 +215,8 @@ bool ImageBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl,
   if (!isSurfaceValid())
     return false;
 
-  sk_sp<const SkImage> textureImage = m_surface->newImageSnapshot(
-      PreferAcceleration, SnapshotReasonCopyToWebGLTexture);
+  sk_sp<const SkImage> textureImage =
+      m_surface->newImageSnapshot(PreferAcceleration, reason);
   if (!textureImage)
     return false;
 
@@ -240,7 +231,7 @@ bool ImageBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl,
   if (!textureInfo || !textureInfo->fID)
     return false;
 
-  std::unique_ptr<WebGraphicsContext3DProvider> provider = wrapUnique(
+  std::unique_ptr<WebGraphicsContext3DProvider> provider = WTF::wrapUnique(
       Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
   if (!provider || !provider->grContext())
     return false;
@@ -268,7 +259,7 @@ bool ImageBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl,
   // semantics are reversed.
   // It is expected that callers of this method have already allocated
   // the platform texture with the appropriate size.
-  gl->CopySubTextureCHROMIUM(sourceTexture, texture, destPoint.x(),
+  gl->CopySubTextureCHROMIUM(sourceTexture, 0, texture, 0, destPoint.x(),
                              destPoint.y(), sourceSubRectangle.x(),
                              sourceSubRectangle.y(), sourceSubRectangle.width(),
                              sourceSubRectangle.height(),
@@ -301,7 +292,7 @@ bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(
     SourceDrawingBuffer sourceBuffer) {
   if (!drawingBuffer || !m_surface->isAccelerated())
     return false;
-  std::unique_ptr<WebGraphicsContext3DProvider> provider = wrapUnique(
+  std::unique_ptr<WebGraphicsContext3DProvider> provider = WTF::wrapUnique(
       Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
   if (!provider)
     return false;
@@ -366,8 +357,9 @@ bool ImageBuffer::getImageData(Multiply multiplied,
   DCHECK(canvas());
 
   if (ExpensiveCanvasHeuristicParameters::GetImageDataForcesNoAcceleration &&
-      !RuntimeEnabledFeatures::canvas2dFixedRenderingModeEnabled())
+      !RuntimeEnabledFeatures::canvas2dFixedRenderingModeEnabled()) {
     const_cast<ImageBuffer*>(this)->disableAcceleration();
+  }
 
   sk_sp<SkImage> snapshot = m_surface->newImageSnapshot(
       PreferNoAcceleration, SnapshotReasonGetImageData);
@@ -441,22 +433,22 @@ void ImageBuffer::putByteArray(Multiply multiplied,
   if (!isSurfaceValid())
     return;
 
-  ASSERT(sourceRect.width() > 0);
-  ASSERT(sourceRect.height() > 0);
+  DCHECK_GT(sourceRect.width(), 0);
+  DCHECK_GT(sourceRect.height(), 0);
 
   int originX = sourceRect.x();
   int destX = destPoint.x() + sourceRect.x();
-  ASSERT(destX >= 0);
-  ASSERT(destX < m_surface->size().width());
-  ASSERT(originX >= 0);
-  ASSERT(originX < sourceRect.maxX());
+  DCHECK_GE(destX, 0);
+  DCHECK_LT(destX, m_surface->size().width());
+  DCHECK_GE(originX, 0);
+  DCHECK_LT(originX, sourceRect.maxX());
 
   int originY = sourceRect.y();
   int destY = destPoint.y() + sourceRect.y();
-  ASSERT(destY >= 0);
-  ASSERT(destY < m_surface->size().height());
-  ASSERT(originY >= 0);
-  ASSERT(originY < sourceRect.maxY());
+  DCHECK_GE(destY, 0);
+  DCHECK_LT(destY, m_surface->size().height());
+  DCHECK_GE(originY, 0);
+  DCHECK_LT(originY, sourceRect.maxY());
 
   const size_t srcBytesPerRow = 4 * sourceSize.width();
   const void* srcAddr = source + originY * srcBytesPerRow + originX * 4;
@@ -491,8 +483,13 @@ void ImageBuffer::updateGPUMemoryUsage() const {
     s_globalAcceleratedImageBufferCount--;
     s_globalGPUMemoryUsage -= m_gpuMemoryUsage;
     m_gpuMemoryUsage = 0;
+
+    if (m_client)
+      m_client->didDisableAcceleration();
   }
 }
+
+namespace {
 
 class UnacceleratedSurfaceFactory
     : public RecordingImageBufferFallbackSurfaceFactory {
@@ -502,7 +499,7 @@ class UnacceleratedSurfaceFactory
       OpacityMode opacityMode,
       sk_sp<SkColorSpace> colorSpace,
       SkColorType colorType) {
-    return wrapUnique(new UnacceleratedImageBufferSurface(
+    return WTF::wrapUnique(new UnacceleratedImageBufferSurface(
         size, opacityMode, InitializeImagePixels, std::move(colorSpace),
         colorType));
   }
@@ -510,30 +507,39 @@ class UnacceleratedSurfaceFactory
   virtual ~UnacceleratedSurfaceFactory() {}
 };
 
+}  // namespace
+
 void ImageBuffer::disableAcceleration() {
   if (!isAccelerated())
     return;
 
-  sk_sp<SkImage> image =
-      m_surface->newImageSnapshot(PreferNoAcceleration, SnapshotReasonPaint);
-  // Using a GPU-backed image with RecordingImageBufferSurface
-  // will fail at playback time.
-  image = image->makeNonTextureImage();
-
   // Create and configure a recording (unaccelerated) surface.
   std::unique_ptr<RecordingImageBufferFallbackSurfaceFactory> surfaceFactory =
-      makeUnique<UnacceleratedSurfaceFactory>();
+      WTF::makeUnique<UnacceleratedSurfaceFactory>();
   std::unique_ptr<ImageBufferSurface> surface =
-      wrapUnique(new RecordingImageBufferSurface(
+      WTF::wrapUnique(new RecordingImageBufferSurface(
           m_surface->size(), std::move(surfaceFactory),
           m_surface->getOpacityMode(), m_surface->colorSpace()));
+  setSurface(std::move(surface));
+}
+
+void ImageBuffer::setSurface(std::unique_ptr<ImageBufferSurface> surface) {
+  sk_sp<SkImage> image =
+      m_surface->newImageSnapshot(PreferNoAcceleration, SnapshotReasonPaint);
+
+  if (surface->isRecording()) {
+    // Using a GPU-backed image with RecordingImageBufferSurface
+    // will fail at playback time.
+    image = image->makeNonTextureImage();
+  }
+
   surface->canvas()->drawImage(image.get(), 0, 0);
   surface->setImageBuffer(this);
   if (m_client)
     m_client->restoreCanvasMatrixClipStack(surface->canvas());
   m_surface = std::move(surface);
 
-  didDisableAcceleration();
+  updateGPUMemoryUsage();
 }
 
 bool ImageDataBuffer::encodeImage(const String& mimeType,
@@ -551,7 +557,7 @@ bool ImageDataBuffer::encodeImage(const String& mimeType,
   } else {
     if (!PNGImageEncoder::encode(*this, encodedImage))
       return false;
-    ASSERT(mimeType == "image/png");
+    DCHECK_EQ(mimeType, "image/png");
   }
 
   return true;
@@ -559,7 +565,7 @@ bool ImageDataBuffer::encodeImage(const String& mimeType,
 
 String ImageDataBuffer::toDataURL(const String& mimeType,
                                   const double& quality) const {
-  ASSERT(MIMETypeRegistry::isSupportedImageMIMETypeForEncoding(mimeType));
+  DCHECK(MIMETypeRegistry::isSupportedImageMIMETypeForEncoding(mimeType));
 
   Vector<unsigned char> result;
   if (!encodeImage(mimeType, quality, &result))

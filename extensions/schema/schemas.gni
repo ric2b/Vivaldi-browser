@@ -18,6 +18,7 @@ sources = [
   "savedpasswords.json",
   "settings.json",
   "show_menu.json",
+  "sync.json",
   "tabs_private.json",
   "thumbnails.json",
   "vivaldi_sessions.json",

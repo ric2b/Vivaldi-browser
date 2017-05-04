@@ -8,6 +8,7 @@
 #include "core/clipboard/DataTransfer.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SelectionController.h"
 #include "core/events/DragEvent.h"
@@ -63,22 +64,23 @@ const double kFakeMouseMoveInterval = 0.1;
 #if OS(MACOSX)
 const int kDragThresholdX = 3;
 const int kDragThresholdY = 3;
-const double kTextDragDelay = 0.15;
+const TimeDelta kTextDragDelay = TimeDelta::FromSecondsD(0.15);
 #else
 const int kDragThresholdX = 4;
 const int kDragThresholdY = 4;
-const double kTextDragDelay = 0.0;
+const TimeDelta kTextDragDelay = TimeDelta::FromSecondsD(0.0);
 #endif
 
 }  // namespace
 
 enum class DragInitiator { Mouse, Touch };
 
-MouseEventManager::MouseEventManager(LocalFrame* frame,
-                                     ScrollManager* scrollManager)
+MouseEventManager::MouseEventManager(LocalFrame& frame,
+                                     ScrollManager& scrollManager)
     : m_frame(frame),
       m_scrollManager(scrollManager),
       m_fakeMouseMoveEventTimer(
+          TaskRunnerHelper::get(TaskType::UserInteraction, &frame),
           this,
           &MouseEventManager::fakeMouseMoveEventTimerFired) {
   clear();
@@ -97,7 +99,7 @@ void MouseEventManager::clear() {
   m_clickCount = 0;
   m_clickNode = nullptr;
   m_mouseDownPos = IntPoint();
-  m_mouseDownTimestamp = 0;
+  m_mouseDownTimestamp = TimeTicks();
   m_mouseDown = PlatformMouseEvent();
   m_svgPan = false;
   m_dragStartPos = LayoutPoint();
@@ -283,8 +285,7 @@ void MouseEventManager::fakeMouseMoveEventTimerFired(TimerBase* timer) {
   DCHECK(timer == &m_fakeMouseMoveEventTimer);
   DCHECK(!m_mousePressed);
 
-  Settings* settings = m_frame->settings();
-  if (settings && !settings->deviceSupportsMouse())
+  if (m_isMousePositionUnknown)
     return;
 
   FrameView* view = m_frame->view();
@@ -304,9 +305,11 @@ void MouseEventManager::fakeMouseMoveEventTimerFired(TimerBase* timer) {
       WebPointerProperties::Button::NoButton, PlatformEvent::MouseMoved, 0,
       static_cast<PlatformEvent::Modifiers>(
           KeyboardEventManager::getCurrentModifierState()),
-      PlatformMouseEvent::RealOrIndistinguishable,
-      monotonicallyIncreasingTime(), WebPointerProperties::PointerType::Mouse);
-  m_frame->eventHandler().handleMouseMoveEvent(fakeMouseMoveEvent);
+      PlatformMouseEvent::RealOrIndistinguishable, TimeTicks::Now(),
+      WebPointerProperties::PointerType::Mouse);
+  Vector<PlatformMouseEvent> coalescedEvents;
+  m_frame->eventHandler().handleMouseMoveEvent(fakeMouseMoveEvent,
+                                               coalescedEvents);
 }
 
 void MouseEventManager::cancelFakeMouseMoveEvent() {
@@ -528,10 +531,6 @@ void MouseEventManager::dispatchFakeMouseMoveEventSoon() {
   if (m_isMousePositionUnknown)
     return;
 
-  Settings* settings = m_frame->settings();
-  if (settings && !settings->deviceSupportsMouse())
-    return;
-
   // Reschedule the timer, to prevent dispatching mouse move events
   // during a scroll. This avoids a potential source of scroll jank.
   m_fakeMouseMoveEventTimer.startOneShot(kFakeMouseMoveInterval,
@@ -641,29 +640,28 @@ void MouseEventManager::updateSelectionForMouseDrag() {
 
 bool MouseEventManager::handleDragDropIfPossible(
     const GestureEventWithHitTestResults& targetedEvent) {
-  if (m_frame->settings() && m_frame->settings()->touchDragDropEnabled() &&
+  if (m_frame->settings() && m_frame->settings()->getTouchDragDropEnabled() &&
       m_frame->view()) {
-    const PlatformGestureEvent& gestureEvent = targetedEvent.event();
-    IntPoint adjustedPoint = gestureEvent.position();
-    unsigned modifiers = gestureEvent.getModifiers();
+    const WebGestureEvent& gestureEvent = targetedEvent.event();
+    unsigned modifiers = gestureEvent.modifiers();
 
     // TODO(mustaq): Suppressing long-tap MouseEvents could break
     // drag-drop. Will do separately because of the risk. crbug.com/606938.
     PlatformMouseEvent mouseDownEvent(
-        adjustedPoint, gestureEvent.globalPosition(),
-        WebPointerProperties::Button::Left, PlatformEvent::MousePressed, 1,
+        gestureEvent, WebPointerProperties::Button::Left,
+        PlatformEvent::MousePressed, 1,
         static_cast<PlatformEvent::Modifiers>(modifiers |
                                               PlatformEvent::LeftButtonDown),
-        PlatformMouseEvent::FromTouch, WTF::monotonicallyIncreasingTime(),
+        PlatformMouseEvent::FromTouch, TimeTicks::Now(),
         WebPointerProperties::PointerType::Mouse);
     m_mouseDown = mouseDownEvent;
 
     PlatformMouseEvent mouseDragEvent(
-        adjustedPoint, gestureEvent.globalPosition(),
-        WebPointerProperties::Button::Left, PlatformEvent::MouseMoved, 1,
+        gestureEvent, WebPointerProperties::Button::Left,
+        PlatformEvent::MouseMoved, 1,
         static_cast<PlatformEvent::Modifiers>(modifiers |
                                               PlatformEvent::LeftButtonDown),
-        PlatformMouseEvent::FromTouch, WTF::monotonicallyIncreasingTime(),
+        PlatformMouseEvent::FromTouch, TimeTicks::Now(),
         WebPointerProperties::PointerType::Mouse);
     HitTestRequest request(HitTestRequest::ReadOnly);
     MouseEventWithHitTestResults mev =
@@ -730,8 +728,17 @@ WebInputEventResult MouseEventManager::handleMouseDraggedEvent(
 
   m_mouseDownMayStartDrag = false;
 
-  if (m_mouseDownMayStartAutoscroll &&
-      !m_scrollManager->middleClickAutoscrollInProgress()) {
+  m_frame->eventHandler().selectionController().handleMouseDraggedEvent(
+      event, m_mouseDownPos, m_dragStartPos, m_mousePressNode.get(),
+      m_lastKnownMousePosition);
+
+  // The call into handleMouseDraggedEvent may have caused a re-layout,
+  // so get the LayoutObject again.
+  layoutObject = targetNode->layoutObject();
+
+  if (layoutObject && m_mouseDownMayStartAutoscroll &&
+      !m_scrollManager->middleClickAutoscrollInProgress() &&
+      !m_frame->selection().selectedHTMLForClipboard().isEmpty()) {
     if (AutoscrollController* controller =
             m_scrollManager->autoscrollController()) {
       controller->startAutoscrollForSelection(layoutObject);
@@ -739,9 +746,6 @@ WebInputEventResult MouseEventManager::handleMouseDraggedEvent(
     }
   }
 
-  m_frame->eventHandler().selectionController().handleMouseDraggedEvent(
-      event, m_mouseDownPos, m_dragStartPos, m_mousePressNode.get(),
-      m_lastKnownMousePosition);
   return WebInputEventResult::HandledSystem;
 }
 
@@ -790,8 +794,10 @@ bool MouseEventManager::handleDrag(const MouseEventWithHitTestResults& event,
   m_frame->view()->setCursor(pointerCursor());
 
   if (initiator == DragInitiator::Mouse &&
-      !dragThresholdExceeded(event.event().position()))
+      !dragThresholdExceeded(event.event().position())) {
+    dragState().m_dragSrc = nullptr;
     return true;
+  }
 
   // Once we're past the drag threshold, we don't want to treat this gesture as
   // a click.
@@ -903,8 +909,7 @@ void MouseEventManager::dragSourceEndedAt(const PlatformMouseEvent& event,
                                           DragOperation operation) {
   if (dragState().m_dragSrc) {
     dragState().m_dragDataTransfer->setDestinationOperation(operation);
-    // For now we don't care if event handler cancels default behavior, since
-    // there is none.
+    // The return value is ignored because dragend is not cancelable.
     dispatchDragSrcEvent(EventTypeNames::dragend, event);
   }
   clearDragDataTransfer();

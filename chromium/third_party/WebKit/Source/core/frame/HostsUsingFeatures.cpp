@@ -83,7 +83,7 @@ void HostsUsingFeatures::documentDetached(Document& document) {
   if (!url.protocolIsInHTTPFamily())
     return;
 
-  m_urlAndValues.append(std::make_pair(url, counter));
+  m_urlAndValues.push_back(std::make_pair(url, counter));
   document.HostsUsingFeaturesValue().clear();
   DCHECK(document.HostsUsingFeaturesValue().isEmpty());
 }
@@ -202,6 +202,13 @@ void HostsUsingFeatures::Value::recordETLDPlus1ToRappor(const KURL& url) {
   if (get(Feature::RTCPeerConnectionDataChannel))
     Platform::current()->recordRapporURL("RTCPeerConnection.DataChannel",
                                          WebURL(url));
+  if (get(Feature::RTCPeerConnectionUsed) &&
+      !get(Feature::RTCPeerConnectionAudio) &&
+      !get(Feature::RTCPeerConnectionVideo) &&
+      !get(Feature::RTCPeerConnectionDataChannel)) {
+    Platform::current()->recordRapporURL("RTCPeerConnection.Unconnected",
+                                         WebURL(url));
+  }
 }
 
 }  // namespace blink

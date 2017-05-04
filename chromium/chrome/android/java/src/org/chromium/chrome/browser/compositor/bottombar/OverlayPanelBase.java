@@ -109,7 +109,7 @@ abstract class OverlayPanelBase {
      * The Y coordinate to apply to the Base Page in order to keep the selection
      * in view when the Overlay Panel is in its EXPANDED state.
      */
-    private float mBasePageTargetY = 0.f;
+    private float mBasePageTargetY;
 
     /** The current context. */
     protected final Context mContext;
@@ -329,9 +329,7 @@ abstract class OverlayPanelBase {
      * @return The height of the Overlay Panel Content View in pixels.
      */
     public int getContentViewHeightPx() {
-        float barExpandedHeight = isFullWidthSizePanel()
-                ? getToolbarHeight() : mBarHeightPeeking;
-        return Math.round((mMaximumHeight - barExpandedHeight) / mPxToDp);
+        return Math.round((mMaximumHeight - getToolbarHeight()) / mPxToDp);
     }
 
     // ============================================================================================
@@ -390,8 +388,8 @@ abstract class OverlayPanelBase {
     private boolean mIsBarBorderVisible;
     private float mBarBorderHeight;
 
-    private boolean mBarShadowVisible = false;
-    private float mBarShadowOpacity = 0.f;
+    private boolean mBarShadowVisible;
+    private float mBarShadowOpacity;
 
     private float mArrowIconOpacity;
 
@@ -487,7 +485,7 @@ abstract class OverlayPanelBase {
     // Base Page states
     // --------------------------------------------------------------------------------------------
 
-    private float mBasePageY = 0.0f;
+    private float mBasePageY;
     private float mBasePageBrightness = 1.0f;
 
     /**
@@ -686,11 +684,7 @@ abstract class OverlayPanelBase {
      * @return The maximized height of the panel in dps.
      */
     protected float getMaximizedHeight() {
-        if (isFullWidthSizePanel()) {
-            return getTabHeight();
-        } else {
-            return getTabHeight() - mToolbarHeight;
-        }
+        return getTabHeight();
     }
 
     /**

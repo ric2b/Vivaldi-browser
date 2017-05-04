@@ -28,6 +28,7 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "modules/webaudio/AudioBuffer.h"
 #include "modules/webaudio/AudioNodeInput.h"
 #include "modules/webaudio/AudioNodeOutput.h"
@@ -102,8 +103,8 @@ void ScriptProcessorHandler::initialize() {
                                                        bufferSize(), sampleRate)
                                  : 0;
 
-    m_inputBuffers.append(inputBuffer);
-    m_outputBuffers.append(outputBuffer);
+    m_inputBuffers.push_back(inputBuffer);
+    m_outputBuffers.push_back(outputBuffer);
   }
 
   AudioHandler::initialize();
@@ -206,7 +207,7 @@ void ScriptProcessorHandler::process(size_t framesToProcess) {
         // Fire the event on the main thread with the appropriate buffer
         // index.
         context()->getExecutionContext()->postTask(
-            BLINK_FROM_HERE,
+            TaskType::MediaElementEvent, BLINK_FROM_HERE,
             createCrossThreadTask(&ScriptProcessorHandler::fireProcessEvent,
                                   crossThreadUnretained(this),
                                   m_doubleBufferIndex));
@@ -214,10 +215,10 @@ void ScriptProcessorHandler::process(size_t framesToProcess) {
         // If this node is in the offline audio context, use the
         // waitable event to synchronize to the offline rendering thread.
         std::unique_ptr<WaitableEvent> waitableEvent =
-            makeUnique<WaitableEvent>();
+            WTF::makeUnique<WaitableEvent>();
 
         context()->getExecutionContext()->postTask(
-            BLINK_FROM_HERE,
+            TaskType::MediaElementEvent, BLINK_FROM_HERE,
             createCrossThreadTask(
                 &ScriptProcessorHandler::fireProcessEventForOfflineAudioContext,
                 crossThreadUnretained(this), m_doubleBufferIndex,
@@ -336,20 +337,19 @@ ScriptProcessorNode::ScriptProcessorNode(BaseAudioContext& context,
                                          size_t bufferSize,
                                          unsigned numberOfInputChannels,
                                          unsigned numberOfOutputChannels)
-    : AudioNode(context), ActiveScriptWrappable(this) {
+    : AudioNode(context) {
   setHandler(ScriptProcessorHandler::create(*this, sampleRate, bufferSize,
                                             numberOfInputChannels,
                                             numberOfOutputChannels));
 }
 
-static size_t chooseBufferSize() {
+static size_t chooseBufferSize(size_t callbackBufferSize) {
   // Choose a buffer size based on the audio hardware buffer size. Arbitarily
   // make it a power of two that is 4 times greater than the hardware buffer
   // size.
   // FIXME: What is the best way to choose this?
-  size_t hardwareBufferSize = Platform::current()->audioHardwareBufferSize();
   size_t bufferSize =
-      1 << static_cast<unsigned>(log2(4 * hardwareBufferSize) + 0.5);
+      1 << static_cast<unsigned>(log2(4 * callbackBufferSize) + 0.5);
 
   if (bufferSize < 256)
     return 256;
@@ -431,7 +431,14 @@ ScriptProcessorNode* ScriptProcessorNode::create(
   // Check for valid buffer size.
   switch (bufferSize) {
     case 0:
-      bufferSize = chooseBufferSize();
+      // Choose an appropriate size.  For an AudioContext, we need to
+      // choose an appropriate size based on the callback buffer size.
+      // For OfflineAudioContext, there's no callback buffer size, so
+      // just use the minimum valid buffer size.
+      bufferSize =
+          context.hasRealtimeConstraint()
+              ? chooseBufferSize(context.destination()->callbackBufferSize())
+              : 256;
       break;
     case 256:
     case 512:

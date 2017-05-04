@@ -7,10 +7,10 @@
 
 namespace switches {
 
-// Enables overlay scrollbars on Aura or Linux. Does nothing on Mac.
+// Enables or disables overlay scrollbars in Blink (i.e. web content) on Aura
+// or Linux.  The status of native UI overlay scrollbars are determined in
+// PlatformStyle::CreateScrollBar. Does nothing on Mac.
 const char kEnableOverlayScrollbar[] = "enable-overlay-scrollbar";
-
-// Disables overlay scrollbars on Aura or Linux. Does nothing on Mac.
 const char kDisableOverlayScrollbar[] = "disable-overlay-scrollbar";
 
 }  // namespace switches

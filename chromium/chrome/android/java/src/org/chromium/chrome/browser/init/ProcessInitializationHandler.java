@@ -35,6 +35,7 @@ import org.chromium.chrome.browser.rlz.RevenueStats;
 import org.chromium.chrome.browser.services.AccountsChangedReceiver;
 import org.chromium.chrome.browser.services.GoogleServicesManager;
 import org.chromium.chrome.browser.sync.SyncController;
+import org.chromium.chrome.browser.webapps.ChromeWebApkHost;
 import org.chromium.components.signin.AccountManagerHelper;
 import org.chromium.content.common.ContentSwitches;
 import org.chromium.printing.PrintDocumentAdapterWrapper;
@@ -205,7 +206,7 @@ public class ProcessInitializationHandler {
         DeferredStartupHandler.getInstance().addDeferredTask(new Runnable() {
             @Override
             public void run() {
-                ForcedSigninProcessor.start(application);
+                ForcedSigninProcessor.start(application, null);
                 AccountsChangedReceiver.addObserver(
                         new AccountsChangedReceiver.AccountsChangedObserver() {
                             @Override
@@ -213,7 +214,7 @@ public class ProcessInitializationHandler {
                                 ThreadUtils.runOnUiThread(new Runnable() {
                                     @Override
                                     public void run() {
-                                        ForcedSigninProcessor.start(application);
+                                        ForcedSigninProcessor.start(application, null);
                                     }
                                 });
                             }
@@ -254,6 +255,13 @@ public class ProcessInitializationHandler {
                             R.string.error_printing_failed);
                     PrintingControllerImpl.create(new PrintDocumentAdapterWrapper(), errorText);
                 }
+            }
+        });
+
+        DeferredStartupHandler.getInstance().addDeferredTask(new Runnable() {
+            @Override
+            public void run() {
+                ChromeWebApkHost.initCanUseGooglePlayToInstallWebApk();
             }
         });
     }

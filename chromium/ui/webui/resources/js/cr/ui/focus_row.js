@@ -121,8 +121,7 @@ cr.define('cr.ui', function() {
       this.eventTracker.add(element, 'blur', this.onBlur_.bind(this));
       this.eventTracker.add(element, 'focus', this.onFocus_.bind(this));
       this.eventTracker.add(element, 'keydown', this.onKeydown_.bind(this));
-      this.eventTracker.add(element, 'mousedown',
-                             this.onMousedown_.bind(this));
+      this.eventTracker.add(element, 'mousedown', this.onMousedown_.bind(this));
       return true;
     },
 
@@ -222,10 +221,10 @@ cr.define('cr.ui', function() {
      * @private
      */
     onBlur_: function(e) {
-      if (!this.boundary_.contains(/** @type {Element} */(e.relatedTarget)))
+      if (!this.boundary_.contains(/** @type {Element} */ (e.relatedTarget)))
         return;
 
-      var currentTarget = /** @type {!Element} */(e.currentTarget);
+      var currentTarget = /** @type {!Element} */ (e.currentTarget);
       if (this.getFocusableElements().indexOf(currentTarget) >= 0)
         this.makeActive(false);
     },
@@ -254,19 +253,19 @@ cr.define('cr.ui', function() {
     },
 
     /**
-     * @param {Event} e The keydown event.
+     * @param {!Event} e The keydown event.
      * @private
      */
     onKeydown_: function(e) {
       var elements = this.getFocusableElements();
-      var currentElement = /** @type {!Element} */(e.currentTarget);
+      var currentElement = /** @type {!Element} */ (e.currentTarget);
       var elementIndex = elements.indexOf(currentElement);
       assert(elementIndex >= 0);
 
       if (this.delegate && this.delegate.onKeydown(this, e))
         return;
 
-      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)
+      if (hasKeyModifiers(e))
         return;
 
       var index = -1;

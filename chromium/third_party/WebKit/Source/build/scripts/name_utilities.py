@@ -59,10 +59,13 @@ def lower_first(name):
 
 
 def upper_first(name):
-    """Return name with first letter or initial acronym uppercased."""
+    """Return name with first letter or initial acronym uppercased.
+       The acronym must have a capital letter following it to be considered.
+    """
     for acronym in ACRONYMS:
         if name.startswith(acronym.lower()):
-            return name.replace(acronym.lower(), acronym, 1)
+            if len(name) == len(acronym) or name[len(acronym)].isupper():
+                return name.replace(acronym.lower(), acronym, 1)
     return upper_first_letter(name)
 
 
@@ -88,6 +91,16 @@ def to_macro_style(name):
 
 def script_name(entry):
     return os.path.basename(entry['name'])
+
+
+def cpp_bool(value):
+    if value is True:
+        return 'true'
+    if value is False:
+        return 'false'
+    # Return value as is, which for example may be a platform-dependent constant
+    # such as "defaultSelectTrailingWhitespaceEnabled".
+    return value
 
 
 def cpp_name(entry):

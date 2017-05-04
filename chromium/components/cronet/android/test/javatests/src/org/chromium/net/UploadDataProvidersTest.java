@@ -7,7 +7,7 @@ package org.chromium.net;
 import android.os.ConditionVariable;
 import android.os.ParcelFileDescriptor;
 import android.os.StrictMode;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.Feature;
@@ -25,6 +25,7 @@ public class UploadDataProvidersTest extends CronetTestBase {
     private CronetTestFramework mTestFramework;
     private File mFile;
     private StrictMode.VmPolicy mOldVmPolicy;
+    private MockUrlRequestJobFactory mMockUrlRequestJobFactory;
 
     @Override
     protected void setUp() throws Exception {
@@ -38,7 +39,7 @@ public class UploadDataProvidersTest extends CronetTestBase {
         mTestFramework = startCronetTestFramework();
         assertTrue(NativeTestServer.startNativeTestServer(getContext()));
         // Add url interceptors after native application context is initialized.
-        MockUrlRequestJobFactory.setUp();
+        mMockUrlRequestJobFactory = new MockUrlRequestJobFactory(mTestFramework.mCronetEngine);
         mFile = new File(getContext().getCacheDir().getPath() + "/tmpfile");
         FileOutputStream fileOutputStream = new FileOutputStream(mFile);
         try {
@@ -52,6 +53,7 @@ public class UploadDataProvidersTest extends CronetTestBase {
     @Override
     protected void tearDown() throws Exception {
         try {
+            mMockUrlRequestJobFactory.shutdown();
             NativeTestServer.shutdownNativeTestServer();
             mTestFramework.mCronetEngine.shutdown();
             assertTrue(mFile.delete());
@@ -198,8 +200,7 @@ public class UploadDataProvidersTest extends CronetTestBase {
         first.block();
         callback.blockForDone();
         assertFalse(callback.mOnCanceledCalled);
-        assertEquals(UrlRequestException.ERROR_LISTENER_EXCEPTION_THROWN,
-                callback.mError.getErrorCode());
+        assertTrue(callback.mError instanceof CallbackException);
         assertContains("Exception received from UploadDataProvider", callback.mError.getMessage());
         assertContains(exceptionMessage, callback.mError.getCause().getMessage());
     }

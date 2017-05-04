@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/md_downloads/md_downloads_ui.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_piece.h"
@@ -14,6 +15,7 @@
 #include "chrome/browser/download/download_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/md_downloads/md_downloads_dom_handler.h"
+#include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/features.h"
@@ -104,6 +106,13 @@ content::WebUIDataSource* CreateDownloadsUIHTMLSource(Profile* profile) {
                           IDR_MD_DOWNLOADS_2X_NO_DOWNLOADS_PNG);
 
 #if BUILDFLAG(USE_VULCANIZE)
+  std::unordered_set<std::string> exclude_from_gzip;
+  exclude_from_gzip.insert("1x/incognito_marker.png");
+  exclude_from_gzip.insert("2x/incognito_marker.png");
+  exclude_from_gzip.insert("1x/no_downloads.png");
+  exclude_from_gzip.insert("2x/no_downloads.png");
+  source->UseGzip(exclude_from_gzip);
+
   source->AddResourcePath("crisper.js", IDR_MD_DOWNLOADS_CRISPER_JS);
   source->SetDefaultResource(IDR_MD_DOWNLOADS_VULCANIZED_HTML);
 #else
@@ -142,16 +151,15 @@ MdDownloadsUI::MdDownloadsUI(content::WebUI* web_ui) : WebUIController(web_ui) {
   Profile* profile = Profile::FromWebUI(web_ui);
   DownloadManager* dlm = BrowserContext::GetDownloadManager(profile);
 
-  handler_ = new MdDownloadsDOMHandler(dlm, web_ui);
-  web_ui->AddMessageHandler(handler_);
+  web_ui->AddMessageHandler(
+      base::MakeUnique<MdDownloadsDOMHandler>(dlm, web_ui));
+  web_ui->AddMessageHandler(base::MakeUnique<MetricsHandler>());
 
   // Set up the chrome://downloads/ source.
   content::WebUIDataSource* source = CreateDownloadsUIHTMLSource(profile);
   content::WebUIDataSource::Add(profile, source);
-#if defined(ENABLE_THEMES)
   ThemeSource* theme = new ThemeSource(profile);
   content::URLDataSource::Add(profile, theme);
-#endif
 }
 
 // static

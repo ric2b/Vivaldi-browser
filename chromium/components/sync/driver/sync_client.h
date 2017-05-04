@@ -17,9 +17,9 @@
 
 class BookmarkUndoService;
 class PrefService;
+class Profile;
 
 namespace autofill {
-class AutocompleteSyncableService;
 class PersonalDataManager;
 }  // namespace autofill
 
@@ -43,6 +43,10 @@ namespace sync_sessions {
 class SyncSessionsClient;
 }  // namespace sync_sessions
 
+namespace vivaldi {
+class Notes_Model;
+} // namespace vivaldi
+
 namespace syncer {
 
 class SyncService;
@@ -65,6 +69,9 @@ class SyncClient {
   // Returns the current SyncService instance.
   virtual SyncService* GetSyncService() = 0;
 
+  // Returns the current profil
+  virtual Profile *GetProfile();
+
   // Returns the current profile's preference service.
   virtual PrefService* GetPrefService() = 0;
 
@@ -72,6 +79,7 @@ class SyncClient {
   virtual bookmarks::BookmarkModel* GetBookmarkModel() = 0;
   virtual favicon::FaviconService* GetFaviconService() = 0;
   virtual history::HistoryService* GetHistoryService() = 0;
+  virtual bool HasPasswordStore() = 0;
 
   // Returns a callback that will register the types specific to the current
   // platform.
@@ -109,6 +117,7 @@ class SyncClient {
   // Returns the current SyncApiComponentFactory instance.
   virtual SyncApiComponentFactory* GetSyncApiComponentFactory() = 0;
 
+  virtual vivaldi::Notes_Model* GetNotesModel();
  private:
   DISALLOW_COPY_AND_ASSIGN(SyncClient);
 };

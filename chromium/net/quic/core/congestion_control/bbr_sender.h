@@ -10,14 +10,16 @@
 #include <cstdint>
 #include <ostream>
 
+#include "base/macros.h"
 #include "net/quic/core/congestion_control/bandwidth_sampler.h"
 #include "net/quic/core/congestion_control/send_algorithm_interface.h"
 #include "net/quic/core/congestion_control/windowed_filter.h"
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_bandwidth.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_time.h"
 #include "net/quic/core/quic_unacked_packet_map.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
 
@@ -36,7 +38,7 @@ typedef uint64_t QuicRoundTripCount;
 // TODO(vasilvv): implement traffic policer (long-term sampling) mode.
 //
 // TODO(vasilvv): implement packet conservation.
-class NET_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
+class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
  public:
   enum Mode {
     // Startup phase of the connection.
@@ -87,8 +89,7 @@ class NET_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
     bool last_sample_is_app_limited;
   };
 
-  BbrSender(const QuicClock* clock,
-            const RttStats* rtt_stats,
+  BbrSender(const RttStats* rtt_stats,
             const QuicUnackedPacketMap* unacked_packets,
             QuicPacketCount initial_tcp_congestion_window,
             QuicPacketCount max_tcp_congestion_window,
@@ -188,7 +189,6 @@ class NET_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   // recovery.
   void CalculateRecoveryWindow(QuicByteCount bytes_acked);
 
-  const QuicClock* clock_;
   const RttStats* rtt_stats_;
   const QuicUnackedPacketMap* unacked_packets_;
   QuicRandom* random_;
@@ -270,13 +270,18 @@ class NET_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   // A window used to limit the number of bytes in flight during loss recovery.
   QuicByteCount recovery_window_;
 
+  // Indicates whether to always only increase the pacing rate during startup.
+  // Latches |FLAGS_quic_reloadable_flag_quic_bbr_faster_startup|.
+  bool enforce_startup_pacing_rate_increase_;
+
   DISALLOW_COPY_AND_ASSIGN(BbrSender);
 };
 
-NET_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,
-                                            const BbrSender::Mode& mode);
-NET_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,
-                                            const BbrSender::DebugState& state);
+QUIC_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,
+                                             const BbrSender::Mode& mode);
+QUIC_EXPORT_PRIVATE std::ostream& operator<<(
+    std::ostream& os,
+    const BbrSender::DebugState& state);
 
 }  // namespace net
 

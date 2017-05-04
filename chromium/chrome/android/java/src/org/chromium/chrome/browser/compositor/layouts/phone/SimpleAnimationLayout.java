@@ -5,7 +5,7 @@
 package org.chromium.chrome.browser.compositor.layouts.phone;
 
 import android.content.Context;
-import android.graphics.Rect;
+import android.graphics.RectF;
 import android.view.animation.Interpolator;
 
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
@@ -81,8 +81,8 @@ public class SimpleAnimationLayout
     }
 
     @Override
-    public int getSizingFlags() {
-        return SizingFlags.HELPER_SUPPORTS_FULLSCREEN;
+    public ViewportMode getViewportMode() {
+        return ViewportMode.USE_PREVIOUS_BROWSER_CONTROLS_STATE;
     }
 
     @Override
@@ -412,13 +412,14 @@ public class SimpleAnimationLayout
     }
 
     @Override
-    protected void updateSceneLayer(Rect viewport, Rect contentViewport,
+    protected void updateSceneLayer(RectF viewport, RectF contentViewport,
             LayerTitleCache layerTitleCache, TabContentManager tabContentManager,
             ResourceManager resourceManager, ChromeFullscreenManager fullscreenManager) {
         super.updateSceneLayer(viewport, contentViewport, layerTitleCache, tabContentManager,
                 resourceManager, fullscreenManager);
         assert mSceneLayer != null;
-        mSceneLayer.pushLayers(getContext(), viewport, contentViewport, this, layerTitleCache,
-                tabContentManager, resourceManager, fullscreenManager);
+        // The content viewport is intentionally sent as both params below.
+        mSceneLayer.pushLayers(getContext(), contentViewport, contentViewport, this,
+                layerTitleCache, tabContentManager, resourceManager, fullscreenManager);
     }
 }

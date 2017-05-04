@@ -104,7 +104,8 @@ Sources.ScriptFormatterEditorAction = class {
   constructor() {
     this._projectId = 'formatter:';
     this._project = new Bindings.ContentProviderBasedProject(
-        Workspace.workspace, this._projectId, Workspace.projectTypes.Formatter, 'formatter');
+        Workspace.workspace, this._projectId, Workspace.projectTypes.Formatter, 'formatter',
+        true /* isServiceProject */);
 
     /** @type {!Map.<!SDK.Script, !Workspace.UISourceCode>} */
     this._uiSourceCodes = new Map();
@@ -193,7 +194,7 @@ Sources.ScriptFormatterEditorAction = class {
     this._sourcesView.addEventListener(Sources.SourcesView.Events.EditorClosed, this._editorClosed.bind(this));
 
     this._button = new UI.ToolbarButton(Common.UIString('Pretty print'), 'largeicon-pretty-print');
-    this._button.addEventListener('click', this._toggleFormatScriptSource, this);
+    this._button.addEventListener(UI.ToolbarButton.Events.Click, this._toggleFormatScriptSource, this);
     this._updateButton(sourcesView.currentUISourceCode());
 
     return this._button;
@@ -206,16 +207,19 @@ Sources.ScriptFormatterEditorAction = class {
   _isFormatableScript(uiSourceCode) {
     if (!uiSourceCode)
       return false;
-    if (Persistence.persistence.binding(uiSourceCode))
+    if (uiSourceCode.project().canSetFileContent())
       return false;
-    var supportedProjectTypes =
-        [Workspace.projectTypes.Network, Workspace.projectTypes.Debugger, Workspace.projectTypes.ContentScripts];
-    if (supportedProjectTypes.indexOf(uiSourceCode.project().type()) === -1)
+    if (uiSourceCode.project().type() === Workspace.projectTypes.Formatter)
+      return false;
+    if (Persistence.persistence.binding(uiSourceCode))
       return false;
     return uiSourceCode.contentType().hasScripts();
   }
 
-  _toggleFormatScriptSource() {
+  /**
+   * @param {!Common.Event} event
+   */
+  _toggleFormatScriptSource(event) {
     var uiSourceCode = this._sourcesView.currentUISourceCode();
     if (this._isFormatableScript(uiSourceCode))
       this._formatUISourceCodeScript(uiSourceCode);
@@ -289,7 +293,7 @@ Sources.ScriptFormatterEditorAction = class {
    * @param {!Common.Event} event
    */
   _debuggerReset(event) {
-    var debuggerModel = /** @type {!SDK.DebuggerModel} */ (event.target);
+    var debuggerModel = /** @type {!SDK.DebuggerModel} */ (event.data);
     this._cleanForTarget(debuggerModel.target());
   }
 

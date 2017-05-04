@@ -4,6 +4,9 @@
 
 #include "extensions/shell/common/shell_extensions_client.h"
 
+#include <memory>
+#include <string>
+
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -11,11 +14,7 @@
 #include "extensions/common/common_manifest_handlers.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/extensions_aliases.h"
-#include "extensions/common/features/api_feature.h"
-#include "extensions/common/features/behavior_feature.h"
 #include "extensions/common/features/json_feature_provider_source.h"
-#include "extensions/common/features/manifest_feature.h"
-#include "extensions/common/features/permission_feature.h"
 #include "extensions/common/features/simple_feature.h"
 #include "extensions/common/manifest_handler.h"
 #include "extensions/common/permissions/permission_message_provider.h"
@@ -33,11 +32,6 @@
 namespace extensions {
 
 namespace {
-
-template <class FeatureClass>
-SimpleFeature* CreateFeature() {
-  return new FeatureClass;
-}
 
 // TODO(jamescook): Refactor ChromePermissionsMessageProvider so we can share
 // code. For now, this implementation does nothing.
@@ -77,6 +71,7 @@ base::LazyInstance<ShellPermissionMessageProvider>
 
 ShellExtensionsClient::ShellExtensionsClient()
     : extensions_api_permissions_(ExtensionsAPIPermissions()),
+      webstore_base_url_(extension_urls::kChromeWebstoreBaseURL),
       webstore_update_url_(extension_urls::kChromeWebstoreUpdateURL) {}
 
 ShellExtensionsClient::~ShellExtensionsClient() {
@@ -181,8 +176,8 @@ bool ShellExtensionsClient::ShouldSuppressFatalErrors() const {
 void ShellExtensionsClient::RecordDidSuppressFatalError() {
 }
 
-std::string ShellExtensionsClient::GetWebstoreBaseURL() const {
-  return extension_urls::kChromeWebstoreBaseURL;
+const GURL& ShellExtensionsClient::GetWebstoreBaseURL() const {
+  return webstore_base_url_;
 }
 
 const GURL& ShellExtensionsClient::GetWebstoreUpdateURL() const {

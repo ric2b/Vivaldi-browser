@@ -60,6 +60,18 @@ ExtensionHostAttribute.prototype.handleMutation = function(oldValue, newValue) {
   WebViewPrivate.setExtensionHost(this.view.guest.getId(), newValue);
 };
 
+function GuestContentIdAttribute(view) {
+  GuestViewAttributes.Attribute.call(this,
+    WebViewConstants.ATTRIBUTE_GUESTCONTENT_ID, view);
+}
+
+GuestContentIdAttribute.prototype.__proto__ =
+  GuestViewAttributes.Attribute.prototype;
+
+GuestContentIdAttribute.prototype.handleMutation = function (oldValue, newValue) {
+  // nothing to do here, will not happen
+};
+
 function addPrivateAttributes(athis /* WebViewImpl */) {
   athis.attributes[WebViewConstants.ATTRIBUTE_TAB_ID] =
       new TabIdAttribute(athis);
@@ -72,6 +84,10 @@ function addPrivateAttributes(athis /* WebViewImpl */) {
 
   athis.attributes[WebViewConstants.ATTRIBUTE_EXTENSIONHOST] =
       new ExtensionHostAttribute(athis);
+
+  athis.attributes[WebViewConstants.ATTRIBUTE_GUESTCONTENT_ID] =
+      new GuestContentIdAttribute(athis);
+
 }
 
 // Exports.

@@ -45,8 +45,6 @@ Network.NetworkLogView = class extends UI.VBox {
 
     this._networkHideDataURLSetting = Common.settings.createSetting('networkHideDataURL', false);
     this._networkResourceTypeFiltersSetting = Common.settings.createSetting('networkResourceTypeFilters', {});
-    this._networkShowPrimaryLoadWaterfallSetting =
-        Common.settings.createSetting('networkShowPrimaryLoadWaterfall', false);
 
     this._filterBar = filterBar;
     this._progressBarContainer = progressBarContainer;
@@ -71,8 +69,10 @@ Network.NetworkLogView = class extends UI.VBox {
     this._columns = new Network.NetworkLogViewColumns(
         this, this._timeCalculator, this._durationCalculator, networkLogLargeRowsSetting);
 
-    /** @type {!Map.<string, !Network.NetworkDataGridNode>} */
+    /** @type {!Map.<string, !Network.NetworkRequestNode>} */
     this._nodesByRequestId = new Map();
+    /** @type {!Map.<string, !Network.NetworkGroupNode>} */
+    this._nodeGroups = new Map();
     /** @type {!Object.<string, boolean>} */
     this._staleRequestIds = {};
     /** @type {number} */
@@ -86,6 +86,8 @@ Network.NetworkLogView = class extends UI.VBox {
     this._filters = [];
     /** @type {?Network.NetworkLogView.Filter} */
     this._timeFilter = null;
+    /** @type {?Network.NetworkNode} */
+    this._hoveredNode = null;
 
     this._currentMatchedRequestNode = null;
     this._currentMatchedRequestIndex = -1;
@@ -205,6 +207,15 @@ Network.NetworkLogView = class extends UI.VBox {
    */
   static _requestMethodFilter(value, request) {
     return request.requestMethod === value;
+  }
+
+  /**
+   * @param {string} value
+   * @param {!SDK.NetworkRequest} request
+   * @return {boolean}
+   */
+  static _requestPriorityFilter(value, request) {
+    return request.initialPriority() === value;
   }
 
   /**
@@ -334,6 +345,14 @@ Network.NetworkLogView = class extends UI.VBox {
   }
 
   /**
+   * @param {!SDK.NetworkRequest} request
+   * @return {?Network.NetworkNode}
+   */
+  nodeForRequest(request) {
+    return this._nodesByRequestId.get(request.requestId());
+  }
+
+  /**
    * @return {number}
    */
   headerHeight() {
@@ -442,7 +461,7 @@ Network.NetworkLogView = class extends UI.VBox {
     this._suggestionBuilder.addItem(Network.NetworkLogView.FilterType.LargerThan, '100');
     this._suggestionBuilder.addItem(Network.NetworkLogView.FilterType.LargerThan, '10k');
     this._suggestionBuilder.addItem(Network.NetworkLogView.FilterType.LargerThan, '1M');
-    this._textFilterUI.setSuggestionBuilder(this._suggestionBuilder);
+    this._textFilterUI.setSuggestionProvider(this._suggestionBuilder.completions.bind(this._suggestionBuilder));
   }
 
   /**
@@ -503,90 +522,49 @@ Network.NetworkLogView = class extends UI.VBox {
   }
 
   _setupDataGrid() {
+    /** @type {!DataGrid.SortableDataGrid<!Network.NetworkNode>} */
     this._dataGrid = this._columns.dataGrid();
-    this._dataGrid.setRowContextMenuCallback(
-        (contextMenu, node) => this.handleContextMenuForRequest(contextMenu, node.request()));
+    this._dataGrid.setRowContextMenuCallback((contextMenu, node) => {
+      var request = node.request();
+      if (request)
+        this.handleContextMenuForRequest(contextMenu, request);
+    });
     this._dataGrid.setStickToBottom(true);
     this._dataGrid.setName('networkLog');
-    this._dataGrid.setResizeMethod(UI.DataGrid.ResizeMethod.Last);
+    this._dataGrid.setResizeMethod(DataGrid.DataGrid.ResizeMethod.Last);
     this._dataGrid.element.classList.add('network-log-grid');
     this._dataGrid.element.addEventListener('mousedown', this._dataGridMouseDown.bind(this), true);
     this._dataGrid.element.addEventListener('mousemove', this._dataGridMouseMove.bind(this), true);
-    this._dataGrid.element.addEventListener('mouseleave', this._dataGridMouseLeave.bind(this), true);
+    this._dataGrid.element.addEventListener('mouseleave', () => this._setHoveredNode(null), true);
   }
 
   /**
    * @param {!Event} event
    */
   _dataGridMouseMove(event) {
-    var node = this._dataGrid.dataGridNodeFromNode(event.target);
+    var node = (this._dataGrid.dataGridNodeFromNode(/** @type {!Node} */ (event.target)));
     var highlightInitiatorChain = event.shiftKey;
     this._setHoveredNode(node, highlightInitiatorChain);
-    this._highlightInitiatorChain((highlightInitiatorChain && node) ? node.request() : null);
-  }
-
-  _dataGridMouseLeave() {
-    this._setHoveredNode(null);
-    this._highlightInitiatorChain(null);
   }
 
   /**
-   * @param {?SDK.NetworkRequest} request
-   * @param {boolean} highlightInitiatorChain
-   */
-  setHoveredRequest(request, highlightInitiatorChain) {
-    this._setHoveredNode(request ? this._nodesByRequestId.get(request.requestId) : null, highlightInitiatorChain);
-    this._highlightInitiatorChain((request && highlightInitiatorChain) ? request : null);
-  }
-
-  /**
-   * @param {?Network.NetworkDataGridNode} node
+   * @param {?Network.NetworkNode} node
    * @param {boolean=} highlightInitiatorChain
    */
   _setHoveredNode(node, highlightInitiatorChain) {
     if (this._hoveredNode)
-      this._hoveredNode.element().classList.remove('hover');
+      this._hoveredNode.setHovered(false, false);
     this._hoveredNode = node;
     if (this._hoveredNode)
-      this._hoveredNode.element().classList.add('hover');
-    this._columns.setHoveredRequest(this._hoveredNode ? this._hoveredNode.request() : null, !!highlightInitiatorChain);
+      this._hoveredNode.setHovered(true, !!highlightInitiatorChain);
   }
 
   /**
    * @param {!Event} event
    */
   _dataGridMouseDown(event) {
-    if ((!this._dataGrid.selectedNode && event.button) || event.target.enclosingNodeOrSelfWithNodeName('a'))
+    if (!this._dataGrid.selectedNode && event.button)
       event.consume();
-  }
-
-  /**
-   * @param {?SDK.NetworkRequest} request
-   */
-  _highlightInitiatorChain(request) {
-    if (this._requestWithHighlightedInitiators === request)
-      return;
-    this._requestWithHighlightedInitiators = request;
-
-    if (!request) {
-      for (var node of this._nodesByRequestId.values()) {
-        if (!node.dataGrid)
-          continue;
-        node.element().classList.remove('network-node-on-initiator-path', 'network-node-on-initiated-path');
-      }
-      return;
-    }
-
-    var initiatorGraph = request.initiatorGraph();
-    for (var node of this._nodesByRequestId.values()) {
-      if (!node.dataGrid)
-        continue;
-      node.element().classList.toggle(
-          'network-node-on-initiator-path',
-          node.request() !== request && initiatorGraph.initiators.has(node.request()));
-      node.element().classList.toggle(
-          'network-node-on-initiated-path', node.request() !== request && initiatorGraph.initiated.has(node.request()));
-    }
   }
 
   _updateSummaryBar() {
@@ -612,7 +590,7 @@ Network.NetworkLogView = class extends UI.VBox {
         selectedRequestsNumber++;
         selectedTransferSize += requestTransferSize;
       }
-      if (request.url === request.target().inspectedURL() && request.resourceType() === Common.resourceTypes.Document)
+      if (request.url() === request.target().inspectedURL() && request.resourceType() === Common.resourceTypes.Document)
         baseTime = request.startTime;
       if (request.endTime > maxTime)
         maxTime = request.endTime;
@@ -778,6 +756,17 @@ Network.NetworkLogView = class extends UI.VBox {
     this._columns.willHide();
   }
 
+  /**
+   * @return {!Array<!Network.NetworkNode>}
+   */
+  flatNodesList() {
+    return this._dataGrid.rootNode().flatChildren();
+  }
+
+  stylesChanged() {
+    this._columns.scheduleRefresh();
+  }
+
   _refresh() {
     this._needsRefresh = false;
 
@@ -788,17 +777,14 @@ Network.NetworkLogView = class extends UI.VBox {
 
     this.removeAllNodeHighlights();
 
-    var oldBoundary = this.calculator().boundary();
     this._timeCalculator.updateBoundariesForEventTime(this._mainRequestLoadTime);
     this._durationCalculator.updateBoundariesForEventTime(this._mainRequestLoadTime);
     this._timeCalculator.updateBoundariesForEventTime(this._mainRequestDOMContentLoadedTime);
     this._durationCalculator.updateBoundariesForEventTime(this._mainRequestDOMContentLoadedTime);
 
-    var dataGrid = this._dataGrid;
-    var rootNode = dataGrid.rootNode();
-    /** @type {!Array<!Network.NetworkDataGridNode> } */
+    /** @type {!Array<!Network.NetworkRequestNode> } */
     var nodesToInsert = [];
-    /** @type {!Array<!Network.NetworkDataGridNode> } */
+    /** @type {!Array<!Network.NetworkRequestNode> } */
     var nodesToRefresh = [];
     for (var requestId in this._staleRequestIds) {
       var node = this._nodesByRequestId.get(requestId);
@@ -809,7 +795,7 @@ Network.NetworkLogView = class extends UI.VBox {
         this._setHoveredNode(null);
       if (node[Network.NetworkLogView._isFilteredOutSymbol] !== isFilteredOut) {
         if (!node[Network.NetworkLogView._isFilteredOutSymbol])
-          rootNode.removeChild(node);
+          node.parent.removeChild(node);
 
         node[Network.NetworkLogView._isFilteredOutSymbol] = isFilteredOut;
 
@@ -826,8 +812,9 @@ Network.NetworkLogView = class extends UI.VBox {
     for (var i = 0; i < nodesToInsert.length; ++i) {
       var node = nodesToInsert[i];
       var request = node.request();
-      dataGrid.insertChild(node);
       node[Network.NetworkLogView._isMatchingSearchQuerySymbol] = this._matchRequest(request);
+      var parent = this._parentNodeForInsert(node);
+      parent.appendChild(node);
     }
 
     for (var node of nodesToRefresh)
@@ -840,6 +827,26 @@ Network.NetworkLogView = class extends UI.VBox {
     this._updateSummaryBar();
 
     this._columns.dataChanged();
+  }
+
+  /**
+   * @param {!Network.NetworkRequestNode} node
+   * @return {!Network.NetworkNode}
+   */
+  _parentNodeForInsert(node) {
+    if (!Runtime.experiments.isEnabled('networkGroupingRequests'))
+      return /** @type {!Network.NetworkNode} */ (this._dataGrid.rootNode());
+
+    var request = node.request();
+    // TODO(allada) Make this dynamic and allow multiple grouping types.
+    var groupKey = request.domain;
+    var group = this._nodeGroups.get(groupKey);
+    if (group)
+      return group;
+    group = new Network.NetworkGroupNode(this, groupKey);
+    this._nodeGroups.set(groupKey, group);
+    this._dataGrid.rootNode().appendChild(group);
+    return group;
   }
 
   reset() {
@@ -860,6 +867,7 @@ Network.NetworkLogView = class extends UI.VBox {
     for (var i = 0; i < nodes.length; ++i)
       nodes[i].dispose();
 
+    this._nodeGroups.clear();
     this._nodesByRequestId.clear();
     this._staleRequestIds = {};
     this._resetSuggestionBuilder();
@@ -897,16 +905,16 @@ Network.NetworkLogView = class extends UI.VBox {
    * @param {!SDK.NetworkRequest} request
    */
   _appendRequest(request) {
-    var node = new Network.NetworkDataGridNode(this, request);
+    var node = new Network.NetworkRequestNode(this, request);
     node[Network.NetworkLogView._isFilteredOutSymbol] = true;
     node[Network.NetworkLogView._isMatchingSearchQuerySymbol] = false;
 
     // In case of redirect request id is reassigned to a redirected
     // request and we need to update _nodesByRequestId and search results.
-    var originalRequestNode = this._nodesByRequestId.get(request.requestId);
+    var originalRequestNode = this._nodesByRequestId.get(request.requestId());
     if (originalRequestNode)
-      this._nodesByRequestId.set(originalRequestNode.request().requestId, originalRequestNode);
-    this._nodesByRequestId.set(request.requestId, node);
+      this._nodesByRequestId.set(originalRequestNode.request().requestId(), originalRequestNode);
+    this._nodesByRequestId.set(request.requestId(), node);
 
     // Pull all the redirects of the main request upon commit load.
     if (request.redirects) {
@@ -929,7 +937,7 @@ Network.NetworkLogView = class extends UI.VBox {
    * @param {!SDK.NetworkRequest} request
    */
   _refreshRequest(request) {
-    if (!this._nodesByRequestId.get(request.requestId))
+    if (!this._nodesByRequestId.get(request.requestId()))
       return;
 
     Network.NetworkLogView._subdomains(request.domain)
@@ -939,6 +947,12 @@ Network.NetworkLogView = class extends UI.VBox {
     this._suggestionBuilder.addItem(Network.NetworkLogView.FilterType.MimeType, request.mimeType);
     this._suggestionBuilder.addItem(Network.NetworkLogView.FilterType.Scheme, '' + request.scheme);
     this._suggestionBuilder.addItem(Network.NetworkLogView.FilterType.StatusCode, '' + request.statusCode);
+
+    var priority = request.initialPriority();
+    if (priority) {
+      this._suggestionBuilder.addItem(
+          Network.NetworkLogView.FilterType.Priority, Components.uiLabelForPriority(priority));
+    }
 
     if (request.mixedContentType !== 'none') {
       this._suggestionBuilder.addItem(
@@ -967,7 +981,7 @@ Network.NetworkLogView = class extends UI.VBox {
       this._suggestionBuilder.addItem(Network.NetworkLogView.FilterType.SetCookieValue, cookie.value());
     }
 
-    this._staleRequestIds[request.requestId] = true;
+    this._staleRequestIds[request.requestId()] = true;
     this.dispatchEventToListeners(Network.NetworkLogView.Events.UpdateRequest, request);
     this.scheduleRefresh();
   }
@@ -999,7 +1013,7 @@ Network.NetworkLogView = class extends UI.VBox {
     }
     for (var i = 0; i < requestsToPick.length; ++i) {
       var request = requestsToPick[i];
-      var node = this._nodesByRequestId.get(request.requestId);
+      var node = this._nodesByRequestId.get(request.requestId());
       if (node) {
         node.markAsNavigationRequest();
         break;
@@ -1227,7 +1241,7 @@ Network.NetworkLogView = class extends UI.VBox {
   _highlightNthMatchedRequestForSearch(n, reveal) {
     this._removeAllHighlights();
 
-    /** @type {!Array.<!Network.NetworkDataGridNode>} */
+    /** @type {!Array.<!Network.NetworkRequestNode>} */
     var nodes = this._dataGrid.rootNode().children;
     var matchCount = 0;
     var node = null;
@@ -1268,7 +1282,7 @@ Network.NetworkLogView = class extends UI.VBox {
     this._clearSearchMatchedList();
     this._searchRegex = createPlainTextSearchRegex(query, 'i');
 
-    /** @type {!Array.<!Network.NetworkDataGridNode>} */
+    /** @type {!Array.<!Network.NetworkRequestNode>} */
     var nodes = this._dataGrid.rootNode().children;
     for (var i = 0; i < nodes.length; ++i)
       nodes[i][Network.NetworkLogView._isMatchingSearchQuerySymbol] = this._matchRequest(nodes[i].request());
@@ -1295,11 +1309,10 @@ Network.NetworkLogView = class extends UI.VBox {
   }
 
   /**
-   * @param {?Network.NetworkDataGridNode} node
+   * @param {?Network.NetworkRequestNode} node
    * @return {number}
    */
   _updateMatchCountAndFindMatchIndex(node) {
-    /** @type {!Array.<!Network.NetworkDataGridNode>} */
     var nodes = this._dataGrid.rootNode().children;
     var matchCount = 0;
     var matchIndex = 0;
@@ -1326,7 +1339,7 @@ Network.NetworkLogView = class extends UI.VBox {
   }
 
   /**
-   * @param {!Network.NetworkDataGridNode} node
+   * @param {!Network.NetworkRequestNode} node
    * @return {boolean}
    */
   _applyFilter(node) {
@@ -1449,6 +1462,9 @@ Network.NetworkLogView = class extends UI.VBox {
       case Network.NetworkLogView.FilterType.SetCookieValue:
         return Network.NetworkLogView._requestSetCookieValueFilter.bind(null, value);
 
+      case Network.NetworkLogView.FilterType.Priority:
+        return Network.NetworkLogView._requestPriorityFilter.bind(null, Components.uiLabelToPriority(value));
+
       case Network.NetworkLogView.FilterType.StatusCode:
         return Network.NetworkLogView._statusCodeFilter.bind(null, value);
     }
@@ -1514,7 +1530,7 @@ Network.NetworkLogView = class extends UI.VBox {
   revealAndHighlightRequest(request) {
     this.removeAllNodeHighlights();
 
-    var node = this._nodesByRequestId.get(request.requestId);
+    var node = this._nodesByRequestId.get(request.requestId());
     if (node) {
       node.reveal();
       this._highlightNode(node);
@@ -1529,7 +1545,7 @@ Network.NetworkLogView = class extends UI.VBox {
   }
 
   /**
-   * @param {!Network.NetworkDataGridNode} node
+   * @param {!Network.NetworkRequestNode} node
    */
   _highlightNode(node) {
     UI.runCSSAnimationOnce(node.element(), 'highlighted-row');
@@ -1584,7 +1600,15 @@ Network.NetworkLogView = class extends UI.VBox {
           encapsChars;
     }
 
+    /**
+     * @param {string} str
+     * @return {string}
+     */
     function escapeStringPosix(str) {
+      /**
+       * @param {string} x
+       * @return {string}
+       */
       function escapeCharacter(x) {
         var code = x.charCodeAt(0);
         if (code < 256) {
@@ -1614,7 +1638,7 @@ Network.NetworkLogView = class extends UI.VBox {
     // (it may be different from the inspected page platform).
     var escapeString = platform === 'win' ? escapeStringWin : escapeStringPosix;
 
-    command.push(escapeString(request.url).replace(/[[{}\]]/g, '\\$&'));
+    command.push(escapeString(request.url()).replace(/[[{}\]]/g, '\\$&'));
 
     var inferredMethod = 'GET';
     var data = [];
@@ -1665,9 +1689,6 @@ Network.NetworkLogView.HTTPSchemas = {
   'wss': true
 };
 
-Network.NetworkLogView._waterfallMinOvertime = 1;
-Network.NetworkLogView._waterfallMaxOvertime = 3;
-
 /** @enum {symbol} */
 Network.NetworkLogView.Events = {
   RequestSelected: Symbol('RequestSelected'),
@@ -1685,6 +1706,7 @@ Network.NetworkLogView.FilterType = {
   Method: 'method',
   MimeType: 'mime-type',
   MixedContent: 'mixed-content',
+  Priority: 'priority',
   Scheme: 'scheme',
   SetCookieDomain: 'set-cookie-domain',
   SetCookieName: 'set-cookie-name',

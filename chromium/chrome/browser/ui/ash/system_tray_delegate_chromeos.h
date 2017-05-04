@@ -7,11 +7,11 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "ash/common/accessibility_types.h"
-#include "ash/common/session/session_state_observer.h"
 #include "ash/common/system/chromeos/supervised/custodian_info_tray_observer.h"
 #include "ash/common/system/tray/ime_info.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
@@ -42,7 +42,6 @@
 
 namespace ash {
 class SystemTrayNotifier;
-class VPNDelegate;
 }
 
 namespace user_manager {
@@ -59,9 +58,9 @@ class SystemTrayDelegateChromeOS
       public input_method::InputMethodManager::Observer,
       public device::BluetoothAdapter::Observer,
       public policy::CloudPolicyStore::Observer,
-      public ash::SessionStateObserver,
       public chrome::BrowserListObserver,
       public extensions::AppWindowRegistry::Observer,
+      public user_manager::UserManager::Observer,
       public user_manager::UserManager::UserSessionStateObserver,
       public SupervisedUserServiceObserver,
       public input_method::InputMethodManager::ImeMenuObserver {
@@ -77,14 +76,12 @@ class SystemTrayDelegateChromeOS
   void Initialize() override;
   ash::LoginStatus GetUserLoginStatus() const override;
   std::string GetEnterpriseDomain() const override;
-  std::string GetEnterpriseRealm() const override;
   base::string16 GetEnterpriseMessage() const override;
   std::string GetSupervisedUserManager() const override;
   base::string16 GetSupervisedUserManagerName() const override;
   base::string16 GetSupervisedUserMessage() const override;
   bool IsUserSupervised() const override;
   bool IsUserChild() const override;
-  void GetSystemUpdateInfo(ash::UpdateInfo* info) const override;
   bool ShouldShowSettings() const override;
   bool ShouldShowNotificationTray() const override;
   void ShowEnterpriseInfo() override;
@@ -104,7 +101,6 @@ class SystemTrayDelegateChromeOS
   bool GetBluetoothAvailable() override;
   bool GetBluetoothEnabled() override;
   bool GetBluetoothDiscovering() override;
-  ash::CastConfigDelegate* GetCastConfigDelegate() override;
   ash::NetworkingConfigDelegate* GetNetworkingConfigDelegate() const override;
   bool GetSessionStartTime(base::TimeTicks* session_start_time) override;
   bool GetSessionLengthLimit(base::TimeDelta* session_length_limit) override;
@@ -115,9 +111,11 @@ class SystemTrayDelegateChromeOS
       ash::CustodianInfoTrayObserver* observer) override;
   void RemoveCustodianInfoTrayObserver(
       ash::CustodianInfoTrayObserver* observer) override;
-  ash::VPNDelegate* GetVPNDelegate() const override;
   std::unique_ptr<ash::SystemTrayItem> CreateRotationLockTrayItem(
       ash::SystemTray* tray) override;
+
+  // Overridden from user_manager::UserManager::Observer:
+  void OnUserImageChanged(const user_manager::User& user) override;
 
   // Overridden from user_manager::UserManager::UserSessionStateObserver:
   void UserAddedToSession(const user_manager::User* active_user) override;
@@ -196,10 +194,6 @@ class SystemTrayDelegateChromeOS
   void OnStoreLoaded(policy::CloudPolicyStore* store) override;
   void OnStoreError(policy::CloudPolicyStore* store) override;
 
-  // Overridden from ash::SessionStateObserver
-  void UserAddedToSession(const AccountId& account_id) override;
-  void ActiveUserChanged(const AccountId& account_id) override;
-
   // Overridden from chrome::BrowserListObserver:
   void OnBrowserRemoved(Browser* browser) override;
 
@@ -234,17 +228,15 @@ class SystemTrayDelegateChromeOS
   bool have_session_length_limit_ = false;
   base::TimeDelta session_length_limit_;
   std::string enterprise_domain_;
-  std::string enterprise_realm_;
+  bool is_active_directory_managed_ = false;
   bool should_run_bluetooth_discovery_ = false;
   bool session_started_ = false;
 
   scoped_refptr<device::BluetoothAdapter> bluetooth_adapter_;
   std::unique_ptr<device::BluetoothDiscoverySession>
       bluetooth_discovery_session_;
-  std::unique_ptr<ash::CastConfigDelegate> cast_config_delegate_;
   std::unique_ptr<ash::NetworkingConfigDelegate> networking_config_delegate_;
   std::unique_ptr<AccessibilityStatusSubscription> accessibility_subscription_;
-  std::unique_ptr<ash::VPNDelegate> vpn_delegate_;
 
   base::ObserverList<ash::CustodianInfoTrayObserver>
       custodian_info_changed_observers_;
@@ -257,4 +249,5 @@ class SystemTrayDelegateChromeOS
 ash::SystemTrayDelegate* CreateSystemTrayDelegate();
 
 }  // namespace chromeos
+
 #endif  // CHROME_BROWSER_UI_ASH_SYSTEM_TRAY_DELEGATE_CHROMEOS_H_

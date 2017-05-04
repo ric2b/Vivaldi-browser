@@ -27,7 +27,7 @@
 #define IDBTransaction_h
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMStringList.h"
 #include "core/events/EventListener.h"
 #include "modules/EventModules.h"
@@ -53,13 +53,19 @@ class IDBOpenDBRequest;
 class IDBRequest;
 class ScriptState;
 
-class MODULES_EXPORT IDBTransaction final : public EventTargetWithInlineData,
-                                            public ActiveScriptWrappable,
-                                            public ActiveDOMObject {
+class MODULES_EXPORT IDBTransaction final
+    : public EventTargetWithInlineData,
+      public ActiveScriptWrappable<IDBTransaction>,
+      public ContextLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(IDBTransaction);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
+  static IDBTransaction* createObserver(ExecutionContext*,
+                                        int64_t,
+                                        const HashSet<String>& scope,
+                                        IDBDatabase*);
+
   static IDBTransaction* createNonVersionChange(ScriptState*,
                                                 int64_t,
                                                 const HashSet<String>& scope,
@@ -140,6 +146,12 @@ class MODULES_EXPORT IDBTransaction final : public EventTargetWithInlineData,
 
  private:
   using IDBObjectStoreMap = HeapHashMap<String, Member<IDBObjectStore>>;
+
+  // For observer transactions.
+  IDBTransaction(ExecutionContext*,
+                 int64_t,
+                 const HashSet<String>& scope,
+                 IDBDatabase*);
 
   // For non-upgrade transactions.
   IDBTransaction(ScriptState*,

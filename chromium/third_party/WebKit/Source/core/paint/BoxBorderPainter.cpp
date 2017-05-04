@@ -305,8 +305,6 @@ void drawBleedAdjustedDRRect(GraphicsContext& context,
       // Based on this, we can avoid background bleeding by filling the
       // *outside* of inner rrect, all the way to the layer bounds (enclosing
       // int rect for the clip, in device space).
-      DCHECK(outer.isRounded());
-
       SkPath path;
       path.addRRect(inner);
       path.setFillType(SkPath::kInverseWinding_FillType);
@@ -411,7 +409,7 @@ struct BoxBorderPainter::ComplexBorderInfo {
       BoxSide side = static_cast<BoxSide>(i);
 
       if (includesEdge(borderPainter.m_visibleEdgeSet, side))
-        sortedSides.append(side);
+        sortedSides.push_back(side);
     }
     DCHECK(!sortedSides.isEmpty());
 
@@ -461,13 +459,13 @@ struct BoxBorderPainter::ComplexBorderInfo {
       DCHECK_GT(edgeAlpha, 0u);
       DCHECK_GE(edgeAlpha, currentAlpha);
       if (edgeAlpha != currentAlpha) {
-        opacityGroups.append(OpacityGroup(edgeAlpha));
+        opacityGroups.push_back(OpacityGroup(edgeAlpha));
         currentAlpha = edgeAlpha;
       }
 
       DCHECK(!opacityGroups.isEmpty());
-      OpacityGroup& currentGroup = opacityGroups.last();
-      currentGroup.sides.append(side);
+      OpacityGroup& currentGroup = opacityGroups.back();
+      currentGroup.sides.push_back(side);
       currentGroup.edgeFlags |= edgeFlagForSide(side);
     }
 
@@ -1007,8 +1005,8 @@ void BoxBorderPainter::drawBoxSideFromPath(GraphicsContext& graphicsContext,
         }
 
         DashArray lineDash;
-        lineDash.append(dashLength);
-        lineDash.append(gapLength);
+        lineDash.push_back(dashLength);
+        lineDash.push_back(gapLength);
         graphicsContext.setLineDash(lineDash, dashLength);
       }
 

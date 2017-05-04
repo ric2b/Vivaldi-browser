@@ -44,6 +44,8 @@ String messageSourceValue(MessageSource source) {
       return protocol::Log::LogEntry::SourceEnum::Worker;
     case ViolationMessageSource:
       return protocol::Log::LogEntry::SourceEnum::Violation;
+    case InterventionMessageSource:
+      return protocol::Log::LogEntry::SourceEnum::Intervention;
     default:
       return protocol::Log::LogEntry::SourceEnum::Other;
   }
@@ -92,7 +94,7 @@ void InspectorLogAgent::restore() {
   if (config) {
     protocol::ErrorSupport errors;
     startViolationsReport(
-        protocol::Array<ViolationSetting>::parse(config, &errors));
+        protocol::Array<ViolationSetting>::fromValue(config, &errors));
   }
 }
 
@@ -184,7 +186,7 @@ Response InspectorLogAgent::startViolationsReport(
     std::unique_ptr<protocol::Array<ViolationSetting>> settings) {
   if (!m_enabled)
     return Response::Error("Log is not enabled");
-  m_state->setValue(LogAgentState::logViolations, settings->serialize());
+  m_state->setValue(LogAgentState::logViolations, settings->toValue());
   if (!m_performanceMonitor)
     return Response::Error("Violations are not supported for this target");
   m_performanceMonitor->unsubscribeAll(this);
@@ -205,18 +207,6 @@ Response InspectorLogAgent::stopViolationsReport() {
     return Response::Error("Violations are not supported for this target");
   m_performanceMonitor->unsubscribeAll(this);
   return Response::OK();
-}
-
-void InspectorLogAgent::reportLongTask(
-    double startTime,
-    double endTime,
-    const HeapHashSet<Member<Frame>>& contextFrames) {
-  double time = (endTime - startTime) * 1000;
-  String messageText =
-      String::format("Long running JavaScript task took %ldms", lround(time));
-  ConsoleMessage* message = ConsoleMessage::create(
-      ViolationMessageSource, WarningMessageLevel, messageText);
-  consoleMessageAdded(message);
 }
 
 void InspectorLogAgent::reportLongLayout(double duration) {

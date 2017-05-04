@@ -11,8 +11,8 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "remoting/client/gl_renderer.h"
-#include "remoting/client/gl_renderer_delegate.h"
+#include "remoting/client/display/gl_renderer.h"
+#include "remoting/client/display/gl_renderer_delegate.h"
 #include "remoting/client/queued_task_poster.h"
 #include "remoting/protocol/cursor_shape_stub.h"
 
@@ -23,8 +23,6 @@ class VideoRenderer;
 }  // namespace protocol
 
 class ChromotingJniRuntime;
-class DualBufferFrameConsumer;
-class EglThreadContext;
 
 // Handles OpenGL display operations. Draws desktop and cursor on the OpenGL
 // surface. The handler should be used and destroyed on the UI thread. It also

@@ -34,6 +34,10 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/text_elider.h"
 
+#if defined(OS_CHROMEOS)
+#include "chromeos/login/login_state.h"
+#endif
+
 namespace profiles {
 
 bool IsMultipleProfilesEnabled() {
@@ -55,6 +59,7 @@ void RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(prefs::kProfileLastUsed, std::string());
   registry->RegisterIntegerPref(prefs::kProfilesNumCreated, 1);
   registry->RegisterListPref(prefs::kProfilesLastActive);
+  registry->RegisterListPref(prefs::kProfilesDeleted);
 
   // Preferences about the user manager.
   registry->RegisterBooleanPref(prefs::kBrowserGuestModeEnabled, true);
@@ -242,7 +247,7 @@ void RemoveBrowsingDataForProfile(const base::FilePath& profile_path) {
     profile = profile->GetOffTheRecordProfile();
 
   BrowsingDataRemoverFactory::GetForBrowserContext(profile)->Remove(
-      BrowsingDataRemover::Unbounded(),
+      base::Time(), base::Time::Max(),
       BrowsingDataRemover::REMOVE_WIPE_PROFILE, BrowsingDataHelper::ALL);
 }
 
@@ -276,6 +281,15 @@ bool AreAllNonChildNonSupervisedProfilesLocked() {
     }
   }
   return at_least_one_regular_profile_present;
+}
+
+bool IsPublicSession() {
+#if defined(OS_CHROMEOS)
+  if (chromeos::LoginState::IsInitialized()) {
+    return chromeos::LoginState::Get()->IsPublicSessionUser();
+  }
+#endif
+  return false;
 }
 
 }  // namespace profiles

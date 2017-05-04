@@ -194,6 +194,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void RegisterFrameSinkId();
   void UnregisterFrameSinkId();
 
+  void UpdateViewportIntersection(const gfx::Rect& viewport_intersection);
+
   // NOTE(andre@vivaldi.com): We need to make sure the framesink id is cleared
   // before ~RenderWidgetHostViewGuest is run because when moving WebContents
   // between GuestViewBase instances the HostView is recreated. Otherwise we

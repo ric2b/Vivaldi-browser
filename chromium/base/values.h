@@ -49,15 +49,15 @@ class Value;
 // See the file-level comment above for more information.
 class BASE_EXPORT Value {
  public:
-  enum Type {
-    TYPE_NULL = 0,
-    TYPE_BOOLEAN,
-    TYPE_INTEGER,
-    TYPE_DOUBLE,
-    TYPE_STRING,
-    TYPE_BINARY,
-    TYPE_DICTIONARY,
-    TYPE_LIST
+  enum class Type {
+    NONE = 0,
+    BOOLEAN,
+    INTEGER,
+    DOUBLE,
+    STRING,
+    BINARY,
+    DICTIONARY,
+    LIST
     // Note: Do not add more types. See the file-level comment above for why.
   };
 
@@ -88,6 +88,7 @@ class BASE_EXPORT Value {
   virtual bool GetAsString(std::string* out_value) const;
   virtual bool GetAsString(string16* out_value) const;
   virtual bool GetAsString(const StringValue** out_value) const;
+  virtual bool GetAsString(StringPiece* out_value) const;
   virtual bool GetAsBinary(const BinaryValue** out_value) const;
   // ListValue::From is the equivalent for std::unique_ptr conversions.
   virtual bool GetAsList(ListValue** out_value);
@@ -134,7 +135,7 @@ class BASE_EXPORT FundamentalValue : public Value {
   // Overridden from Value:
   bool GetAsBoolean(bool* out_value) const override;
   bool GetAsInteger(int* out_value) const override;
-  // Values of both type TYPE_INTEGER and TYPE_DOUBLE can be obtained as
+  // Values of both type Type::INTEGER and Type::DOUBLE can be obtained as
   // doubles.
   bool GetAsDouble(double* out_value) const override;
   FundamentalValue* DeepCopy() const override;
@@ -166,6 +167,7 @@ class BASE_EXPORT StringValue : public Value {
   bool GetAsString(std::string* out_value) const override;
   bool GetAsString(string16* out_value) const override;
   bool GetAsString(const StringValue** out_value) const override;
+  bool GetAsString(StringPiece* out_value) const override;
   StringValue* DeepCopy() const override;
   bool Equals(const Value* other) const override;
 
@@ -287,7 +289,7 @@ class BASE_EXPORT DictionaryValue : public Value {
   // |out_value| is optional and will only be set if non-NULL.
   bool GetBoolean(StringPiece path, bool* out_value) const;
   bool GetInteger(StringPiece path, int* out_value) const;
-  // Values of both type TYPE_INTEGER and TYPE_DOUBLE can be obtained as
+  // Values of both type Type::INTEGER and Type::DOUBLE can be obtained as
   // doubles.
   bool GetDouble(StringPiece path, double* out_value) const;
   bool GetString(StringPiece path, std::string* out_value) const;
@@ -327,7 +329,7 @@ class BASE_EXPORT DictionaryValue : public Value {
   // |out_value|.  If |out_value| is NULL, the removed value will be deleted.
   // This method returns true if |path| is a valid path; otherwise it will
   // return false and the DictionaryValue object will be unchanged.
-  virtual bool Remove(StringPiece path, std::unique_ptr<Value>* out_value);
+  bool Remove(StringPiece path, std::unique_ptr<Value>* out_value);
 
   // Like Remove(), but without special treatment of '.'.  This allows e.g. URLs
   // to be used as paths.
@@ -336,7 +338,7 @@ class BASE_EXPORT DictionaryValue : public Value {
 
   // Removes a path, clearing out all dictionaries on |path| that remain empty
   // after removing the value at |path|.
-  virtual bool RemovePath(StringPiece path, std::unique_ptr<Value>* out_value);
+  bool RemovePath(StringPiece path, std::unique_ptr<Value>* out_value);
 
   // Makes a copy of |this| but doesn't include empty dictionaries and lists in
   // the copy.  This never returns NULL, even if |this| itself is empty.
@@ -427,7 +429,7 @@ class BASE_EXPORT ListValue : public Value {
   // |out_value| is optional and will only be set if non-NULL.
   bool GetBoolean(size_t index, bool* out_value) const;
   bool GetInteger(size_t index, int* out_value) const;
-  // Values of both type TYPE_INTEGER and TYPE_DOUBLE can be obtained as
+  // Values of both type Type::INTEGER and Type::DOUBLE can be obtained as
   // doubles.
   bool GetDouble(size_t index, double* out_value) const;
   bool GetString(size_t index, std::string* out_value) const;
@@ -561,6 +563,10 @@ BASE_EXPORT inline std::ostream& operator<<(std::ostream& out,
                                             const ListValue& value) {
   return out << static_cast<const Value&>(value);
 }
+
+// Stream operator so that enum class Types can be used in log statements.
+BASE_EXPORT std::ostream& operator<<(std::ostream& out,
+                                     const Value::Type& type);
 
 }  // namespace base
 

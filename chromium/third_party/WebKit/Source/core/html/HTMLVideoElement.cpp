@@ -54,9 +54,10 @@ using namespace HTMLNames;
 
 inline HTMLVideoElement::HTMLVideoElement(Document& document)
     : HTMLMediaElement(videoTag, document) {
-  if (document.settings())
+  if (document.settings()) {
     m_defaultPosterURL =
-        AtomicString(document.settings()->defaultVideoPosterURL());
+        AtomicString(document.settings()->getDefaultVideoPosterURL());
+  }
 }
 
 HTMLVideoElement* HTMLVideoElement::create(Document& document) {
@@ -113,10 +114,9 @@ bool HTMLVideoElement::isPresentationAttribute(
   return HTMLMediaElement::isPresentationAttribute(name);
 }
 
-void HTMLVideoElement::parseAttribute(const QualifiedName& name,
-                                      const AtomicString& oldValue,
-                                      const AtomicString& value) {
-  if (name == posterAttr) {
+void HTMLVideoElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  if (params.name == posterAttr) {
     // In case the poster attribute is set after playback, don't update the
     // display state, post playback the correct state will be picked up.
     if (getDisplayMode() < Video || !hasAvailableVideoFrame()) {
@@ -137,7 +137,7 @@ void HTMLVideoElement::parseAttribute(const QualifiedName& name,
     if (webMediaPlayer())
       webMediaPlayer()->setPoster(posterImageURL());
   } else {
-    HTMLMediaElement::parseAttribute(name, oldValue, value);
+    HTMLMediaElement::parseAttribute(params);
   }
 }
 
@@ -211,17 +211,33 @@ void HTMLVideoElement::paintCurrentFrame(SkCanvas* canvas,
 bool HTMLVideoElement::copyVideoTextureToPlatformTexture(
     gpu::gles2::GLES2Interface* gl,
     GLuint texture,
-    GLenum internalFormat,
-    GLenum type,
     bool premultiplyAlpha,
     bool flipY) {
   if (!webMediaPlayer())
     return false;
 
-  DCHECK(Extensions3DUtil::canUseCopyTextureCHROMIUM(GL_TEXTURE_2D,
-                                                     internalFormat, type, 0));
   return webMediaPlayer()->copyVideoTextureToPlatformTexture(
-      gl, texture, internalFormat, type, premultiplyAlpha, flipY);
+      gl, texture, premultiplyAlpha, flipY);
+}
+
+bool HTMLVideoElement::texImageImpl(
+    WebMediaPlayer::TexImageFunctionID functionID,
+    GLenum target,
+    gpu::gles2::GLES2Interface* gl,
+    GLint level,
+    GLint internalformat,
+    GLenum format,
+    GLenum type,
+    GLint xoffset,
+    GLint yoffset,
+    GLint zoffset,
+    bool flipY,
+    bool premultiplyAlpha) {
+  if (!webMediaPlayer())
+    return false;
+  return webMediaPlayer()->texImageImpl(
+      functionID, target, gl, level, internalformat, format, type, xoffset,
+      yoffset, zoffset, flipY, premultiplyAlpha);
 }
 
 bool HTMLVideoElement::hasAvailableVideoFrame() const {
@@ -235,12 +251,12 @@ bool HTMLVideoElement::hasAvailableVideoFrame() const {
 
 void HTMLVideoElement::webkitEnterFullscreen() {
   if (!isFullscreen())
-    enterFullscreen();
+    Fullscreen::requestFullscreen(*this, Fullscreen::RequestType::Prefixed);
 }
 
 void HTMLVideoElement::webkitExitFullscreen() {
   if (isFullscreen())
-    exitFullscreen();
+    Fullscreen::exitFullscreen(document());
 }
 
 bool HTMLVideoElement::webkitSupportsFullscreen() {

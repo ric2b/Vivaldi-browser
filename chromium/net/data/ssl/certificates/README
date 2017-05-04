@@ -79,6 +79,15 @@ unit tests.
 - client-nokey.p12 : A PKCS #12 file containing a client certificate (the same
      as the one in client.p12) but no private key. The password is "12345".
 
+- client-empty-password.p12 : A PKCS #12 file containing an unencrypted client
+     certificate and a encrypted private key.  The password is the empty string,
+     encoded as two zero bytes.  (PKCS#12 passwords are encoded as
+     NUL-terminated UTF-16.)
+
+- client-null-password.p12 : A PKCS #12 file containing an unencrypted client
+     certificate and a encrypted private key.  The password is the empty string,
+     encoded as the empty byte string.
+
 - unittest.selfsigned.der : A self-signed certificate generated using private
      key in unittest.key.bin. The common name is "unittest".
 
@@ -87,11 +96,6 @@ unit tests.
 - unittest.originbound.der: A test origin-bound certificate for
      https://www.google.com:443.
 - unittest.originbound.key.der: matching PrivateKeyInfo.
-
-- x509_verify_results.chain.pem : A simple certificate chain used to test that
-    the correctly ordered, filtered certificate chain is returned during
-    verification, regardless of the order in which the intermediate/root CA
-    certificates are provided.
 
 - test_mail_google_com.pem : A certificate signed by the test CA for
     "mail.google.com". Because it is signed by that CA instead of the true CA
@@ -134,6 +138,12 @@ unit tests.
 - root_ca_cert.pem
     These certificates are the common certificates used by the Python test
     server for simulating HTTPS connections.
+
+- intermediate_ca_cert.pem
+- ok_cert_by_intermediate.pem
+    These certificates simulate a more common chain of root (root_ca_cert.pem)
+    to intermediate (intermediate_ca_cert.pem) to leaf
+    (ok_cert_by_intermediate.pem).
 
 - wildcard_.pem
     A certificate and private key valid for *.example.org, used in various
@@ -188,6 +198,11 @@ unit tests.
 - tls_feature_extension.pem
   A certificate that contains the TLS Feature Extension.
 
+- x509_verify_results.chain.pem : A simple certificate chain used to test that
+    the correctly ordered, filtered certificate chain is returned during
+    verification, regardless of the order in which the intermediate/root CA
+    certificates are provided.
+
 ===== From net/data/ssl/scripts/generate-weak-test-chains.sh
 - 2048-rsa-root.pem
 - {768-rsa,1024-rsa,2048-rsa,prime256v1-ecdsa}-intermediate.pem
@@ -237,6 +252,14 @@ unit tests.
 - client_4.key
 - client_4.pk8
 - client_4_ca.pem
+- client_5.pem
+- client_5.key
+- client_5.pk8
+- client_5_ca.pem
+- client_6.pem
+- client_6.key
+- client_6.pk8
+- client_6_ca.pem
 - client_root_ca.pem
      This is a set of files used to unit test SSL client certificate
      authentication.
@@ -253,6 +276,10 @@ unit tests.
        of X509v3 extensions.  Specifically it includes two Subject
        Alternative Name fields recognized by Chrome OS.
      - client_4.pem is similar to client_2.pem but is a P-256 ECDSA key rather
+       than RSA.
+     - client_5.pem is similar to client_2.pem but is a P-384 ECDSA key rather
+       than RSA.
+     - client_6.pem is similar to client_2.pem but is a P-521 ECDSA key rather
        than RSA.
      - client_root_ca.pem is the CA certificate which signed client_*_ca.pem.
 

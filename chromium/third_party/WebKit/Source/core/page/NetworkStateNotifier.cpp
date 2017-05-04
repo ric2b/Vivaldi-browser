@@ -27,6 +27,7 @@
 
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/page/Page.h"
 #include "wtf/Assertions.h"
 #include "wtf/Functional.h"
@@ -92,10 +93,10 @@ void NetworkStateNotifier::addObserver(NetworkStateObserver* observer,
   MutexLocker locker(m_mutex);
   ObserverListMap::AddResult result = m_observers.add(context, nullptr);
   if (result.isNewEntry)
-    result.storedValue->value = wrapUnique(new ObserverList);
+    result.storedValue->value = WTF::wrapUnique(new ObserverList);
 
   ASSERT(result.storedValue->value->observers.find(observer) == kNotFound);
-  result.storedValue->value->observers.append(observer);
+  result.storedValue->value->observers.push_back(observer);
 }
 
 void NetworkStateNotifier::removeObserver(NetworkStateObserver* observer,
@@ -111,7 +112,7 @@ void NetworkStateNotifier::removeObserver(NetworkStateObserver* observer,
   size_t index = observers.find(observer);
   if (index != kNotFound) {
     observers[index] = 0;
-    observerList->zeroedObservers.append(index);
+    observerList->zeroedObservers.push_back(index);
   }
 
   if (!observerList->iterating && !observerList->zeroedObservers.isEmpty())
@@ -149,7 +150,7 @@ void NetworkStateNotifier::notifyObservers(WebConnectionType type,
   for (const auto& entry : m_observers) {
     ExecutionContext* context = entry.key;
     context->postTask(
-        BLINK_FROM_HERE,
+        TaskType::Networking, BLINK_FROM_HERE,
         createCrossThreadTask(
             &NetworkStateNotifier::notifyObserversOfConnectionChangeOnContext,
             crossThreadUnretained(this), type, maxBandwidthMbps));

@@ -22,6 +22,8 @@ LayoutDelegate* LayoutDelegate::Get() {
 
 int LayoutDelegate::GetLayoutDistance(LayoutDistanceType type) const {
   switch (type) {
+    case LayoutDistanceType::PANEL_HORIZ_MARGIN:
+      return views::kPanelHorizMargin;
     case LayoutDistanceType::PANEL_VERT_MARGIN:
       return views::kPanelVertMargin;
     case LayoutDistanceType::RELATED_BUTTON_HORIZONTAL_SPACING:
@@ -38,6 +40,8 @@ int LayoutDelegate::GetLayoutDistance(LayoutDistanceType type) const {
       return views::kButtonVEdgeMarginNew;
     case LayoutDistanceType::BUTTON_HEDGE_MARGIN_NEW:
       return views::kButtonHEdgeMarginNew;
+    case LayoutDistanceType::CHECKBOX_INDENT:
+      return views::kCheckboxIndent;
   }
   NOTREACHED();
   return 0;
@@ -45,9 +49,17 @@ int LayoutDelegate::GetLayoutDistance(LayoutDistanceType type) const {
 
 views::GridLayout::Alignment LayoutDelegate::GetControlLabelGridAlignment()
     const {
-  return views::kControlLabelGridAlignment;
+  return views::GridLayout::TRAILING;
 }
 
 bool LayoutDelegate::UseExtraDialogPadding() const {
   return true;
+}
+
+bool LayoutDelegate::IsHarmonyMode() const {
+  return false;
+}
+
+int LayoutDelegate::GetDialogPreferredWidth(DialogWidthType type) const {
+  return 0;
 }

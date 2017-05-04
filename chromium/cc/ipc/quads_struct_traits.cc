@@ -67,13 +67,14 @@ bool StructTraits<cc::mojom::RenderPassQuadStateDataView, cc::DrawQuad>::Read(
   quad->resources.ids[cc::RenderPassDrawQuad::kMaskResourceIdIndex] =
       data.mask_resource_id();
   quad->resources.count = data.mask_resource_id() ? 1 : 0;
-  return data.ReadRenderPassId(&quad->render_pass_id) &&
-         data.ReadMaskUvScale(&quad->mask_uv_scale) &&
+  quad->render_pass_id = data.render_pass_id();
+  // RenderPass ids are never zero.
+  if (!quad->render_pass_id)
+    return false;
+  return data.ReadMaskUvScale(&quad->mask_uv_scale) &&
          data.ReadMaskTextureSize(&quad->mask_texture_size) &&
-         data.ReadFilters(&quad->filters) &&
          data.ReadFiltersScale(&quad->filters_scale) &&
-         data.ReadFiltersOrigin(&quad->filters_origin) &&
-         data.ReadBackgroundFilters(&quad->background_filters);
+         data.ReadFiltersOrigin(&quad->filters_origin);
 }
 
 // static
@@ -113,8 +114,15 @@ bool StructTraits<cc::mojom::TextureQuadStateDataView, cc::DrawQuad>::Read(
     cc::mojom::TextureQuadStateDataView data,
     cc::DrawQuad* out) {
   cc::TextureDrawQuad* quad = static_cast<cc::TextureDrawQuad*>(out);
+
   quad->resources.ids[cc::TextureDrawQuad::kResourceIdIndex] =
       data.resource_id();
+  if (!data.ReadResourceSizeInPixels(
+          &quad->overlay_resources
+               .size_in_pixels[cc::TextureDrawQuad::kResourceIdIndex])) {
+    return false;
+  }
+
   quad->resources.count = 1;
   quad->premultiplied_alpha = data.premultiplied_alpha();
   if (!data.ReadUvTopLeft(&quad->uv_top_left) ||

@@ -400,6 +400,12 @@ Host.InspectorFrontendHostStub = class {
 
   /**
    * @override
+   */
+  openNodeFrontend() {
+  }
+
+  /**
+   * @override
    * @param {number} x
    * @param {number} y
    * @param {!Array.<!InspectorFrontendHostAPI.ContextMenuDescriptor>} items
@@ -421,7 +427,7 @@ Host.InspectorFrontendHostStub = class {
 /**
  * @unrestricted
  */
-var InspectorFrontendAPIImpl = class {
+Host.InspectorFrontendAPIImpl = class {
   constructor() {
     this._debugFrontend =
         !!Runtime.queryParam('debugFrontend') || (window['InspectorTest'] && window['InspectorTest']['debugTest']);
@@ -514,7 +520,7 @@ window.InspectorFrontendHost = InspectorFrontendHost;
   // FIXME: This file is included into both apps, since the devtools_app needs the InspectorFrontendHostAPI only,
   // so the host instance should not initialized there.
   initializeInspectorFrontendHost();
-  window.InspectorFrontendAPI = new InspectorFrontendAPIImpl();
+  window.InspectorFrontendAPI = new Host.InspectorFrontendAPIImpl();
   Common.setLocalizationPlatform(InspectorFrontendHost.platform());
 })();
 
@@ -522,3 +528,16 @@ window.InspectorFrontendHost = InspectorFrontendHost;
  * @type {!Common.EventTarget}
  */
 InspectorFrontendHost.events;
+
+/**
+ * @param {!Object<string, string>=} prefs
+ * @return {boolean}
+ */
+Host.isUnderTest = function(prefs) {
+  if (InspectorFrontendHost.isUnderTest())
+    return true;
+
+  if (prefs)
+    return prefs['isUnderTest'] === 'true';
+  return Common.settings.createSetting('isUnderTest', false).get();
+};

@@ -30,15 +30,13 @@
 test infrastructure (the Port and Driver classes).
 """
 
-import collections
 import cgi
+import collections
 import difflib
 import errno
 import functools
-import itertools
 import json
 import logging
-import operator
 import optparse
 import re
 import sys
@@ -59,7 +57,6 @@ from webkitpy.layout_tests.port.factory import PortFactory
 from webkitpy.layout_tests.servers import apache_http
 from webkitpy.layout_tests.servers import pywebsocket
 from webkitpy.layout_tests.servers import wptserve
-from functools import reduce  # pylint: disable=redefined-builtin
 
 _log = logging.getLogger(__name__)
 
@@ -82,9 +79,6 @@ class Port(object):
 
     CONTENT_SHELL_NAME = 'content_shell'
 
-    # True if the port as aac and mp3 codecs built in.
-    PORT_HAS_AUDIO_CODECS_BUILT_IN = False
-
     ALL_SYSTEMS = (
 
         # FIXME: We treat Retina (High-DPI) devices as if they are running
@@ -97,7 +91,6 @@ class Port(object):
         ('mac10.11', 'x86'),
         ('win7', 'x86'),
         ('win10', 'x86'),
-        ('precise', 'x86_64'),
         ('trusty', 'x86_64'),
         # FIXME: Technically this should be 'arm', but adding a third architecture type breaks TestConfigurationConverter.
         # If we need this to be 'arm' in the future, then we first have to fix TestConfigurationConverter.
@@ -107,7 +100,7 @@ class Port(object):
     CONFIGURATION_SPECIFIER_MACROS = {
         'mac': ['retina', 'mac10.9', 'mac10.10', 'mac10.11'],
         'win': ['win7', 'win10'],
-        'linux': ['precise', 'trusty'],
+        'linux': ['trusty'],
         'android': ['icecreamsandwich'],
     }
 
@@ -179,24 +172,9 @@ class Port(object):
         self._is_wptserve_enabled = getattr(options, 'enable_wptserve', False)
         self._wpt_server = None
         self._image_differ = None
-        self._server_process_constructor = server_process.ServerProcess  # overridable for testing
+        self.server_process_constructor = server_process.ServerProcess  # overridable for testing
         self._http_lock = None  # FIXME: Why does this live on the port object?
         self._dump_reader = None
-
-        # Python's Popen has a bug that causes any pipes opened to a
-        # process that can't be executed to be leaked.  Since this
-        # code is specifically designed to tolerate exec failures
-        # to gracefully handle cases where wdiff is not installed,
-        # the bug results in a massive file descriptor leak. As a
-        # workaround, if an exec failure is ever experienced for
-        # wdiff, assume it's not available.  This will leak one
-        # file descriptor but that's better than leaking each time
-        # wdiff would be run.
-        #
-        # http://mail.python.org/pipermail/python-list/
-        #    2008-August/505753.html
-        # http://bugs.python.org/issue3210
-        self._wdiff_available = None
 
         # FIXME: prettypatch.py knows this path, why is it copied here?
         self._pretty_patch_path = self.path_from_webkit_base("Tools", "Scripts", "webkitruby", "PrettyPatch", "prettify.rb")
@@ -244,11 +222,6 @@ class Port(object):
         # We want to wait for at least 3 seconds, but if we are really slow, we want to be slow on cleanup as
         # well (for things like ASAN, Valgrind, etc.)
         return 3.0 * float(self.get_option('time_out_ms', '0')) / self.default_timeout_ms()
-
-    def wdiff_available(self):
-        if self._wdiff_available is None:
-            self._wdiff_available = self.check_wdiff(more_logging=False)
-        return self._wdiff_available
 
     def pretty_patch_available(self):
         if self._pretty_patch_available is None:
@@ -353,9 +326,8 @@ class Port(object):
         if self.get_option('pixel_tests'):
             result = self.check_image_diff() and result
 
-        # It's okay if pretty patch and wdiff aren't available, but we will at least log messages.
+        # It's okay if pretty patch isn't available, but we will at least log messages.
         self._pretty_patch_available = self.check_pretty_patch()
-        self._wdiff_available = self.check_wdiff()
 
         if self._dump_reader:
             result = self._dump_reader.check_is_functional() and result
@@ -418,8 +390,8 @@ class Port(object):
         """Checks whether we can use the PrettyPatch ruby script."""
         try:
             _ = self._executive.run_command(['ruby', '--version'])
-        except OSError as e:
-            if e.errno in [errno.ENOENT, errno.EACCES, errno.ECHILD]:
+        except OSError as error:
+            if error.errno in [errno.ENOENT, errno.EACCES, errno.ECHILD]:
                 if more_logging:
                     _log.warning("Ruby is not installed; can't generate pretty patches.")
                     _log.warning('')
@@ -432,27 +404,6 @@ class Port(object):
             return False
 
         return True
-
-    def check_wdiff(self, more_logging=True):
-        if not self._path_to_wdiff():
-            # Don't need to log here since this is the port choosing not to use wdiff.
-            return False
-
-        try:
-            _ = self._executive.run_command([self._path_to_wdiff(), '--help'])
-        except OSError:
-            if more_logging:
-                message = self._wdiff_missing_message()
-                if message:
-                    for line in message.splitlines():
-                        _log.warning('    ' + line)
-                        _log.warning('')
-            return False
-
-        return True
-
-    def _wdiff_missing_message(self):
-        return 'wdiff is not installed; please install it to generate word-by-word diffs.'
 
     def check_httpd(self):
         httpd_path = self.path_to_apache()
@@ -517,42 +468,12 @@ class Port(object):
                 result = self._filesystem.read_binary_file(native_diff_filename)
             else:
                 err_str = "Image diff returned an exit code of %s. See http://crbug.com/278596" % exit_code
-        except OSError as e:
-            err_str = 'error running image diff: %s' % str(e)
+        except OSError as error:
+            err_str = 'error running image diff: %s' % error
         finally:
             self._filesystem.rmtree(str(tempdir))
 
         return (result, err_str or None)
-
-    def diff_text(self, expected_text, actual_text, expected_filename, actual_filename):
-        """Returns a string containing the diff of the two text strings
-        in 'unified diff' format.
-        """
-
-        # The filenames show up in the diff output, make sure they're
-        # raw bytes and not unicode, so that they don't trigger join()
-        # trying to decode the input.
-        def to_raw_bytes(string_value):
-            if isinstance(string_value, unicode):
-                return string_value.encode('utf-8')
-            return string_value
-        expected_filename = to_raw_bytes(expected_filename)
-        actual_filename = to_raw_bytes(actual_filename)
-        diff = difflib.unified_diff(expected_text.splitlines(True),
-                                    actual_text.splitlines(True),
-                                    expected_filename,
-                                    actual_filename)
-
-        # The diff generated by the difflib is incorrect if one of the files
-        # does not have a newline at the end of the file and it is present in
-        # the diff. Relevant Python issue: http://bugs.python.org/issue2142
-        def diff_fixup(diff):
-            for line in diff:
-                yield line
-                if not line.endswith('\n'):
-                    yield '\n\\ No newline at end of file\n'
-
-        return ''.join(diff_fixup(diff))
 
     def driver_name(self):
         if self.get_option('driver_name'):
@@ -784,13 +705,15 @@ class Port(object):
         return extension in Port._supported_file_extensions
 
     def is_test_file(self, filesystem, dirname, filename):
-        match = re.search(r'[/\\]imported[/\\]wpt([/\\].*)?$', dirname)
+        match = re.search(r'[/\\]external[/\\]wpt([/\\].*)?$', dirname)
         if match:
             if match.group(1):
                 path_in_wpt = match.group(1)[1:].replace('\\', '/') + '/' + filename
             else:
                 path_in_wpt = filename
             return self._manifest_items_for_path(path_in_wpt) is not None
+        if 'inspector-unit' in dirname:
+            return filesystem.splitext(filename)[1] == '.js'
         return Port._has_supported_extension(
             filesystem, filename) and not Port.is_reference_html_file(filesystem, dirname, filename)
 
@@ -798,14 +721,17 @@ class Port(object):
         tests = []
         for file_path in files:
             # Path separators are normalized by relative_test_filename().
-            match = re.search(r'imported/wpt/(.*)$', file_path)
+            match = re.search(r'external/wpt/(.*)$', file_path)
             if not match:
                 tests.append(file_path)
                 continue
             path_in_wpt = match.group(1)
             manifest_items = self._manifest_items_for_path(path_in_wpt)
             assert manifest_items is not None
-            if len(manifest_items) != 1 or manifest_items[0]['url'][1:] != path_in_wpt:
+            if len(manifest_items) != 1:
+                continue
+            url = manifest_items[0][0]
+            if url[1:] != path_in_wpt:
                 # TODO(tkent): foo.any.js and bar.worker.js should be accessed
                 # as foo.any.html, foo.any.worker, and bar.worker with WPTServe.
                 continue
@@ -814,20 +740,21 @@ class Port(object):
 
     @memoized
     def _wpt_manifest(self):
-        path = self._filesystem.join(self.layout_tests_dir(), 'imported', 'wpt', 'MANIFEST.json')
+        path = self._filesystem.join(self.layout_tests_dir(), 'external', 'wpt', 'MANIFEST.json')
         return json.loads(self._filesystem.read_text_file(path))
 
     def _manifest_items_for_path(self, path_in_wpt):
-        """Returns a list of a dict representing ManifestItem for the specified
-        path, or None if MANIFEST.json has no items for the specified path.
+        """Returns a manifest item for the given WPT path, or None if not found.
 
-        A ManifestItem has 'path', 'url', and optional 'timeout' fields. Also,
-        it has "references" list for reference tests. It's defined in
-        web-platform-tests/tools/manifest/item.py.
+        The format of a manifest item depends on
+        https://github.com/w3c/wpt-tools/blob/master/manifest/item.py
+        and is assumed to be a list of the format [url, extras],
+        or [url, references, extras] for reftests, or None if not found.
+
+        For most testharness tests, the returned manifest_items is expected
+        to look like this:: [["/some/test/path.html", {}]]
         """
-        # Because we generate MANIFEST.json before finishing import, all
-        # entries are in 'local_changes'.
-        items = self._wpt_manifest()['local_changes']['items']
+        items = self._wpt_manifest()['items']
         if path_in_wpt in items['manual']:
             return items['manual'][path_in_wpt]
         elif path_in_wpt in items['reftest']:
@@ -968,9 +895,9 @@ class Port(object):
     def perf_tests_dir(self):
         return self._webkit_finder.perf_tests_dir()
 
-    def skipped_layout_tests(self, test_list):
-        """Returns tests skipped outside of the TestExpectations files."""
-        return set(self._skipped_tests_for_unsupported_features(test_list))
+    def skipped_layout_tests(self, _):
+        # TODO(qyearsley): Remove this method.
+        return set()
 
     def skips_test(self, test, generic_expectations, full_expectations):
         """Checks whether the given test is skipped for this port.
@@ -1098,9 +1025,6 @@ class Port(object):
 
     def inspector_build_directory(self):
         return self._build_path('resources', 'inspector')
-
-    def inspector_debug_directory(self):
-        return self.path_from_webkit_base('Source', 'devtools', 'front_end')
 
     def apache_config_directory(self):
         return self.path_from_webkit_base('Tools', 'Scripts', 'apache_config')
@@ -1230,7 +1154,7 @@ class Port(object):
     @staticmethod
     def is_wptserve_test(test):
         """Whether wptserve should be used for a given test if enabled."""
-        return test.startswith("imported/wpt/")
+        return test.startswith("external/wpt/")
 
     def should_use_wptserve(self, test):
         return self.is_wptserve_enabled() and self.is_wptserve_test(test)
@@ -1406,70 +1330,6 @@ class Port(object):
         """Returns the repository path for the chromium code base."""
         return self.path_from_chromium_base('build')
 
-    _WDIFF_DEL = '##WDIFF_DEL##'
-    _WDIFF_ADD = '##WDIFF_ADD##'
-    _WDIFF_END = '##WDIFF_END##'
-
-    def _format_wdiff_output_as_html(self, wdiff):
-        wdiff = cgi.escape(wdiff)
-        wdiff = wdiff.replace(self._WDIFF_DEL, "<span class=del>")
-        wdiff = wdiff.replace(self._WDIFF_ADD, "<span class=add>")
-        wdiff = wdiff.replace(self._WDIFF_END, "</span>")
-        html = "<head><style>.del { background: #faa; } "
-        html += ".add { background: #afa; }</style></head>"
-        html += "<pre>%s</pre>" % wdiff
-        return html
-
-    def _wdiff_command(self, actual_filename, expected_filename):
-        executable = self._path_to_wdiff()
-        return [executable,
-                "--start-delete=%s" % self._WDIFF_DEL,
-                "--end-delete=%s" % self._WDIFF_END,
-                "--start-insert=%s" % self._WDIFF_ADD,
-                "--end-insert=%s" % self._WDIFF_END,
-                actual_filename,
-                expected_filename]
-
-    @staticmethod
-    def _handle_wdiff_error(script_error):
-        # Exit 1 means the files differed, any other exit code is an error.
-        if script_error.exit_code != 1:
-            raise script_error
-
-    def _run_wdiff(self, actual_filename, expected_filename):
-        """Runs wdiff and may throw exceptions.
-        This is mostly a hook for unit testing.
-        """
-        # Diffs are treated as binary as they may include multiple files
-        # with conflicting encodings.  Thus we do not decode the output.
-        command = self._wdiff_command(actual_filename, expected_filename)
-        wdiff = self._executive.run_command(command, decode_output=False,
-                                            error_handler=self._handle_wdiff_error)
-        return self._format_wdiff_output_as_html(wdiff)
-
-    _wdiff_error_html = "Failed to run wdiff, see error log."
-
-    def wdiff_text(self, actual_filename, expected_filename):
-        """Returns a string of HTML indicating the word-level diff of the
-        contents of the two filenames. Returns an empty string if word-level
-        diffing isn't available.
-        """
-        if not self.wdiff_available():
-            return ""
-        try:
-            # It's possible to raise a ScriptError we pass wdiff invalid paths.
-            return self._run_wdiff(actual_filename, expected_filename)
-        except OSError as e:
-            if e.errno in [errno.ENOENT, errno.EACCES, errno.ECHILD]:
-                # Silently ignore cases where wdiff is missing.
-                self._wdiff_available = False
-                return ""
-            raise
-        except ScriptError as e:
-            _log.error("Failed to run wdiff: %s", e)
-            self._wdiff_available = False
-            return self._wdiff_error_html
-
     # This is a class variable so we can test error output easily.
     _pretty_patch_error_html = "Failed to run PrettyPatch, see error log."
 
@@ -1484,16 +1344,16 @@ class Port(object):
             # Diffs are treated as binary (we pass decode_output=False) as they
             # may contain multiple files of conflicting encodings.
             return self._executive.run_command(command, decode_output=False)
-        except OSError as e:
+        except OSError as error:
             # If the system is missing ruby log the error and stop trying.
             self._pretty_patch_available = False
-            _log.error("Failed to run PrettyPatch (%s): %s", command, e)
+            _log.error("Failed to run PrettyPatch (%s): %s", command, error)
             return self._pretty_patch_error_html
-        except ScriptError as e:
+        except ScriptError as error:
             # If ruby failed to run for some reason, log the command
             # output and stop trying.
             self._pretty_patch_available = False
-            _log.error("Failed to run PrettyPatch (%s):\n%s", command, e.message_with_output())
+            _log.error("Failed to run PrettyPatch (%s):\n%s", command, error.message_with_output())
             return self._pretty_patch_error_html
 
     def default_configuration(self):
@@ -1562,17 +1422,6 @@ class Port(object):
         """
         return self._build_path('image_diff')
 
-    @memoized
-    def _path_to_wdiff(self):
-        """Returns the full path to the wdiff binary, or None if it is not available.
-
-        This is likely used only by wdiff_text()
-        """
-        for path in ("/usr/bin/wdiff", "/usr/bin/dwdiff"):
-            if self._filesystem.exists(path):
-                return path
-        return None
-
     def _absolute_baseline_path(self, platform_dir):
         """Return the absolute path to the top of the baseline tree for a
         given platform directory.
@@ -1616,12 +1465,12 @@ class Port(object):
 
         # We require stdout and stderr to be bytestrings, not character strings.
         if stdout:
-            assert isinstance(stdout, str)
+            assert isinstance(stdout, basestring)
             stdout_lines = stdout.decode('utf8', 'replace').splitlines()
         else:
             stdout_lines = [u'<empty>']
         if stderr:
-            assert isinstance(stderr, str)
+            assert isinstance(stderr, basestring)
             stderr_lines = stderr.decode('utf8', 'replace').splitlines()
         else:
             stderr_lines = [u'<empty>']
@@ -1653,8 +1502,8 @@ class Port(object):
             try:
                 test_suite_json = json.loads(self._filesystem.read_text_file(path_to_virtual_test_suites))
                 self._virtual_test_suites = [VirtualTestSuite(**d) for d in test_suite_json]
-            except ValueError as e:
-                raise ValueError("LayoutTests/VirtualTestSuites is not a valid JSON file: %s" % str(e))
+            except ValueError as error:
+                raise ValueError("LayoutTests/VirtualTestSuites is not a valid JSON file: %s" % error)
         return self._virtual_test_suites
 
     def _all_virtual_tests(self, suites):
@@ -1729,44 +1578,6 @@ class Port(object):
         if self.should_use_wptserve(test_input.test_name):
             return False
         return True
-
-    def _symbols_string(self):
-        return ''
-
-    # Ports which use compile-time feature detection should define this method and return
-    # a dictionary mapping from symbol substrings to possibly disabled test directories.
-    # When the symbol substrings are not matched, the directories will be skipped.
-    # If ports don't ever enable certain features, then those directories can just be
-    # in the Skipped list instead of compile-time-checked here.
-    def _missing_symbol_to_skipped_tests(self):
-        if self.PORT_HAS_AUDIO_CODECS_BUILT_IN:
-            return {}
-        else:
-            return {
-                "ff_mp3_decoder": ["webaudio/codec-tests/mp3"],
-                "ff_aac_decoder": ["webaudio/codec-tests/aac"],
-            }
-
-    def _has_test_in_directories(self, directory_lists, test_list):
-        if not test_list:
-            return False
-
-        directories = itertools.chain.from_iterable(directory_lists)
-        for directory, test in itertools.product(directories, test_list):
-            if test.startswith(directory):
-                return True
-        return False
-
-    def _skipped_tests_for_unsupported_features(self, test_list):
-        # Only check the symbols of there are tests in the test_list that might get skipped.
-        # This is a performance optimization to avoid the calling nm.
-        # Runtime feature detection not supported, fallback to static detection:
-        # Disable any tests for symbols missing from the executable or libraries.
-        if self._has_test_in_directories(self._missing_symbol_to_skipped_tests().values(), test_list):
-            symbols_string = self._symbols_string()
-            return reduce(operator.add, [directories for symbol_substring, directories in self._missing_symbol_to_skipped_tests(
-            ).items() if symbol_substring not in symbols_string], [])
-        return []
 
     def _convert_path(self, path):
         """Handles filename conversion for subprocess command line args."""

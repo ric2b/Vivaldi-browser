@@ -11,6 +11,7 @@ namespace {
 bool g_checked_vivaldi_status = false;
 bool g_vivaldi_is_running = false;
 bool g_debugging_vivaldi = false;
+bool g_forced_vivaldi_status = false;
 bool g_tab_drag_in_progress = false;
 
 void CheckVivaldiStatus() {
@@ -24,6 +25,17 @@ void CheckVivaldiStatus() {
 }
 
 }  // namespace
+
+void ForceVivaldiRunning(bool status) {
+  //g_vivaldi_is_running = status;
+  g_checked_vivaldi_status = true;
+  g_forced_vivaldi_status = status;
+}
+
+bool ForcedVivaldiRunning()
+{
+  return g_forced_vivaldi_status;
+}
 
 bool IsVivaldiRunning(const base::CommandLine &cmd_line) {
   if (cmd_line.HasSwitch(switches::kDisableVivaldi) ||

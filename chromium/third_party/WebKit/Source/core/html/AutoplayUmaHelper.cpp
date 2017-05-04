@@ -7,10 +7,10 @@
 #include "core/dom/Document.h"
 #include "core/dom/ElementVisibilityObserver.h"
 #include "core/events/Event.h"
-#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLMediaElement.h"
 #include "platform/Histogram.h"
+#include "public/platform/Platform.h"
 #include "wtf/CurrentTime.h"
 
 namespace blink {
@@ -28,6 +28,7 @@ AutoplayUmaHelper* AutoplayUmaHelper::create(HTMLMediaElement* element) {
 
 AutoplayUmaHelper::AutoplayUmaHelper(HTMLMediaElement* element)
     : EventListener(CPPEventListenerType),
+      ContextLifecycleObserver(nullptr),
       m_source(AutoplaySource::NumberOfSources),
       m_element(element),
       m_mutedVideoPlayMethodVisibilityObserver(nullptr),
@@ -73,12 +74,27 @@ void AutoplayUmaHelper::onAutoplayInitiated(AutoplaySource source) {
     audioHistogram.count(static_cast<int>(m_source));
   }
 
+  // Record the child frame and top-level frame URLs for autoplay muted videos
+  // by attribute.
+  if (m_element->isHTMLVideoElement() && m_element->muted()) {
+    if (source == AutoplaySource::Attribute) {
+      Platform::current()->recordRapporURL(
+          "Media.Video.Autoplay.Muted.Attribute.Frame",
+          m_element->document().url());
+    } else {
+      DCHECK(source == AutoplaySource::Method);
+      Platform::current()->recordRapporURL(
+          "Media.Video.Autoplay.Muted.PlayMethod.Frame",
+          m_element->document().url());
+    }
+  }
+
   // Record if it will be blocked by Data Saver or Autoplay setting.
   if (m_element->isHTMLVideoElement() && m_element->muted() &&
       RuntimeEnabledFeatures::autoplayMutedVideosEnabled()) {
     bool dataSaverEnabled =
         m_element->document().settings() &&
-        m_element->document().settings()->dataSaverEnabled();
+        m_element->document().settings()->getDataSaverEnabled();
     bool blockedBySetting = !m_element->isAutoplayAllowedPerSettings();
 
     if (dataSaverEnabled && blockedBySetting) {
@@ -94,6 +110,84 @@ void AutoplayUmaHelper::onAutoplayInitiated(AutoplaySource source) {
   m_element->addEventListener(EventTypeNames::playing, this, false);
 }
 
+void AutoplayUmaHelper::recordCrossOriginAutoplayResult(
+    CrossOriginAutoplayResult result) {
+  DEFINE_STATIC_LOCAL(
+      EnumerationHistogram, autoplayResultHistogram,
+      ("Media.Autoplay.CrossOrigin.Result",
+       static_cast<int>(CrossOriginAutoplayResult::NumberOfResults)));
+
+  if (!m_element->isHTMLVideoElement())
+    return;
+  if (!m_element->isInCrossOriginFrame())
+    return;
+
+  // Record each metric only once per element, since the metric focuses on the
+  // site distribution. If a page calls play() multiple times, it will be
+  // recorded only once.
+  if (m_recordedCrossOriginAutoplayResults.count(result))
+    return;
+
+  switch (result) {
+    case CrossOriginAutoplayResult::AutoplayAllowed:
+      // Record metric
+      Platform::current()->recordRapporURL(
+          "Media.Autoplay.CrossOrigin.Allowed.ChildFrame",
+          m_element->document().url());
+      Platform::current()->recordRapporURL(
+          "Media.Autoplay.CrossOrigin.Allowed.TopLevelFrame",
+          m_element->document().topDocument().url());
+      autoplayResultHistogram.count(static_cast<int>(result));
+      m_recordedCrossOriginAutoplayResults.insert(result);
+      break;
+    case CrossOriginAutoplayResult::AutoplayBlocked:
+      Platform::current()->recordRapporURL(
+          "Media.Autoplay.CrossOrigin.Blocked.ChildFrame",
+          m_element->document().url());
+      Platform::current()->recordRapporURL(
+          "Media.Autoplay.CrossOrigin.Blocked.TopLevelFrame",
+          m_element->document().topDocument().url());
+      autoplayResultHistogram.count(static_cast<int>(result));
+      m_recordedCrossOriginAutoplayResults.insert(result);
+      break;
+    case CrossOriginAutoplayResult::PlayedWithGesture:
+      // Record this metric only when the video has been blocked from autoplay
+      // previously. This is to record the sites having videos that are blocked
+      // to autoplay but the user starts the playback by gesture.
+      if (!m_recordedCrossOriginAutoplayResults.count(
+              CrossOriginAutoplayResult::AutoplayBlocked)) {
+        return;
+      }
+      Platform::current()->recordRapporURL(
+          "Media.Autoplay.CrossOrigin.PlayedWithGestureAfterBlock.ChildFrame",
+          m_element->document().url());
+      Platform::current()->recordRapporURL(
+          "Media.Autoplay.CrossOrigin.PlayedWithGestureAfterBlock."
+          "TopLevelFrame",
+          m_element->document().topDocument().url());
+      autoplayResultHistogram.count(static_cast<int>(result));
+      m_recordedCrossOriginAutoplayResults.insert(result);
+      break;
+    case CrossOriginAutoplayResult::UserPaused:
+      if (!shouldRecordUserPausedAutoplayingCrossOriginVideo())
+        return;
+      if (m_element->ended() || m_element->seeking())
+        return;
+      Platform::current()->recordRapporURL(
+          "Media.Autoplay.CrossOrigin.UserPausedAutoplayingVideo.ChildFrame",
+          m_element->document().url());
+      Platform::current()->recordRapporURL(
+          "Media.Autoplay.CrossOrigin.UserPausedAutoplayingVideo."
+          "TopLevelFrame",
+          m_element->document().topDocument().url());
+      autoplayResultHistogram.count(static_cast<int>(result));
+      m_recordedCrossOriginAutoplayResults.insert(result);
+      break;
+    default:
+      NOTREACHED();
+  }
+}
+
 void AutoplayUmaHelper::recordAutoplayUnmuteStatus(
     AutoplayUnmuteActionStatus status) {
   DEFINE_STATIC_LOCAL(
@@ -105,15 +199,10 @@ void AutoplayUmaHelper::recordAutoplayUnmuteStatus(
 }
 
 void AutoplayUmaHelper::didMoveToNewDocument(Document& oldDocument) {
-  if (!shouldListenToUnloadEvent())
+  if (!shouldListenToContextDestroyed())
     return;
 
-  if (oldDocument.domWindow())
-    oldDocument.domWindow()->removeEventListener(EventTypeNames::unload, this,
-                                                 false);
-  if (m_element->document().domWindow())
-    m_element->document().domWindow()->addEventListener(EventTypeNames::unload,
-                                                        this, false);
+  setContext(&m_element->document());
 }
 
 void AutoplayUmaHelper::onVisibilityChangedForMutedVideoPlayMethodBecomeVisible(
@@ -146,8 +235,6 @@ void AutoplayUmaHelper::handleEvent(ExecutionContext* executionContext,
     handlePlayingEvent();
   else if (event->type() == EventTypeNames::pause)
     handlePauseEvent();
-  else if (event->type() == EventTypeNames::unload)
-    handleUnloadEvent();
   else
     NOTREACHED();
 }
@@ -161,9 +248,14 @@ void AutoplayUmaHelper::handlePlayingEvent() {
 
 void AutoplayUmaHelper::handlePauseEvent() {
   maybeStopRecordingMutedVideoOffscreenDuration();
+  maybeRecordUserPausedAutoplayingCrossOriginVideo();
 }
 
-void AutoplayUmaHelper::handleUnloadEvent() {
+void AutoplayUmaHelper::contextDestroyed(ExecutionContext*) {
+  handleContextDestroyed();
+}
+
+void AutoplayUmaHelper::handleContextDestroyed() {
   maybeStopRecordingMutedVideoPlayMethodBecomeVisible(false);
   maybeStopRecordingMutedVideoOffscreenDuration();
 }
@@ -179,9 +271,7 @@ void AutoplayUmaHelper::maybeStartRecordingMutedVideoPlayMethodBecomeVisible() {
                     onVisibilityChangedForMutedVideoPlayMethodBecomeVisible,
                 wrapWeakPersistent(this)));
   m_mutedVideoPlayMethodVisibilityObserver->start();
-  if (m_element->document().domWindow())
-    m_element->document().domWindow()->addEventListener(EventTypeNames::unload,
-                                                        this, false);
+  setContext(&m_element->document());
 }
 
 void AutoplayUmaHelper::maybeStopRecordingMutedVideoPlayMethodBecomeVisible(
@@ -195,7 +285,7 @@ void AutoplayUmaHelper::maybeStopRecordingMutedVideoPlayMethodBecomeVisible(
   histogram.count(visible);
   m_mutedVideoPlayMethodVisibilityObserver->stop();
   m_mutedVideoPlayMethodVisibilityObserver = nullptr;
-  maybeUnregisterUnloadListener();
+  maybeUnregisterContextDestroyedObserver();
 }
 
 void AutoplayUmaHelper::maybeStartRecordingMutedVideoOffscreenDuration() {
@@ -214,9 +304,7 @@ void AutoplayUmaHelper::maybeStartRecordingMutedVideoOffscreenDuration() {
                     wrapWeakPersistent(this)));
   m_mutedVideoOffscreenDurationVisibilityObserver->start();
   m_element->addEventListener(EventTypeNames::pause, this, false);
-  if (m_element->document().domWindow())
-    m_element->document().domWindow()->addEventListener(EventTypeNames::unload,
-                                                        this, false);
+  setContext(&m_element->document());
 }
 
 void AutoplayUmaHelper::maybeStopRecordingMutedVideoOffscreenDuration() {
@@ -250,23 +338,45 @@ void AutoplayUmaHelper::maybeStopRecordingMutedVideoOffscreenDuration() {
   m_mutedVideoOffscreenDurationVisibilityObserver->stop();
   m_mutedVideoOffscreenDurationVisibilityObserver = nullptr;
   m_mutedVideoAutoplayOffscreenDurationMS = 0;
+  maybeUnregisterMediaElementPauseListener();
+  maybeUnregisterContextDestroyedObserver();
+}
+
+void AutoplayUmaHelper::maybeRecordUserPausedAutoplayingCrossOriginVideo() {
+  recordCrossOriginAutoplayResult(CrossOriginAutoplayResult::UserPaused);
+  maybeUnregisterMediaElementPauseListener();
+}
+
+void AutoplayUmaHelper::maybeUnregisterContextDestroyedObserver() {
+  if (!shouldListenToContextDestroyed()) {
+    setContext(nullptr);
+  }
+}
+
+void AutoplayUmaHelper::maybeUnregisterMediaElementPauseListener() {
+  if (m_mutedVideoOffscreenDurationVisibilityObserver)
+    return;
+  if (shouldRecordUserPausedAutoplayingCrossOriginVideo())
+    return;
   m_element->removeEventListener(EventTypeNames::pause, this, false);
-  maybeUnregisterUnloadListener();
 }
 
-void AutoplayUmaHelper::maybeUnregisterUnloadListener() {
-  if (!shouldListenToUnloadEvent() && m_element->document().domWindow())
-    m_element->document().domWindow()->removeEventListener(
-        EventTypeNames::unload, this, false);
-}
-
-bool AutoplayUmaHelper::shouldListenToUnloadEvent() const {
+bool AutoplayUmaHelper::shouldListenToContextDestroyed() const {
   return m_mutedVideoPlayMethodVisibilityObserver ||
          m_mutedVideoOffscreenDurationVisibilityObserver;
 }
 
+bool AutoplayUmaHelper::shouldRecordUserPausedAutoplayingCrossOriginVideo()
+    const {
+  return m_element->isInCrossOriginFrame() && m_element->isHTMLVideoElement() &&
+         m_source != AutoplaySource::NumberOfSources &&
+         !m_recordedCrossOriginAutoplayResults.count(
+             CrossOriginAutoplayResult::UserPaused);
+}
+
 DEFINE_TRACE(AutoplayUmaHelper) {
   EventListener::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
   visitor->trace(m_element);
   visitor->trace(m_mutedVideoPlayMethodVisibilityObserver);
   visitor->trace(m_mutedVideoOffscreenDurationVisibilityObserver);

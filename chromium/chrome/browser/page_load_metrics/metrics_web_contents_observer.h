@@ -66,13 +66,20 @@ class MetricsWebContentsObserver
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
 
-  // This method is forwarded from the MetricsNavigationThrottle.
+  // These methods are forwarded from the MetricsNavigationThrottle.
   void WillStartNavigationRequest(content::NavigationHandle* navigation_handle);
+  void WillProcessNavigationResponse(
+      content::NavigationHandle* navigation_handle);
 
-  // A resource request completed on the IO thread.
-  void OnRequestComplete(content::ResourceType resource_type,
+  // A resource request completed on the IO thread. This method is invoked on
+  // the UI thread.
+  void OnRequestComplete(const content::GlobalRequestID& request_id,
+                         content::ResourceType resource_type,
                          bool was_cached,
-                         int net_error);
+                         bool used_data_reduction_proxy,
+                         int64_t raw_body_bytes,
+                         int64_t original_content_length,
+                         base::TimeTicks creation_time);
 
   // Flush any buffered metrics, as part of the metrics subsystem persisting
   // metrics as the application goes into the background. The application may be
@@ -94,11 +101,20 @@ class MetricsWebContentsObserver
       content::NavigationHandle* navigation_handle,
       std::unique_ptr<PageLoadTracker> tracker);
 
+  // Return a PageLoadTracker (either provisional or committed) that matches the
+  // given request attributes, or nullptr if there are no matching
+  // PageLoadTrackers.
+  PageLoadTracker* GetTrackerOrNullForRequest(
+      const content::GlobalRequestID& request_id,
+      content::ResourceType resource_type,
+      base::TimeTicks creation_time);
+
   // Notify all loads, provisional and committed, that we performed an action
   // that might abort them.
-  void NotifyAbortAllLoads(UserAbortType abort_type, bool user_initiated);
+  void NotifyAbortAllLoads(UserAbortType abort_type,
+                           UserInitiatedInfo user_initiated_info);
   void NotifyAbortAllLoadsWithTimestamp(UserAbortType abort_type,
-                                        bool user_initiated,
+                                        UserInitiatedInfo user_initiated_info,
                                         base::TimeTicks timestamp,
                                         bool is_certainly_browser_timestamp);
 
@@ -111,7 +127,8 @@ class MetricsWebContentsObserver
   // loads. This method returns the provisional load that was likely aborted
   // by this navigation, to help instantiate the new PageLoadTracker.
   std::unique_ptr<PageLoadTracker> NotifyAbortedProvisionalLoadsNewNavigation(
-      content::NavigationHandle* new_navigation);
+      content::NavigationHandle* new_navigation,
+      UserInitiatedInfo user_initiated_info);
 
   void OnTimingUpdated(content::RenderFrameHost*,
                        const PageLoadTiming& timing,

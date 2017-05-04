@@ -26,24 +26,6 @@ class StreamStateSaver : private std::ios {
 
 namespace blink {
 
-// basic_ostream::operator<<(const void*) is drunk.
-static void PrintPointer(const void* ptr, std::ostream& os) {
-  StreamStateSaver saver(os);
-  uintptr_t intPtr = reinterpret_cast<uintptr_t>(ptr);
-  os << "0x" << std::setfill('0') << std::setw(sizeof(uintptr_t) * 2)
-     << std::hex << intPtr;
-}
-
-void PrintTo(const ClipPaintPropertyNode& node, std::ostream* os) {
-  *os << "ClipPaintPropertyNode(clip=";
-  PrintTo(node.clipRect(), os);
-  *os << ", localTransformSpace=";
-  PrintPointer(node.localTransformSpace(), *os);
-  *os << ", parent=";
-  PrintPointer(node.parent(), *os);
-  *os << ")";
-}
-
 void PrintTo(const PaintChunk& chunk, std::ostream* os) {
   *os << "PaintChunk(begin=" << chunk.beginIndex << ", end=" << chunk.endIndex
       << ", id=";
@@ -78,33 +60,33 @@ void PrintTo(const PaintChunk& chunk, std::ostream* os) {
 void PrintTo(const PaintChunkProperties& properties, std::ostream* os) {
   *os << "PaintChunkProperties(";
   bool printedProperty = false;
-  if (properties.transform) {
+  if (properties.propertyTreeState.transform()) {
     *os << "transform=";
-    PrintTo(*properties.transform, os);
+    PrintTo(*properties.propertyTreeState.transform(), os);
     printedProperty = true;
   }
 
-  if (properties.clip) {
+  if (properties.propertyTreeState.clip()) {
     if (printedProperty)
       *os << ", ";
     *os << "clip=";
-    PrintTo(*properties.clip, os);
+    PrintTo(*properties.propertyTreeState.clip(), os);
     printedProperty = true;
   }
 
-  if (properties.effect) {
+  if (properties.propertyTreeState.effect()) {
     if (printedProperty)
       *os << ", ";
     *os << "effect=";
-    PrintTo(*properties.effect, os);
+    PrintTo(*properties.propertyTreeState.effect(), os);
     printedProperty = true;
   }
 
-  if (properties.scroll) {
+  if (properties.propertyTreeState.scroll()) {
     if (printedProperty)
       *os << ", ";
     *os << "scroll=";
-    PrintTo(*properties.scroll, os);
+    PrintTo(*properties.propertyTreeState.scroll(), os);
     printedProperty = true;
   }
 
@@ -115,31 +97,20 @@ void PrintTo(const PaintChunkProperties& properties, std::ostream* os) {
   *os << ")";
 }
 
-void PrintTo(const TransformPaintPropertyNode& transformPaintProperty,
-             std::ostream* os) {
-  *os << "TransformPaintPropertyNode(matrix=";
-  PrintTo(transformPaintProperty.matrix(), os);
-  *os << ", origin=";
-  PrintTo(transformPaintProperty.origin(), os);
-  *os << ")";
+void PrintTo(const ClipPaintPropertyNode& node, std::ostream* os) {
+  *os << "ClipPaintPropertyNode(" << node.toString().ascii().data() << ")";
 }
 
-void PrintTo(const EffectPaintPropertyNode& effect, std::ostream* os) {
-  *os << "EffectPaintPropertyNode(opacity=" << effect.opacity() << ")";
+void PrintTo(const TransformPaintPropertyNode& node, std::ostream* os) {
+  *os << "TransformPaintPropertyNode(" << node.toString().ascii().data() << ")";
+}
+
+void PrintTo(const EffectPaintPropertyNode& node, std::ostream* os) {
+  *os << "EffectPaintPropertyNode(" << node.toString().ascii().data() << ")";
 }
 
 void PrintTo(const ScrollPaintPropertyNode& node, std::ostream* os) {
-  *os << "ScrollPaintPropertyNode(clip=";
-  PrintTo(node.clip(), os);
-  *os << ", bounds=";
-  PrintTo(node.bounds(), os);
-  *os << ", userScrollableHorizontal=" << node.userScrollableHorizontal();
-  *os << ", userScrollableVertical=" << node.userScrollableVertical();
-  *os << ", scrollOffsetTranslation=";
-  PrintPointer(node.scrollOffsetTranslation(), *os);
-  *os << ", parent=";
-  PrintPointer(node.parent(), *os);
-  *os << ")";
+  *os << "ScrollPaintPropertyNode(" << node.toString().ascii().data() << ")";
 }
 
 }  // namespace blink

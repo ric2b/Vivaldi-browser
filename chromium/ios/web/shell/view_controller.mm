@@ -13,14 +13,10 @@
 
 #import "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
-#include "ios/net/cookies/cookie_store_ios.h"
-#import "ios/net/crn_http_protocol_handler.h"
-#import "ios/net/empty_nsurlcache.h"
-#import "ios/net/request_tracker.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/referrer.h"
 #import "ios/web/public/web_state/context_menu_params.h"
-#include "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state.h"
 #import "ios/web/public/web_state/web_state_delegate_bridge.h"
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
 #import "net/base/mac/url_conversions.h"
@@ -61,11 +57,6 @@ using web::NavigationManager;
     _browserState = browserState;
   }
   return self;
-}
-
-- (void)dealloc {
-  net::HTTPProtocolHandlerDelegate::SetInstance(nullptr);
-  net::RequestTracker::SetRequestTrackerFactory(nullptr);
 }
 
 - (void)viewDidLoad {
@@ -133,9 +124,6 @@ using web::NavigationManager;
   [_toolbarView addSubview:forward];
   [_toolbarView addSubview:field];
 
-  // Set up the network stack before creating the WebState.
-  [self setUpNetworkStack];
-
   web::WebState::CreateParams webStateCreateParams(_browserState);
   _webState = web::WebState::Create(webStateCreateParams);
   _webState->SetWebUsageEnabled(true);
@@ -160,12 +148,6 @@ using web::NavigationManager;
 
 - (web::WebState*)webState {
   return _webState.get();
-}
-
-- (void)setUpNetworkStack {
-  // Disable the default cache.
-  [NSURLCache setSharedURLCache:[EmptyNSURLCache emptyNSURLCache]];
-  net::CookieStoreIOS::SetCookiePolicy(net::CookieStoreIOS::ALLOW);
 }
 
 - (void)didReceiveMemoryWarning {
@@ -282,7 +264,7 @@ using web::NavigationManager;
   [self updateToolbar];
 }
 
-- (void)webStateDidLoadPage:(web::WebState*)webState {
+- (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
   DCHECK_EQ(_webState.get(), webState);
   [self updateToolbar];
 }

@@ -44,7 +44,8 @@ CanvasRenderingContext::CanvasRenderingContext(
       m_offscreenCanvas(offscreenCanvas),
       m_colorSpace(kLegacyCanvasColorSpace),
       m_creationAttributes(attrs) {
-  if (RuntimeEnabledFeatures::experimentalCanvasFeaturesEnabled()) {
+  if (RuntimeEnabledFeatures::experimentalCanvasFeaturesEnabled() &&
+      RuntimeEnabledFeatures::colorCorrectRenderingEnabled()) {
     if (m_creationAttributes.colorSpace() == kSRGBCanvasColorSpaceName)
       m_colorSpace = kSRGBCanvasColorSpace;
     else if (m_creationAttributes.colorSpace() ==
@@ -88,6 +89,15 @@ sk_sp<SkColorSpace> CanvasRenderingContext::skColorSpace() const {
   return nullptr;
 }
 
+ColorBehavior CanvasRenderingContext::colorBehaviorForMediaDrawnToCanvas()
+    const {
+  sk_sp<SkColorSpace> colorSpace = skColorSpace();
+  if (colorSpace) {
+    return ColorBehavior::transformTo(std::move(colorSpace));
+  }
+  return ColorBehavior::transformToGlobalTarget();
+}
+
 SkColorType CanvasRenderingContext::colorType() const {
   switch (m_colorSpace) {
     case kLinearRGBCanvasColorSpace:
@@ -107,6 +117,10 @@ void CanvasRenderingContext::dispose() {
   if (canvas()) {
     canvas()->detachContext();
     m_canvas = nullptr;
+  }
+  if (offscreenCanvas()) {
+    offscreenCanvas()->detachContext();
+    m_offscreenCanvas = nullptr;
   }
 }
 

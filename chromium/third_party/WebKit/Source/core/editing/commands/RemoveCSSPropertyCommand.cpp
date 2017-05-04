@@ -25,7 +25,7 @@
 
 #include "core/editing/commands/RemoveCSSPropertyCommand.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/css/CSSStyleDeclaration.h"
 #include "core/css/StylePropertySet.h"
 #include "core/dom/Element.h"
@@ -57,12 +57,13 @@ void RemoveCSSPropertyCommand::doApply(EditingState*) {
   // script. Setting to null string removes the property. We don't have internal
   // version of removeProperty.
   m_element->style()->setPropertyInternal(m_property, String(), String(), false,
-                                          IGNORE_EXCEPTION);
+                                          IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 void RemoveCSSPropertyCommand::doUnapply() {
   m_element->style()->setPropertyInternal(m_property, String(), m_oldValue,
-                                          m_important, IGNORE_EXCEPTION);
+                                          m_important,
+                                          IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 DEFINE_TRACE(RemoveCSSPropertyCommand) {

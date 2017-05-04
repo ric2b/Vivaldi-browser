@@ -6,14 +6,18 @@
 
 #import <Foundation/Foundation.h>
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
+static int startup_attempt_count = -1;
 NSString* const kAppStartupFailureCountKey = @"AppStartupFailureCount";
 }
 
 namespace crash_util {
 
 int GetFailedStartupAttemptCount() {
-  static int startup_attempt_count = -1;
   if (startup_attempt_count == -1) {
     NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
     startup_attempt_count = [defaults integerForKey:kAppStartupFailureCountKey];
@@ -36,6 +40,11 @@ void ResetFailedStartupAttemptCount() {
     [defaults setInteger:0 forKey:kAppStartupFailureCountKey];
     [defaults synchronize];
   }
+}
+
+void ResetFailedStartupAttemptCountForTests() {
+  ResetFailedStartupAttemptCount();
+  startup_attempt_count = -1;
 }
 
 }  // namespace crash_util

@@ -41,9 +41,9 @@ namespace blink {
 static const size_t sizeOfFileHeader = 14;
 
 BMPImageDecoder::BMPImageDecoder(AlphaOption alphaOption,
-                                 ColorSpaceOption colorOptions,
+                                 const ColorBehavior& colorBehavior,
                                  size_t maxDecodedBytes)
-    : ImageDecoder(alphaOption, colorOptions, maxDecodedBytes),
+    : ImageDecoder(alphaOption, colorBehavior, maxDecodedBytes),
       m_decodedOffset(0) {}
 
 void BMPImageDecoder::onSetData(SegmentReader* data) {
@@ -67,7 +67,7 @@ void BMPImageDecoder::decode(bool onlySize) {
   // If we're done decoding the image, we don't need the BMPImageReader
   // anymore.  (If we failed, |m_reader| has already been cleared.)
   else if (!m_frameBufferCache.isEmpty() &&
-           (m_frameBufferCache.first().getStatus() ==
+           (m_frameBufferCache.front().getStatus() ==
             ImageFrame::FrameComplete))
     m_reader.reset();
 }
@@ -78,13 +78,13 @@ bool BMPImageDecoder::decodeHelper(bool onlySize) {
     return false;
 
   if (!m_reader) {
-    m_reader = wrapUnique(
+    m_reader = WTF::wrapUnique(
         new BMPImageReader(this, m_decodedOffset, imgDataOffset, false));
     m_reader->setData(m_data.get());
   }
 
   if (!m_frameBufferCache.isEmpty())
-    m_reader->setBuffer(&m_frameBufferCache.first());
+    m_reader->setBuffer(&m_frameBufferCache.front());
 
   return m_reader->decodeBMP(onlySize);
 }

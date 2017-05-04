@@ -30,16 +30,13 @@ namespace blink {
 MediaQueryList* MediaQueryList::create(ExecutionContext* context,
                                        MediaQueryMatcher* matcher,
                                        MediaQuerySet* media) {
-  MediaQueryList* list = new MediaQueryList(context, matcher, media);
-  list->suspendIfNeeded();
-  return list;
+  return new MediaQueryList(context, matcher, media);
 }
 
 MediaQueryList::MediaQueryList(ExecutionContext* context,
                                MediaQueryMatcher* matcher,
                                MediaQuerySet* media)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : ContextLifecycleObserver(context),
       m_matcher(matcher),
       m_media(media),
       m_matchesDirty(true),
@@ -83,10 +80,11 @@ void MediaQueryList::removeListener(MediaQueryListListener* listener) {
 }
 
 bool MediaQueryList::hasPendingActivity() const {
-  return m_listeners.size() || hasEventListeners(EventTypeNames::change);
+  return getExecutionContext() &&
+         (m_listeners.size() || hasEventListeners(EventTypeNames::change));
 }
 
-void MediaQueryList::contextDestroyed() {
+void MediaQueryList::contextDestroyed(ExecutionContext*) {
   m_listeners.clear();
   removeAllEventListeners();
 }
@@ -97,7 +95,7 @@ bool MediaQueryList::mediaFeaturesChanged(
   if (!updateMatches())
     return false;
   for (const auto& listener : m_listeners) {
-    listenersToNotify->append(listener);
+    listenersToNotify->push_back(listener);
   }
   return hasEventListeners(EventTypeNames::change);
 }
@@ -121,7 +119,7 @@ DEFINE_TRACE(MediaQueryList) {
   visitor->trace(m_media);
   visitor->trace(m_listeners);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 const AtomicString& MediaQueryList::interfaceName() const {
@@ -129,7 +127,7 @@ const AtomicString& MediaQueryList::interfaceName() const {
 }
 
 ExecutionContext* MediaQueryList::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return ContextLifecycleObserver::getExecutionContext();
 }
 
 }  // namespace blink

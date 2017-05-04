@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/atomic_sequence_num.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -53,7 +52,7 @@ class GPU_EXPORT GpuChannelEstablishFactory {
 
   virtual void EstablishGpuChannel(
       const GpuChannelEstablishedCallback& callback) = 0;
-  virtual scoped_refptr<GpuChannelHost> EstablishGpuChannelSync() = 0;
+  virtual scoped_refptr<GpuChannelHost> EstablishGpuChannelSync(bool force_access_to_gpu = false) = 0;
   virtual GpuMemoryBufferManager* GetGpuMemoryBufferManager() = 0;
 };
 
@@ -139,17 +138,10 @@ class GPU_EXPORT GpuChannelHost
   // GPU process. The caller is responsible for ensuring it is closed. Returns
   // an invalid handle on failure.
   base::SharedMemoryHandle ShareToGpuProcess(
-      base::SharedMemoryHandle source_handle);
+      const base::SharedMemoryHandle& source_handle);
 
   // Reserve one unused transfer buffer ID.
   int32_t ReserveTransferBufferId();
-
-  // Returns a GPU memory buffer handle to the buffer that can be sent via
-  // IPC to the GPU process. The caller is responsible for ensuring it is
-  // closed. Returns an invalid handle on failure.
-  gfx::GpuMemoryBufferHandle ShareGpuMemoryBufferToGpuProcess(
-      const gfx::GpuMemoryBufferHandle& source_handle,
-      bool* requires_sync_point);
 
   // Reserve one unused image ID.
   int32_t ReserveImageId();

@@ -6,8 +6,11 @@
 #define CHROME_BROWSER_MEDIA_WEBRTC_WEBRTC_BROWSERTEST_BASE_H_
 
 #include <string>
+#include <vector>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
+#include "chrome/browser/media/webrtc/test_stats_dictionary.h"
 #include "chrome/test/base/in_process_browser_test.h"
 
 namespace infobars {
@@ -40,6 +43,7 @@ class WebRtcTestBase : public InProcessBrowserTest {
   static const char kFailedWithPermissionDismissedError[];
 
   static const char kUseDefaultCertKeygen[];
+  static const char kUseDefaultAudioCodec[];
   static const char kUseDefaultVideoCodec[];
 
  protected:
@@ -122,6 +126,8 @@ class WebRtcTestBase : public InProcessBrowserTest {
       content::WebContents* tab,
       const std::string& certificate) const;
 
+  void CreateDataChannel(content::WebContents* tab, const std::string& label);
+
   // Exchanges offers and answers between the peer connections in the
   // respective tabs. Before calling this, you must have prepared peer
   // connections in both tabs and configured them as you like (for instance by
@@ -162,9 +168,16 @@ class WebRtcTestBase : public InProcessBrowserTest {
                                    const std::string& keygen_algorithm) const;
 
   void VerifyStatsGeneratedCallback(content::WebContents* tab) const;
-  void VerifyStatsGeneratedPromise(content::WebContents* tab) const;
+  std::vector<std::string> VerifyStatsGeneratedPromise(
+      content::WebContents* tab) const;
+  scoped_refptr<content::TestStatsReportDictionary> GetStatsReportDictionary(
+      content::WebContents* tab) const;
+  std::vector<std::string> GetWhitelistedStatsTypes(
+      content::WebContents* tab) const;
 
-  // Change the default video codec in the offer SDP.
+  // Change the default audio/video codec in the offer SDP.
+  void SetDefaultAudioCodec(content::WebContents* tab,
+                            const std::string& audio_codec) const;
   void SetDefaultVideoCodec(content::WebContents* tab,
                             const std::string& video_codec) const;
 

@@ -24,6 +24,7 @@
     documentSelectionChanged,
     expandedChanged,
     focus,
+    imageFrameUpdated,
     hide,
     hover,
     invalidStatusChanged,
@@ -32,12 +33,19 @@
     liveRegionChanged,
     loadComplete,
     locationChanged,
+    mediaStartedPlaying,
+    mediaStoppedPlaying,
     menuEnd,
     menuListItemSelected,
     menuListValueChanged,
     menuPopupEnd,
     menuPopupStart,
     menuStart,
+    mouseCanceled,
+    mouseDragged,
+    mouseMoved,
+    mousePressed,
+    mouseReleased,
     rowCollapsed,
     rowCountChanged,
     rowExpanded,
@@ -93,6 +101,7 @@
     div,
     document,
     embeddedObject,
+    feed,
     figcaption,
     figure,
     footer,
@@ -169,6 +178,7 @@
     tab,
     tableHeaderContainer,
     table,
+    term,
     textField,
     time,
     timer,
@@ -262,7 +272,7 @@
 
   // Arguments for the find() and findAll() methods.
   [nocompile, noinline_doc] dictionary FindParams {
-    automation.RoleType? role;
+    RoleType? role;
 
     // A map of $(ref:automation.StateType) to boolean, indicating for each
     // state whether it should be set or not. For example:
@@ -574,6 +584,11 @@
 
     // Places focus on this node.
     static void focus();
+
+    // Request a data url for the contents of an image, optionally
+    // resized.  Pass zero for maxWidth and/or maxHeight for the
+    // original size.
+    static void getImageData(long maxWidth, long maxHeight);
 
     // Scrolls this node to make it visible.
     static void makeVisible();

@@ -143,10 +143,6 @@ void WebSettingsImpl::setDeviceSupportsTouch(bool deviceSupportsTouch) {
   m_settings->setDeviceSupportsTouch(deviceSupportsTouch);
 }
 
-void WebSettingsImpl::setDeviceSupportsMouse(bool deviceSupportsMouse) {
-  m_settings->setDeviceSupportsMouse(deviceSupportsMouse);
-}
-
 void WebSettingsImpl::setAutoZoomFocusedNodeToLegibleScale(
     bool autoZoomFocusedNodeToLegibleScale) {
   m_autoZoomFocusedNodeToLegibleScale = autoZoomFocusedNodeToLegibleScale;
@@ -280,6 +276,10 @@ void WebSettingsImpl::setProgressBarCompletion(
 
 void WebSettingsImpl::setPluginsEnabled(bool enabled) {
   m_devToolsEmulator->setPluginsEnabled(enabled);
+}
+
+void WebSettingsImpl::setEncryptedMediaEnabled(bool enabled) {
+  m_settings->setEncryptedMediaEnabled(enabled);
 }
 
 void WebSettingsImpl::setAvailablePointerTypes(int pointers) {
@@ -514,16 +514,16 @@ void WebSettingsImpl::setHideDownloadUI(bool hide) {
   m_settings->setHideDownloadUI(hide);
 }
 
+void WebSettingsImpl::setPresentationReceiver(bool enabled) {
+  m_settings->setPresentationReceiver(enabled);
+}
+
 void WebSettingsImpl::setHistoryEntryRequiresUserGesture(bool enabled) {
   m_settings->setHistoryEntryRequiresUserGesture(enabled);
 }
 
 void WebSettingsImpl::setHyperlinkAuditingEnabled(bool enabled) {
   m_settings->setHyperlinkAuditingEnabled(enabled);
-}
-
-void WebSettingsImpl::setAutoplayExperimentMode(const WebString& mode) {
-  m_settings->setAutoplayExperimentMode(mode);
 }
 
 void WebSettingsImpl::setValidationMessageTimerMagnification(int newValue) {
@@ -590,7 +590,7 @@ void WebSettingsImpl::setEnableTouchAdjustment(bool enabled) {
 }
 
 bool WebSettingsImpl::multiTargetTapNotificationEnabled() {
-  return m_settings->multiTargetTapNotificationEnabled();
+  return m_settings->getMultiTargetTapNotificationEnabled();
 }
 
 void WebSettingsImpl::setMultiTargetTapNotificationEnabled(bool enabled) {
@@ -598,11 +598,11 @@ void WebSettingsImpl::setMultiTargetTapNotificationEnabled(bool enabled) {
 }
 
 bool WebSettingsImpl::viewportEnabled() const {
-  return m_settings->viewportEnabled();
+  return m_settings->getViewportEnabled();
 }
 
 bool WebSettingsImpl::viewportMetaEnabled() const {
-  return m_settings->viewportMetaEnabled();
+  return m_settings->getViewportMetaEnabled();
 }
 
 bool WebSettingsImpl::doubleTapToZoomEnabled() const {
@@ -610,7 +610,7 @@ bool WebSettingsImpl::doubleTapToZoomEnabled() const {
 }
 
 bool WebSettingsImpl::mockGestureTapHighlightsEnabled() const {
-  return m_settings->mockGestureTapHighlightsEnabled();
+  return m_settings->getMockGestureTapHighlightsEnabled();
 }
 
 bool WebSettingsImpl::shrinksViewportContentToFit() const {
@@ -647,6 +647,11 @@ void WebSettingsImpl::setSyncXHRInDocumentsEnabled(bool enabled) {
 
 void WebSettingsImpl::setCookieEnabled(bool enabled) {
   m_settings->setCookieEnabled(enabled);
+}
+
+void WebSettingsImpl::setCrossOriginMediaPlaybackRequiresUserGesture(
+    bool required) {
+  m_settings->setCrossOriginMediaPlaybackRequiresUserGesture(required);
 }
 
 void WebSettingsImpl::setNavigateOnDragDrop(bool enabled) {

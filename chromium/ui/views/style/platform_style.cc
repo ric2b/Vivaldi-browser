@@ -17,7 +17,9 @@
 #include "ui/views/controls/focusable_border.h"
 #include "ui/views/controls/scrollbar/scroll_bar_views.h"
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS)
+#include "ui/views/controls/scrollbar/overlay_scroll_bar.h"
+#elif defined(OS_LINUX)
 #define DESKTOP_LINUX
 #endif
 
@@ -39,12 +41,16 @@ const int PlatformStyle::kMinLabelButtonWidth = 70;
 const int PlatformStyle::kMinLabelButtonHeight = 33;
 const bool PlatformStyle::kDefaultLabelButtonHasBoldFont = true;
 const bool PlatformStyle::kDialogDefaultButtonCanBeCancel = true;
-const bool PlatformStyle::kTextDragVerticallyDragsToEnd = false;
+const bool PlatformStyle::kSelectWordOnRightClick = false;
 const CustomButton::NotifyAction PlatformStyle::kMenuNotifyActivationAction =
     CustomButton::NOTIFY_ON_RELEASE;
+const CustomButton::KeyClickAction PlatformStyle::kKeyClickActionOnSpace =
+    CustomButton::CLICK_ON_KEY_RELEASE;
+const bool PlatformStyle::kReturnClicksFocusedControl = true;
 const bool PlatformStyle::kTreeViewHasFocusRing = false;
 const bool PlatformStyle::kTreeViewSelectionPaintsEntireRow = false;
 const bool PlatformStyle::kUseRipples = true;
+const bool PlatformStyle::kMirrorBubbleArrowInRTLByDefault = true;
 
 // static
 gfx::ImageSkia PlatformStyle::CreateComboboxArrow(bool is_enabled,
@@ -55,7 +61,11 @@ gfx::ImageSkia PlatformStyle::CreateComboboxArrow(bool is_enabled,
 
 // static
 std::unique_ptr<ScrollBar> PlatformStyle::CreateScrollBar(bool is_horizontal) {
+#if defined(OS_CHROMEOS)
+  return base::MakeUnique<OverlayScrollBar>(is_horizontal);
+#else
   return base::MakeUnique<ScrollBarViews>(is_horizontal);
+#endif
 }
 
 // static

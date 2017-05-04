@@ -8,8 +8,8 @@ import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_LOW_END_D
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE;
 
 import android.content.Context;
+import android.support.test.filters.SmallTest;
 import android.test.UiThreadTest;
-import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Restriction;
@@ -60,7 +60,7 @@ public class WarmupManagerTest extends NativeLibraryTestBase {
 
     @SmallTest
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
-    public void testCreateAndTakeSpareRenderer() throws Exception {
+    public void testCreateAndTakeSpareRenderer() {
         final AtomicBoolean isRenderViewReady = new AtomicBoolean();
         final AtomicReference<WebContents> webContentsReference = new AtomicReference<>();
 

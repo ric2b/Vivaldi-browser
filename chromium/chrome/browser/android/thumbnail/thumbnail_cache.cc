@@ -17,7 +17,7 @@
 #include "base/files/file_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/threading/worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
@@ -28,7 +28,8 @@
 #include "third_party/skia/include/core/SkMallocPixelRef.h"
 #include "third_party/skia/include/core/SkPixelRef.h"
 #include "ui/android/resources/ui_resource_provider.h"
-#include "ui/gfx/android/device_display_info.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
 namespace {
@@ -378,12 +379,13 @@ void ThumbnailCache::CompressThumbnailIfNecessary(
   gfx::Size encoded_size = GetEncodedSize(
       raw_data_size, ui_resource_provider_->SupportsETC1NonPowerOfTwo());
 
-  base::WorkerPool::PostTask(FROM_HERE,
-                             base::Bind(&ThumbnailCache::CompressionTask,
-                                        bitmap,
-                                        encoded_size,
-                                        post_compression_task),
-                             true);
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits()
+                     .WithPriority(base::TaskPriority::BACKGROUND)
+                     .WithShutdownBehavior(
+                         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
+      base::Bind(&ThumbnailCache::CompressionTask, bitmap, encoded_size,
+                 post_compression_task));
 }
 
 void ThumbnailCache::ReadNextThumbnail() {
@@ -693,9 +695,9 @@ bool ReadFromFile(base::File& file,
   // Do some simple sanity check validation.  We can't have thumbnails larger
   // than the max display size of the screen.  We also can't have etc1 texture
   // data larger than the next power of 2 up from that.
-  gfx::DeviceDisplayInfo display_info;
-  int max_dimension = std::max(display_info.GetDisplayWidth(),
-                               display_info.GetDisplayHeight());
+  gfx::Size display_size =
+      display::Screen::GetScreen()->GetPrimaryDisplay().GetSizeInPixel();
+  int max_dimension = std::max(display_size.width(), display_size.height());
 
   if (content_width > max_dimension
       || content_height > max_dimension
@@ -775,11 +777,11 @@ void ThumbnailCache::ReadTask(
   }
 
   if (decompress) {
-    base::WorkerPool::PostTask(
+    base::PostTaskWithTraits(
         FROM_HERE,
+        base::TaskTraits().WithPriority(base::TaskPriority::BACKGROUND),
         base::Bind(post_read_task, std::move(compressed_data), scale,
-                   content_size),
-        true);
+                   content_size));
   } else {
     content::BrowserThread::PostTask(
         content::BrowserThread::UI,

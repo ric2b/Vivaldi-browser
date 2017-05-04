@@ -108,10 +108,10 @@ std::unique_ptr<net::test_server::HttpResponse> HandleTestAuthRequest(
   }
 }
 
-class ObservingAutofillClient : public autofill::TestAutofillClient {
+class ObservingAutofillClient
+    : public autofill::TestAutofillClient,
+      public content::WebContentsUserData<ObservingAutofillClient> {
  public:
-  ObservingAutofillClient()
-      : message_loop_runner_(new content::MessageLoopRunner) {}
   ~ObservingAutofillClient() override {}
 
   void Wait() { message_loop_runner_->Run(); }
@@ -125,6 +125,10 @@ class ObservingAutofillClient : public autofill::TestAutofillClient {
   }
 
  private:
+  explicit ObservingAutofillClient(content::WebContents* web_contents)
+      : message_loop_runner_(new content::MessageLoopRunner) {}
+  friend class content::WebContentsUserData<ObservingAutofillClient>;
+
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(ObservingAutofillClient);
@@ -163,6 +167,8 @@ void TestPromptNotShown(const char* failure_message,
 }
 
 }  // namespace
+
+DEFINE_WEB_CONTENTS_USER_DATA_KEY(ObservingAutofillClient);
 
 namespace password_manager {
 
@@ -1412,6 +1418,124 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_FALSE(prompt_observer->IsShowingSavePrompt());
 }
 
+// Tests whether a attempted submission of a malicious credentials gets blocked.
+// This simulates a case which is described in http://crbug.com/571580.
+IN_PROC_BROWSER_TEST_F(
+    PasswordManagerBrowserTestBase,
+    NoPromptForSeperateLoginFormWhenSwitchingFromHttpsToHttp) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      ::switches::kAllowRunningInsecureContent);
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      ::switches::kIgnoreCertificateErrors);
+  const base::FilePath::CharType kDocRoot[] =
+      FILE_PATH_LITERAL("chrome/test/data");
+  net::EmbeddedTestServer https_test_server(
+      net::EmbeddedTestServer::TYPE_HTTPS);
+  https_test_server.ServeFilesFromSourceDirectory(base::FilePath(kDocRoot));
+  ASSERT_TRUE(https_test_server.Start());
+
+  std::string path = "/password/password_form.html";
+  GURL https_url(https_test_server.GetURL(path));
+  ASSERT_TRUE(https_url.SchemeIs(url::kHttpsScheme));
+
+  NavigationObserver form_observer(WebContents());
+  ui_test_utils::NavigateToURL(browser(), https_url);
+  form_observer.Wait();
+
+  std::string fill_and_submit_redirect =
+      "document.getElementById('username_redirect').value = 'user';"
+      "document.getElementById('password_redirect').value = 'password';"
+      "document.getElementById('submit_redirect').click()";
+  ASSERT_TRUE(
+      content::ExecuteScript(RenderViewHost(), fill_and_submit_redirect));
+
+  NavigationObserver redirect_observer(WebContents());
+  redirect_observer.SetPathToWaitFor("/password/redirect.html");
+  redirect_observer.Wait();
+
+  // Normally the redirect happens to done.html. Here an attack is simulated
+  // that hijacks the redirect to a attacker controlled page.
+  GURL http_url(
+      embedded_test_server()->GetURL("/password/simple_password.html"));
+  std::string attacker_redirect =
+      "window.location.href = '" + http_url.spec() + "';";
+  ASSERT_TRUE(content::ExecuteScript(RenderViewHost(), attacker_redirect));
+
+  NavigationObserver attacker_observer(WebContents());
+  attacker_observer.SetPathToWaitFor("/password/simple_password.html");
+  attacker_observer.Wait();
+
+  std::string fill_and_submit_attacker_form =
+      "document.getElementById('username_field').value = 'attacker_username';"
+      "document.getElementById('password_field').value = 'attacker_password';"
+      "document.getElementById('input_submit_button').click()";
+  ASSERT_TRUE(
+      content::ExecuteScript(RenderViewHost(), fill_and_submit_attacker_form));
+
+  NavigationObserver done_observer(WebContents());
+  done_observer.SetPathToWaitFor("/password/done.html");
+  done_observer.Wait();
+
+  WaitForPasswordStore();
+  BubbleObserver prompt_observer(WebContents());
+  EXPECT_TRUE(prompt_observer.IsShowingSavePrompt());
+  prompt_observer.AcceptSavePrompt();
+
+  // Wait for password store and check that credentials are stored.
+  WaitForPasswordStore();
+  scoped_refptr<password_manager::TestPasswordStore> password_store =
+      static_cast<password_manager::TestPasswordStore*>(
+          PasswordStoreFactory::GetForProfile(
+              browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
+              .get());
+  EXPECT_FALSE(password_store->IsEmpty());
+  CheckThatCredentialsStored(password_store.get(), base::ASCIIToUTF16("user"),
+                             base::ASCIIToUTF16("password"));
+}
+
+// Tests that after HTTP -> HTTPS migration the credential is autofilled.
+IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTestBase,
+                       HttpMigratedCredentialAutofilled) {
+  net::EmbeddedTestServer https_test_server(
+      net::EmbeddedTestServer::TYPE_HTTPS);
+  https_test_server.ServeFilesFromSourceDirectory(
+      base::FilePath(FILE_PATH_LITERAL("chrome/test/data")));
+  ASSERT_TRUE(https_test_server.Start());
+
+  // Add an http credential to the password store.
+  GURL https_origin = https_test_server.base_url();
+  ASSERT_TRUE(https_origin.SchemeIs(url::kHttpsScheme));
+  GURL::Replacements rep;
+  rep.SetSchemeStr(url::kHttpScheme);
+  GURL http_origin = https_origin.ReplaceComponents(rep);
+  autofill::PasswordForm http_form;
+  http_form.signon_realm = http_origin.spec();
+  http_form.origin = http_origin;
+  // Assume that the previous action was already HTTPS one matching the current
+  // page.
+  http_form.action = https_origin;
+  http_form.username_value = base::ASCIIToUTF16("user");
+  http_form.password_value = base::ASCIIToUTF16("12345");
+  scoped_refptr<password_manager::TestPasswordStore> password_store =
+      static_cast<password_manager::TestPasswordStore*>(
+          PasswordStoreFactory::GetForProfile(
+              browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS).get());
+  password_store->AddLogin(http_form);
+
+  NavigationObserver form_observer(WebContents());
+  ui_test_utils::NavigateToURL(
+      browser(), https_test_server.GetURL("/password/password_form.html"));
+  form_observer.Wait();
+  WaitForPasswordStore();
+
+  // Let the user interact with the page, so that DOM gets modification events,
+  // needed for autofilling fields.
+  content::SimulateMouseClickAt(
+      WebContents(), 0, blink::WebMouseEvent::Button::Left, gfx::Point(1, 1));
+  WaitForElementValue("username_field", "user");
+  CheckElementValue("password_field", "12345");
+}
+
 IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTestBase,
                        PromptWhenPasswordFormWithoutUsernameFieldSubmitted) {
   scoped_refptr<password_manager::TestPasswordStore> password_store =
@@ -1637,12 +1761,14 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTestBase,
   password_manager::ContentPasswordManagerDriverFactory* driver_factory =
       password_manager::ContentPasswordManagerDriverFactory::FromWebContents(
           WebContents());
-  ObservingAutofillClient observing_autofill_client;
+  ObservingAutofillClient::CreateForWebContents(WebContents());
+  ObservingAutofillClient* observing_autofill_client =
+      ObservingAutofillClient::FromWebContents(WebContents());
   password_manager::ContentPasswordManagerDriver* driver =
       driver_factory->GetDriverForFrame(RenderViewHost()->GetMainFrame());
   DCHECK(driver);
   driver->GetPasswordAutofillManager()->set_autofill_client(
-      &observing_autofill_client);
+      observing_autofill_client);
 
   NavigateToFile("/password/password_form.html");
 
@@ -1686,7 +1812,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTestBase,
       WebContents(), 0, blink::WebMouseEvent::Button::Left, gfx::Point(left + 1,
                                                                      top + 1));
   // Make sure the popup would be shown.
-  observing_autofill_client.Wait();
+  observing_autofill_client->Wait();
 }
 
 IN_PROC_BROWSER_TEST_F(PasswordManagerBrowserTestBase,

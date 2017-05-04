@@ -85,10 +85,10 @@ cr.define('cr', function() {
         var kind;
         var ctrl = cr.isMac && e.metaKey || !cr.isMac && e.ctrlKey;
 
-        if (e.button == 1 || ctrl) // middle, ctrl or keyboard
+        if (e.button == 1 || ctrl)  // middle, ctrl or keyboard
           kind = e.shiftKey ? cr.LinkKind.FOREGROUND_TAB :
-              cr.LinkKind.BACKGROUND_TAB;
-        else // left or keyboard
+                              cr.LinkKind.BACKGROUND_TAB;
+        else  // left or keyboard
           kind = e.shiftKey ? cr.LinkKind.WINDOW : cr.LinkKind.SELF;
 
         this.openUrls([url], kind);
@@ -128,17 +128,13 @@ cr.define('cr', function() {
 
       var incognito = kind == cr.LinkKind.INCOGNITO;
       if (kind == cr.LinkKind.WINDOW || incognito) {
-        chrome.windows.create({
-          url: urls,
-          incognito: incognito
-        });
-      } else if (kind == cr.LinkKind.FOREGROUND_TAB ||
-                 kind == cr.LinkKind.BACKGROUND_TAB) {
+        chrome.windows.create({url: urls, incognito: incognito});
+      } else if (
+          kind == cr.LinkKind.FOREGROUND_TAB ||
+          kind == cr.LinkKind.BACKGROUND_TAB) {
         urls.forEach(function(url, i) {
-          chrome.tabs.create({
-            url: url,
-            selected: kind == cr.LinkKind.FOREGROUND_TAB && !i
-          });
+          chrome.tabs.create(
+              {url: url, selected: kind == cr.LinkKind.FOREGROUND_TAB && !i});
         });
       } else {
         this.window.location.href = urls[0];

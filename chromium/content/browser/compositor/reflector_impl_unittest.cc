@@ -76,14 +76,10 @@ CreateTestValidatorOzone() {
 
 class TestOutputSurface : public BrowserCompositorOutputSurface {
  public:
-  TestOutputSurface(scoped_refptr<cc::ContextProvider> context_provider,
-                    scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-                    cc::SyntheticBeginFrameSource* begin_frame_source)
+  TestOutputSurface(scoped_refptr<cc::ContextProvider> context_provider)
       : BrowserCompositorOutputSurface(std::move(context_provider),
-                                       std::move(vsync_manager),
-                                       begin_frame_source,
-                                       CreateTestValidatorOzone()) {
-  }
+                                       UpdateVSyncParametersCallback(),
+                                       CreateTestValidatorOzone()) {}
 
   void SetFlip(bool flip) { capabilities_.flipped_output_surface = flip; }
 
@@ -94,7 +90,8 @@ class TestOutputSurface : public BrowserCompositorOutputSurface {
   void Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,
-               bool has_alpha) override {}
+               bool has_alpha,
+               bool use_stencil) override {}
   void SwapBuffers(cc::OutputSurfaceFrame frame) override {}
   uint32_t GetFramebufferCopyTextureFormat() override { return GL_RGB; }
   bool IsDisplayedAsOverlayPlane() const override { return false; }
@@ -127,8 +124,11 @@ class ReflectorImplTest : public testing::Test {
  public:
   void SetUp() override {
     bool enable_pixel_output = false;
-    ui::ContextFactory* context_factory =
-        ui::InitializeContextFactoryForTests(enable_pixel_output);
+    ui::ContextFactory* context_factory = nullptr;
+    ui::ContextFactoryPrivate* context_factory_private = nullptr;
+
+    ui::InitializeContextFactoryForTests(enable_pixel_output, &context_factory,
+                                         &context_factory_private);
     ImageTransportFactory::InitializeForUnitTests(
         std::unique_ptr<ImageTransportFactory>(
             new NoTransportImageTransportFactory));
@@ -138,21 +138,22 @@ class ReflectorImplTest : public testing::Test {
     begin_frame_source_.reset(new cc::DelayBasedBeginFrameSource(
         base::MakeUnique<cc::DelayBasedTimeSource>(
             compositor_task_runner_.get())));
-    compositor_.reset(
-        new ui::Compositor(context_factory, compositor_task_runner_.get()));
+    compositor_.reset(new ui::Compositor(
+        context_factory_private->AllocateFrameSinkId(), context_factory,
+        context_factory_private, compositor_task_runner_.get()));
     compositor_->SetAcceleratedWidget(gfx::kNullAcceleratedWidget);
 
     auto context_provider = cc::TestContextProvider::Create();
     context_provider->BindToCurrentThread();
-    output_surface_ = base::MakeUnique<TestOutputSurface>(
-        std::move(context_provider), compositor_->vsync_manager(),
-        begin_frame_source_.get());
+    output_surface_ =
+        base::MakeUnique<TestOutputSurface>(std::move(context_provider));
 
     root_layer_.reset(new ui::Layer(ui::LAYER_SOLID_COLOR));
     compositor_->SetRootLayer(root_layer_.get());
     mirroring_layer_.reset(new ui::Layer(ui::LAYER_SOLID_COLOR));
     compositor_->root_layer()->Add(mirroring_layer_.get());
-    output_surface_->Reshape(kSurfaceSize, 1.f, gfx::ColorSpace(), false);
+    output_surface_->Reshape(kSurfaceSize, 1.f, gfx::ColorSpace(), false,
+                             false);
     mirroring_layer_->SetBounds(gfx::Rect(kSurfaceSize));
   }
 

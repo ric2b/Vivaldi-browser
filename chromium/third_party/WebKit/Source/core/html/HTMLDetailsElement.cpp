@@ -20,7 +20,7 @@
 
 #include "core/html/HTMLDetailsElement.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
@@ -118,12 +118,11 @@ Element* HTMLDetailsElement::findMainSummary() const {
   return toElement(content->firstChild());
 }
 
-void HTMLDetailsElement::parseAttribute(const QualifiedName& name,
-                                        const AtomicString& oldValue,
-                                        const AtomicString& value) {
-  if (name == openAttr) {
+void HTMLDetailsElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  if (params.name == openAttr) {
     bool oldValue = m_isOpen;
-    m_isOpen = !value.isNull();
+    m_isOpen = !params.newValue.isNull();
     if (m_isOpen == oldValue)
       return;
 
@@ -154,7 +153,7 @@ void HTMLDetailsElement::parseAttribute(const QualifiedName& name,
 
     return;
   }
-  HTMLElement::parseAttribute(name, oldValue, value);
+  HTMLElement::parseAttribute(params);
 }
 
 void HTMLDetailsElement::toggleOpen() {

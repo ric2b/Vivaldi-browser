@@ -25,8 +25,8 @@ HTMLImportTreeRoot::HTMLImportTreeRoot(Document* document)
 HTMLImportTreeRoot::~HTMLImportTreeRoot() {}
 
 void HTMLImportTreeRoot::dispose() {
-  for (size_t i = 0; i < m_imports.size(); ++i)
-    m_imports[i]->dispose();
+  for (const auto& importChild : m_imports)
+    importChild->dispose();
   m_imports.clear();
   m_document = nullptr;
   m_recalcTimer.stop();
@@ -62,13 +62,12 @@ void HTMLImportTreeRoot::scheduleRecalcState() {
 }
 
 HTMLImportChild* HTMLImportTreeRoot::add(HTMLImportChild* child) {
-  m_imports.append(child);
-  return m_imports.last().get();
+  m_imports.push_back(child);
+  return m_imports.back().get();
 }
 
 HTMLImportChild* HTMLImportTreeRoot::find(const KURL& url) const {
-  for (size_t i = 0; i < m_imports.size(); ++i) {
-    HTMLImportChild* candidate = m_imports[i].get();
+  for (const auto& candidate : m_imports) {
     if (equalIgnoringFragmentIdentifier(candidate->url(), url))
       return candidate;
   }

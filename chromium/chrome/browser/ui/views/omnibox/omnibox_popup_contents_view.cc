@@ -11,7 +11,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/themes/theme_properties.h"
-#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_result_view.h"
 #include "chrome/browser/ui/views/theme_copying_widget.h"
@@ -37,6 +36,8 @@ namespace {
 // repeated.
 base::LazyInstance<gfx::ImageSkia> g_top_shadow = LAZY_INSTANCE_INITIALIZER;
 base::LazyInstance<gfx::ImageSkia> g_bottom_shadow = LAZY_INSTANCE_INITIALIZER;
+
+const int kPopupVerticalPadding = 4;
 
 }  // namespace
 
@@ -147,7 +148,7 @@ gfx::Rect OmniboxPopupContentsView::GetPopupBounds() const {
 
 void OmniboxPopupContentsView::LayoutChildren() {
   gfx::Rect contents_rect = GetContentsBounds();
-  contents_rect.Inset(GetLayoutInsets(OMNIBOX_DROPDOWN));
+  contents_rect.Inset(gfx::Insets(kPopupVerticalPadding, 0));
   contents_rect.Inset(start_margin_, g_top_shadow.Get().height(), end_margin_,
                       0);
 
@@ -434,7 +435,7 @@ int OmniboxPopupContentsView::CalculatePopupHeight() {
   // Add enough space on the top and bottom so it looks like there is the same
   // amount of space between the text and the popup border as there is in the
   // interior between each row of text.
-  return popup_height + GetLayoutInsets(OMNIBOX_DROPDOWN).height() +
+  return popup_height + kPopupVerticalPadding * 2 +
          g_top_shadow.Get().height() + g_bottom_shadow.Get().height();
 }
 

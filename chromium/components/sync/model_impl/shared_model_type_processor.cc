@@ -20,50 +20,44 @@
 
 namespace syncer {
 
-SharedModelTypeProcessor::SharedModelTypeProcessor(ModelType type,
-                                                   ModelTypeSyncBridge* bridge)
+SharedModelTypeProcessor::SharedModelTypeProcessor(
+    ModelType type,
+    ModelTypeSyncBridge* bridge,
+    const base::RepeatingClosure& dump_stack)
     : type_(type),
-      is_metadata_loaded_(false),
-      is_initial_pending_data_loaded_(false),
       bridge_(bridge),
-      error_handler_(nullptr),
+      dump_stack_(dump_stack),
       weak_ptr_factory_(this) {
   DCHECK(bridge);
 }
 
-SharedModelTypeProcessor::~SharedModelTypeProcessor() {}
+SharedModelTypeProcessor::~SharedModelTypeProcessor() = default;
 
 void SharedModelTypeProcessor::OnSyncStarting(
-    std::unique_ptr<DataTypeErrorHandler> error_handler,
+    const ModelErrorHandler& error_handler,
     const StartCallback& start_callback) {
   DCHECK(CalledOnValidThread());
-  DCHECK(start_callback_.is_null());
   DCHECK(!IsConnected());
   DCHECK(error_handler);
+  DCHECK(start_callback);
   DVLOG(1) << "Sync is starting for " << ModelTypeToString(type_);
 
-  error_handler_ = std::move(error_handler);
+  error_handler_ = error_handler;
   start_callback_ = start_callback;
   ConnectIfReady();
 }
 
-void SharedModelTypeProcessor::OnMetadataLoaded(
-    SyncError error,
+void SharedModelTypeProcessor::ModelReadyToSync(
     std::unique_ptr<MetadataBatch> batch) {
   DCHECK(CalledOnValidThread());
+  DCHECK(waiting_for_metadata_);
   DCHECK(entities_.empty());
-  DCHECK(!is_metadata_loaded_);
-  DCHECK(!IsConnected());
 
-  is_metadata_loaded_ = true;
-  // Flip this flag here to cover all cases where we don't need to load data.
-  is_initial_pending_data_loaded_ = true;
-
-  if (error.IsSet()) {
-    start_error_ = error;
-    ConnectIfReady();
+  // The model already experienced an error; abort;
+  if (model_error_)
     return;
-  }
+
+  waiting_for_metadata_ = false;
 
   if (batch->GetModelTypeState().initial_sync_done()) {
     EntityMetadataMap metadata_map(batch->TakeAllMetadata());
@@ -81,9 +75,9 @@ void SharedModelTypeProcessor::OnMetadataLoaded(
     }
     model_type_state_ = batch->GetModelTypeState();
     if (!entities_to_commit.empty()) {
-      is_initial_pending_data_loaded_ = false;
+      waiting_for_pending_data_ = true;
       bridge_->GetData(
-          entities_to_commit,
+          std::move(entities_to_commit),
           base::Bind(&SharedModelTypeProcessor::OnInitialPendingDataLoaded,
                      weak_ptr_factory_.GetWeakPtr()));
     }
@@ -96,30 +90,33 @@ void SharedModelTypeProcessor::OnMetadataLoaded(
   ConnectIfReady();
 }
 
+bool SharedModelTypeProcessor::IsModelReadyOrError() const {
+  return model_error_ || (!waiting_for_metadata_ && !waiting_for_pending_data_);
+}
+
 void SharedModelTypeProcessor::ConnectIfReady() {
-  DCHECK(CalledOnValidThread());
-  if (!is_metadata_loaded_ || !is_initial_pending_data_loaded_ ||
-      start_callback_.is_null()) {
+  if (!IsModelReadyOrError() || !start_callback_)
     return;
-  }
 
-  std::unique_ptr<ActivationContext> activation_context;
-
-  if (!start_error_.IsSet()) {
-    activation_context = base::MakeUnique<ActivationContext>();
+  if (model_error_) {
+    error_handler_.Run(model_error_.value());
+  } else {
+    auto activation_context = base::MakeUnique<ActivationContext>();
     activation_context->model_type_state = model_type_state_;
     activation_context->type_processor =
         base::MakeUnique<ModelTypeProcessorProxy>(
             weak_ptr_factory_.GetWeakPtr(),
             base::ThreadTaskRunnerHandle::Get());
+    start_callback_.Run(std::move(activation_context));
   }
 
-  start_callback_.Run(start_error_, std::move(activation_context));
   start_callback_.Reset();
 }
 
 bool SharedModelTypeProcessor::IsAllowingChanges() const {
-  return is_metadata_loaded_;
+  DCHECK(CalledOnValidThread());
+  // Changes can be handled correctly even before pending data is loaded.
+  return !waiting_for_metadata_;
 }
 
 bool SharedModelTypeProcessor::IsConnected() const {
@@ -129,7 +126,6 @@ bool SharedModelTypeProcessor::IsConnected() const {
 
 void SharedModelTypeProcessor::DisableSync() {
   DCHECK(CalledOnValidThread());
-  DCHECK(is_metadata_loaded_);
   std::unique_ptr<MetadataChangeList> change_list =
       bridge_->CreateMetadataChangeList();
   for (auto it = entities_.begin(); it != entities_.end(); ++it) {
@@ -144,14 +140,34 @@ bool SharedModelTypeProcessor::IsTrackingMetadata() {
   return model_type_state_.initial_sync_done();
 }
 
-SyncError SharedModelTypeProcessor::CreateAndUploadError(
+void SharedModelTypeProcessor::ReportError(const ModelError& error) {
+  DCHECK(CalledOnValidThread());
+
+  // Ignore all errors after the first.
+  if (model_error_)
+    return;
+
+  model_error_ = error;
+
+  if (dump_stack_) {
+    // Upload a stack trace if possible.
+    dump_stack_.Run();
+  }
+
+  if (start_callback_) {
+    // Tell sync about the error instead of connecting.
+    ConnectIfReady();
+  } else if (error_handler_) {
+    // Connecting was already initiated; just tell sync about the error instead
+    // of going through ConnectIfReady().
+    error_handler_.Run(error);
+  }
+}
+
+void SharedModelTypeProcessor::ReportError(
     const tracked_objects::Location& location,
     const std::string& message) {
-  if (error_handler_) {
-    return error_handler_->CreateAndUploadError(location, message, type_);
-  } else {
-    return SyncError(location, SyncError::DATATYPE_ERROR, message, type_);
-  }
+  ReportError(ModelError(location, message));
 }
 
 void SharedModelTypeProcessor::ConnectSync(
@@ -180,8 +196,9 @@ void SharedModelTypeProcessor::DisconnectSync() {
 void SharedModelTypeProcessor::Put(const std::string& storage_key,
                                    std::unique_ptr<EntityData> data,
                                    MetadataChangeList* metadata_change_list) {
+  DCHECK(CalledOnValidThread());
   DCHECK(IsAllowingChanges());
-  DCHECK(data.get());
+  DCHECK(data);
   DCHECK(!data->is_deleted());
   DCHECK(!data->non_unique_name.empty());
   DCHECK_EQ(type_, GetModelTypeFromSpecifics(data->specifics));
@@ -191,19 +208,14 @@ void SharedModelTypeProcessor::Put(const std::string& storage_key,
     return;
   }
 
-  // Fill in some data.
-  data->client_tag_hash = GetClientTagHash(storage_key, *data);
-  if (data->modification_time.is_null()) {
-    data->modification_time = base::Time::Now();
-  }
-
-  ProcessorEntityTracker* entity = GetEntityForTagHash(data->client_tag_hash);
-
+  ProcessorEntityTracker* entity = GetEntityForStorageKey(storage_key);
   if (entity == nullptr) {
     // The bridge is creating a new entity.
-    if (data->creation_time.is_null()) {
-      data->creation_time = data->modification_time;
-    }
+    data->client_tag_hash = GetClientTagHash(storage_key, *data);
+    if (data->creation_time.is_null())
+      data->creation_time = base::Time::Now();
+    if (data->modification_time.is_null())
+      data->modification_time = data->creation_time;
     entity = CreateEntity(storage_key, *data);
   } else if (entity->MatchesData(*data)) {
     // Ignore changes that don't actually change anything.
@@ -219,6 +231,7 @@ void SharedModelTypeProcessor::Put(const std::string& storage_key,
 void SharedModelTypeProcessor::Delete(
     const std::string& storage_key,
     MetadataChangeList* metadata_change_list) {
+  DCHECK(CalledOnValidThread());
   DCHECK(IsAllowingChanges());
 
   if (!model_type_state_.initial_sync_done()) {
@@ -269,6 +282,7 @@ void SharedModelTypeProcessor::FlushPendingCommitRequests() {
 void SharedModelTypeProcessor::OnCommitCompleted(
     const sync_pb::ModelTypeState& type_state,
     const CommitResponseDataList& response_list) {
+  DCHECK(CalledOnValidThread());
   std::unique_ptr<MetadataChangeList> change_list =
       bridge_->CreateMetadataChangeList();
 
@@ -288,22 +302,24 @@ void SharedModelTypeProcessor::OnCommitCompleted(
 
     if (entity->CanClearMetadata()) {
       change_list->ClearMetadata(entity->storage_key());
+      storage_key_to_tag_hash_.erase(entity->storage_key());
       entities_.erase(entity->metadata().client_tag_hash());
     } else {
       change_list->UpdateMetadata(entity->storage_key(), entity->metadata());
     }
   }
 
-  SyncError error =
+  base::Optional<ModelError> error =
       bridge_->ApplySyncChanges(std::move(change_list), EntityChangeList());
-  if (error.IsSet()) {
-    error_handler_->OnUnrecoverableError(error);
+  if (error) {
+    ReportError(error.value());
   }
 }
 
 void SharedModelTypeProcessor::OnUpdateReceived(
     const sync_pb::ModelTypeState& model_type_state,
     const UpdateResponseDataList& updates) {
+  DCHECK(CalledOnValidThread());
   if (!model_type_state_.initial_sync_done()) {
     OnInitialUpdateReceived(model_type_state, updates);
     return;
@@ -334,6 +350,7 @@ void SharedModelTypeProcessor::OnUpdateReceived(
 
     if (entity->CanClearMetadata()) {
       metadata_changes->ClearMetadata(entity->storage_key());
+      storage_key_to_tag_hash_.erase(entity->storage_key());
       entities_.erase(entity->metadata().client_tag_hash());
     } else {
       metadata_changes->UpdateMetadata(entity->storage_key(),
@@ -350,11 +367,11 @@ void SharedModelTypeProcessor::OnUpdateReceived(
   }
 
   // Inform the bridge of the new or updated data.
-  SyncError error =
+  base::Optional<ModelError> error =
       bridge_->ApplySyncChanges(std::move(metadata_changes), entity_changes);
 
-  if (error.IsSet()) {
-    error_handler_->OnUnrecoverableError(error);
+  if (error) {
+    ReportError(error.value());
   } else {
     // There may be new reasons to commit by the time this function is done.
     FlushPendingCommitRequests();
@@ -512,7 +529,7 @@ void SharedModelTypeProcessor::RecommitAllForEncryption(
 
   if (!entities_needing_data.empty()) {
     bridge_->GetData(
-        entities_needing_data,
+        std::move(entities_needing_data),
         base::Bind(&SharedModelTypeProcessor::OnDataLoadedForReEncryption,
                    weak_ptr_factory_.GetWeakPtr()));
   }
@@ -535,6 +552,11 @@ void SharedModelTypeProcessor::OnInitialUpdateReceived(
   metadata_changes->UpdateModelTypeState(model_type_state_);
 
   for (const UpdateResponseData& update : updates) {
+    if (update.entity->is_deleted()) {
+      DLOG(WARNING) << "Ignoring tombstone found during initial update: "
+                    << "client_tag_hash = " << update.entity->client_tag_hash;
+      continue;
+    }
     ProcessorEntityTracker* entity = CreateEntity(update.entity.value());
     const std::string& storage_key = entity->storage_key();
     entity->RecordAcceptedUpdate(update);
@@ -543,11 +565,11 @@ void SharedModelTypeProcessor::OnInitialUpdateReceived(
   }
 
   // Let the bridge handle associating and merging the data.
-  SyncError error =
+  base::Optional<ModelError> error =
       bridge_->MergeSyncData(std::move(metadata_changes), data_map);
 
-  if (error.IsSet()) {
-    error_handler_->OnUnrecoverableError(error);
+  if (error) {
+    ReportError(error.value());
   } else {
     // We may have new reasons to commit by the time this function is done.
     FlushPendingCommitRequests();
@@ -555,29 +577,24 @@ void SharedModelTypeProcessor::OnInitialUpdateReceived(
 }
 
 void SharedModelTypeProcessor::OnInitialPendingDataLoaded(
-    SyncError error,
     std::unique_ptr<DataBatch> data_batch) {
-  DCHECK(!is_initial_pending_data_loaded_);
+  DCHECK(CalledOnValidThread());
+  DCHECK(waiting_for_pending_data_);
 
-  if (error.IsSet()) {
-    start_error_ = error;
-  } else {
-    ConsumeDataBatch(std::move(data_batch));
-  }
+  // The model already experienced an error; abort;
+  if (model_error_)
+    return;
 
-  is_initial_pending_data_loaded_ = true;
+  ConsumeDataBatch(std::move(data_batch));
+  waiting_for_pending_data_ = false;
+
   ConnectIfReady();
 }
 
 void SharedModelTypeProcessor::OnDataLoadedForReEncryption(
-    SyncError error,
     std::unique_ptr<DataBatch> data_batch) {
-  DCHECK(is_initial_pending_data_loaded_);
-
-  if (error.IsSet()) {
-    error_handler_->OnUnrecoverableError(error);
-    return;
-  }
+  DCHECK(CalledOnValidThread());
+  DCHECK(!waiting_for_pending_data_);
 
   ConsumeDataBatch(std::move(data_batch));
   FlushPendingCommitRequests();
@@ -590,7 +607,9 @@ void SharedModelTypeProcessor::ConsumeDataBatch(
     ProcessorEntityTracker* entity = GetEntityForStorageKey(data.first);
     // If the entity wasn't deleted or updated with new commit.
     if (entity != nullptr && entity->RequiresCommitData()) {
-      entity->CacheCommitData(data.second.get());
+      // SetCommitData will update EntityData's fields with values from
+      // metadata.
+      entity->SetCommitData(data.second.get());
     }
   }
 }

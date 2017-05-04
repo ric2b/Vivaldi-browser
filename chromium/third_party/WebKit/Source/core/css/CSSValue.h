@@ -27,6 +27,7 @@
 
 namespace blink {
 
+class Document;
 class Length;
 
 class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
@@ -85,6 +86,9 @@ class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
   bool isFontFeatureValue() const { return m_classType == FontFeatureClass; }
   bool isFontFamilyValue() const { return m_classType == FontFamilyClass; }
   bool isFontFaceSrcValue() const { return m_classType == FontFaceSrcClass; }
+  bool isFontVariationValue() const {
+    return m_classType == FontVariationClass;
+  }
   bool isFunctionValue() const { return m_classType == FunctionClass; }
   bool isCustomIdentValue() const { return m_classType == CustomIdentClass; }
   bool isImageGeneratorValue() const {
@@ -96,7 +100,6 @@ class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
   }
   bool isImageSetValue() const { return m_classType == ImageSetClass; }
   bool isImageValue() const { return m_classType == ImageClass; }
-  bool isImplicitInitialValue() const;
   bool isInheritedValue() const { return m_classType == InheritedClass; }
   bool isInitialValue() const { return m_classType == InitialClass; }
   bool isUnsetValue() const { return m_classType == UnsetClass; }
@@ -145,6 +148,8 @@ class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
   }
 
   bool hasFailedOrCanceledSubresources() const;
+  bool mayContainUrl() const;
+  void reResolveUrl(const Document&) const;
 
   bool equals(const CSSValue&) const;
 
@@ -197,6 +202,7 @@ class CORE_EXPORT CSSValue : public GarbageCollectedFinalized<CSSValue> {
     FontFeatureClass,
     FontFaceSrcClass,
     FontFamilyClass,
+    FontVariationClass,
 
     InheritedClass,
     InitialClass,

@@ -5,8 +5,8 @@
 package org.chromium.chrome.browser;
 
 import android.content.Context;
+import android.support.test.filters.LargeTest;
 import android.test.MoreAsserts;
-import android.test.suitebuilder.annotation.LargeTest;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 
@@ -53,55 +53,39 @@ public class BindingManagerIntegrationTest extends ChromeActivityTestCaseBase<Ch
         private boolean mIsReleaseAllModerateBindingsCalled;
 
         void assertIsInForeground(final int pid) {
-            try {
-                CriteriaHelper.pollInstrumentationThread(new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return mProcessInForegroundMap.get(pid);
-                    }
-                });
-            } catch (InterruptedException ie) {
-                fail();
-            }
+            CriteriaHelper.pollInstrumentationThread(new Criteria() {
+                @Override
+                public boolean isSatisfied() {
+                    return mProcessInForegroundMap.get(pid);
+                }
+            });
         }
 
         void assertIsInBackground(final int pid) {
-            try {
-                CriteriaHelper.pollInstrumentationThread(new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return !mProcessInForegroundMap.get(pid);
-                    }
-                });
-            } catch (InterruptedException ie) {
-                fail();
-            }
+            CriteriaHelper.pollInstrumentationThread(new Criteria() {
+                @Override
+                public boolean isSatisfied() {
+                    return !mProcessInForegroundMap.get(pid);
+                }
+            });
         }
 
         void assertSetInForegroundWasCalled(String message, final int pid) {
-            try {
-                CriteriaHelper.pollInstrumentationThread(new Criteria(message) {
-                    @Override
-                    public boolean isSatisfied() {
-                        return mProcessInForegroundMap.indexOfKey(pid) >= 0;
-                    }
-                });
-            } catch (InterruptedException ie) {
-                fail();
-            }
+            CriteriaHelper.pollInstrumentationThread(new Criteria(message) {
+                @Override
+                public boolean isSatisfied() {
+                    return mProcessInForegroundMap.indexOfKey(pid) >= 0;
+                }
+            });
         }
 
         void assertIsReleaseAllModerateBindingsCalled() {
-            try {
-                CriteriaHelper.pollInstrumentationThread(new Criteria() {
-                    @Override
-                    public boolean isSatisfied() {
-                        return mIsReleaseAllModerateBindingsCalled;
-                    }
-                });
-            } catch (InterruptedException ie) {
-                fail();
-            }
+            CriteriaHelper.pollInstrumentationThread(new Criteria() {
+                @Override
+                public boolean isSatisfied() {
+                    return mIsReleaseAllModerateBindingsCalled;
+                }
+            });
         }
 
         String getVisibilityCalls(int pid) {

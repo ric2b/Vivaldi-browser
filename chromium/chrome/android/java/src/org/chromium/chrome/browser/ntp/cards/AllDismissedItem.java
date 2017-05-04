@@ -14,7 +14,6 @@ import android.widget.TextView;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
-import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 
 import java.util.Calendar;
 
@@ -22,7 +21,8 @@ import java.util.Calendar;
  * Displayed when all suggested content and their sections have been dismissed. Provides a button
  * to restore the dismissed sections and load new suggestions from the server.
  */
-public class AllDismissedItem extends Leaf {
+public class AllDismissedItem extends OptionalLeaf {
+
     @Override
     @ItemViewType
     public int getItemViewType() {
@@ -41,8 +41,7 @@ public class AllDismissedItem extends Leaf {
     public static class ViewHolder extends NewTabPageViewHolder {
         private final TextView mBodyTextView;
 
-        public ViewHolder(
-                ViewGroup root, final NewTabPageManager manager, final NewTabPageAdapter adapter) {
+        public ViewHolder(ViewGroup root, final SectionList sections) {
             super(LayoutInflater.from(root.getContext())
                             .inflate(R.layout.new_tab_page_all_dismissed, root, false));
             mBodyTextView = (TextView) itemView.findViewById(R.id.body_text);
@@ -53,9 +52,7 @@ public class AllDismissedItem extends Leaf {
                         public void onClick(View v) {
                             NewTabPageUma.recordAction(
                                     NewTabPageUma.ACTION_CLICKED_ALL_DISMISSED_REFRESH);
-                            manager.getSuggestionsSource().restoreDismissedCategories();
-                            adapter.resetSections(/*allowEmptySections=*/true);
-                            adapter.reloadSnippets();
+                            sections.restoreDismissedSections();
                         }
                     });
         }

@@ -5,7 +5,6 @@
 #include "modules/credentialmanager/PasswordCredential.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/URLSearchParams.h"
@@ -129,7 +128,7 @@ TEST_F(PasswordCredentialTest, CreateFromFormNoPassword) {
                    "value='https://example.com/photo' autocomplete='photo'>"
                    "<input type='text' name='theName' value='friendly name' "
                    "autocomplete='name'>");
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   PasswordCredential* credential =
       PasswordCredential::create(form, exceptionState);
   EXPECT_EQ(nullptr, credential);
@@ -148,7 +147,7 @@ TEST_F(PasswordCredentialTest, CreateFromFormNoId) {
                    "value='https://example.com/photo' autocomplete='photo'>"
                    "<input type='text' name='theName' value='friendly name' "
                    "autocomplete='name'>");
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   PasswordCredential* credential =
       PasswordCredential::create(form, exceptionState);
   EXPECT_EQ(nullptr, credential);

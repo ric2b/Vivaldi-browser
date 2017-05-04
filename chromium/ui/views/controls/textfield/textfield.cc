@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -64,6 +65,12 @@ namespace views {
 namespace {
 
 #if defined(OS_MACOSX)
+const ui::EventFlags kPlatformModifier = ui::EF_COMMAND_DOWN;
+#else
+const ui::EventFlags kPlatformModifier = ui::EF_CONTROL_DOWN;
+#endif  // OS_MACOSX
+
+#if defined(OS_MACOSX)
 const gfx::SelectionBehavior kLineSelectionBehavior = gfx::SELECTION_EXTEND;
 const gfx::SelectionBehavior kWordSelectionBehavior = gfx::SELECTION_CARET;
 const gfx::SelectionBehavior kMoveParagraphSelectionBehavior =
@@ -92,7 +99,7 @@ ui::TextEditCommand GetCommandForKeyEvent(const ui::KeyEvent& event) {
     return ui::TextEditCommand::INVALID_COMMAND;
 
   const bool shift = event.IsShiftDown();
-  const bool control = event.IsControlDown();
+  const bool control = event.IsControlDown() || event.IsCommandDown();
   const bool alt = event.IsAltDown() || event.IsAltGrDown();
   switch (event.key_code()) {
     case ui::VKEY_Z:
@@ -401,11 +408,6 @@ void Textfield::SetSelectionTextColor(SkColor color) {
 void Textfield::UseDefaultSelectionTextColor() {
   use_default_selection_text_color_ = true;
   GetRenderText()->set_selection_color(GetSelectionTextColor());
-  SchedulePaint();
-}
-
-void Textfield::SetShadows(const gfx::ShadowValues& shadows) {
-  GetRenderText()->set_shadows(shadows);
   SchedulePaint();
 }
 
@@ -872,6 +874,10 @@ void Textfield::OnDragDone() {
 void Textfield::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ui::AX_ROLE_TEXT_FIELD;
   node_data->SetName(accessible_name_);
+  if (enabled()) {
+    node_data->AddIntAttribute(ui::AX_ATTR_ACTION,
+                               ui::AX_SUPPORTED_ACTION_ACTIVATE);
+  }
   if (read_only())
     node_data->AddStateFlag(ui::AX_STATE_READ_ONLY);
   else
@@ -1182,23 +1188,23 @@ bool Textfield::GetAcceleratorForCommandId(int command_id,
                                            ui::Accelerator* accelerator) const {
   switch (command_id) {
     case IDS_APP_UNDO:
-      *accelerator = ui::Accelerator(ui::VKEY_Z, ui::EF_CONTROL_DOWN);
+      *accelerator = ui::Accelerator(ui::VKEY_Z, kPlatformModifier);
       return true;
 
     case IDS_APP_CUT:
-      *accelerator = ui::Accelerator(ui::VKEY_X, ui::EF_CONTROL_DOWN);
+      *accelerator = ui::Accelerator(ui::VKEY_X, kPlatformModifier);
       return true;
 
     case IDS_APP_COPY:
-      *accelerator = ui::Accelerator(ui::VKEY_C, ui::EF_CONTROL_DOWN);
+      *accelerator = ui::Accelerator(ui::VKEY_C, kPlatformModifier);
       return true;
 
     case IDS_APP_PASTE:
-      *accelerator = ui::Accelerator(ui::VKEY_V, ui::EF_CONTROL_DOWN);
+      *accelerator = ui::Accelerator(ui::VKEY_V, kPlatformModifier);
       return true;
 
     case IDS_APP_SELECT_ALL:
-      *accelerator = ui::Accelerator(ui::VKEY_A, ui::EF_CONTROL_DOWN);
+      *accelerator = ui::Accelerator(ui::VKEY_A, kPlatformModifier);
       return true;
 
     default:
@@ -1434,7 +1440,7 @@ void Textfield::ExtendSelectionAndDelete(size_t before, size_t after) {
     DeleteRange(range);
 }
 
-void Textfield::EnsureCaretInRect(const gfx::Rect& rect) {}
+void Textfield::EnsureCaretNotInRect(const gfx::Rect& rect) {}
 
 bool Textfield::IsTextEditCommandEnabled(ui::TextEditCommand command) const {
   base::string16 result;
@@ -1841,8 +1847,8 @@ void Textfield::UpdateBackgroundColor() {
   const SkColor color = GetBackgroundColor();
   if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
     set_background(Background::CreateBackgroundPainter(
-        true, Painter::CreateSolidRoundRectPainter(
-                  color, FocusableBorder::kCornerRadiusDp)));
+        Painter::CreateSolidRoundRectPainter(
+            color, FocusableBorder::kCornerRadiusDp)));
   } else {
     set_background(Background::CreateSolidBackground(color));
   }

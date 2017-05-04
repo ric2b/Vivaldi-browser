@@ -31,7 +31,7 @@
 #include "ui/views/controls/table/table_view.h"
 #include "ui/views/controls/table/table_view_observer.h"
 #include "ui/views/mus/aura_init.h"
-#include "ui/views/mus/window_manager_connection.h"
+#include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
 namespace mash {
@@ -146,7 +146,7 @@ class TaskViewerContents
   // Overridden from views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {
     DCHECK_EQ(sender, kill_button_);
-    DCHECK_EQ(table_view_->SelectedRowCount(), 1);
+    DCHECK_EQ(table_view_->selection_model().size(), 1UL);
     int row = table_view_->FirstSelectedRow();
     DCHECK(row < static_cast<int>(instances_.size()));
     base::Process process = base::Process::Open(instances_[row]->pid);
@@ -295,14 +295,13 @@ void TaskViewer::OnStart() {
   tracing_.Initialize(context()->connector(), context()->identity().name());
 
   aura_init_ = base::MakeUnique<views::AuraInit>(
-      context()->connector(), context()->identity(), "views_mus_resources.pak");
-  window_manager_connection_ = views::WindowManagerConnection::Create(
-      context()->connector(), context()->identity());
+      context()->connector(), context()->identity(), "views_mus_resources.pak",
+      std::string(), nullptr, views::AuraInit::Mode::AURA_MUS);
 }
 
 bool TaskViewer::OnConnect(const service_manager::ServiceInfo& remote_info,
                            service_manager::InterfaceRegistry* registry) {
-  registry->AddInterface<mojom::Launchable>(this);
+  registry->AddInterface<::mash::mojom::Launchable>(this);
   return true;
 }
 
@@ -315,17 +314,15 @@ void TaskViewer::Launch(uint32_t what, mojom::LaunchMode how) {
   }
 
   service_manager::mojom::ServiceManagerPtr service_manager;
-  context()->connector()->ConnectToInterface(
-      service_manager::mojom::kServiceName, &service_manager);
+  context()->connector()->BindInterface(service_manager::mojom::kServiceName,
+                                        &service_manager);
 
   service_manager::mojom::ServiceManagerListenerPtr listener;
-  service_manager::mojom::ServiceManagerListenerRequest request =
-      GetProxy(&listener);
+  service_manager::mojom::ServiceManagerListenerRequest request(&listener);
   service_manager->AddListener(std::move(listener));
 
   catalog::mojom::CatalogPtr catalog;
-  context()->connector()->ConnectToInterface(catalog::mojom::kServiceName,
-                                             &catalog);
+  context()->connector()->BindInterface(catalog::mojom::kServiceName, &catalog);
 
   TaskViewerContents* task_viewer = new TaskViewerContents(
       this, std::move(request), std::move(catalog));
@@ -336,7 +333,7 @@ void TaskViewer::Launch(uint32_t what, mojom::LaunchMode how) {
 }
 
 void TaskViewer::Create(const service_manager::Identity& remote_identity,
-                        mojom::LaunchableRequest request) {
+                        ::mash::mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }
 

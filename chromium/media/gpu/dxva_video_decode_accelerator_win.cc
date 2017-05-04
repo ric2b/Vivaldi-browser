@@ -20,6 +20,7 @@
 #include <string.h>
 #include <wmcodecdsp.h>
 
+#include "base/atomicops.h"
 #include "base/base_paths_win.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -33,18 +34,23 @@
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/threading/thread_local_storage.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
+#include "base/win/scoped_co_mem.h"
 #include "base/win/windows_version.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
+#include "media/base/media_switches.h"
 #include "media/base/win/mf_helpers.h"
 #include "media/base/win/mf_initializer.h"
 #include "media/gpu/dxva_picture_buffer_win.h"
 #include "media/video/video_decode_accelerator.h"
 #include "third_party/angle/include/EGL/egl.h"
 #include "third_party/angle/include/EGL/eglext.h"
+#include "ui/gfx/color_space_win.h"
+#include "ui/gl/gl_angle_util_win.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_fence.h"
@@ -179,6 +185,60 @@ constexpr const wchar_t* const kMediaFoundationVideoDecoderDLLs[] = {
     L"mf.dll", L"mfplat.dll", L"msmpeg2vdec.dll",
 };
 
+// Vectored exception handlers are global to the entire process, so use TLS to
+// ensure only the thread with the ScopedExceptionCatcher dumps anything.
+base::ThreadLocalStorage::StaticSlot g_catcher_tls_slot = TLS_INITIALIZER;
+
+uint64_t GetCurrentQPC() {
+  LARGE_INTEGER perf_counter_now = {};
+  // Use raw QueryPerformanceCounter to avoid grabbing locks or allocating
+  // memory in an exception handler;
+  ::QueryPerformanceCounter(&perf_counter_now);
+  return perf_counter_now.QuadPart;
+}
+
+// This is information about the last exception. Writing into it may be racy,
+// but that should be ok because the information is only used for debugging.
+DWORD g_last_exception_code;
+uint64_t g_last_exception_time;
+uint64_t g_last_process_output_time;
+HRESULT g_last_unhandled_error;
+HRESULT g_last_device_removed_reason;
+
+LONG CALLBACK VectoredCrashHandler(EXCEPTION_POINTERS* exception_pointers) {
+  if (g_catcher_tls_slot.Get()) {
+    g_last_exception_code = exception_pointers->ExceptionRecord->ExceptionCode;
+    g_last_exception_time = GetCurrentQPC();
+  }
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+
+// The MS VP9 MFT swallows driver exceptions and later hangs because it gets
+// into a weird state. Add a vectored exception handler so information about
+// the exception can be retrieved. See http://crbug.com/636158
+class ScopedExceptionCatcher {
+ public:
+  explicit ScopedExceptionCatcher(bool handle_exception) {
+    if (handle_exception) {
+      DCHECK(g_catcher_tls_slot.initialized());
+      g_catcher_tls_slot.Set(static_cast<void*>(this));
+      handler_ = AddVectoredExceptionHandler(1, &VectoredCrashHandler);
+    }
+  }
+
+  ~ScopedExceptionCatcher() {
+    if (handler_) {
+      g_catcher_tls_slot.Set(nullptr);
+      RemoveVectoredExceptionHandler(handler_);
+    }
+  }
+
+ private:
+  void* handler_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedExceptionCatcher);
+};
+
 }  // namespace
 
 namespace media {
@@ -215,38 +275,43 @@ enum {
 // If duration and sample time are not known, provide 0.
 // |min_size| specifies the minimum size of the buffer (might be required by
 // the decoder for input). If no alignment is required, provide 0.
-static IMFSample* CreateInputSample(const uint8_t* stream,
-                                    uint32_t size,
-                                    uint32_t min_size,
-                                    int alignment) {
+static base::win::ScopedComPtr<IMFSample> CreateInputSample(
+    const uint8_t* stream,
+    uint32_t size,
+    uint32_t min_size,
+    int alignment) {
   CHECK(stream);
   CHECK_GT(size, 0U);
   base::win::ScopedComPtr<IMFSample> sample;
-  sample.Attach(
-      mf::CreateEmptySampleWithBuffer(std::max(min_size, size), alignment));
-  RETURN_ON_FAILURE(sample.get(), "Failed to create empty sample", NULL);
+  sample = mf::CreateEmptySampleWithBuffer(std::max(min_size, size), alignment);
+  RETURN_ON_FAILURE(sample.get(), "Failed to create empty sample",
+                    base::win::ScopedComPtr<IMFSample>());
 
   base::win::ScopedComPtr<IMFMediaBuffer> buffer;
   HRESULT hr = sample->GetBufferByIndex(0, buffer.Receive());
-  RETURN_ON_HR_FAILURE(hr, "Failed to get buffer from sample", NULL);
+  RETURN_ON_HR_FAILURE(hr, "Failed to get buffer from sample",
+                       base::win::ScopedComPtr<IMFSample>());
 
   DWORD max_length = 0;
   DWORD current_length = 0;
   uint8_t* destination = NULL;
   hr = buffer->Lock(&destination, &max_length, &current_length);
-  RETURN_ON_HR_FAILURE(hr, "Failed to lock buffer", NULL);
+  RETURN_ON_HR_FAILURE(hr, "Failed to lock buffer",
+                       base::win::ScopedComPtr<IMFSample>());
 
   CHECK_EQ(current_length, 0u);
   CHECK_GE(max_length, size);
   memcpy(destination, stream, size);
 
   hr = buffer->SetCurrentLength(size);
-  RETURN_ON_HR_FAILURE(hr, "Failed to set buffer length", NULL);
+  RETURN_ON_HR_FAILURE(hr, "Failed to set buffer length",
+                       base::win::ScopedComPtr<IMFSample>());
 
   hr = buffer->Unlock();
-  RETURN_ON_HR_FAILURE(hr, "Failed to unlock buffer", NULL);
+  RETURN_ON_HR_FAILURE(hr, "Failed to unlock buffer",
+                       base::win::ScopedComPtr<IMFSample>());
 
-  return sample.Detach();
+  return sample;
 }
 
 // Helper function to create a COM object instance from a DLL. The alternative
@@ -275,80 +340,6 @@ HRESULT CreateCOMObjectFromDll(HMODULE dll,
 
   hr = factory->CreateInstance(NULL, iid, object);
   return hr;
-}
-
-// Helper function to query the ANGLE device object. The template argument T
-// identifies the device interface being queried. IDirect3DDevice9Ex for d3d9
-// and ID3D11Device for dx11.
-template <class T>
-base::win::ScopedComPtr<T> QueryDeviceObjectFromANGLE(int object_type) {
-  base::win::ScopedComPtr<T> device_object;
-
-  EGLDisplay egl_display = nullptr;
-  intptr_t egl_device = 0;
-  intptr_t device = 0;
-
-  {
-    TRACE_EVENT0("gpu", "QueryDeviceObjectFromANGLE. GetHardwareDisplay");
-    egl_display = gl::GLSurfaceEGL::GetHardwareDisplay();
-  }
-
-  RETURN_ON_FAILURE(gl::GLSurfaceEGL::HasEGLExtension("EGL_EXT_device_query"),
-                    "EGL_EXT_device_query missing", device_object);
-
-  PFNEGLQUERYDISPLAYATTRIBEXTPROC QueryDisplayAttribEXT = nullptr;
-
-  {
-    TRACE_EVENT0("gpu", "QueryDeviceObjectFromANGLE. eglGetProcAddress");
-
-    QueryDisplayAttribEXT = reinterpret_cast<PFNEGLQUERYDISPLAYATTRIBEXTPROC>(
-        eglGetProcAddress("eglQueryDisplayAttribEXT"));
-
-    RETURN_ON_FAILURE(
-        QueryDisplayAttribEXT,
-        "Failed to get the eglQueryDisplayAttribEXT function from ANGLE",
-        device_object);
-  }
-
-  PFNEGLQUERYDEVICEATTRIBEXTPROC QueryDeviceAttribEXT = nullptr;
-
-  {
-    TRACE_EVENT0("gpu", "QueryDeviceObjectFromANGLE. eglGetProcAddress");
-
-    QueryDeviceAttribEXT = reinterpret_cast<PFNEGLQUERYDEVICEATTRIBEXTPROC>(
-        eglGetProcAddress("eglQueryDeviceAttribEXT"));
-
-    RETURN_ON_FAILURE(
-        QueryDeviceAttribEXT,
-        "Failed to get the eglQueryDeviceAttribEXT function from ANGLE",
-        device_object);
-  }
-
-  {
-    TRACE_EVENT0("gpu", "QueryDeviceObjectFromANGLE. QueryDisplayAttribEXT");
-
-    RETURN_ON_FAILURE(
-        QueryDisplayAttribEXT(egl_display, EGL_DEVICE_EXT, &egl_device),
-        "The eglQueryDisplayAttribEXT function failed to get the EGL device",
-        device_object);
-  }
-
-  RETURN_ON_FAILURE(egl_device, "Failed to get the EGL device", device_object);
-
-  {
-    TRACE_EVENT0("gpu", "QueryDeviceObjectFromANGLE. QueryDisplayAttribEXT");
-
-    RETURN_ON_FAILURE(
-        QueryDeviceAttribEXT(reinterpret_cast<EGLDeviceEXT>(egl_device),
-                             object_type, &device),
-        "The eglQueryDeviceAttribEXT function failed to get the device",
-        device_object);
-
-    RETURN_ON_FAILURE(device, "Failed to get the ANGLE device", device_object);
-  }
-
-  device_object = reinterpret_cast<T*>(device);
-  return device_object;
 }
 
 H264ConfigChangeDetector::H264ConfigChangeDetector()
@@ -470,13 +461,12 @@ gfx::ColorSpace H264ConfigChangeDetector::current_color_space() const {
 
 DXVAVideoDecodeAccelerator::PendingSampleInfo::PendingSampleInfo(
     int32_t buffer_id,
-    IMFSample* sample,
+    base::win::ScopedComPtr<IMFSample> sample,
     const gfx::ColorSpace& color_space)
     : input_buffer_id(buffer_id),
       picture_buffer_id(-1),
-      color_space(color_space) {
-  output_sample.Attach(sample);
-}
+      color_space(color_space),
+      output_sample(sample) {}
 
 DXVAVideoDecodeAccelerator::PendingSampleInfo::PendingSampleInfo(
     const PendingSampleInfo& other) = default;
@@ -519,6 +509,7 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
   weak_ptr_ = weak_this_factory_.GetWeakPtr();
   memset(&input_stream_info_, 0, sizeof(input_stream_info_));
   memset(&output_stream_info_, 0, sizeof(output_stream_info_));
+  use_color_info_ = base::FeatureList::IsEnabled(kVideoBlitColorAccuracy);
 }
 
 DXVAVideoDecodeAccelerator::~DXVAVideoDecodeAccelerator() {
@@ -532,7 +523,7 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
     return false;
   }
 
-  if (config.is_encrypted) {
+  if (config.is_encrypted()) {
     NOTREACHED() << "Encrypted streams are not supported for this VDA";
     return false;
   }
@@ -658,7 +649,7 @@ bool DXVAVideoDecodeAccelerator::CreateD3DDevManager() {
                        false);
 
   base::win::ScopedComPtr<IDirect3DDevice9> angle_device =
-      QueryDeviceObjectFromANGLE<IDirect3DDevice9>(EGL_D3D9_DEVICE_ANGLE);
+      gl::QueryD3D9DeviceObjectFromANGLE();
   if (angle_device.get())
     using_angle_device_ = true;
 
@@ -702,7 +693,92 @@ bool DXVAVideoDecodeAccelerator::CreateD3DDevManager() {
   // CopyOutputSampleDataToPictureBuffer).
   hr = query_->Issue(D3DISSUE_END);
   RETURN_ON_HR_FAILURE(hr, "Failed to issue END test query", false);
+
+  CreateVideoProcessor();
   return true;
+}
+
+bool DXVAVideoDecodeAccelerator::CreateVideoProcessor() {
+  if (!use_color_info_)
+    return false;
+
+  // TODO(Hubbe): Don't try again if we tried and failed already.
+  if (video_processor_service_.get())
+    return true;
+  HRESULT hr = DXVA2CreateVideoService(d3d9_device_ex_.get(),
+                                       IID_IDirectXVideoProcessorService,
+                                       video_processor_service_.ReceiveVoid());
+  RETURN_ON_HR_FAILURE(hr, "DXVA2CreateVideoService failed", false);
+
+  // TODO(Hubbe): Use actual video settings.
+  DXVA2_VideoDesc inputDesc;
+  inputDesc.SampleWidth = 1920;
+  inputDesc.SampleHeight = 1080;
+  inputDesc.SampleFormat.VideoChromaSubsampling =
+      DXVA2_VideoChromaSubsampling_MPEG2;
+  inputDesc.SampleFormat.NominalRange = DXVA2_NominalRange_16_235;
+  inputDesc.SampleFormat.VideoTransferMatrix = DXVA2_VideoTransferMatrix_BT709;
+  inputDesc.SampleFormat.VideoLighting = DXVA2_VideoLighting_dim;
+  inputDesc.SampleFormat.VideoPrimaries = DXVA2_VideoPrimaries_BT709;
+  inputDesc.SampleFormat.VideoTransferFunction = DXVA2_VideoTransFunc_709;
+  inputDesc.SampleFormat.SampleFormat = DXVA2_SampleProgressiveFrame;
+  inputDesc.Format = (D3DFORMAT)MAKEFOURCC('N', 'V', '1', '2');
+  inputDesc.InputSampleFreq.Numerator = 30;
+  inputDesc.InputSampleFreq.Denominator = 1;
+  inputDesc.OutputFrameFreq.Numerator = 30;
+  inputDesc.OutputFrameFreq.Denominator = 1;
+
+  UINT guid_count = 0;
+  base::win::ScopedCoMem<GUID> guids;
+  hr = video_processor_service_->GetVideoProcessorDeviceGuids(
+      &inputDesc, &guid_count, &guids);
+  RETURN_ON_HR_FAILURE(hr, "GetVideoProcessorDeviceGuids failed", false);
+
+  for (UINT g = 0; g < guid_count; g++) {
+    DXVA2_VideoProcessorCaps caps;
+    hr = video_processor_service_->GetVideoProcessorCaps(
+        guids[g], &inputDesc, D3DFMT_X8R8G8B8, &caps);
+    if (hr)
+      continue;
+
+    if (!(caps.VideoProcessorOperations & DXVA2_VideoProcess_YUV2RGB))
+      continue;
+
+    base::win::ScopedCoMem<D3DFORMAT> formats;
+    UINT format_count = 0;
+    hr = video_processor_service_->GetVideoProcessorRenderTargets(
+        guids[g], &inputDesc, &format_count, &formats);
+    if (hr)
+      continue;
+
+    UINT f;
+    for (f = 0; f < format_count; f++) {
+      if (formats[f] == D3DFMT_X8R8G8B8) {
+        break;
+      }
+    }
+    if (f == format_count)
+      continue;
+
+    // Create video processor
+    hr = video_processor_service_->CreateVideoProcessor(
+        guids[g], &inputDesc, D3DFMT_X8R8G8B8, 0, processor_.Receive());
+    if (hr)
+      continue;
+
+    DXVA2_ValueRange range;
+    processor_->GetProcAmpRange(DXVA2_ProcAmp_Brightness, &range);
+    default_procamp_values_.Brightness = range.DefaultValue;
+    processor_->GetProcAmpRange(DXVA2_ProcAmp_Contrast, &range);
+    default_procamp_values_.Contrast = range.DefaultValue;
+    processor_->GetProcAmpRange(DXVA2_ProcAmp_Hue, &range);
+    default_procamp_values_.Hue = range.DefaultValue;
+    processor_->GetProcAmpRange(DXVA2_ProcAmp_Saturation, &range);
+    default_procamp_values_.Saturation = range.DefaultValue;
+
+    return true;
+  }
+  return false;
 }
 
 bool DXVAVideoDecodeAccelerator::CreateDX11DevManager() {
@@ -713,8 +789,7 @@ bool DXVAVideoDecodeAccelerator::CreateDX11DevManager() {
                                            d3d11_device_manager_.Receive());
   RETURN_ON_HR_FAILURE(hr, "MFCreateDXGIDeviceManager failed", false);
 
-  angle_device_ =
-      QueryDeviceObjectFromANGLE<ID3D11Device>(EGL_D3D11_DEVICE_ANGLE);
+  angle_device_ = gl::QueryD3D11DeviceObjectFromANGLE();
   if (!angle_device_)
     copy_nv12_textures_ = false;
   if (share_nv12_textures_) {
@@ -847,10 +922,10 @@ void DXVAVideoDecodeAccelerator::Decode(
                                "Failed in base::SharedMemory::Map",
                                PLATFORM_FAILURE, );
 
-  sample.Attach(CreateInputSample(
+  sample = CreateInputSample(
       reinterpret_cast<const uint8_t*>(shm.memory()), bitstream_buffer.size(),
       std::min<uint32_t>(bitstream_buffer.size(), input_stream_info_.cbSize),
-      input_stream_info_.cbAlignment));
+      input_stream_info_.cbAlignment);
   RETURN_AND_NOTIFY_ON_FAILURE(sample.get(), "Failed to create input sample",
                                PLATFORM_FAILURE, );
 
@@ -1046,7 +1121,7 @@ void DXVAVideoDecodeAccelerator::Reset() {
       (state == kNormal || state == kStopped || state == kFlushing),
       "Reset: invalid state: " << state, ILLEGAL_STATE, );
 
-  decoder_thread_.Stop();
+  StopDecoderThread();
 
   if (state == kFlushing)
     NotifyFlushDone();
@@ -1080,11 +1155,14 @@ void DXVAVideoDecodeAccelerator::Reset() {
   main_thread_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&DXVAVideoDecodeAccelerator::NotifyResetDone, weak_ptr_));
+  main_thread_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&DXVAVideoDecodeAccelerator::NotifyInputBuffersDropped,
+                 weak_ptr_, std::move(pending_input_buffers_)));
+  pending_input_buffers_.clear();
 
   StartDecoderThread();
   SetState(kNormal);
-
-  NotifyInputBuffersDropped();
 }
 
 void DXVAVideoDecodeAccelerator::Destroy() {
@@ -1141,6 +1219,7 @@ DXVAVideoDecodeAccelerator::GetSupportedProfiles(
 
 // static
 void DXVAVideoDecodeAccelerator::PreSandboxInitialization() {
+  g_catcher_tls_slot.Initialize(nullptr);
   for (const wchar_t* mfdll : kMediaFoundationVideoDecoderDLLs)
     ::LoadLibrary(mfdll);
   ::LoadLibrary(L"dxva2.dll");
@@ -1215,7 +1294,7 @@ std::pair<int, int> DXVAVideoDecodeAccelerator::GetMaxH264Resolution() {
     TRACE_EVENT0("gpu,startup",
                  "GetMaxH264Resolution. QueryDeviceObjectFromANGLE");
 
-    device = QueryDeviceObjectFromANGLE<ID3D11Device>(EGL_D3D11_DEVICE_ANGLE);
+    device = gl::QueryD3D11DeviceObjectFromANGLE();
     if (!device.get())
       return max_resolution;
   }
@@ -1653,16 +1732,26 @@ void DXVAVideoDecodeAccelerator::DoDecode(const gfx::ColorSpace& color_space) {
       (state == kNormal || state == kFlushing || state == kStopped),
       "DoDecode: not in normal/flushing/stopped state", ILLEGAL_STATE, );
 
+  if (d3d11_device_)
+    g_last_device_removed_reason = d3d11_device_->GetDeviceRemovedReason();
+
   MFT_OUTPUT_DATA_BUFFER output_data_buffer = {0};
   DWORD status = 0;
-  HRESULT hr = decoder_->ProcessOutput(0,  // No flags
-                                       1,  // # of out streams to pull from
-                                       &output_data_buffer, &status);
+  HRESULT hr;
+  {
+    ScopedExceptionCatcher catcher(using_ms_vp9_mft_);
+    g_last_process_output_time = GetCurrentQPC();
+    hr = decoder_->ProcessOutput(0,  // No flags
+                                 1,  // # of out streams to pull from
+                                 &output_data_buffer, &status);
+  }
   IMFCollection* events = output_data_buffer.pEvents;
   if (events != NULL) {
     DVLOG(1) << "Got events from ProcessOuput, but discarding";
     events->Release();
   }
+  base::win::ScopedComPtr<IMFSample> output_sample;
+  output_sample.Attach(output_data_buffer.pSample);
   if (FAILED(hr)) {
     // A stream change needs further ProcessInput calls to get back decoder
     // output which is why we need to set the state to stopped.
@@ -1685,6 +1774,7 @@ void DXVAVideoDecodeAccelerator::DoDecode(const gfx::ColorSpace& color_space) {
       return;
     } else {
       NOTREACHED() << "Unhandled error in DoDecode()";
+      g_last_unhandled_error = hr;
       return;
     }
   }
@@ -1695,13 +1785,13 @@ void DXVAVideoDecodeAccelerator::DoDecode(const gfx::ColorSpace& color_space) {
 
   inputs_before_decode_ = 0;
 
-  RETURN_AND_NOTIFY_ON_FAILURE(
-      ProcessOutputSample(output_data_buffer.pSample, color_space),
-      "Failed to process output sample.", PLATFORM_FAILURE, );
+  RETURN_AND_NOTIFY_ON_FAILURE(ProcessOutputSample(output_sample, color_space),
+                               "Failed to process output sample.",
+                               PLATFORM_FAILURE, );
 }
 
 bool DXVAVideoDecodeAccelerator::ProcessOutputSample(
-    IMFSample* sample,
+    base::win::ScopedComPtr<IMFSample> sample,
     const gfx::ColorSpace& color_space) {
   RETURN_ON_FAILURE(sample, "Decode succeeded with NULL output sample", false);
 
@@ -1728,7 +1818,7 @@ bool DXVAVideoDecodeAccelerator::ProcessOutputSample(
 
   int width = 0;
   int height = 0;
-  if (!GetVideoFrameDimensions(sample, &width, &height)) {
+  if (!GetVideoFrameDimensions(sample.get(), &width, &height)) {
     RETURN_ON_FAILURE(false, "Failed to get D3D surface from output sample",
                       false);
   }
@@ -1785,18 +1875,7 @@ void DXVAVideoDecodeAccelerator::ProcessPendingSamples() {
 
       pending_sample->picture_buffer_id = index->second->id();
       index->second->set_bound();
-
-      // We only propagate the input color space if we can give the raw YUV data
-      // back to the browser process. When we cannot return the YUV data, we
-      // have to do a copy to an RGBA texture, which makes proper color
-      // management difficult as some fidelity is lost. Also, we currently let
-      // the drivers decide how to actually do the YUV to RGB conversion, which
-      // means that even if we wanted to try to color-adjust the RGB output, we
-      // don't actually know exactly what color space it is in anymore.
-      // TODO(hubbe): Figure out a way to always return the raw YUV data.
-      if (share_nv12_textures_ || copy_nv12_textures_) {
-        index->second->set_color_space(pending_sample->color_space);
-      }
+      index->second->set_color_space(pending_sample->color_space);
 
       if (share_nv12_textures_) {
         main_thread_task_runner_->PostTask(
@@ -1867,7 +1946,7 @@ void DXVAVideoDecodeAccelerator::Invalidate() {
   // Best effort to make the GL context current.
   make_context_current_cb_.Run();
 
-  decoder_thread_.Stop();
+  StopDecoderThread();
   weak_this_factory_.InvalidateWeakPtrs();
   weak_ptr_ = weak_this_factory_.GetWeakPtr();
   pending_output_samples_.clear();
@@ -1907,6 +1986,34 @@ void DXVAVideoDecodeAccelerator::Invalidate() {
   }
   sent_drain_message_ = false;
   SetState(kUninitialized);
+}
+
+void DXVAVideoDecodeAccelerator::StopDecoderThread() {
+  // Try to determine what, if any exception last happened before a hang. See
+  // http://crbug.com/613701
+  DWORD last_exception_code = g_last_exception_code;
+  HRESULT last_unhandled_error = g_last_unhandled_error;
+  uint64_t last_exception_time = g_last_exception_time;
+  uint64_t last_process_output_time = g_last_process_output_time;
+  HRESULT last_device_removed_reason = g_last_device_removed_reason;
+  LARGE_INTEGER perf_frequency;
+  ::QueryPerformanceFrequency(&perf_frequency);
+  uint32_t output_array_size = output_array_size_;
+  size_t sample_count;
+  {
+    base::AutoLock lock(decoder_lock_);
+    sample_count = pending_output_samples_.size();
+  }
+
+  base::debug::Alias(&last_exception_code);
+  base::debug::Alias(&last_unhandled_error);
+  base::debug::Alias(&last_exception_time);
+  base::debug::Alias(&last_process_output_time);
+  base::debug::Alias(&last_device_removed_reason);
+  base::debug::Alias(&perf_frequency.QuadPart);
+  base::debug::Alias(&output_array_size);
+  base::debug::Alias(&sample_count);
+  decoder_thread_.Stop();
 }
 
 void DXVAVideoDecodeAccelerator::NotifyInputBufferRead(int input_buffer_id) {
@@ -1966,19 +2073,18 @@ void DXVAVideoDecodeAccelerator::NotifyPictureReady(
   }
 }
 
-void DXVAVideoDecodeAccelerator::NotifyInputBuffersDropped() {
+void DXVAVideoDecodeAccelerator::NotifyInputBuffersDropped(
+    const PendingInputs& pending_buffers) {
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
   if (!client_)
     return;
 
-  for (PendingInputs::iterator it = pending_input_buffers_.begin();
-       it != pending_input_buffers_.end(); ++it) {
+  for (const auto& buffer : pending_buffers) {
     LONGLONG input_buffer_id = 0;
-    RETURN_ON_HR_FAILURE((*it)->GetSampleTime(&input_buffer_id),
+    RETURN_ON_HR_FAILURE(buffer->GetSampleTime(&input_buffer_id),
                          "Failed to get buffer id associated with sample", );
     client_->NotifyEndOfBitstreamBuffer(input_buffer_id);
   }
-  pending_input_buffers_.clear();
 }
 
 void DXVAVideoDecodeAccelerator::DecodePendingInputBuffers() {
@@ -2096,8 +2202,10 @@ void DXVAVideoDecodeAccelerator::DecodeInternal(
                              this);
   }
   inputs_before_decode_++;
-
-  hr = decoder_->ProcessInput(0, sample.get(), 0);
+  {
+    ScopedExceptionCatcher catcher(using_ms_vp9_mft_);
+    hr = decoder_->ProcessInput(0, sample.get(), 0);
+  }
   // As per msdn if the decoder returns MF_E_NOTACCEPTING then it means that it
   // has enough data to produce one or more output samples. In this case the
   // recommended options are to
@@ -2247,23 +2355,65 @@ bool DXVAVideoDecodeAccelerator::OutputSamplesPresent() {
   return !pending_output_samples_.empty();
 }
 
-void DXVAVideoDecodeAccelerator::CopySurface(IDirect3DSurface9* src_surface,
-                                             IDirect3DSurface9* dest_surface,
-                                             int picture_buffer_id,
-                                             int input_buffer_id) {
+void DXVAVideoDecodeAccelerator::CopySurface(
+    IDirect3DSurface9* src_surface,
+    IDirect3DSurface9* dest_surface,
+    int picture_buffer_id,
+    int input_buffer_id,
+    const gfx::ColorSpace& color_space) {
   TRACE_EVENT0("media", "DXVAVideoDecodeAccelerator::CopySurface");
   if (!decoder_thread_task_runner_->BelongsToCurrentThread()) {
     decoder_thread_task_runner_->PostTask(
         FROM_HERE, base::Bind(&DXVAVideoDecodeAccelerator::CopySurface,
                               base::Unretained(this), src_surface, dest_surface,
-                              picture_buffer_id, input_buffer_id));
+                              picture_buffer_id, input_buffer_id, color_space));
     return;
   }
 
-  HRESULT hr = d3d9_device_ex_->StretchRect(src_surface, NULL, dest_surface,
-                                            NULL, D3DTEXF_NONE);
-  RETURN_ON_HR_FAILURE(hr, "Colorspace conversion via StretchRect failed", );
+  HRESULT hr;
+  if (processor_) {
+    D3DSURFACE_DESC src_desc;
+    src_surface->GetDesc(&src_desc);
+    int width = src_desc.Width;
+    int height = src_desc.Height;
+    RECT rect = {0, 0, width, height};
+    DXVA2_VideoSample sample = {0};
+    sample.End = 1000;
+    if (use_color_info_) {
+      sample.SampleFormat = gfx::ColorSpaceWin::GetExtendedFormat(color_space);
+    } else {
+      sample.SampleFormat.SampleFormat = DXVA2_SampleProgressiveFrame;
+    }
 
+    sample.SrcSurface = src_surface;
+    sample.SrcRect = rect;
+    sample.DstRect = rect;
+    sample.PlanarAlpha = DXVA2_Fixed32OpaqueAlpha();
+
+    DXVA2_VideoProcessBltParams params = {0};
+    params.TargetFrame = 0;
+    params.TargetRect = rect;
+    params.ConstrictionSize = {width, height};
+    params.BackgroundColor = {0, 0, 0, 0xFFFF};
+    params.ProcAmpValues = default_procamp_values_;
+
+    params.Alpha = DXVA2_Fixed32OpaqueAlpha();
+
+    hr = processor_->VideoProcessBlt(dest_surface, &params, &sample, 1, NULL);
+    if (hr != S_OK) {
+      LOG(ERROR) << "VideoProcessBlt failed with code " << hr
+                 << "  E_INVALIDARG= " << E_INVALIDARG;
+
+      // Release the processor and fall back to StretchRect()
+      processor_ = NULL;
+    }
+  }
+
+  if (!processor_) {
+    hr = d3d9_device_ex_->StretchRect(src_surface, NULL, dest_surface, NULL,
+                                      D3DTEXF_NONE);
+    RETURN_ON_HR_FAILURE(hr, "Colorspace conversion via StretchRect failed", );
+  }
   // Ideally, this should be done immediately before the draw call that uses
   // the texture. Flush it once here though.
   hr = query_->Issue(D3DISSUE_END);
@@ -2320,8 +2470,9 @@ void DXVAVideoDecodeAccelerator::CopySurfaceComplete(
   RETURN_AND_NOTIFY_ON_FAILURE(result, "Failed to complete copying surface",
                                PLATFORM_FAILURE, );
 
-  NotifyPictureReady(picture_buffer->id(), input_buffer_id,
-                     picture_buffer->color_space());
+  NotifyPictureReady(
+      picture_buffer->id(), input_buffer_id,
+      copy_nv12_textures_ ? picture_buffer->color_space() : gfx::ColorSpace());
 
   {
     base::AutoLock lock(decoder_lock_);
@@ -2400,7 +2551,8 @@ void DXVAVideoDecodeAccelerator::CopyTexture(
     base::win::ScopedComPtr<IDXGIKeyedMutex> dest_keyed_mutex,
     uint64_t keyed_mutex_value,
     int picture_buffer_id,
-    int input_buffer_id) {
+    int input_buffer_id,
+    const gfx::ColorSpace& color_space) {
   TRACE_EVENT0("media", "DXVAVideoDecodeAccelerator::CopyTexture");
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
 
@@ -2421,8 +2573,8 @@ void DXVAVideoDecodeAccelerator::CopyTexture(
   src_texture->GetDesc(&source_desc);
 
   // Set up the input and output types for the video processor MFT.
-  if (!InitializeDX11VideoFormatConverterMediaType(source_desc.Width,
-                                                   source_desc.Height)) {
+  if (!InitializeDX11VideoFormatConverterMediaType(
+          source_desc.Width, source_desc.Height, color_space)) {
     RETURN_AND_NOTIFY_ON_FAILURE(
         false, "Failed to initialize media types for convesion.",
         PLATFORM_FAILURE, );
@@ -2440,7 +2592,7 @@ void DXVAVideoDecodeAccelerator::CopyTexture(
       FROM_HERE,
       base::Bind(&DXVAVideoDecodeAccelerator::CopyTextureOnDecoderThread,
                  base::Unretained(this), dest_texture, dest_keyed_mutex,
-                 keyed_mutex_value, input_sample_for_conversion.Detach(),
+                 keyed_mutex_value, input_sample_for_conversion,
                  picture_buffer_id, input_buffer_id));
 }
 
@@ -2448,7 +2600,7 @@ void DXVAVideoDecodeAccelerator::CopyTextureOnDecoderThread(
     ID3D11Texture2D* dest_texture,
     base::win::ScopedComPtr<IDXGIKeyedMutex> dest_keyed_mutex,
     uint64_t keyed_mutex_value,
-    IMFSample* video_frame,
+    base::win::ScopedComPtr<IMFSample> input_sample,
     int picture_buffer_id,
     int input_buffer_id) {
   TRACE_EVENT0("media",
@@ -2457,11 +2609,7 @@ void DXVAVideoDecodeAccelerator::CopyTextureOnDecoderThread(
   HRESULT hr = E_FAIL;
 
   DCHECK(use_dx11_);
-  DCHECK(video_frame);
-
-  base::win::ScopedComPtr<IMFSample> input_sample;
-  input_sample.Attach(video_frame);
-
+  DCHECK(!!input_sample);
   DCHECK(video_format_converter_mft_.get());
 
   if (dest_keyed_mutex) {
@@ -2493,12 +2641,14 @@ void DXVAVideoDecodeAccelerator::CopyTextureOnDecoderThread(
 
   output_sample->AddBuffer(output_buffer.get());
 
-  hr = video_format_converter_mft_->ProcessInput(0, video_frame, 0);
+  hr = video_format_converter_mft_->ProcessInput(0, input_sample.get(), 0);
   if (FAILED(hr)) {
     DCHECK(false);
     RETURN_AND_NOTIFY_ON_HR_FAILURE(
         hr, "Failed to convert output sample format.", PLATFORM_FAILURE, );
   }
+
+  input_sample.Release();
 
   DWORD status = 0;
   MFT_OUTPUT_DATA_BUFFER format_converter_output = {};
@@ -2587,9 +2737,12 @@ void DXVAVideoDecodeAccelerator::FlushDecoder(int iterations,
 
 bool DXVAVideoDecodeAccelerator::InitializeDX11VideoFormatConverterMediaType(
     int width,
-    int height) {
-  if (!dx11_video_format_converter_media_type_needs_init_)
+    int height,
+    const gfx::ColorSpace& color_space) {
+  if (!dx11_video_format_converter_media_type_needs_init_ &&
+      (!use_color_info_ || color_space == dx11_converter_color_space_)) {
     return true;
+  }
 
   CHECK(video_format_converter_mft_.get());
 
@@ -2623,6 +2776,17 @@ bool DXVAVideoDecodeAccelerator::InitializeDX11VideoFormatConverterMediaType(
   hr = MFSetAttributeSize(media_type.get(), MF_MT_FRAME_SIZE, width, height);
   RETURN_AND_NOTIFY_ON_HR_FAILURE(hr, "Failed to set media type attributes",
                                   PLATFORM_FAILURE, false);
+
+  if (use_color_info_) {
+    DXVA2_ExtendedFormat format =
+        gfx::ColorSpaceWin::GetExtendedFormat(color_space);
+    media_type->SetUINT32(MF_MT_YUV_MATRIX, format.VideoTransferMatrix);
+    media_type->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, format.NominalRange);
+    media_type->SetUINT32(MF_MT_VIDEO_PRIMARIES, format.VideoPrimaries);
+    media_type->SetUINT32(MF_MT_TRANSFER_FUNCTION,
+                          format.VideoTransferFunction);
+    dx11_converter_color_space_ = color_space;
+  }
 
   hr = video_format_converter_mft_->SetInputType(0, media_type.get(), 0);
   if (FAILED(hr))
@@ -2684,6 +2848,7 @@ bool DXVAVideoDecodeAccelerator::GetVideoFrameDimensions(IMFSample* sample,
     d3d11_texture->GetDesc(&d3d11_texture_desc);
     *width = d3d11_texture_desc.Width;
     *height = d3d11_texture_desc.Height;
+    output_array_size_ = d3d11_texture_desc.ArraySize;
   } else {
     base::win::ScopedComPtr<IDirect3DSurface9> surface;
     hr = MFGetService(output_buffer.get(), MR_BUFFER_SERVICE,

@@ -4,7 +4,7 @@
 
 #include "core/dom/StaticRange.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/Element.h"
 #include "core/dom/NodeList.h"
 #include "core/dom/Range.h"
@@ -240,7 +240,7 @@ TEST_F(StaticRangeTest, InvalidToRange) {
   EXPECT_EQ(4, staticRange04->endOffset());
 
   // Invalid StaticRange.
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   staticRange04->toRange(exceptionState);
   EXPECT_TRUE(exceptionState.hadException());
 }

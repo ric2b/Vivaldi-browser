@@ -34,7 +34,7 @@ void RegisterServiceWorkerFinished(int64_t trace_id, bool result) {
 }
 
 void HandleServiceWorkerLink(
-    const net::URLRequest* request,
+    net::URLRequest* request,
     const std::string& url,
     const std::unordered_map<std::string, base::Optional<std::string>>& params,
     ServiceWorkerContextWrapper* service_worker_context_for_testing) {
@@ -50,17 +50,12 @@ void HandleServiceWorkerLink(
   if (ContainsKey(params, "anchor"))
     return;
 
-  const ResourceRequestInfoImpl* request_info =
+  ResourceRequestInfoImpl* request_info =
       ResourceRequestInfoImpl::ForRequest(request);
-  ResourceMessageFilter* filter = request_info->filter();
   ServiceWorkerContext* service_worker_context =
-      filter ? filter->service_worker_context()
-             : service_worker_context_for_testing;
-  if (IsBrowserSideNavigationEnabled() &&
-      ServiceWorkerUtils::IsMainResourceType(request_info->GetResourceType()) &&
-      !service_worker_context) {
-    service_worker_context = request_info->service_worker_context();
-  }
+      service_worker_context_for_testing
+          ? service_worker_context_for_testing
+          : request_info->requester_info()->service_worker_context();
 
   if (!service_worker_context)
     return;
@@ -113,14 +108,10 @@ void HandleServiceWorkerLink(
                                                       &error))
     return;
 
-  int render_process_id = -1;
-  int render_frame_id = -1;
-  ResourceRequestInfo::GetRenderFrameForRequest(request, &render_process_id,
-                                                &render_frame_id);
-
   if (!GetContentClient()->browser()->AllowServiceWorker(
           scope_url, request->first_party_for_cookies(),
-          request_info->GetContext(), render_process_id, render_frame_id))
+          request_info->GetContext(),
+          request_info->GetWebContentsGetterForRequest()))
     return;
 
   static int64_t trace_id = 0;
@@ -133,7 +124,7 @@ void HandleServiceWorkerLink(
 }
 
 void ProcessLinkHeaderValueForRequest(
-    const net::URLRequest* request,
+    net::URLRequest* request,
     std::string::const_iterator value_begin,
     std::string::const_iterator value_end,
     ServiceWorkerContextWrapper* service_worker_context_for_testing) {
@@ -159,7 +150,7 @@ void ProcessLinkHeaderValueForRequest(
 
 }  // namespace
 
-void ProcessRequestForLinkHeaders(const net::URLRequest* request) {
+void ProcessRequestForLinkHeaders(net::URLRequest* request) {
   std::string link_header;
   request->GetResponseHeaderByName("link", &link_header);
   if (link_header.empty())
@@ -169,7 +160,7 @@ void ProcessRequestForLinkHeaders(const net::URLRequest* request) {
 }
 
 void ProcessLinkHeaderForRequest(
-    const net::URLRequest* request,
+    net::URLRequest* request,
     const std::string& link_header,
     ServiceWorkerContextWrapper* service_worker_context_for_testing) {
   for (const auto& value : link_header_util::SplitLinkHeader(link_header)) {

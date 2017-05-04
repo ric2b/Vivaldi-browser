@@ -33,6 +33,7 @@
 #include "core/html/parser/CSSPreloadScanner.h"
 #include "core/html/parser/CompactHTMLToken.h"
 #include "core/html/parser/HTMLToken.h"
+#include "core/html/parser/PreloadRequest.h"
 #include "platform/text/SegmentedString.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/Vector.h"
@@ -44,7 +45,6 @@ typedef size_t TokenPreloadScannerCheckpoint;
 
 class HTMLParserOptions;
 class HTMLTokenizer;
-class ResourcePreloader;
 class SegmentedString;
 
 struct ViewportDescriptionWrapper {
@@ -58,11 +58,11 @@ struct CORE_EXPORT CachedDocumentParameters {
 
  public:
   static std::unique_ptr<CachedDocumentParameters> create(Document* document) {
-    return wrapUnique(new CachedDocumentParameters(document));
+    return WTF::wrapUnique(new CachedDocumentParameters(document));
   }
 
   static std::unique_ptr<CachedDocumentParameters> create() {
-    return wrapUnique(new CachedDocumentParameters);
+    return WTF::wrapUnique(new CachedDocumentParameters);
   }
 
   bool doHtmlPreloadScanning;
@@ -178,17 +178,16 @@ class CORE_EXPORT HTMLPreloadScanner {
       const KURL& documentURL,
       std::unique_ptr<CachedDocumentParameters> documentParameters,
       const MediaValuesCached::MediaValuesCachedData& mediaValuesCachedData) {
-    return wrapUnique(new HTMLPreloadScanner(options, documentURL,
-                                             std::move(documentParameters),
-                                             mediaValuesCachedData));
+    return WTF::wrapUnique(new HTMLPreloadScanner(options, documentURL,
+                                                  std::move(documentParameters),
+                                                  mediaValuesCachedData));
   }
 
   ~HTMLPreloadScanner();
 
   void appendToEnd(const SegmentedString&);
-  void scanAndPreload(ResourcePreloader*,
-                      const KURL& documentBaseElementURL,
-                      ViewportDescriptionWrapper*);
+  PreloadRequestStream scan(const KURL& documentBaseElementURL,
+                            ViewportDescriptionWrapper*);
 
  private:
   HTMLPreloadScanner(const HTMLParserOptions&,

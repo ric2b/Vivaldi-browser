@@ -30,6 +30,7 @@ namespace cc {
 
 class CopyOutputRequest;
 class LayerTreeImpl;
+class RenderSurfaceImpl;
 class ScrollState;
 struct ClipNode;
 struct EffectNode;
@@ -64,13 +65,11 @@ class CC_EXPORT PropertyTree {
   int Insert(const T& tree_node, int parent_id);
 
   T* Node(int i) {
-    // TODO(vollick): remove this.
-    CHECK(i < static_cast<int>(nodes_.size()));
+    DCHECK(i < static_cast<int>(nodes_.size()));
     return i > kInvalidNodeId ? &nodes_[i] : nullptr;
   }
   const T* Node(int i) const {
-    // TODO(vollick): remove this.
-    CHECK(i < static_cast<int>(nodes_.size()));
+    DCHECK(i < static_cast<int>(nodes_.size()));
     return i > kInvalidNodeId ? &nodes_[i] : nullptr;
   }
 
@@ -331,6 +330,14 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
 
   void ResetChangeTracking();
 
+  // A list of pairs of stable id and render surface, sorted by stable id.
+  using StableIdRenderSurfaceList =
+      std::vector<std::pair<int, RenderSurfaceImpl*>>;
+  StableIdRenderSurfaceList CreateStableIdRenderSurfaceList() const;
+  void UpdateRenderSurfaceEffectIds(
+      const StableIdRenderSurfaceList& stable_id_render_surface_list,
+      LayerTreeImpl* layer_tree_impl);
+
  private:
   void UpdateOpacities(EffectNode* node, EffectNode* parent_node);
   void UpdateIsDrawn(EffectNode* node, EffectNode* parent_node);
@@ -354,13 +361,10 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
 
   void clear();
 
-  typedef std::unordered_map<int, scoped_refptr<SyncedScrollOffset>>
-      ScrollOffsetMap;
   typedef std::unordered_map<int, bool> ScrollbarsEnabledMap;
 
   gfx::ScrollOffset MaxScrollOffset(int scroll_node_id) const;
   void OnScrollOffsetAnimated(int layer_id,
-                              int transform_tree_index,
                               int scroll_tree_index,
                               const gfx::ScrollOffset& scroll_offset,
                               LayerTreeImpl* layer_tree_impl);
@@ -373,19 +377,36 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   void set_currently_scrolling_node(int scroll_node_id);
   gfx::Transform ScreenSpaceTransform(int scroll_node_id) const;
 
+  // Returns the current scroll offset. On the main thread this would return the
+  // value for the LayerTree while on the impl thread this is the current value
+  // on the active tree.
   const gfx::ScrollOffset current_scroll_offset(int layer_id) const;
+
+  // Collects deltas for scroll changes on the impl thread that need to be
+  // reported to the main thread during the main frame. As such, should only be
+  // called on the impl thread side PropertyTrees.
   void CollectScrollDeltas(ScrollAndScaleSet* scroll_info,
                            int inner_viewport_layer_id);
-  void UpdateScrollOffsetMap(ScrollOffsetMap* new_scroll_offset_map,
-                             LayerTreeImpl* layer_tree_impl);
-  ScrollOffsetMap& scroll_offset_map();
-  const ScrollOffsetMap& scroll_offset_map() const;
+
+  // Applies deltas sent in the previous main frame onto the impl thread state.
+  // Should only be called on the impl thread side PropertyTrees.
   void ApplySentScrollDeltasFromAbortedCommit();
+
+  // Pushes scroll updates from the ScrollTree on the main thread onto the
+  // impl thread associated state.
+  void PushScrollUpdatesFromMainThread(PropertyTrees* main_property_trees,
+                                       LayerTreeImpl* sync_tree);
+
+  // Pushes scroll updates from the ScrollTree on the pending tree onto the
+  // active tree associated state.
+  void PushScrollUpdatesFromPendingTree(PropertyTrees* pending_property_trees,
+                                        LayerTreeImpl* active_tree);
+
   bool SetBaseScrollOffset(int layer_id,
                            const gfx::ScrollOffset& scroll_offset);
   bool SetScrollOffset(int layer_id, const gfx::ScrollOffset& scroll_offset);
   void SetScrollOffsetClobberActiveValue(int layer_id) {
-    synced_scroll_offset(layer_id)->set_clobber_active_value();
+    GetOrCreateSyncedScrollOffset(layer_id)->set_clobber_active_value();
   }
   bool UpdateScrollOffsetBaseForTesting(int layer_id,
                                         const gfx::ScrollOffset& offset);
@@ -402,17 +423,30 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   gfx::ScrollOffset ClampScrollOffsetToLimits(gfx::ScrollOffset offset,
                                               ScrollNode* scroll_node) const;
 
+  const SyncedScrollOffset* GetSyncedScrollOffset(int layer_id) const;
+
+#if DCHECK_IS_ON()
+  void CopyCompleteTreeState(const ScrollTree& other);
+#endif
+
  private:
+  using ScrollOffsetMap = std::unordered_map<int, gfx::ScrollOffset>;
+  using SyncedScrollOffsetMap =
+      std::unordered_map<int, scoped_refptr<SyncedScrollOffset>>;
+
   int currently_scrolling_node_id_;
-  ScrollOffsetMap layer_id_to_scroll_offset_map_;
   ScrollbarsEnabledMap layer_id_to_scrollbars_enabled_map_;
 
-  SyncedScrollOffset* synced_scroll_offset(int layer_id);
-  const SyncedScrollOffset* synced_scroll_offset(int layer_id) const;
+  // On the main thread we store the scroll offsets directly since the main
+  // thread only needs to keep track of the current main thread state. The impl
+  // thread stores a map of SyncedProperty instances in order to track
+  // additional state necessary to synchronize scroll changes between the main
+  // and impl threads.
+  ScrollOffsetMap layer_id_to_scroll_offset_map_;
+  SyncedScrollOffsetMap layer_id_to_synced_scroll_offset_map_;
+
+  SyncedScrollOffset* GetOrCreateSyncedScrollOffset(int layer_id);
   gfx::ScrollOffset PullDeltaForMainThread(SyncedScrollOffset* scroll_offset);
-  void UpdateScrollOffsetMapEntry(int key,
-                                  ScrollOffsetMap* new_scroll_offset_map,
-                                  LayerTreeImpl* layer_tree_impl);
 };
 
 struct AnimationScaleData {
@@ -496,7 +530,7 @@ struct DrawTransformData {
   // performance.
   DrawTransformData()
       : update_number(-1),
-        target_id(-1),
+        target_id(EffectTree::kInvalidNodeId),
         transforms(gfx::Transform(), gfx::Transform()) {}
 };
 
@@ -518,11 +552,26 @@ class CC_EXPORT PropertyTrees final {
   bool operator==(const PropertyTrees& other) const;
   PropertyTrees& operator=(const PropertyTrees& from);
 
-  std::unordered_map<int, int> transform_id_to_index_map;
-  std::unordered_map<int, int> effect_id_to_index_map;
-  std::unordered_map<int, int> clip_id_to_index_map;
-  std::unordered_map<int, int> scroll_id_to_index_map;
+  // These maps map from layer id to the index for each of the respective
+  // property node types.
+  std::unordered_map<int, int> layer_id_to_transform_node_index;
+  std::unordered_map<int, int> layer_id_to_effect_node_index;
+  std::unordered_map<int, int> layer_id_to_clip_node_index;
+  std::unordered_map<int, int> layer_id_to_scroll_node_index;
   enum TreeType { TRANSFORM, EFFECT, CLIP, SCROLL };
+
+  // These maps allow mapping directly from a compositor element id to the
+  // respective property node. This will eventually allow simplifying logic in
+  // various places that today has to map from element id to layer id, and then
+  // from layer id to the respective property node. Completing that work is
+  // pending the launch of Slimming Paint v2 and reworking UI compositor logic
+  // to produce cc property trees and these maps.
+  std::unordered_map<ElementId, int, ElementIdHash>
+      element_id_to_effect_node_index;
+  std::unordered_map<ElementId, int, ElementIdHash>
+      element_id_to_scroll_node_index;
+  std::unordered_map<ElementId, int, ElementIdHash>
+      element_id_to_transform_node_index;
 
   std::vector<int> always_use_active_tree_opacity_effect_ids;
   TransformTree transform_tree;
@@ -590,10 +639,6 @@ class CC_EXPORT PropertyTrees final {
   gfx::Transform ToScreenSpaceTransformWithoutSurfaceContentsScale(
       int transform_id,
       int effect_id) const;
-
-  bool ComputeTransformFromTarget(int transform_id,
-                                  int effect_id,
-                                  gfx::Transform* transform) const;
 
  private:
   gfx::Vector2dF inner_viewport_container_bounds_delta_;

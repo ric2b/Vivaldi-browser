@@ -48,6 +48,7 @@
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
+#include "content/public/common/resource_type.h"
 #include "extensions/features/features.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
@@ -62,7 +63,7 @@
 #include "net/log/net_log_with_source.h"
 #include "net/url_request/url_request.h"
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/precache/precache_util.h"
 #endif
@@ -82,7 +83,6 @@
 using content::BrowserThread;
 using content::RenderViewHost;
 using content::ResourceRequestInfo;
-using content::ResourceType;
 
 // By default we don't allow access to all file:// urls on ChromeOS and
 // Android.
@@ -154,8 +154,7 @@ ChromeNetworkDelegate::ChromeNetworkDelegate(
       force_google_safe_search_(nullptr),
       force_youtube_restrict_(nullptr),
       allowed_domains_for_apps_(nullptr),
-      url_blacklist_manager_(nullptr),
-      domain_reliability_monitor_(nullptr),
+      url_blacklist_manager_(NULL),
       experimental_web_platform_features_enabled_(
           base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kEnableExperimentalWebPlatformFeatures)),
@@ -371,11 +370,11 @@ void ChromeNetworkDelegate::OnResponseStarted(net::URLRequest* request,
 
 void ChromeNetworkDelegate::OnNetworkBytesReceived(net::URLRequest* request,
                                                    int64_t bytes_received) {
-#if defined(ENABLE_TASK_MANAGER)
+#if !defined(OS_ANDROID)
   // Note: Currently, OnNetworkBytesReceived is only implemented for HTTP jobs,
   // not FTP or other types, so those kinds of bytes will not be reported here.
   task_manager::TaskManagerInterface::OnRawBytesRead(*request, bytes_received);
-#endif  // defined(ENABLE_TASK_MANAGER)
+#endif  // !defined(OS_ANDROID)
 
   ReportDataUsageStats(request, 0 /* tx_bytes */, bytes_received);
 }
@@ -395,9 +394,9 @@ void ChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
   RecordNetworkErrorHistograms(request, net_error);
 
   if (net_error == net::OK) {
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
     precache::UpdatePrecacheMetricsAndState(request, profile_);
-#endif  // BUILDFLAG(ANDROID_JAVA_UI)
+#endif  // defined(OS_ANDROID)
   }
 
   extensions_delegate_->OnCompleted(request, started, net_error);
@@ -552,10 +551,11 @@ bool ChromeNetworkDelegate::OnCanEnablePrivacyMode(
   if (!cookie_settings_.get())
     return false;
 
-  bool reading_cookie_allowed = cookie_settings_->IsReadingCookieAllowed(
-      url, first_party_for_cookies);
-  bool setting_cookie_allowed = cookie_settings_->IsSettingCookieAllowed(
-      url, first_party_for_cookies);
+  bool reading_cookie_allowed = false;
+  bool setting_cookie_allowed = false;
+  cookie_settings_->GetReadingAndSettingCookieAllowed(
+      url, first_party_for_cookies, &reading_cookie_allowed,
+      &setting_cookie_allowed);
   bool privacy_mode = !(reading_cookie_allowed && setting_cookie_allowed);
   return privacy_mode;
 }

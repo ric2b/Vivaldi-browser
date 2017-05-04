@@ -42,7 +42,7 @@ class SnapToLinesLayouter {
   SnapToLinesLayouter(LayoutVTTCue& cueBox, const IntRect& controlsRect)
       : m_cueBox(cueBox), m_controlsRect(controlsRect), m_margin(0.0) {
     if (Settings* settings = m_cueBox.document().settings())
-      m_margin = settings->textTrackMarginPercentage() / 100.0;
+      m_margin = settings->getTextTrackMarginPercentage() / 100.0;
   }
 
   void layout();
@@ -85,7 +85,7 @@ LayoutUnit SnapToLinesLayouter::computeInitialPositionAdjustment(
 
   WritingMode writingMode = m_cueBox.style()->getWritingMode();
   // 8. Vertical Growing Left: Add one to line then negate it.
-  if (writingMode == RightToLeftWritingMode)
+  if (isFlippedBlocksWritingMode(writingMode))
     linePosition = -(linePosition + 1);
 
   // 9. Let position be the result of multiplying step and line offset.
@@ -93,7 +93,7 @@ LayoutUnit SnapToLinesLayouter::computeInitialPositionAdjustment(
 
   // 10. Vertical Growing Left: Decrease position by the width of the
   // bounding box of the boxes in boxes, then increase position by step.
-  if (writingMode == RightToLeftWritingMode) {
+  if (isFlippedBlocksWritingMode(writingMode)) {
     position -= m_cueBox.size().width();
     position += step;
   }

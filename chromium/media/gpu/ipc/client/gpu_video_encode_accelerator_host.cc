@@ -22,6 +22,7 @@ GpuVideoEncodeAcceleratorHost::GpuVideoEncodeAcceleratorHost(
       client_(nullptr),
       impl_(impl),
       next_frame_id_(0),
+      media_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       weak_this_factory_(this) {
   DCHECK(channel_);
   DCHECK(impl_);
@@ -32,6 +33,8 @@ GpuVideoEncodeAcceleratorHost::~GpuVideoEncodeAcceleratorHost() {
   DCHECK(CalledOnValidThread());
   if (channel_ && encoder_route_id_ != MSG_ROUTING_NONE)
     channel_->RemoveRoute(encoder_route_id_);
+
+  base::AutoLock lock(impl_lock_);
   if (impl_)
     impl_->RemoveDeletionObserver(this);
 }
@@ -83,6 +86,8 @@ bool GpuVideoEncodeAcceleratorHost::Initialize(
     Client* client) {
   DCHECK(CalledOnValidThread());
   client_ = client;
+
+  base::AutoLock lock(impl_lock_);
   if (!impl_) {
     DLOG(ERROR) << "impl_ destroyed";
     return false;
@@ -174,11 +179,13 @@ void GpuVideoEncodeAcceleratorHost::Destroy() {
 }
 
 void GpuVideoEncodeAcceleratorHost::OnWillDeleteImpl() {
-  DCHECK(CalledOnValidThread());
+  base::AutoLock lock(impl_lock_);
   impl_ = nullptr;
 
   // The gpu::CommandBufferProxyImpl is going away; error out this VEA.
-  OnChannelError();
+  media_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&GpuVideoEncodeAcceleratorHost::OnChannelError,
+                            weak_this_factory_.GetWeakPtr()));
 }
 
 void GpuVideoEncodeAcceleratorHost::EncodeSharedMemoryFrame(
@@ -220,7 +227,7 @@ void GpuVideoEncodeAcceleratorHost::PostNotifyError(
               << location.file_name() << ":" << location.line_number() << ") "
               << message << " (error = " << error << ")";
   // Post the error notification back to this thread, to avoid re-entrancy.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  media_task_runner_->PostTask(
       FROM_HERE, base::Bind(&GpuVideoEncodeAcceleratorHost::OnNotifyError,
                             weak_this_factory_.GetWeakPtr(), error));
 }
@@ -239,7 +246,7 @@ void GpuVideoEncodeAcceleratorHost::OnRequireBitstreamBuffers(
     const gfx::Size& input_coded_size,
     uint32_t output_buffer_size) {
   DCHECK(CalledOnValidThread());
-  DVLOG(2) << __FUNCTION__ << " input_count=" << input_count
+  DVLOG(2) << __func__ << " input_count=" << input_count
            << ", input_coded_size=" << input_coded_size.ToString()
            << ", output_buffer_size=" << output_buffer_size;
   if (client_) {
@@ -250,7 +257,7 @@ void GpuVideoEncodeAcceleratorHost::OnRequireBitstreamBuffers(
 
 void GpuVideoEncodeAcceleratorHost::OnNotifyInputDone(int32_t frame_id) {
   DCHECK(CalledOnValidThread());
-  DVLOG(3) << __FUNCTION__ << " frame_id=" << frame_id;
+  DVLOG(3) << __func__ << " frame_id=" << frame_id;
   // Fun-fact: std::hash_map is not spec'd to be re-entrant; since freeing a
   // frame can trigger a further encode to be kicked off and thus an .insert()
   // back into the map, we separate the frame's dtor running from the .erase()
@@ -258,7 +265,7 @@ void GpuVideoEncodeAcceleratorHost::OnNotifyInputDone(int32_t frame_id) {
   // theoretical" - Android's std::hash_map crashes if we don't do this.
   scoped_refptr<VideoFrame> frame = frame_map_[frame_id];
   if (!frame_map_.erase(frame_id)) {
-    DLOG(ERROR) << __FUNCTION__ << " invalid frame_id=" << frame_id;
+    DLOG(ERROR) << __func__ << " invalid frame_id=" << frame_id;
     // See OnNotifyError for why this needs to be the last thing in this
     // function.
     OnNotifyError(kPlatformFailureError);
@@ -274,7 +281,7 @@ void GpuVideoEncodeAcceleratorHost::OnBitstreamBufferReady(
     bool key_frame,
     base::TimeDelta timestamp) {
   DCHECK(CalledOnValidThread());
-  DVLOG(3) << __FUNCTION__ << " bitstream_buffer_id=" << bitstream_buffer_id
+  DVLOG(3) << __func__ << " bitstream_buffer_id=" << bitstream_buffer_id
            << ", payload_size=" << payload_size << ", key_frame=" << key_frame;
   if (client_)
     client_->BitstreamBufferReady(bitstream_buffer_id, payload_size, key_frame,
@@ -283,7 +290,7 @@ void GpuVideoEncodeAcceleratorHost::OnBitstreamBufferReady(
 
 void GpuVideoEncodeAcceleratorHost::OnNotifyError(Error error) {
   DCHECK(CalledOnValidThread());
-  DLOG(ERROR) << __FUNCTION__ << " error=" << error;
+  DLOG(ERROR) << __func__ << " error=" << error;
   if (!client_)
     return;
   weak_this_factory_.InvalidateWeakPtrs();

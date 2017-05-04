@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Next MinVersion: 6
+// Next MinVersion: 9
 
 module arc.mojom;
 
@@ -12,7 +12,7 @@ enum ArcSignInFailureReason {
   // Negative values are reserved for internal use.
   // The values are shuffled to keep the backward compatibility and don't match
   // ProvisioningResult in arc_optin_uma.h
-  // Next value: 15.
+  // Next value: 16.
   UNKNOWN_ERROR = 0,
 
   // Mojo errors:
@@ -61,6 +61,9 @@ enum ArcSignInFailureReason {
   CLOUD_PROVISION_FLOW_FAILED = 5,
   CLOUD_PROVISION_FLOW_TIMEOUT = 13,
   CLOUD_PROVISION_FLOW_INTERNAL_ERROR = 14,
+
+  // Network connection is unavailable.
+  [MinVersion=8] NO_NETWORK_CONNECTION = 15,
 };
 
 // These values describe the type of the Chrome account to provision.
@@ -76,6 +79,23 @@ enum ChromeAccountType {
   ROBOT_ACCOUNT = 2,
 };
 
+// These values describe the type of the metrics to report.
+[Extensible]
+enum MetricsType {
+  // Duration of waiting for network connection in milliseconds.
+  NETWORK_WAITING_TIME_MILLISECONDS = 0,
+
+  // Number of attempts to wait for Checkin task completed. 0 indicates that
+  // Checkin task was already completed prior to GMS SignIn.
+  CHECKIN_ATTEMPTS = 1,
+
+  // Duration of waiting for Checkin task completed in milliseconds.
+  CHECKIN_TIME_MILLISECONDS = 2,
+
+  // Duration of waiting for sign-in completed in milliseconds.
+  SIGNIN_TIME_MILLISECONDS = 3,
+};
+
 // The necessary information for Android to sign in and provision itself.
 struct AccountInfo {
   // The authorization code that can be used in Android to sign in. If it is
@@ -89,7 +109,7 @@ struct AccountInfo {
   bool is_managed;
 };
 
-// Next Method ID: 7.
+// Next Method ID: 9.
 interface AuthHost {
   // Notifies Chrome that the sign-in is completed successfully.
   [MinVersion=2] OnSignInComplete@2();
@@ -99,6 +119,9 @@ interface AuthHost {
   // Asynchronously requests an authorization code, as well as the account
   // information.
   [MinVersion=5] RequestAccountInfo@7();
+
+  // Reports metrics to Chrome to be recorded in UMA.
+  [MinVersion=7] ReportMetrics@8(MetricsType metrics_type, int32 value);
 
   // Deprecated methods:
 

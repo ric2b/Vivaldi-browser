@@ -22,6 +22,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -30,6 +31,7 @@
 #include "content/browser/cache_storage/cache_storage_cache_handle.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/cache_storage/cache_storage_manager.h"
+#include "content/browser/memory/memory_coordinator_impl.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
@@ -50,6 +52,7 @@
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -65,7 +68,9 @@
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/test/test_content_browser_client.h"
+#include "net/cert/cert_status_flags.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/http/http_response_info.h"
 #include "net/log/net_log_with_source.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -383,25 +388,29 @@ bool CheckHeader(const base::DictionaryValue& dict,
   return false;
 }
 
+net::HttpResponseInfo CreateHttpResponseInfo() {
+  net::HttpResponseInfo info;
+  const char data[] =
+      "HTTP/1.1 200 OK\0"
+      "Content-Type: application/javascript\0"
+      "\0";
+  info.headers =
+      new net::HttpResponseHeaders(std::string(data, arraysize(data)));
+  return info;
+}
+
 }  // namespace
 
-class ServiceWorkerBrowserTest
-    : public MojoServiceWorkerTestP<ContentBrowserTest> {
+class ServiceWorkerBrowserTest : public ContentBrowserTest {
  protected:
   using self = ServiceWorkerBrowserTest;
 
   void SetUpOnMainThread() override {
-    ASSERT_TRUE(embedded_test_server()->Start());
+    ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
     StoragePartition* partition = BrowserContext::GetDefaultStoragePartition(
         shell()->web_contents()->GetBrowserContext());
     wrapper_ = static_cast<ServiceWorkerContextWrapper*>(
         partition->GetServiceWorkerContext());
-
-    // Navigate to the page to set up a renderer page (where we can embed
-    // a worker).
-    NavigateToURLBlockUntilNavigationsComplete(
-        shell(),
-        embedded_test_server()->GetURL("/service_worker/empty.html"), 1);
 
     RunOnIOThread(base::Bind(&self::SetUpOnIOThread, base::Unretained(this)));
   }
@@ -410,6 +419,20 @@ class ServiceWorkerBrowserTest
     RunOnIOThread(
         base::Bind(&self::TearDownOnIOThread, base::Unretained(this)));
     wrapper_ = NULL;
+  }
+
+  // Starts the test server and navigates the renderer to an empty page. Call
+  // this after adding all request handlers to the test server. Adding handlers
+  // after the test server has started is not allowed.
+  void StartServerAndNavigateToSetup() {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    embedded_test_server()->StartAcceptingConnections();
+
+    // Navigate to the page to set up a renderer page (where we can embed
+    // a worker).
+    NavigateToURLBlockUntilNavigationsComplete(
+        shell(), embedded_test_server()->GetURL("/service_worker/empty.html"),
+        1);
   }
 
   virtual void SetUpOnIOThread() {}
@@ -511,8 +534,6 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
   void ActivateTestHelper(
       const std::string& worker_url,
       ServiceWorkerStatusCode expected_status) {
-    RunOnIOThread(base::Bind(&self::SetUpRegistrationOnIOThread,
-                             base::Unretained(this), worker_url));
     ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;
     base::RunLoop run_loop;
     BrowserThread::PostTask(
@@ -685,6 +706,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
   void StartOnIOThread(const base::Closure& done,
                        ServiceWorkerStatusCode* result) {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
+    version_->SetMainScriptHttpResponseInfo(CreateHttpResponseInfo());
     version_->StartWorker(ServiceWorkerMetrics::EventType::UNKNOWN,
                           CreateReceiver(BrowserThread::UI, done, result));
   }
@@ -751,8 +773,6 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
   void ActivateOnIOThread(const base::Closure& done,
                           ServiceWorkerStatusCode* result) {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
-    version_->set_fetch_handler_existence(
-        ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
     version_->SetStatus(ServiceWorkerVersion::ACTIVATING);
     registration_->SetActiveVersion(version_.get());
     version_->RunAfterStartWorker(
@@ -783,7 +803,8 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
     version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
     fetch_dispatcher_.reset(new ServiceWorkerFetchDispatcher(
         std::move(request), version_.get(), RESOURCE_TYPE_MAIN_FRAME,
-        net::NetLogWithSource(), CreatePrepareReceiver(prepare_result),
+        base::nullopt, net::NetLogWithSource(),
+        CreatePrepareReceiver(prepare_result),
         CreateResponseReceiver(done, blob_context_.get(), result)));
     fetch_dispatcher_->Run();
   }
@@ -836,7 +857,8 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
   std::unique_ptr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
 };
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, StartAndStop) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, StartAndStop) {
+  StartServerAndNavigateToSetup();
   RunOnIOThread(base::Bind(&self::SetUpRegistrationOnIOThread,
                            base::Unretained(this),
                            "/service_worker/worker.js"));
@@ -862,7 +884,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, StartAndStop) {
   ASSERT_EQ(SERVICE_WORKER_OK, status);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, StartNotFound) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, StartNotFound) {
+  StartServerAndNavigateToSetup();
   RunOnIOThread(base::Bind(&self::SetUpRegistrationOnIOThread,
                            base::Unretained(this),
                            "/service_worker/nonexistent.js"));
@@ -871,7 +894,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, StartNotFound) {
   StartWorker(SERVICE_WORKER_ERROR_NETWORK);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, ReadResourceFailure) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, ReadResourceFailure) {
+  StartServerAndNavigateToSetup();
   // Create a registration.
   RunOnIOThread(base::Bind(&self::SetUpRegistrationOnIOThread,
                            base::Unretained(this),
@@ -902,20 +926,12 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, ReadResourceFailure) {
                         SERVICE_WORKER_ERROR_NOT_FOUND);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
                        ReadResourceFailure_WaitingWorker) {
+  StartServerAndNavigateToSetup();
   // Create a registration and active version.
-  RunOnIOThread(base::Bind(&self::SetUpRegistrationOnIOThread,
-                           base::Unretained(this),
-                           "/service_worker/worker.js"));
-  base::RunLoop activate_run_loop;
-  ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&self::ActivateOnIOThread, base::Unretained(this),
-                 activate_run_loop.QuitClosure(), &status));
-  activate_run_loop.Run();
-  EXPECT_EQ(SERVICE_WORKER_OK, status);
+  InstallTestHelper("/service_worker/worker.js", SERVICE_WORKER_OK);
+  ActivateTestHelper("/service_worker/worker.js", SERVICE_WORKER_OK);
   ASSERT_TRUE(registration_->active_version());
 
   // Give the version a controllee.
@@ -923,15 +939,15 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
       base::Bind(&self::AddControlleeOnIOThread, base::Unretained(this)));
 
   // Add a non-existent resource to the version.
-  std::vector<ServiceWorkerDatabase::ResourceRecord> records;
-  records.push_back(
-      ServiceWorkerDatabase::ResourceRecord(30, version_->script_url(), 100));
-  version_->script_cache_map()->SetResources(records);
+  version_->script_cache_map()->resource_map_[version_->script_url()] =
+      ServiceWorkerDatabase::ResourceRecord(30, version_->script_url(), 100);
 
   // Make a waiting version and store it.
   RunOnIOThread(base::Bind(&self::AddWaitingWorkerOnIOThread,
                            base::Unretained(this),
                            "/service_worker/worker.js"));
+  std::vector<ServiceWorkerDatabase::ResourceRecord> records = {
+      ServiceWorkerDatabase::ResourceRecord(31, version_->script_url(), 100)};
   registration_->waiting_version()->script_cache_map()->SetResources(records);
   StoreRegistration(registration_->waiting_version()->version_id(),
                     SERVICE_WORKER_OK);
@@ -951,25 +967,29 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
                         SERVICE_WORKER_OK);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, Install) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, Install) {
+  StartServerAndNavigateToSetup();
   InstallTestHelper("/service_worker/worker.js", SERVICE_WORKER_OK);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
                        InstallWithWaitUntil_Fulfilled) {
+  StartServerAndNavigateToSetup();
   InstallTestHelper("/service_worker/worker_install_fulfilled.js",
                     SERVICE_WORKER_OK);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
                        InstallWithFetchHandler) {
+  StartServerAndNavigateToSetup();
   InstallTestHelper("/service_worker/fetch_event.js", SERVICE_WORKER_OK);
   EXPECT_EQ(ServiceWorkerVersion::FetchHandlerExistence::EXISTS,
             version_->fetch_handler_existence());
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
                        InstallWithoutFetchHandler) {
+  StartServerAndNavigateToSetup();
   InstallTestHelper("/service_worker/worker.js", SERVICE_WORKER_OK);
   EXPECT_EQ(ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST,
             version_->fetch_handler_existence());
@@ -977,32 +997,40 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
 
 // Check that ServiceWorker script requests set a "Service-Worker: script"
 // header.
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
                        ServiceWorkerScriptHeader) {
   embedded_test_server()->RegisterRequestHandler(
       base::Bind(&VerifyServiceWorkerHeaderInRequest));
+  StartServerAndNavigateToSetup();
   InstallTestHelper("/service_worker/generated_sw.js", SERVICE_WORKER_OK);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
                        Activate_NoEventListener) {
+  StartServerAndNavigateToSetup();
+  InstallTestHelper("/service_worker/worker.js", SERVICE_WORKER_OK);
   ActivateTestHelper("/service_worker/worker.js", SERVICE_WORKER_OK);
   ASSERT_EQ(ServiceWorkerVersion::ACTIVATING, version_->status());
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, Activate_Rejected) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, Activate_Rejected) {
+  StartServerAndNavigateToSetup();
+  InstallTestHelper("/service_worker/worker_activate_rejected.js",
+                    SERVICE_WORKER_OK);
   ActivateTestHelper("/service_worker/worker_activate_rejected.js",
                      SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
                        InstallWithWaitUntil_Rejected) {
+  StartServerAndNavigateToSetup();
   InstallTestHelper("/service_worker/worker_install_rejected.js",
                     SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
                        InstallWithWaitUntil_RejectConsoleMessage) {
+  StartServerAndNavigateToSetup();
   RunOnIOThread(base::Bind(&self::SetUpRegistrationOnIOThread,
                            base::Unretained(this),
                            "/service_worker/worker_install_rejected.js"));
@@ -1046,7 +1074,8 @@ class WaitForLoaded : public EmbeddedWorkerInstance::Listener {
   base::Closure quit_;
 };
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, TimeoutStartingWorker) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, TimeoutStartingWorker) {
+  StartServerAndNavigateToSetup();
   RunOnIOThread(base::Bind(&self::SetUpRegistrationOnIOThread,
                            base::Unretained(this),
                            "/service_worker/while_true_worker.js"));
@@ -1083,7 +1112,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, TimeoutStartingWorker) {
   EXPECT_EQ(SERVICE_WORKER_ERROR_TIMEOUT, status);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, TimeoutWorkerInEvent) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, TimeoutWorkerInEvent) {
+  StartServerAndNavigateToSetup();
   RunOnIOThread(base::Bind(&self::SetUpRegistrationOnIOThread,
                            base::Unretained(this),
                            "/service_worker/while_true_in_install_worker.js"));
@@ -1118,10 +1148,12 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, TimeoutWorkerInEvent) {
   EXPECT_EQ(SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED, status);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, FetchEvent_Response) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, FetchEvent_Response) {
+  StartServerAndNavigateToSetup();
   ServiceWorkerFetchEventResult result;
   ServiceWorkerResponse response;
   std::unique_ptr<storage::BlobDataHandle> blob_data_handle;
+  InstallTestHelper("/service_worker/fetch_event.js", SERVICE_WORKER_OK);
   ActivateTestHelper("/service_worker/fetch_event.js", SERVICE_WORKER_OK);
 
   FetchOnRegisteredWorker(&result, &response, &blob_data_handle);
@@ -1140,13 +1172,16 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, FetchEvent_Response) {
   EXPECT_EQ("This resource is gone. Gone, gone, gone.", body);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
                        FetchEvent_ResponseViaCache) {
+  StartServerAndNavigateToSetup();
   ServiceWorkerFetchEventResult result;
   ServiceWorkerResponse response1;
   ServiceWorkerResponse response2;
   std::unique_ptr<storage::BlobDataHandle> blob_data_handle;
   const base::Time start_time(base::Time::Now());
+  InstallTestHelper("/service_worker/fetch_event_response_via_cache.js",
+                    SERVICE_WORKER_OK);
   ActivateTestHelper("/service_worker/fetch_event_response_via_cache.js",
                      SERVICE_WORKER_OK);
 
@@ -1167,11 +1202,14 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
   EXPECT_EQ("cache_name", response2.cache_storage_cache_name);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
                        FetchEvent_respondWithRejection) {
+  StartServerAndNavigateToSetup();
   ServiceWorkerFetchEventResult result;
   ServiceWorkerResponse response;
   std::unique_ptr<storage::BlobDataHandle> blob_data_handle;
+  InstallTestHelper("/service_worker/fetch_event_rejected.js",
+                    SERVICE_WORKER_OK);
   ActivateTestHelper("/service_worker/fetch_event_rejected.js",
                      SERVICE_WORKER_OK);
 
@@ -1222,9 +1260,10 @@ class MockContentBrowserClient : public TestContentBrowserClient {
   bool data_saver_enabled_;
 };
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, FetchWithSaveData) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, FetchWithSaveData) {
   embedded_test_server()->RegisterRequestHandler(
       base::Bind(&VerifySaveDataHeaderInRequest));
+  StartServerAndNavigateToSetup();
   MockContentBrowserClient content_browser_client;
   content_browser_client.set_data_saver_enabled(true);
   ContentBrowserClient* old_client =
@@ -1233,10 +1272,11 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, FetchWithSaveData) {
   SetBrowserClientForTesting(old_client);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
                        RequestWorkerScriptWithSaveData) {
   embedded_test_server()->RegisterRequestHandler(
       base::Bind(&VerifySaveDataHeaderInRequest));
+  StartServerAndNavigateToSetup();
   MockContentBrowserClient content_browser_client;
   content_browser_client.set_data_saver_enabled(true);
   ContentBrowserClient* old_client =
@@ -1245,9 +1285,10 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest,
   SetBrowserClientForTesting(old_client);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, FetchWithoutSaveData) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, FetchWithoutSaveData) {
   embedded_test_server()->RegisterRequestHandler(
       base::Bind(&VerifySaveDataHeaderNotInRequest));
+  StartServerAndNavigateToSetup();
   MockContentBrowserClient content_browser_client;
   ContentBrowserClient* old_client =
       SetBrowserClientForTesting(&content_browser_client);
@@ -1255,7 +1296,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserTest, FetchWithoutSaveData) {
   SetBrowserClientForTesting(old_client);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest, FetchPageWithSaveData) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, FetchPageWithSaveData) {
+  StartServerAndNavigateToSetup();
   const char kPageUrl[] = "/service_worker/handle_fetch.html";
   const char kWorkerUrl[] = "/service_worker/add_save_data_to_title.js";
   MockContentBrowserClient content_browser_client;
@@ -1290,7 +1332,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest, FetchPageWithSaveData) {
 // Tests that when data saver is enabled and a cross-origin fetch by a webpage
 // is intercepted by a serviceworker, and the serviceworker does a fetch, the
 // preflight request does not have save-data in Access-Control-Request-Headers.
-IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest, CrossOriginFetchWithSaveData) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, CrossOriginFetchWithSaveData) {
+  StartServerAndNavigateToSetup();
   const char kPageUrl[] = "/service_worker/fetch_cross_origin.html";
   const char kWorkerUrl[] = "/service_worker/fetch_event_pass_through.js";
   net::EmbeddedTestServer cross_origin_server;
@@ -1333,7 +1376,7 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest, CrossOriginFetchWithSaveData) {
   run_loop.Run();
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
                        FetchPageWithSaveDataPassThroughOnFetch) {
   const char kPageUrl[] = "/service_worker/pass_through_fetch.html";
   const char kWorkerUrl[] = "/service_worker/fetch_event_pass_through.js";
@@ -1345,14 +1388,16 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest,
   scoped_refptr<WorkerActivatedObserver> observer =
       new WorkerActivatedObserver(wrapper());
   observer->Init();
+
+  embedded_test_server()->RegisterRequestHandler(
+      base::Bind(&VerifySaveDataHeaderInRequest));
+  StartServerAndNavigateToSetup();
+
   public_context()->RegisterServiceWorker(
       embedded_test_server()->GetURL(kPageUrl),
       embedded_test_server()->GetURL(kWorkerUrl),
       base::Bind(&ExpectResultAndRun, true, base::Bind(&base::DoNothing)));
   observer->Wait();
-
-  embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&VerifySaveDataHeaderInRequest));
 
   NavigateToURLBlockUntilNavigationsComplete(
       shell(), embedded_test_server()->GetURL(kPageUrl), 1);
@@ -1367,7 +1412,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest,
   run_loop.Run();
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest, Reload) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, Reload) {
+  StartServerAndNavigateToSetup();
   const char kPageUrl[] = "/service_worker/reload.html";
   const char kWorkerUrl[] = "/service_worker/fetch_event_reload.js";
   scoped_refptr<WorkerActivatedObserver> observer =
@@ -1432,16 +1478,29 @@ class ServiceWorkerNavigationPreloadTest : public ServiceWorkerBrowserTest {
     return request.headers.find(kNavigationPreloadHeaderName)->second;
   }
 
+  static void CancellingInterceptorCallback(
+      const std::string& header,
+      const std::string& value,
+      int child_process_id,
+      content::ResourceContext* resource_context,
+      OnHeaderProcessedCallback callback) {
+    DCHECK_EQ(kNavigationPreloadHeaderName, header);
+    callback.Run(false, 0);
+  }
+
   void SetupForNavigationPreloadTest(const GURL& scope,
                                      const GURL& worker_url) {
     scoped_refptr<WorkerActivatedObserver> observer =
         new WorkerActivatedObserver(wrapper());
     observer->Init();
+
     public_context()->RegisterServiceWorker(
         scope, worker_url,
         base::Bind(&ExpectResultAndRun, true, base::Bind(&base::DoNothing)));
     observer->Wait();
+  }
 
+  void RegisterMonitorRequestHandler() {
     embedded_test_server()->RegisterRequestMonitor(
         base::Bind(&self::MonitorRequestHandler, base::Unretained(this)));
   }
@@ -1561,7 +1620,7 @@ const std::string
 
 const std::string
     ServiceWorkerNavigationPreloadTest::kEnableNavigationPreloadScript(
-        "self.addEventListener('install', event => {\n"
+        "self.addEventListener('activate', event => {\n"
         "    event.waitUntil(self.registration.navigationPreload.enable());\n"
         "  });\n");
 
@@ -1612,7 +1671,7 @@ const std::string
         "            result => event.source.postMessage(result)));\n"
         "  });";
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, NetworkFallback) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest, NetworkFallback) {
   const char kPageUrl[] = "/service_worker/navigation_preload.html";
   const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
   const char kPage[] = "<title>PASS</title>Hello world.";
@@ -1625,6 +1684,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, NetworkFallback) {
   RegisterStaticFile(kPageUrl, kPage, "text/html");
   RegisterStaticFile(kWorkerUrl, kScript, "text/javascript");
 
+  RegisterMonitorRequestHandler();
+  StartServerAndNavigateToSetup();
   SetupForNavigationPreloadTest(page_url, worker_url);
 
   const base::string16 title = base::ASCIIToUTF16("PASS");
@@ -1651,7 +1712,7 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, NetworkFallback) {
   }
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, SetHeaderValue) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest, SetHeaderValue) {
   const std::string kPageUrl = "/service_worker/navigation_preload.html";
   const std::string kWorkerUrl = "/service_worker/navigation_preload.js";
   const std::string kPage = "<title>FROM_SERVER</title>";
@@ -1686,6 +1747,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, SetHeaderValue) {
   RegisterStaticFile(kPageUrl, kPage, "text/html");
   RegisterStaticFile(kWorkerUrl, kScript, "text/javascript");
 
+  RegisterMonitorRequestHandler();
+  StartServerAndNavigateToSetup();
   SetupForNavigationPreloadTest(page_url, worker_url);
 
   const std::string kPageUrl1 = kPageUrl + "?enable";
@@ -1695,7 +1758,7 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, SetHeaderValue) {
   NavigateToURL(shell(), embedded_test_server()->GetURL(kPageUrl1));
   EXPECT_EQ(title1, title_watcher1.WaitAndGetTitle());
   // When the navigation started, the navigation preload was not enabled yet.
-  EXPECT_EQ("null", GetTextContent());
+  EXPECT_EQ("undefined", GetTextContent());
   ASSERT_EQ(0, GetRequestCount(kPageUrl1));
 
   const std::string kPageUrl2 = kPageUrl + "?change";
@@ -1730,11 +1793,11 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, SetHeaderValue) {
   NavigateToURL(shell(), embedded_test_server()->GetURL(kPageUrl4));
   EXPECT_EQ(title4, title_watcher4.WaitAndGetTitle());
   // When the navigation started, the navigation preload must be disabled.
-  EXPECT_EQ("null", GetTextContent());
+  EXPECT_EQ("undefined", GetTextContent());
   ASSERT_EQ(0, GetRequestCount(kPageUrl4));
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest,
                        RespondWithNavigationPreload) {
   const char kPageUrl[] = "/service_worker/navigation_preload.html";
   const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
@@ -1755,6 +1818,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
   RegisterStaticFile(kPageUrl, kPage, "text/html");
   RegisterStaticFile(kWorkerUrl, kScript, "text/javascript");
 
+  RegisterMonitorRequestHandler();
+  StartServerAndNavigateToSetup();
   SetupForNavigationPreloadTest(page_url, worker_url);
 
   const base::string16 title = base::ASCIIToUTF16("PASS");
@@ -1771,7 +1836,7 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
             request_log_[kPageUrl][0].headers[kNavigationPreloadHeaderName]);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, GetResponseText) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest, GetResponseText) {
   const char kPageUrl[] = "/service_worker/navigation_preload.html";
   const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
   const char kPage[] = "<title>PASS</title>Hello world.";
@@ -1791,6 +1856,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, GetResponseText) {
   RegisterStaticFile(kPageUrl, kPage, "text/html");
   RegisterStaticFile(kWorkerUrl, kScript, "text/javascript");
 
+  RegisterMonitorRequestHandler();
+  StartServerAndNavigateToSetup();
   SetupForNavigationPreloadTest(page_url, worker_url);
 
   const base::string16 title = base::ASCIIToUTF16("PASS");
@@ -1804,65 +1871,7 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, GetResponseText) {
   EXPECT_EQ(1, GetRequestCount(kPageUrl));
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
-                       AbortPreloadRequest) {
-  const char kPageUrl[] = "/service_worker/navigation_preload.html";
-  const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
-  const char kPage[] = "<title>ERROR</title>Hello world.";
-  // In this script, event.preloadResponse is not guarded by event.waitUntil.
-  // So the preload request should be canceled, when the fetch event handler
-  // has been executed.
-  const std::string kScript =
-      kEnableNavigationPreloadScript +
-      "var preload_resolve;\n"
-      "var preload_promise = new Promise(r => { preload_resolve = r; });\n"
-      "self.addEventListener('fetch', event => {\n"
-      "    event.preloadResponse.then(\n"
-      "        _ => { preload_resolve({result: 'RESOLVED',\n"
-      "                                info: 'Preload resolved.'}); },\n"
-      "        e => { preload_resolve({result: 'REJECTED',\n"
-      "                                info: e.toString()}); });\n"
-      "    event.respondWith(\n"
-      "        new Response(\n"
-      "            '<title>WAITING</title><script>\\n' +\n"
-      "            'navigator.serviceWorker.onmessage = e => {\\n' +\n"
-      "            '    var div = document.createElement(\\'div\\');\\n' +\n"
-      "            '    div.appendChild(' +\n"
-      "            '        document.createTextNode(e.data.info));\\n' +\n"
-      "            '    document.body.appendChild(div);\\n' +\n"
-      "            '    document.title = e.data.result;\\n' +\n"
-      "            '  };\\n' +\n"
-      "            'navigator.serviceWorker.controller.postMessage(\\n' +\n"
-      "            '    null);\\n' +\n"
-      "            '</script>',"
-      "            {headers: [['content-type', 'text/html']]}));\n"
-      "  });\n"
-      "self.addEventListener('message', event => {\n"
-      "    event.waitUntil(\n"
-      "        preload_promise.then(\n"
-      "            result => event.source.postMessage(result)));\n"
-      "  });";
-  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
-  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
-  RegisterStaticFile(kPageUrl, kPage, "text/html");
-  RegisterStaticFile(kWorkerUrl, kScript, "text/javascript");
-
-  SetupForNavigationPreloadTest(page_url, worker_url);
-
-  const base::string16 title = base::ASCIIToUTF16("REJECTED");
-  TitleWatcher title_watcher(shell()->web_contents(), title);
-  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("RESOLVED"));
-  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("ERROR"));
-  NavigateToURL(shell(), page_url);
-  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
-
-  EXPECT_EQ(
-      "AbortError: Service Worker navigation preload aborted. Need to guard "
-      "with respondWith or waitUntil.",
-      GetTextContent());
-}
-
-IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, NetworkError) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest, NetworkError) {
   const char kPageUrl[] = "/service_worker/navigation_preload.html";
   const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
   const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
@@ -1871,6 +1880,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, NetworkError) {
       kWorkerUrl, kEnableNavigationPreloadScript + kPreloadResponseTestScript,
       "text/javascript");
 
+  RegisterMonitorRequestHandler();
+  StartServerAndNavigateToSetup();
   SetupForNavigationPreloadTest(page_url, worker_url);
 
   EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
@@ -1884,7 +1895,34 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, NetworkError) {
             GetTextContent());
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest,
+                       CanceledByInterceptor) {
+  content::ResourceDispatcherHost::Get()->RegisterInterceptor(
+      kNavigationPreloadHeaderName, "",
+      base::Bind(&CancellingInterceptorCallback));
+
+  const char kPageUrl[] = "/service_worker/navigation_preload.html";
+  const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
+  const GURL page_url = embedded_test_server()->GetURL(kPageUrl);
+  const GURL worker_url = embedded_test_server()->GetURL(kWorkerUrl);
+  RegisterStaticFile(
+      kWorkerUrl, kEnableNavigationPreloadScript + kPreloadResponseTestScript,
+      "text/javascript");
+
+  RegisterMonitorRequestHandler();
+  StartServerAndNavigateToSetup();
+  SetupForNavigationPreloadTest(page_url, worker_url);
+
+  const base::string16 title = base::ASCIIToUTF16("REJECTED");
+  TitleWatcher title_watcher(shell()->web_contents(), title);
+  title_watcher.AlsoWaitForTitle(base::ASCIIToUTF16("RESOLVED"));
+  NavigateToURL(shell(), page_url);
+  EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
+  EXPECT_EQ("NetworkError: Service Worker navigation preload network error.",
+            GetTextContent());
+}
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest,
                        PreloadHeadersSimple) {
   const char kPageUrl[] = "/service_worker/navigation_preload.html";
   const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
@@ -1896,6 +1934,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
       kWorkerUrl, kEnableNavigationPreloadScript + kPreloadResponseTestScript,
       "text/javascript");
 
+  RegisterMonitorRequestHandler();
+  StartServerAndNavigateToSetup();
   SetupForNavigationPreloadTest(page_url, worker_url);
 
   const base::string16 title = base::ASCIIToUTF16("RESOLVED");
@@ -1922,7 +1962,7 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
                           base::IntToString(sizeof(kPage) - 1)));
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, NotEnabled) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest, NotEnabled) {
   const char kPageUrl[] = "/service_worker/navigation_preload.html";
   const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
   const char kPage[] = "<title>ERROR</title>Hello world.";
@@ -1931,6 +1971,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, NotEnabled) {
   RegisterStaticFile(kPageUrl, kPage, "text/html");
   RegisterStaticFile(kWorkerUrl, kPreloadResponseTestScript, "text/javascript");
 
+  RegisterMonitorRequestHandler();
+  StartServerAndNavigateToSetup();
   SetupForNavigationPreloadTest(page_url, worker_url);
 
   const base::string16 title = base::ASCIIToUTF16("RESOLVED");
@@ -1943,10 +1985,10 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, NotEnabled) {
   // The page request must not be sent, since the worker responded with a
   // generated Response and the navigation preload isn't enabled.
   EXPECT_EQ(0, GetRequestCount(kPageUrl));
-  EXPECT_EQ("Resolved with null.", GetTextContent());
+  EXPECT_EQ("Resolved with undefined.", GetTextContent());
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest,
                        PreloadHeadersCustom) {
   const char kPageUrl[] = "/service_worker/navigation_preload.html";
   const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
@@ -1968,6 +2010,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
       kWorkerUrl, kEnableNavigationPreloadScript + kPreloadResponseTestScript,
       "text/javascript");
 
+  RegisterMonitorRequestHandler();
+  StartServerAndNavigateToSetup();
   SetupForNavigationPreloadTest(page_url, worker_url);
 
   const base::string16 title = base::ASCIIToUTF16("RESOLVED");
@@ -1997,7 +2041,7 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
   EXPECT_FALSE(dict->HasKey("set-cookie2"));
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, RejectRedirects) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest, RejectRedirects) {
   const char kPageUrl[] = "/service_worker/navigation_preload.html";
   const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
   const char kRedirectedPageUrl[] =
@@ -2018,6 +2062,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, RejectRedirects) {
       "text/javascript");
   RegisterStaticFile(kRedirectedPageUrl, kRedirectedPage, "text/html");
 
+  RegisterMonitorRequestHandler();
+  StartServerAndNavigateToSetup();
   SetupForNavigationPreloadTest(page_url, worker_url);
 
   const base::string16 title = base::ASCIIToUTF16("REJECTED");
@@ -2039,7 +2085,7 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest, RejectRedirects) {
 
 // Tests responding with the navigation preload response when the navigation
 // occurred after a redirect.
-IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest,
                        RedirectAndRespondWithNavigationPreload) {
   const std::string kPageUrl = "/service_worker/navigation_preload.html";
   const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
@@ -2065,6 +2111,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
   RegisterKeepSearchRedirect(kRedirectPageUrl, page_url.spec());
   RegisterKeepSearchRedirect(kInScopeRedirectPageUrl, page_url.spec());
 
+  RegisterMonitorRequestHandler();
+  StartServerAndNavigateToSetup();
   SetupForNavigationPreloadTest(
       embedded_test_server()->GetURL("/service_worker/"), worker_url);
 
@@ -2107,7 +2155,7 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
 // OnReceiveResponse(). This behavior is caused by MimeSniffingResourceHandler.
 // This test checks that even if the MimeSniffingResourceHandler is triggered
 // navigation preload must be handled correctly.
-IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest,
                        RespondWithNavigationPreloadWithMimeSniffing) {
   const char kPageUrl[] = "/service_worker/navigation_preload.html";
   const char kWorkerUrl[] = "/service_worker/navigation_preload.js";
@@ -2123,6 +2171,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
   RegisterStaticFile(kPageUrl, kPage, "");
   RegisterStaticFile(kWorkerUrl, kScript, "text/javascript");
 
+  RegisterMonitorRequestHandler();
+  StartServerAndNavigateToSetup();
   SetupForNavigationPreloadTest(page_url, worker_url);
 
   const base::string16 title = base::ASCIIToUTF16("PASS");
@@ -2142,8 +2192,9 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerNavigationPreloadTest,
 #else
 #define MAYBE_ResponseFromHTTPSServiceWorkerIsMarkedAsSecure ResponseFromHTTPSServiceWorkerIsMarkedAsSecure
 #endif
-IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
                        MAYBE_ResponseFromHTTPSServiceWorkerIsMarkedAsSecure) {
+  StartServerAndNavigateToSetup();
   const char kPageUrl[] = "/service_worker/fetch_event_blob.html";
   const char kWorkerUrl[] = "/service_worker/fetch_event_blob.js";
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
@@ -2170,7 +2221,7 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest,
                   SSLStatus::DISPLAYED_INSECURE_CONTENT));
   EXPECT_TRUE(
       https_server.GetCertificate()->Equals(entry->GetSSL().certificate.get()));
-  EXPECT_EQ(0u, entry->GetSSL().cert_status & net::CERT_STATUS_ALL_ERRORS);
+  EXPECT_FALSE(net::IsCertStatusError(entry->GetSSL().cert_status));
 
   shell()->Close();
 
@@ -2181,8 +2232,9 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest,
   run_loop.Run();
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
                        ResponseFromHTTPServiceWorkerIsNotMarkedAsSecure) {
+  StartServerAndNavigateToSetup();
   const char kPageUrl[] = "/service_worker/fetch_event_blob.html";
   const char kWorkerUrl[] = "/service_worker/fetch_event_blob.js";
   scoped_refptr<WorkerActivatedObserver> observer =
@@ -2214,7 +2266,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest,
   run_loop.Run();
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest, ImportsBustMemcache) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, ImportsBustMemcache) {
+  StartServerAndNavigateToSetup();
   const char kScopeUrl[] = "/service_worker/imports_bust_memcache_scope/";
   const char kPageUrl[] = "/service_worker/imports_bust_memcache.html";
   const char kScriptUrl[] = "/service_worker/worker_with_one_import.js";
@@ -2279,7 +2332,8 @@ static int CountRenderProcessHosts() {
   return result;
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerBlackBoxBrowserTest, Registration) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBlackBoxBrowserTest, Registration) {
+  StartServerAndNavigateToSetup();
   // Close the only window to be sure we're not re-using its RenderProcessHost.
   shell()->Close();
   EXPECT_EQ(0, CountRenderProcessHosts());
@@ -2361,7 +2415,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerBlackBoxBrowserTest, Registration) {
 #else
 #define MAYBE_CrossSiteTransfer CrossSiteTransfer
 #endif
-IN_PROC_BROWSER_TEST_P(ServiceWorkerBrowserTest, MAYBE_CrossSiteTransfer) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, MAYBE_CrossSiteTransfer) {
+  StartServerAndNavigateToSetup();
   // The first page registers a service worker.
   const char kRegisterPageUrl[] = "/service_worker/cross_site_xfer.html";
   const base::string16 kOKTitle1(base::ASCIIToUTF16("OK_1"));
@@ -2415,7 +2470,8 @@ class ServiceWorkerVersionBrowserV8CacheTest
   base::Closure cache_updated_closure_;
 };
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserV8CacheTest, Restart) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserV8CacheTest, Restart) {
+  StartServerAndNavigateToSetup();
   RunOnIOThread(base::Bind(&self::SetUpRegistrationAndListenerOnIOThread,
                            base::Unretained(this),
                            "/service_worker/worker.js"));
@@ -2430,15 +2486,6 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerVersionBrowserV8CacheTest, Restart) {
   // OnCachedMetadataUpdated() is called.
   cached_metadata_run_loop.Run();
 
-  // Activate the worker.
-  ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;
-  base::RunLoop activate_run_loop;
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&self::ActivateOnIOThread, base::Unretained(this),
-                 activate_run_loop.QuitClosure(), &status));
-  activate_run_loop.Run();
-  ASSERT_EQ(SERVICE_WORKER_OK, status);
   // Stop the worker.
   StopWorker(SERVICE_WORKER_OK);
   // Restart the worker.
@@ -2570,6 +2617,11 @@ class ServiceWorkerV8CacheStrategiesTest : public ServiceWorkerBrowserTest {
   ServiceWorkerV8CacheStrategiesTest() {}
   ~ServiceWorkerV8CacheStrategiesTest() override {}
 
+  void SetUpOnMainThread() override {
+    ServiceWorkerBrowserTest::SetUpOnMainThread();
+    StartServerAndNavigateToSetup();
+  }
+
  protected:
   void CheckStrategyIsNone() {
     RegisterAndActivateServiceWorker();
@@ -2682,7 +2734,7 @@ const std::string ServiceWorkerV8CacheStrategiesTest::kScriptUrl =
 const int ServiceWorkerV8CacheStrategiesTest::kV8CacheTimeStampDataSize =
     sizeof(unsigned) + sizeof(double);
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerV8CacheStrategiesTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerV8CacheStrategiesTest,
                        V8CacheOnCacheStorage) {
   // The strategy is "aggressive" on default.
   CheckStrategyIsAggressive();
@@ -2702,7 +2754,7 @@ class ServiceWorkerV8CacheStrategiesNoneTest
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerV8CacheStrategiesNoneTest);
 };
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerV8CacheStrategiesNoneTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerV8CacheStrategiesNoneTest,
                        V8CacheOnCacheStorage) {
   CheckStrategyIsNone();
 }
@@ -2721,7 +2773,7 @@ class ServiceWorkerV8CacheStrategiesNormalTest
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerV8CacheStrategiesNormalTest);
 };
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerV8CacheStrategiesNormalTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerV8CacheStrategiesNormalTest,
                        V8CacheOnCacheStorage) {
   CheckStrategyIsNormal();
 }
@@ -2740,7 +2792,7 @@ class ServiceWorkerV8CacheStrategiesAggressiveTest
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerV8CacheStrategiesAggressiveTest);
 };
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerV8CacheStrategiesAggressiveTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerV8CacheStrategiesAggressiveTest,
                        V8CacheOnCacheStorage) {
   CheckStrategyIsAggressive();
 }
@@ -2791,21 +2843,24 @@ class ServiceWorkerDisableWebSecurityTest : public ServiceWorkerBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerDisableWebSecurityTest);
 };
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerDisableWebSecurityTest,
+IN_PROC_BROWSER_TEST_F(ServiceWorkerDisableWebSecurityTest,
                        GetRegistrationNoCrash) {
+  StartServerAndNavigateToSetup();
   const char kPageUrl[] =
       "/service_worker/disable_web_security_get_registration.html";
   const char kScopeUrl[] = "/service_worker/";
   RunTestWithCrossOriginURL(kPageUrl, kScopeUrl);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerDisableWebSecurityTest, RegisterNoCrash) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerDisableWebSecurityTest, RegisterNoCrash) {
+  StartServerAndNavigateToSetup();
   const char kPageUrl[] = "/service_worker/disable_web_security_register.html";
   const char kScopeUrl[] = "/service_worker/";
   RunTestWithCrossOriginURL(kPageUrl, kScopeUrl);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerDisableWebSecurityTest, UnregisterNoCrash) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerDisableWebSecurityTest, UnregisterNoCrash) {
+  StartServerAndNavigateToSetup();
   const char kPageUrl[] =
       "/service_worker/disable_web_security_unregister.html";
   const char kScopeUrl[] = "/service_worker/scope/";
@@ -2814,7 +2869,8 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerDisableWebSecurityTest, UnregisterNoCrash) {
   RunTestWithCrossOriginURL(kPageUrl, kScopeUrl);
 }
 
-IN_PROC_BROWSER_TEST_P(ServiceWorkerDisableWebSecurityTest, UpdateNoCrash) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerDisableWebSecurityTest, UpdateNoCrash) {
+  StartServerAndNavigateToSetup();
   const char kPageUrl[] = "/service_worker/disable_web_security_update.html";
   const char kScopeUrl[] = "/service_worker/scope/";
   const char kWorkerUrl[] = "/service_worker/fetch_event_blob.js";
@@ -2822,35 +2878,68 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerDisableWebSecurityTest, UpdateNoCrash) {
   RunTestWithCrossOriginURL(kPageUrl, kScopeUrl);
 }
 
-INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
-                        ServiceWorkerBrowserTest,
-                        ::testing::Values(true, false));
-INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
-                        ServiceWorkerVersionBrowserV8CacheTest,
-                        ::testing::Values(true, false));
-INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
-                        ServiceWorkerVersionBrowserTest,
-                        ::testing::Values(true, false));
-INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
-                        ServiceWorkerBlackBoxBrowserTest,
-                        ::testing::Values(true, false));
-INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
-                        ServiceWorkerNavigationPreloadTest,
-                        ::testing::Values(true, false));
-INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
-                        ServiceWorkerV8CacheStrategiesTest,
-                        ::testing::Values(true, false));
-INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
-                        ServiceWorkerV8CacheStrategiesNoneTest,
-                        ::testing::Values(true, false));
-INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
-                        ServiceWorkerV8CacheStrategiesNormalTest,
-                        ::testing::Values(true, false));
-INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
-                        ServiceWorkerV8CacheStrategiesAggressiveTest,
-                        ::testing::Values(true, false));
-INSTANTIATE_TEST_CASE_P(ServiceWorkerBrowserTest,
-                        ServiceWorkerDisableWebSecurityTest,
-                        ::testing::Values(true, false));
+class MemoryCoordinatorWithServiceWorkerTest
+    : public ServiceWorkerVersionBrowserTest {
+ public:
+  MemoryCoordinatorWithServiceWorkerTest() {}
+
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(features::kMemoryCoordinator);
+    ServiceWorkerVersionBrowserTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(MemoryCoordinatorWithServiceWorkerTest);
+};
+
+class TestMemoryCoordinatorDelegate : public MemoryCoordinatorDelegate {
+ public:
+  TestMemoryCoordinatorDelegate() {}
+  ~TestMemoryCoordinatorDelegate() override {}
+
+  bool CanSuspendBackgroundedRenderer(int render_process_id) override {
+    return true;
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TestMemoryCoordinatorDelegate);
+};
+
+// MemoryCoordinatorWithServiceWorkerTest checks if a process won't be
+// suspended when it has one or more shared workers or service workers.
+// TODO(shimazu): Enable these tests on macos when MemoryMonitorMac is
+// implemented.
+#if !defined(OS_MACOSX)
+IN_PROC_BROWSER_TEST_F(MemoryCoordinatorWithServiceWorkerTest,
+                       CannotSuspendRendererWithServiceWorker) {
+  StartServerAndNavigateToSetup();
+  InstallTestHelper("/service_worker/fetch_event.js", SERVICE_WORKER_OK);
+  ActivateTestHelper("/service_worker/fetch_event.js", SERVICE_WORKER_OK);
+
+  MemoryCoordinatorImpl* memory_coordinator =
+      MemoryCoordinatorImpl::GetInstance();
+  memory_coordinator->SetDelegateForTesting(
+      base::MakeUnique<TestMemoryCoordinatorDelegate>());
+
+  // Ensure only one process host exists.
+  ASSERT_EQ(1, CountRenderProcessHosts());
+  ASSERT_EQ(1u, memory_coordinator->children().size());
+
+  // Check the number of workers.
+  int render_process_id = memory_coordinator->children().begin()->first;
+  RenderProcessHost* rph = RenderProcessHost::FromID(render_process_id);
+  EXPECT_EQ(1u, rph->GetWorkerRefCount());
+
+  // A process should be backgrounded to ensure the worker reference count takes
+  // effect in CanSuspendRenderer().
+  shell()->web_contents()->WasHidden();
+  EXPECT_TRUE(rph->IsProcessBackgrounded());
+
+  // The process which has service worker thread shouldn't be suspended.
+  EXPECT_FALSE(memory_coordinator->CanSuspendRenderer(render_process_id));
+}
+#endif
 
 }  // namespace content

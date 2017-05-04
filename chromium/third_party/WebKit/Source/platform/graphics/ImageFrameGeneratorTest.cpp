@@ -59,7 +59,8 @@ class ImageFrameGeneratorTest : public ::testing::Test,
  public:
   void SetUp() override {
     ImageDecodingStore::instance().setCacheLimitInBytes(1024 * 1024);
-    m_generator = ImageFrameGenerator::create(fullSize(), nullptr, false);
+    m_generator =
+        ImageFrameGenerator::create(fullSize(), false, ColorBehavior::ignore());
     m_data = SharedBuffer::create();
     m_segmentReader = SegmentReader::createFromSharedBuffer(m_data);
     useMockImageDecoderFactory();
@@ -110,7 +111,8 @@ class ImageFrameGeneratorTest : public ::testing::Test,
     m_frameCount = count;
     if (count > 1) {
       m_generator.clear();
-      m_generator = ImageFrameGenerator::create(fullSize(), nullptr, true);
+      m_generator = ImageFrameGenerator::create(fullSize(), true,
+                                                ColorBehavior::ignore());
       useMockImageDecoderFactory();
     }
   }
@@ -184,7 +186,7 @@ TEST_F(ImageFrameGeneratorTest, incompleteDecodeBecomesCompleteMultiThreaded) {
   setFrameStatus(ImageFrame::FrameComplete);
   addNewData();
   std::unique_ptr<WebThread> thread =
-      wrapUnique(Platform::current()->createThread("DecodeThread"));
+      WTF::wrapUnique(Platform::current()->createThread("DecodeThread"));
   thread->getWebTaskRunner()->postTask(
       BLINK_FROM_HERE,
       crossThreadBind(&decodeThreadMain, m_generator, m_segmentReader));

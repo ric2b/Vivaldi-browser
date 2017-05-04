@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_CRYPTO_PROOF_SOURCE_CHROMIUM_H_
-#define NET_QUIC_CRYPTO_PROOF_SOURCE_CHROMIUM_H_
+#ifndef NET_QUIC_CHROMIUM_CRYPTO_PROOF_SOURCE_CHROMIUM_H_
+#define NET_QUIC_CHROMIUM_CRYPTO_PROOF_SOURCE_CHROMIUM_H_
 
 #include <string>
 #include <vector>
@@ -33,17 +33,16 @@ class NET_EXPORT_PRIVATE ProofSourceChromium : public ProofSource {
                   const base::FilePath& sct_path);
 
   // ProofSource interface
-  bool GetProof(const IPAddress& server_ip,
+  bool GetProof(const QuicSocketAddress& server_ip,
                 const std::string& hostname,
                 const std::string& server_config,
                 QuicVersion quic_version,
                 base::StringPiece chlo_hash,
                 const QuicTagVector& connection_options,
-                scoped_refptr<ProofSource::Chain>* out_chain,
-                std::string* out_signature,
-                std::string* out_leaf_cert_sct) override;
+                QuicReferenceCountedPointer<ProofSource::Chain>* out_chain,
+                QuicCryptoProof* proof) override;
 
-  void GetProof(const IPAddress& server_ip,
+  void GetProof(const QuicSocketAddress& server_ip,
                 const std::string& hostname,
                 const std::string& server_config,
                 QuicVersion quic_version,
@@ -53,7 +52,7 @@ class NET_EXPORT_PRIVATE ProofSourceChromium : public ProofSource {
 
  private:
   std::unique_ptr<crypto::RSAPrivateKey> private_key_;
-  scoped_refptr<ProofSource::Chain> chain_;
+  QuicReferenceCountedPointer<ProofSource::Chain> chain_;
   std::string signed_certificate_timestamp_;
 
   DISALLOW_COPY_AND_ASSIGN(ProofSourceChromium);
@@ -61,4 +60,4 @@ class NET_EXPORT_PRIVATE ProofSourceChromium : public ProofSource {
 
 }  // namespace net
 
-#endif  // NET_QUIC_CRYPTO_PROOF_SOURCE_CHROMIUM_H_
+#endif  // NET_QUIC_CHROMIUM_CRYPTO_PROOF_SOURCE_CHROMIUM_H_

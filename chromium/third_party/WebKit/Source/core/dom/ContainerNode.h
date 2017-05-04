@@ -25,7 +25,7 @@
 #ifndef ContainerNode_h
 #define ContainerNode_h
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "core/CoreExport.h"
 #include "core/dom/Node.h"
@@ -460,7 +460,7 @@ inline bool Node::isTreeScope() const {
 inline void getChildNodes(ContainerNode& node, NodeVector& nodes) {
   DCHECK(!nodes.size());
   for (Node* child = node.firstChild(); child; child = child->nextSibling())
-    nodes.append(child);
+    nodes.push_back(child);
 }
 
 }  // namespace blink

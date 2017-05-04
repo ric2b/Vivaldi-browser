@@ -39,11 +39,12 @@ class RemoteFrameClient : public FrameClient {
 
   virtual void frameRectsChanged(const IntRect& frameRect) = 0;
 
+  virtual void updateRemoteViewportIntersection(
+      const IntRect& viewportIntersection) = 0;
+
   virtual void advanceFocus(WebFocusType, LocalFrame* source) = 0;
 
   virtual void visibilityChanged(bool visible) = 0;
-
-  virtual void setHasReceivedUserGesture() = 0;
 };
 
 }  // namespace blink

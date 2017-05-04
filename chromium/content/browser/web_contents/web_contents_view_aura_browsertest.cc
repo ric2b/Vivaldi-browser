@@ -43,8 +43,8 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/event_processor.h"
-#include "ui/events/event_switches.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
 
@@ -277,8 +277,8 @@ class WebContentsViewAuraTest : public ContentBrowserTest {
   }
 
   void SetUpCommandLine(base::CommandLine* cmd) override {
-    cmd->AppendSwitchASCII(switches::kTouchEvents,
-                           switches::kTouchEventsEnabled);
+    cmd->AppendSwitchASCII(switches::kTouchEventFeatureDetection,
+                           switches::kTouchEventFeatureDetectionEnabled);
   }
 
   void TestOverscrollNavigation(bool touch_handler) {
@@ -736,7 +736,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, ReplaceStateReloadPushState) {
   // history.replaceState shouldn't capture a screenshot
   EXPECT_FALSE(screenshot_manager()->screenshot_taken_for());
   screenshot_manager()->Reset();
-  web_contents->GetController().Reload(true);
+  web_contents->GetController().Reload(ReloadType::NORMAL, true);
   WaitForLoadStop(web_contents);
   // reloading the page shouldn't capture a screenshot
   // TODO (mfomitchev): currently broken. Uncomment when
@@ -805,11 +805,12 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest, ContentWindowClose) {
 }
 
 
-#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+#if defined(OS_WIN) || defined(OS_LINUX)
 // This appears to be flaky in the same was as the other overscroll
 // tests. Enabling for non-Windows platforms.
 // See http://crbug.com/369871.
-// For linux, see http://crbug.com/381294
+// For linux, see http://crbug.com/381294.
+// For ChromeOS, see http://crbug.com/668128.
 #define MAYBE_RepeatedQuickOverscrollGestures DISABLED_RepeatedQuickOverscrollGestures
 #else
 #define MAYBE_RepeatedQuickOverscrollGestures RepeatedQuickOverscrollGestures
@@ -986,8 +987,10 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
                                                             ui::LatencyInfo());
     WaitAFrame();
 
-    blink::WebGestureEvent scroll_end;
-    scroll_end.type = blink::WebInputEvent::GestureScrollEnd;
+    blink::WebGestureEvent scroll_end(
+        blink::WebInputEvent::GestureScrollEnd,
+        blink::WebInputEvent::NoModifiers,
+        ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
     GetRenderWidgetHost()->ForwardGestureEventWithLatencyInfo(
         scroll_end, ui::LatencyInfo());
     WaitAFrame();
@@ -1000,8 +1003,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsViewAuraTest,
 }
 
 // Test that vertical overscroll updates are sent only when a user overscrolls
-// vertically.
-#if defined(OS_WIN)
+// vertically. Flaky on several platforms. https://crbug.com/679420
+#if defined(OS_WIN) || defined(OS_CHROMEOS)
 #define MAYBE_VerticalOverscroll DISABLED_VerticalOverscroll
 #else
 #define MAYBE_VerticalOverscroll VerticalOverscroll

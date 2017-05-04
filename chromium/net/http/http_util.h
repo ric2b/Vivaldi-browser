@@ -6,6 +6,7 @@
 #define NET_HTTP_HTTP_UTIL_H_
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <string>
 #include <vector>
@@ -45,19 +46,24 @@ class NET_EXPORT HttpUtil {
                                bool* had_charset,
                                std::string* boundary);
 
-  // Scans the headers and look for the first "Range" header in |headers|,
-  // if "Range" exists and the first one of it is well formatted then returns
-  // true, |ranges| will contain a list of valid ranges. If return
-  // value is false then values in |ranges| should not be used. The format of
-  // "Range" header is defined in RFC 7233 Section 2.1.
+  // Parses the value of a "Range" header as defined in RFC 7233 Section 2.1.
   // https://tools.ietf.org/html/rfc7233#section-2.1
-  static bool ParseRanges(const std::string& headers,
-                          std::vector<HttpByteRange>* ranges);
-
-  // Same thing as ParseRanges except the Range header is known and its value
-  // is directly passed in, rather than requiring searching through a string.
+  // Returns false on failure.
   static bool ParseRangeHeader(const std::string& range_specifier,
                                std::vector<HttpByteRange>* ranges);
+
+  // Extracts the values in a Content-Range header and returns true if all three
+  // values are present and valid for a 206 response; otherwise returns false.
+  // The following values will be outputted:
+  // |*first_byte_position| = inclusive position of the first byte of the range
+  // |*last_byte_position| = inclusive position of the last byte of the range
+  // |*instance_length| = size in bytes of the object requested
+  // If this method returns false, then all of the outputs will be -1.
+  static bool ParseContentRangeHeaderFor206(
+      base::StringPiece content_range_spec,
+      int64_t* first_byte_position,
+      int64_t* last_byte_position,
+      int64_t* instance_length);
 
   // Parses a Retry-After header that is either an absolute date/time or a
   // number of seconds in the future. Interprets absolute times as relative to
@@ -67,11 +73,6 @@ class NET_EXPORT HttpUtil {
   static bool ParseRetryAfterHeader(const std::string& retry_after_string,
                                     base::Time now,
                                     base::TimeDelta* retry_after);
-
-  // Scans the '\r\n'-delimited headers for the given header name.  Returns
-  // true if a match is found.  Input is assumed to be well-formed.
-  // TODO(darin): kill this
-  static bool HasHeader(const std::string& headers, const char* name);
 
   // Returns true if it is safe to allow users and scripts to specify the header
   // named |name|.
@@ -83,14 +84,6 @@ class NET_EXPORT HttpUtil {
   // Returns false if |value| contains NUL or CRLF. This method does not perform
   // a fully RFC-2616-compliant header value validation.
   static bool IsValidHeaderValue(const base::StringPiece& value);
-
-  // Strips all header lines from |headers| whose name matches
-  // |headers_to_remove|. |headers_to_remove| is a list of null-terminated
-  // lower-case header names, with array length |headers_to_remove_len|.
-  // Returns the stripped header lines list, separated by "\r\n".
-  static std::string StripHeaders(const std::string& headers,
-                                  const char* const headers_to_remove[],
-                                  size_t headers_to_remove_len);
 
   // Multiple occurances of some headers cannot be coalesced into a comma-
   // separated list since their values are (or contain) unquoted HTTP-date
@@ -185,10 +178,8 @@ class NET_EXPORT HttpUtil {
   // is a workaround to avoid later code from incorrectly interpreting it as
   // a line terminator.
   //
-  // TODO(eroman): we should use \n as the canonical line separator rather than
-  //               \0 to avoid this problem. Unfortunately the persistence layer
-  //               is already dependent on newlines being replaced by NULL so
-  //               this is hard to change without breaking things.
+  // TODO(crbug.com/671799): Should remove or internalize this to
+  //                         HttpResponseHeaders.
   static std::string AssembleRawHeaders(const char* buf, int buf_len);
 
   // Converts assembled "raw headers" back to the HTTP response format. That is
@@ -213,12 +204,6 @@ class NET_EXPORT HttpUtil {
   // be at the beginning of the list (see http://crbug.com/5899).
   static std::string GenerateAcceptLanguageHeader(
       const std::string& raw_language_list);
-
-  // Helper. If |*headers| already contains |header_name| do nothing,
-  // otherwise add <header_name> ": " <header_value> to the end of the list.
-  static void AppendHeaderIfMissing(const char* header_name,
-                                    const std::string& header_value,
-                                    std::string* headers);
 
   // Returns true if the parameters describe a response with a strong etag or
   // last-modified header.  See section 13.3.3 of RFC 2616.

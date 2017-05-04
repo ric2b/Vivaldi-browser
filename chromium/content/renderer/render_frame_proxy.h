@@ -77,10 +77,9 @@ class CONTENT_EXPORT RenderFrameProxy
   // for example, after a cross-process navigation or after the addition of a
   // new frame local to some other process. |routing_id| will be the ID of the
   // newly created RenderFrameProxy. |render_view_routing_id| identifies the
-  // RenderView to be associated with this frame.  |opener_routing_id|, if
-  // valid, is the routing ID of the new frame's opener.  |parent_routing_id|
-  // is the routing ID of the RenderFrameProxy to which the new frame is
-  // parented.
+  // RenderView to be associated with this frame.  |opener|, if supplied, is the
+  // new frame's opener.  |parent_routing_id| is the routing ID of the
+  // RenderFrameProxy to which the new frame is parented.
   //
   // |parent_routing_id| always identifies a RenderFrameProxy (never a
   // RenderFrame) because a new child of a local frame should always start out
@@ -88,7 +87,7 @@ class CONTENT_EXPORT RenderFrameProxy
   static RenderFrameProxy* CreateFrameProxy(
       int routing_id,
       int render_view_routing_id,
-      int opener_routing_id,
+      blink::WebFrame* opener,
       int parent_routing_id,
       const FrameReplicationState& replicated_state);
 
@@ -132,8 +131,9 @@ class CONTENT_EXPORT RenderFrameProxy
                 bool should_replace_current_entry) override;
   void forwardInputEvent(const blink::WebInputEvent* event) override;
   void frameRectsChanged(const blink::WebRect& frame_rect) override;
+  void updateRemoteViewportIntersection(
+      const blink::WebRect& viewportIntersection) override;
   void visibilityChanged(bool visible) override;
-  void setHasReceivedUserGesture() override;
   void didChangeOpener(blink::WebFrame* opener) override;
   void advanceFocus(blink::WebFocusType type,
                     blink::WebLocalFrame* source) override;
@@ -174,6 +174,7 @@ class CONTENT_EXPORT RenderFrameProxy
   void OnSetPageFocus(bool is_focused);
   void OnSetFocusedFrame();
   void OnWillEnterFullscreen();
+  void OnSetHasReceivedUserGesture();
 
   // The routing ID by which this RenderFrameProxy is known.
   const int routing_id_;

@@ -43,8 +43,8 @@
 
 namespace blink {
 
-class LayoutFullScreen;
 class ComputedStyle;
+class LayoutFullScreen;
 
 class CORE_EXPORT Fullscreen final
     : public GarbageCollectedFinalized<Fullscreen>,
@@ -63,13 +63,15 @@ class CORE_EXPORT Fullscreen final
   static Element* currentFullScreenElementForBindingFrom(Document&);
   static bool isCurrentFullScreenElement(const Element&);
 
-  enum RequestType {
+  enum class RequestType {
     // Element.requestFullscreen()
-    UnprefixedRequest,
+    Unprefixed,
     // Element.webkitRequestFullscreen()/webkitRequestFullScreen() and
     // HTMLVideoElement.webkitEnterFullscreen()/webkitEnterFullScreen()
-    PrefixedRequest,
+    Prefixed,
   };
+
+  static void requestFullscreen(Element&);
 
   // |forCrossProcessDescendant| is used in OOPIF scenarios and is set to
   // true when fullscreen is requested for an out-of-process descendant
@@ -88,11 +90,13 @@ class CORE_EXPORT Fullscreen final
   // |currentFullScreenElement()|, see https://crbug.com/402421.
   Element* fullscreenElement() const {
     return !m_fullscreenElementStack.isEmpty()
-               ? m_fullscreenElementStack.last().first.get()
+               ? m_fullscreenElementStack.back().first.get()
                : nullptr;
   }
 
-  void didEnterFullscreenForElement(Element*);
+  // Called by FullscreenController to notify that we've entered or exited
+  // fullscreen. All frames are notified, so there may be no pending request.
+  void didEnterFullscreen();
   void didExitFullscreen();
 
   void setFullScreenLayoutObject(LayoutFullScreen*);
@@ -118,7 +122,7 @@ class CORE_EXPORT Fullscreen final
   }
 
   // ContextLifecycleObserver:
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -137,10 +141,11 @@ class CORE_EXPORT Fullscreen final
   void enqueueErrorEvent(Element&, RequestType);
   void eventQueueTimerFired(TimerBase*);
 
+  Member<Element> m_pendingFullscreenElement;
   HeapVector<std::pair<Member<Element>, RequestType>> m_fullscreenElementStack;
   Member<Element> m_currentFullScreenElement;
   LayoutFullScreen* m_fullScreenLayoutObject;
-  Timer<Fullscreen> m_eventQueueTimer;
+  TaskRunnerTimer<Fullscreen> m_eventQueueTimer;
   HeapDeque<Member<Event>> m_eventQueue;
   LayoutRect m_savedPlaceholderFrameRect;
   RefPtr<ComputedStyle> m_savedPlaceholderComputedStyle;

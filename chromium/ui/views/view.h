@@ -74,6 +74,7 @@ class FocusTraversable;
 class LayoutManager;
 class NativeViewAccessibility;
 class ScrollView;
+class ViewObserver;
 class Widget;
 class WordLookupClient;
 
@@ -81,6 +82,7 @@ namespace internal {
 class PreEventDispatchHandler;
 class PostEventDispatchHandler;
 class RootView;
+class ScopedChildrenLock;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -190,6 +192,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   void RemoveAllChildViews(bool delete_children);
 
   int child_count() const { return static_cast<int>(children_.size()); }
+  // See also |GetChildrenInZOrder()| below that returns |children_|
+  // in reverse z-order.
   bool has_children() const { return !children_.empty(); }
 
   // Returns the child view at |index|.
@@ -236,6 +240,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   int y() const { return bounds_.y(); }
   int width() const { return bounds_.width(); }
   int height() const { return bounds_.height(); }
+  const gfx::Point& origin() const { return bounds_.origin(); }
   const gfx::Size& size() const { return bounds_.size(); }
 
   // Returns the bounds of the content area of the view, i.e. the rectangle
@@ -305,6 +310,14 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Returns whether the view is enabled.
   bool enabled() const { return enabled_; }
+
+  // Returns the child views ordered in reverse z-order. That is, views later in
+  // the returned vector have a higher z-order (are painted later) than those
+  // early in the vector. The returned vector has exactly the same number of
+  // Views as |children_|. The default implementation returns |children_|,
+  // subclass if the paint order should differ from that of |children_|.
+  // This order is taken into account by painting and targeting implementations.
+  virtual View::Views GetChildrenInZOrder();
 
   // Transformations -----------------------------------------------------------
 
@@ -526,13 +539,17 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Returns the NativeTheme to use for this View. This calls through to
   // GetNativeTheme() on the Widget this View is in, or provides a default
-  // theme if there's no widget. Warning: the default theme might not be
-  // correct; you should probably override OnNativeThemeChanged().
+  // theme if there's no widget, or returns |native_theme_| if that's
+  // set. Warning: the default theme might not be correct; you should probably
+  // override OnNativeThemeChanged().
   ui::NativeTheme* GetNativeTheme() {
     return const_cast<ui::NativeTheme*>(
         const_cast<const View*>(this)->GetNativeTheme());
   }
   const ui::NativeTheme* GetNativeTheme() const;
+
+  // Sets the native theme and informs descendants.
+  void SetNativeTheme(ui::NativeTheme* theme);
 
   // RTL painting --------------------------------------------------------------
 
@@ -1000,6 +1017,10 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   virtual int GetLineScrollIncrement(ScrollView* scroll_view,
                                      bool is_horizontal, bool is_positive);
 
+  void AddObserver(ViewObserver* observer);
+  void RemoveObserver(ViewObserver* observer);
+  bool HasObserver(const ViewObserver* observer) const;
+
  protected:
   // Used to track a drag. RootView passes this into
   // ProcessMousePressed/Dragged.
@@ -1224,6 +1245,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   friend class internal::PreEventDispatchHandler;
   friend class internal::PostEventDispatchHandler;
   friend class internal::RootView;
+  friend class internal::ScopedChildrenLock;
   friend class FocusManager;
   friend class ViewLayerTest;
   friend class Widget;
@@ -1461,6 +1483,12 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // This view's children.
   Views children_;
 
+#if DCHECK_IS_ON()
+  // True while iterating over |children_|. Used to detect and DCHECK when
+  // |children_| is mutated during iteration.
+  mutable bool iterating_;
+#endif
+
   // Size and disposition ------------------------------------------------------
 
   // This View's bounds in the parent coordinate system.
@@ -1523,6 +1551,13 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Cached output of painting to be reused in future frames until invalidated.
   ui::PaintCache paint_cache_;
 
+  // Native theme --------------------------------------------------------------
+
+  // A native theme for this view and its descendants. Typically null, in which
+  // case the native theme is drawn from the parent view (eventually the
+  // widget).
+  ui::NativeTheme* native_theme_ = nullptr;
+
   // RTL painting --------------------------------------------------------------
 
   // Indicates whether or not the gfx::Canvas object passed to View::Paint()
@@ -1574,6 +1609,10 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Belongs to this view, but it's reference-counted on some platforms
   // so we can't use a scoped_ptr. It's dereferenced in the destructor.
   NativeViewAccessibility* native_view_accessibility_;
+
+  // Observers -------------------------------------------------------------
+
+  base::ObserverList<ViewObserver> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(View);
 };

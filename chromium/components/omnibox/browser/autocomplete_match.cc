@@ -192,8 +192,6 @@ gfx::VectorIconId AutocompleteMatch::TypeToVectorIcon(Type type) {
       gfx::VectorIconId::OMNIBOX_SEARCH,         // VOICE_SEARCH
       gfx::VectorIconId::OMNIBOX_HTTP,           // PHYSICAL_WEB
       gfx::VectorIconId::OMNIBOX_HTTP,           // PHYSICAL_WEB_OVERFLOW
-      gfx::VectorIconId::OMNIBOX_HTTP,           // BOOKMARK_NICK
-      gfx::VectorIconId::OMNIBOX_HTTP,           // BOOKMARK_DESCRIPTION
   };
   static_assert(arraysize(kIcons) == AutocompleteMatchType::NUM_TYPES,
                 "icons array must have NUM_TYPES elements");

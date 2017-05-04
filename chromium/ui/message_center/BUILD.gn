@@ -16,7 +16,7 @@ component("message_center") {
 
   defines = [ "MESSAGE_CENTER_IMPLEMENTATION" ]
 
-  if (enable_notifications && !is_android) {
+  if (!is_ios && !is_android) {
     deps += [
       "//base:i18n",
       "//base/third_party/dynamic_annotations",
@@ -98,6 +98,8 @@ component("message_center") {
         "views/bounded_label.cc",
         "views/bounded_label.h",
         "views/constants.h",
+        "views/custom_notification_content_view_delegate.cc",
+        "views/custom_notification_content_view_delegate.h",
         "views/custom_notification_view.cc",
         "views/custom_notification_view.h",
         "views/desktop_popup_alignment_delegate.cc",
@@ -167,14 +169,12 @@ component("message_center") {
 static_library("test_support") {
   testonly = true
 
-  if (enable_notifications && !is_android) {
+  if (!is_ios && !is_android) {
     sources = [
       "fake_message_center.cc",
       "fake_message_center.h",
       "fake_message_center_tray_delegate.cc",
       "fake_message_center_tray_delegate.h",
-      "fake_notifier_settings_provider.cc",
-      "fake_notifier_settings_provider.h",
     ]
     deps = [
       "//base",
@@ -218,7 +218,7 @@ test("message_center_unittests") {
     "//ui/resources:ui_test_pak_data",
   ]
 
-  if (enable_notifications && !is_android) {
+  if (!is_ios && !is_android) {
     sources += [
       "cocoa/notification_controller_unittest.mm",
       "cocoa/popup_collection_unittest.mm",
@@ -238,6 +238,7 @@ test("message_center_unittests") {
         "views/bounded_label_unittest.cc",
         "views/custom_notification_view_unittest.cc",
         "views/message_center_view_unittest.cc",
+        "views/message_list_view_unittest.cc",
         "views/message_popup_collection_unittest.cc",
         "views/notification_view_unittest.cc",
         "views/notifier_settings_view_unittest.cc",
@@ -260,5 +261,5 @@ test("message_center_unittests") {
         "//ui/message_center/mojo:test_interfaces",
       ]
     }
-  }  # enable_notifications && !is_android
+  }  # !is_ios && !is_android
 }

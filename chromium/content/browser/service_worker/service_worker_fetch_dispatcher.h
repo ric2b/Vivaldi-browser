@@ -9,10 +9,13 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
+#include "base/time/time.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/common/content_export.h"
-#include "content/common/service_worker/fetch_event_dispatcher.mojom.h"
+#include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/url_loader.mojom.h"
@@ -41,14 +44,17 @@ class CONTENT_EXPORT ServiceWorkerFetchDispatcher {
       std::unique_ptr<ServiceWorkerFetchRequest> request,
       ServiceWorkerVersion* version,
       ResourceType resource_type,
+      const base::Optional<base::TimeDelta>& timeout,
       const net::NetLogWithSource& net_log,
       const base::Closure& prepare_callback,
       const FetchCallback& fetch_callback);
   ~ServiceWorkerFetchDispatcher();
 
   // If appropriate, starts the navigation preload request and creates
-  // |preload_handle_|.
-  void MaybeStartNavigationPreload(net::URLRequest* original_request);
+  // |preload_handle_|. Returns true if it started navigation preload.
+  // |on_response| is invoked in OnReceiveResponse().
+  bool MaybeStartNavigationPreload(net::URLRequest* original_request,
+                                   base::OnceClosure on_response);
 
   // Dispatches a fetch event to the |version| given in ctor, and fires
   // |fetch_callback| (also given in ctor) when finishes. It runs
@@ -58,6 +64,7 @@ class CONTENT_EXPORT ServiceWorkerFetchDispatcher {
 
  private:
   class ResponseCallback;
+  class URLLoaderAssets;
 
   void DidWaitForActivation();
   void StartWorker();
@@ -73,6 +80,13 @@ class CONTENT_EXPORT ServiceWorkerFetchDispatcher {
                 ServiceWorkerFetchEventResult fetch_result,
                 const ServiceWorkerResponse& response);
 
+  static void OnFetchEventFinished(
+      ServiceWorkerVersion* version,
+      int event_finish_id,
+      scoped_refptr<URLLoaderAssets> url_loader_assets,
+      ServiceWorkerStatusCode status,
+      base::Time dispatch_event_time);
+
   ServiceWorkerMetrics::EventType GetEventType() const;
 
   scoped_refptr<ServiceWorkerVersion> version_;
@@ -81,10 +95,11 @@ class CONTENT_EXPORT ServiceWorkerFetchDispatcher {
   FetchCallback fetch_callback_;
   std::unique_ptr<ServiceWorkerFetchRequest> request_;
   ResourceType resource_type_;
+  base::Optional<base::TimeDelta> timeout_;
   bool did_complete_;
-  mojom::URLLoaderFactoryPtr url_loader_factory_;
-  std::unique_ptr<mojom::URLLoader> url_loader_;
-  std::unique_ptr<mojom::URLLoaderClient> url_loader_client_;
+
+  scoped_refptr<URLLoaderAssets> url_loader_assets_;
+
   mojom::FetchEventPreloadHandlePtr preload_handle_;
 
   base::WeakPtrFactory<ServiceWorkerFetchDispatcher> weak_factory_;

@@ -101,7 +101,7 @@ cr.define('cr.ui', function() {
      * @private
      */
     handleMouseOver_: function(e) {
-      var overItem = this.findMenuItem_(/** @type {Element} */(e.target));
+      var overItem = this.findMenuItem_(/** @type {Element} */ (e.target));
       this.selectedItem = overItem;
     },
 
@@ -122,7 +122,7 @@ cr.define('cr.ui', function() {
      * @private
      */
     handleMouseUp_: function(e) {
-      assert(this.contains(/** @type {Element} */(e.target)));
+      assert(this.contains(/** @type {Element} */ (e.target)));
 
       if (!this.trustEvent_(e) || Date.now() - this.shown_.time > 200)
         return;
@@ -310,8 +310,8 @@ cr.define('cr.ui', function() {
    * The selected menu item.
    * type {number}
    */
-  cr.defineProperty(Menu, 'selectedIndex', cr.PropertyKind.JS,
-      selectedIndexChanged);
+  cr.defineProperty(
+      Menu, 'selectedIndex', cr.PropertyKind.JS, selectedIndexChanged);
 
   /**
    * Selector for children which are menu items.
@@ -319,7 +319,5 @@ cr.define('cr.ui', function() {
   cr.defineProperty(Menu, 'menuItemSelector', cr.PropertyKind.ATTR);
 
   // Export
-  return {
-    Menu: Menu
-  };
+  return {Menu: Menu};
 });

@@ -47,7 +47,7 @@ TEST_F('SettingsLanguagesPageBrowserTest', 'MAYBE_LanguagesPage', function() {
     testing.Test.disableAnimationsAndTransitions();
 
     this.toggleAdvanced();
-    var advanced = this.getPage('advanced');
+    var page = this.getPage('basic');
 
     var languagesSection;
     var languagesPage;
@@ -81,10 +81,10 @@ TEST_F('SettingsLanguagesPageBrowserTest', 'MAYBE_LanguagesPage', function() {
     }
 
     suiteSetup(function() {
-      advanced.set('pageVisibility.languages', true);
+      page.set('pageVisibility.languages', true);
       Polymer.dom.flush();
 
-      languagesSection = assert(this.getSection(advanced, 'languages'));
+      languagesSection = assert(this.getSection(page, 'languages'));
       languagesPage = assert(
           languagesSection.querySelector('settings-languages-page'));
       languagesCollapse = languagesPage.$.languagesCollapse;
@@ -235,6 +235,33 @@ TEST_F('SettingsLanguagesPageBrowserTest', 'MAYBE_LanguagesPage', function() {
             cr.isChromeOS || cr.isWindows ? 1 : 0, separator.offsetHeight);
       });
 
+      test('toggle translate', function(done) {
+        // Enable Translate so the menu always shows the Translate checkbox.
+        languageHelper.setPrefValue('translate.enabled', true);
+        languagesPage.set('languages.translateTarget', 'foo');
+        languagesPage.set('languages.enabled.1.supportsTranslate', true);
+
+        var languageOptionsDropdownTrigger =
+            languagesCollapse.querySelectorAll('paper-icon-button')[1];
+        assertTrue(!!languageOptionsDropdownTrigger);
+        MockInteractions.tap(languageOptionsDropdownTrigger);
+        assertTrue(actionMenu.open);
+
+        // Toggle the translate option.
+        var translateOption = actionMenu.querySelector('#offerTranslations');
+        assertTrue(!!translateOption);
+        assertFalse(translateOption.disabled);
+        MockInteractions.tap(translateOption);
+
+        // Menu should stay open briefly.
+        assertTrue(actionMenu.open);
+        // Guaranteed to run later than the menu close delay.
+        setTimeout(function() {
+          assertFalse(actionMenu.open);
+          done();
+        }, settings.kMenuCloseDelay + 1);
+      });
+
       test('remove language', function() {
         var numEnabled = languagesPage.languages.enabled.length;
 
@@ -295,6 +322,27 @@ TEST_F('SettingsLanguagesPageBrowserTest', 'MAYBE_LanguagesPage', function() {
         assertFalse(spellCheckSettingsExist);
       } else {
         assertTrue(spellCheckSettingsExist);
+
+        // Ensure no language has spell check enabled.
+        for (var i = 0; i < languagesPage.languages.enabled.length; i++) {
+          languagesPage.set(
+              'languages.enabled.' + i + '.spellCheckEnabled', false);
+        }
+
+        // The row button should have the extra row only if some language has
+        // spell check enabled.
+        var triggerRow = languagesPage.$.spellCheckSubpageTrigger;
+        assertFalse(triggerRow.classList.contains('two-line'));
+        assertEquals(
+            0, triggerRow.querySelector('.secondary').textContent.length);
+
+        languagesPage.set(
+            'languages.enabled.0.language.supportsSpellcheck', true);
+        languagesPage.set('languages.enabled.0.spellCheckEnabled', true);
+        assertTrue(triggerRow.classList.contains('two-line'));
+        assertLT(
+            0, triggerRow.querySelector('.secondary').textContent.length);
+
         MockInteractions.tap(
             spellCheckCollapse.querySelector('.list-button:last-of-type'));
         assertTrue(!!languagesPage.$$('settings-edit-dictionary-page'));

@@ -48,6 +48,7 @@
 #include "core/layout/line/InlineTextBox.h"
 #include "core/layout/svg/LayoutSVGGradientStop.h"
 #include "core/layout/svg/LayoutSVGImage.h"
+#include "core/layout/svg/LayoutSVGInline.h"
 #include "core/layout/svg/LayoutSVGInlineText.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/layout/svg/LayoutSVGShape.h"
@@ -438,7 +439,7 @@ static void writeTextRun(TextStream& ts,
   // conversion to floating point. :(
   int x = run.x().toInt();
   int y = run.y().toInt();
-  int logicalWidth = (run.left() + run.logicalWidth()).ceil() - x;
+  int logicalWidth = (run.x() + run.logicalWidth()).ceil() - x;
 
   // FIXME: Table cell adjustment is temporary until results can be updated.
   if (o.containingBlock()->isTableCell())
@@ -484,6 +485,10 @@ void write(TextStream& ts,
   }
   if (o.isSVGText()) {
     writeSVGText(ts, toLayoutSVGText(o), indent);
+    return;
+  }
+  if (o.isSVGInline()) {
+    writeSVGInline(ts, toLayoutSVGInline(o), indent);
     return;
   }
   if (o.isSVGInlineText()) {
@@ -574,7 +579,7 @@ static void write(TextStream& ts,
 
   writeIndent(ts, indent);
 
-  if (layer.layoutObject()->style()->visibility() == EVisibility::Hidden)
+  if (layer.layoutObject()->style()->visibility() == EVisibility::kHidden)
     ts << "hidden ";
 
   ts << "layer ";
@@ -601,7 +606,7 @@ static void write(TextStream& ts,
       scrollableArea = layer.getScrollableArea();
 
     ScrollOffset adjustedScrollOffset =
-        scrollableArea->scrollOffset() +
+        scrollableArea->getScrollOffset() +
         toFloatSize(scrollableArea->scrollOrigin());
     if (adjustedScrollOffset.width())
       ts << " scrollX " << adjustedScrollOffset.width();
@@ -651,7 +656,7 @@ static Vector<PaintLayerStackingNode*> normalFlowListFor(
   PaintLayerStackingNodeIterator it(*node, NormalFlowChildren);
   Vector<PaintLayerStackingNode*> vector;
   while (PaintLayerStackingNode* normalFlowChild = it.next())
-    vector.append(normalFlowChild);
+    vector.push_back(normalFlowChild);
   return vector;
 }
 
@@ -736,7 +741,7 @@ void LayoutTreeAsText::writeLayers(TextStream& ts,
   }
 }
 
-String nodePositionAsStringForTesting(Node* node) {
+static String nodePosition(Node* node) {
   StringBuilder result;
 
   Element* body = node->document().body();
@@ -783,18 +788,16 @@ static void writeSelection(TextStream& ts, const LayoutObject* o) {
   VisibleSelection selection = frame->selection().selection();
   if (selection.isCaret()) {
     ts << "caret: position " << selection.start().computeEditingOffset()
-       << " of "
-       << nodePositionAsStringForTesting(selection.start().anchorNode());
+       << " of " << nodePosition(selection.start().anchorNode());
     if (selection.affinity() == TextAffinity::Upstream)
       ts << " (upstream affinity)";
     ts << "\n";
   } else if (selection.isRange()) {
     ts << "selection start: position "
        << selection.start().computeEditingOffset() << " of "
-       << nodePositionAsStringForTesting(selection.start().anchorNode()) << "\n"
+       << nodePosition(selection.start().anchorNode()) << "\n"
        << "selection end:   position " << selection.end().computeEditingOffset()
-       << " of " << nodePositionAsStringForTesting(selection.end().anchorNode())
-       << "\n";
+       << " of " << nodePosition(selection.end().anchorNode()) << "\n";
   }
 }
 

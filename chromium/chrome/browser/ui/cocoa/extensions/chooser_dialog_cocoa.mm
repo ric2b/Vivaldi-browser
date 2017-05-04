@@ -9,12 +9,14 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chooser_controller/chooser_controller.h"
+#include "chrome/browser/extensions/api/chrome_device_permissions_prompt.h"
 #include "chrome/browser/extensions/chrome_extension_chooser_dialog.h"
-#include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/extensions/device_permissions_dialog_controller.h"
 #import "chrome/browser/ui/cocoa/constrained_window/constrained_window_custom_sheet.h"
 #import "chrome/browser/ui/cocoa/constrained_window/constrained_window_custom_window.h"
 #import "chrome/browser/ui/cocoa/extensions/chooser_dialog_cocoa_controller.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
+#include "ui/base/material_design/material_design_controller.h"
 
 ChooserDialogCocoa::ChooserDialogCocoa(
     content::WebContents* web_contents,
@@ -51,9 +53,10 @@ void ChooserDialogCocoa::Dismissed() {
 
 void ChromeExtensionChooserDialog::ShowDialog(
     std::unique_ptr<ChooserController> chooser_controller) const {
-  if (chrome::ToolkitViewsWebUIDialogsEnabled())
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
     return ChromeExtensionChooserDialog::ShowDialogImpl(
         std::move(chooser_controller));
+  }
 
   web_modal::WebContentsModalDialogManager* manager =
       web_modal::WebContentsModalDialogManager::FromWebContents(web_contents_);
@@ -63,4 +66,18 @@ void ChromeExtensionChooserDialog::ShowDialog(
         new ChooserDialogCocoa(web_contents_, std::move(chooser_controller));
     chooser_dialog->ShowDialog();
   }
+}
+
+void ChromeDevicePermissionsPrompt::ShowDialog() {
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial())
+    return ChromeDevicePermissionsPrompt::ShowDialogViews();
+
+  std::unique_ptr<ChooserController> chooser_controller(
+      new DevicePermissionsDialogController(web_contents()->GetMainFrame(),
+                                            prompt()));
+
+  // These objects will delete themselves when the dialog closes.
+  ChooserDialogCocoa* chooser_dialog =
+      new ChooserDialogCocoa(web_contents(), std::move(chooser_controller));
+  chooser_dialog->ShowDialog();
 }

@@ -9,18 +9,9 @@
 #include "ui/gfx/geometry/size.h"
 
 enum LayoutConstant {
-  // Vertical offset from top of content to the top of find bar.
-  FIND_BAR_TOOLBAR_OVERLAP,
-
-  // The thickness of the location bar's border.
-  LOCATION_BAR_BORDER_THICKNESS,
-
   // The vertical padding between the edge of a location bar bubble and its
   // contained text.
   LOCATION_BAR_BUBBLE_FONT_VERTICAL_PADDING,
-
-  // The additional vertical padding of a bubble.
-  LOCATION_BAR_BUBBLE_VERTICAL_PADDING,
 
   // The vertical inset to apply to the bounds of a location bar bubble's anchor
   // view, to bring the bubble closer to the anchor.  This compensates for the
@@ -31,70 +22,24 @@ enum LayoutConstant {
   // The height to be occupied by the LocationBar.
   LOCATION_BAR_HEIGHT,
 
-  // Space between items in the location bar, as well as between items and the
-  // edges.
-  LOCATION_BAR_HORIZONTAL_PADDING,
-
-  // Space between the location bar edge and contents.
-  LOCATION_BAR_VERTICAL_PADDING,
-
-  // The font size to use in the location bar and omnibox dropdown, in pixels.
-  OMNIBOX_FONT_PIXEL_SIZE,
-
   // The amount of overlap between the last tab and the new tab button.
   TABSTRIP_NEW_TAB_BUTTON_OVERLAP,
-
-  // The amount of overlap between two adjacent tabs.
-  TABSTRIP_TAB_OVERLAP,
-
-  // The horizontal space between a tab's favicon and its title.
-  TAB_FAVICON_TITLE_SPACING,
 
   // The height of a tab, including outer strokes.  In non-100% scales this is
   // slightly larger than the apparent height of the tab, as the top stroke is
   // drawn as a 1-px line flush with the bottom of the tab's topmost DIP.
   TAB_HEIGHT,
 
-  // Width available for content inside a pinned tab.
-  TAB_PINNED_CONTENT_WIDTH,
-
   // Additional horizontal padding between the elements in the toolbar.
   TOOLBAR_ELEMENT_PADDING,
-
-  // Padding between the right edge of the location bar and the left edge of the
-  // app menu icon when the browser actions container is not present.
-  TOOLBAR_LOCATION_BAR_RIGHT_PADDING,
 
   // The horizontal space between most items in the toolbar.
   TOOLBAR_STANDARD_SPACING,
 };
 
 enum LayoutInset {
-  // The padding between the avatar icon and the frame border on the left, the
-  // tabstrip on the right, and the toolbar on the bottom.
-  AVATAR_ICON,
-
-  // The padding above the top row and below the bottom row in the omnibox
-  // dropdown.
-  OMNIBOX_DROPDOWN,
-
-  // In an omnibox dropdown row, the minimum distance between the icon and the
-  // row edge.
-  OMNIBOX_DROPDOWN_ICON,
-
-  // In an omnibox dropdown row, the minimum distance between the text and the
-  // row edge.
-  OMNIBOX_DROPDOWN_TEXT,
-
   // The padding inside the tab bounds that defines the tab contents region.
   TAB,
-
-  // The minimum padding of the toolbar.  The edge graphics have some built-in
-  // spacing, shadowing, so this accounts for that as well.
-  TOOLBAR,
-
-  // The spacing between a ToolbarButton's image and its border.
-  TOOLBAR_BUTTON,
 };
 
 enum LayoutSize {

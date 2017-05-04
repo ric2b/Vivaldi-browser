@@ -31,25 +31,9 @@ ShelfItemDelegate::PerformedAction WindowWatcherShelfItemDelegate::ItemSelected(
   return kExistingWindowActivated;
 }
 
-base::string16 WindowWatcherShelfItemDelegate::GetTitle() {
-  return watcher_->GetWindowByID(id_)->title();
-}
-
 ShelfMenuModel* WindowWatcherShelfItemDelegate::CreateApplicationMenu(
     int event_flags) {
   return nullptr;
-}
-
-bool WindowWatcherShelfItemDelegate::IsDraggable() {
-  return true;
-}
-
-bool WindowWatcherShelfItemDelegate::CanPin() const {
-  return true;
-}
-
-bool WindowWatcherShelfItemDelegate::ShouldShowTooltip() {
-  return true;
 }
 
 void WindowWatcherShelfItemDelegate::Close() {}

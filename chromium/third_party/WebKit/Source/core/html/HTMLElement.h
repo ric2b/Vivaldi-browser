@@ -29,9 +29,10 @@
 namespace blink {
 
 class DocumentFragment;
+class ExceptionState;
+class FormAssociated;
 class HTMLFormElement;
 class HTMLMenuElement;
-class ExceptionState;
 class KeyboardEvent;
 
 enum TranslateAttributeMode {
@@ -77,7 +78,7 @@ class CORE_EXPORT HTMLElement : public Element {
   const AtomicString& dir();
   void setDir(const AtomicString&);
 
-  void clickForBindings();
+  void click();
 
   void accessKeyAction(bool sendMouseEvents) override;
 
@@ -119,12 +120,16 @@ class CORE_EXPORT HTMLElement : public Element {
 
   Element* unclosedOffsetParent();
 
+  virtual FormAssociated* toFormAssociatedOrNull() { return nullptr; };
+
  protected:
   HTMLElement(const QualifiedName& tagName, Document&, ConstructionType);
 
+  enum AllowPercentage { DontAllowPercentageValues, AllowPercentageValues };
   void addHTMLLengthToStyle(MutableStylePropertySet*,
                             CSSPropertyID,
-                            const String& value);
+                            const String& value,
+                            AllowPercentage = AllowPercentageValues);
   void addHTMLColorToStyle(MutableStylePropertySet*,
                            CSSPropertyID,
                            const String& color);
@@ -134,9 +139,8 @@ class CORE_EXPORT HTMLElement : public Element {
   void applyBorderAttributeToStyle(const AtomicString&,
                                    MutableStylePropertySet*);
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void attributeChanged(const AttributeModificationParams&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   static bool parseColorWithLegacyRules(const String& attributeValue,
                                         Color& parsedColor);
   bool isPresentationAttribute(const QualifiedName&) const override;

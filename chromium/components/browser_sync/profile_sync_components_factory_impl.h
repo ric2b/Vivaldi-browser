@@ -18,7 +18,6 @@
 #include "url/gurl.h"
 
 class OAuth2TokenService;
-class Profile;
 
 namespace autofill {
 class AutofillWebDataService;
@@ -66,17 +65,18 @@ class ProfileSyncComponentsFactoryImpl
       syncer::SyncService* sync_service,
       const RegisterDataTypesMethod& register_platform_types_method) override;
   syncer::DataTypeManager* CreateDataTypeManager(
+      syncer::ModelTypeSet initial_types,
       const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
           debug_info_listener,
       const syncer::DataTypeController::TypeMap* controllers,
       const syncer::DataTypeEncryptionHandler* encryption_handler,
-      syncer::SyncBackendHost* backend,
+      syncer::ModelTypeConfigurer* configurer,
       syncer::DataTypeManagerObserver* observer) override;
-  syncer::SyncBackendHost* CreateSyncBackendHost(
+  syncer::SyncEngine* CreateSyncEngine(
       const std::string& name,
       invalidation::InvalidationService* invalidator,
       const base::WeakPtr<syncer::SyncPrefs>& sync_prefs,
-      const base::FilePath& sync_folder) override;
+      const base::FilePath& sync_data_folder) override;
   std::unique_ptr<syncer::LocalDeviceInfoProvider>
   CreateLocalDeviceInfoProvider() override;
   std::unique_ptr<syncer::AttachmentService> CreateAttachmentService(
@@ -92,6 +92,10 @@ class ProfileSyncComponentsFactoryImpl
   // Sets a bit that determines whether PREFERENCES should be registered with a
   // ModelTypeController for testing purposes.
   static void OverridePrefsForUssTest(bool use_uss);
+
+  syncer::SyncApiComponentFactory::SyncComponents CreateNotesSyncComponents(
+      syncer::SyncService* sync_service,
+      std::unique_ptr<syncer::DataTypeErrorHandler> error_handler) override;
 
  private:
   // Register data types which are enabled on both desktop and mobile.

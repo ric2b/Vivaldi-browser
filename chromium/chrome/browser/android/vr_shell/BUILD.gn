@@ -38,6 +38,8 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       "vr_shell.h",
       "vr_shell_delegate.cc",
       "vr_shell_delegate.h",
+      "vr_shell_gl.cc",
+      "vr_shell_gl.h",
       "vr_shell_renderer.cc",
       "vr_shell_renderer.h",
       "vr_usage_monitor.cc",
@@ -58,6 +60,8 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       ":vr_shell_jni_headers",
       "//base",
       "//cc",
+      "//components/rappor",
+      "//components/security_state/core",
       "//content/public/browser",
       "//content/public/common",
       "//device/vr",
@@ -68,8 +72,10 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
       "//ui/gl/init",
     ]
 
-    libs =
-        [ "//third_party/gvr-android-sdk/libgvr_shim_static_${current_cpu}.a" ]
+    libs = [
+      "//third_party/gvr-android-sdk/libgvr_shim_static_${current_cpu}.a",
+      "android",
+    ]
     configs += [ "//third_party/gvr-android-sdk:libgvr_config" ]
   }
 
@@ -82,7 +88,7 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
   }
 }
 
-if (enable_vr_shell) {
+if (enable_webvr) {
   test("vr_shell_unittests") {
     sources = [
       "ui_elements_unittest.cc",
@@ -93,7 +99,9 @@ if (enable_vr_shell) {
       ":vr_common",
       "//base/test:run_all_unittests",
       "//base/test:test_support",
+      "//chrome/browser",
       "//testing/gtest",
+      "//third_party/WebKit/public:blink",
       "//ui/gfx/geometry",
     ]
   }

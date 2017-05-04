@@ -51,7 +51,7 @@ void ScreenWakeLock::pageVisibilityChanged() {
   notifyService();
 }
 
-void ScreenWakeLock::contextDestroyed() {
+void ScreenWakeLock::contextDestroyed(ExecutionContext*) {
   setKeepAwake(false);
 }
 
@@ -62,12 +62,13 @@ DEFINE_TRACE(ScreenWakeLock) {
 }
 
 ScreenWakeLock::ScreenWakeLock(LocalFrame& frame)
-    : ContextLifecycleObserver(frame.document()),
+    : Supplement<LocalFrame>(frame),
+      ContextLifecycleObserver(frame.document()),
       PageVisibilityObserver(frame.page()),
       m_keepAwake(false) {
   DCHECK(!m_service.is_bound());
   DCHECK(frame.interfaceProvider());
-  frame.interfaceProvider()->getInterface(mojo::GetProxy(&m_service));
+  frame.interfaceProvider()->getInterface(mojo::MakeRequest(&m_service));
 }
 
 bool ScreenWakeLock::keepAwake() const {

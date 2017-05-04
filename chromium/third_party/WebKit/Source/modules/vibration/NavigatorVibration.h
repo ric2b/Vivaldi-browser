@@ -21,6 +21,7 @@
 #define NavigatorVibration_h
 
 #include "core/dom/ContextLifecycleObserver.h"
+#include "core/frame/Navigator.h"
 #include "modules/ModulesExport.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/GarbageCollected.h"
@@ -71,7 +72,7 @@ class MODULES_EXPORT NavigatorVibration final
   explicit NavigatorVibration(Navigator&);
 
   // Inherited from ContextLifecycleObserver.
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   static void collectHistogramMetrics(const LocalFrame&);
 

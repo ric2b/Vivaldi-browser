@@ -77,7 +77,7 @@ void StyleInvalidator::scheduleInvalidationSetsForNode(
     for (auto& invalidationSet : invalidationLists.siblings) {
       if (pendingInvalidations.siblings().contains(invalidationSet))
         continue;
-      pendingInvalidations.siblings().append(invalidationSet);
+      pendingInvalidations.siblings().push_back(invalidationSet);
     }
   }
 
@@ -90,7 +90,7 @@ void StyleInvalidator::scheduleInvalidationSetsForNode(
       continue;
     if (pendingInvalidations.descendants().contains(invalidationSet))
       continue;
-    pendingInvalidations.descendants().append(invalidationSet);
+    pendingInvalidations.descendants().push_back(invalidationSet);
   }
 }
 
@@ -116,7 +116,7 @@ void StyleInvalidator::scheduleSiblingInvalidationsAsDescendants(
     }
     if (invalidationSet->invalidatesSelf() &&
         !pendingInvalidations.descendants().contains(invalidationSet))
-      pendingInvalidations.descendants().append(invalidationSet);
+      pendingInvalidations.descendants().push_back(invalidationSet);
 
     if (DescendantInvalidationSet* descendants =
             toSiblingInvalidationSet(*invalidationSet).siblingDescendants()) {
@@ -127,9 +127,28 @@ void StyleInvalidator::scheduleSiblingInvalidationsAsDescendants(
         return;
       }
       if (!pendingInvalidations.descendants().contains(descendants))
-        pendingInvalidations.descendants().append(descendants);
+        pendingInvalidations.descendants().push_back(descendants);
     }
   }
+}
+
+void StyleInvalidator::rescheduleSiblingInvalidationsAsDescendants(
+    Element& element) {
+  DCHECK(element.parentNode());
+  PendingInvalidations* pendingInvalidations =
+      m_pendingInvalidationMap.get(&element);
+  if (!pendingInvalidations || pendingInvalidations->siblings().isEmpty())
+    return;
+
+  InvalidationLists invalidationLists;
+  for (const auto& invalidationSet : pendingInvalidations->siblings()) {
+    invalidationLists.descendants.push_back(invalidationSet);
+    if (DescendantInvalidationSet* descendants =
+            toSiblingInvalidationSet(*invalidationSet).siblingDescendants()) {
+      invalidationLists.descendants.push_back(descendants);
+    }
+  }
+  scheduleInvalidationSetsForNode(invalidationLists, *element.parentNode());
 }
 
 void StyleInvalidator::clearInvalidation(ContainerNode& node) {
@@ -144,7 +163,7 @@ PendingInvalidations& StyleInvalidator::ensurePendingInvalidations(
   PendingInvalidationMap::AddResult addResult =
       m_pendingInvalidationMap.add(&node, nullptr);
   if (addResult.isNewEntry)
-    addResult.storedValue->value = makeUnique<PendingInvalidations>();
+    addResult.storedValue->value = WTF::makeUnique<PendingInvalidations>();
   return *addResult.storedValue->value;
 }
 
@@ -169,7 +188,7 @@ void StyleInvalidator::RecursionData::pushInvalidationSet(
     m_insertionPointCrossing = true;
   if (invalidationSet.invalidatesSlotted())
     m_invalidatesSlotted = true;
-  m_invalidationSets.append(&invalidationSet);
+  m_invalidationSets.push_back(&invalidationSet);
 }
 
 ALWAYS_INLINE bool
@@ -213,7 +232,7 @@ void StyleInvalidator::SiblingData::pushInvalidationSet(
   else
     invalidationLimit =
         m_elementIndex + invalidationSet.maxDirectAdjacentSelectors();
-  m_invalidationEntries.append(Entry(&invalidationSet, invalidationLimit));
+  m_invalidationEntries.push_back(Entry(&invalidationSet, invalidationLimit));
 }
 
 bool StyleInvalidator::SiblingData::matchCurrentInvalidationSets(
@@ -227,7 +246,7 @@ bool StyleInvalidator::SiblingData::matchCurrentInvalidationSets(
     if (m_elementIndex > m_invalidationEntries[index].m_invalidationLimit) {
       // m_invalidationEntries[index] only applies to earlier siblings. Remove
       // it.
-      m_invalidationEntries[index] = m_invalidationEntries.last();
+      m_invalidationEntries[index] = m_invalidationEntries.back();
       m_invalidationEntries.pop_back();
       continue;
     }
@@ -265,19 +284,15 @@ void StyleInvalidator::pushInvalidationSetsForContainerNode(
       m_pendingInvalidationMap.get(&node);
   DCHECK(pendingInvalidations);
 
-  for (const auto& invalidationSet : pendingInvalidations->siblings()) {
-    RELEASE_ASSERT(invalidationSet->isAlive());
+  for (const auto& invalidationSet : pendingInvalidations->siblings())
     siblingData.pushInvalidationSet(toSiblingInvalidationSet(*invalidationSet));
-  }
 
   if (node.getStyleChangeType() >= SubtreeStyleChange)
     return;
 
   if (!pendingInvalidations->descendants().isEmpty()) {
-    for (const auto& invalidationSet : pendingInvalidations->descendants()) {
-      RELEASE_ASSERT(invalidationSet->isAlive());
+    for (const auto& invalidationSet : pendingInvalidations->descendants())
       recursionData.pushInvalidationSet(*invalidationSet);
-    }
     if (UNLIKELY(*s_tracingEnabled)) {
       TRACE_EVENT_INSTANT1(
           TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking"),

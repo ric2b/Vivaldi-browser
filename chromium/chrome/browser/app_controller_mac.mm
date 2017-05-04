@@ -958,6 +958,17 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
 - (void)commandDispatch:(id)sender {
   Profile* lastProfile = [self safeLastProfileForNewWindows];
 
+  // NOTE(espen@vivaldi.com): The app window never uses a private profile.
+  // Fetch the profile from the registered main window (if any) so that we get
+  // the private profile when needed. It is ok if there is no window. We then
+  // correctly fall back to the regular profile.
+  if (vivaldi::IsVivaldiRunning()) {
+    Browser* browser = chrome::FindBrowserWithWindow([NSApp mainWindow]);
+    if (browser) {
+      lastProfile = browser->profile();
+    }
+  }
+
   // Handle the case where we're dispatching a command from a sender that's in a
   // browser window. This means that the command came from a background window
   // and is getting here because the foreground window is not a browser window.
@@ -1391,8 +1402,9 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
     command = IDC_FORWARD;
   }
   if (command != 0) {
-    Profile* lastProfile = [self safeLastProfileForNewWindows];
-    if (Browser* browser = ActivateBrowser(lastProfile)) {
+    Browser* browser = chrome::FindBrowserWithWindow([NSApp mainWindow]);
+    if (browser) {
+      browser->window()->Activate();
       if (chrome::IsCommandEnabled(browser, command)) {
         chrome::ExecuteCommand(browser, command);
       }

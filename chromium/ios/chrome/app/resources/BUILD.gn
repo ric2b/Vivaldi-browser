@@ -2,11 +2,25 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chrome_build.gni")
+import("//build/config/ios/rules.gni")
 import("//build/config/locales.gni")
-import("//tools/grit/grit_rule.gni")
 import("//ios/chrome/app/resources/ios_chrome_repack.gni")
+import("//ios/chrome/tools/strings/generate_localizable_strings.gni")
+import("//ios/public/provider/chrome/browser/build_config.gni")
+import("//tools/grit/grit_rule.gni")
 
-grit("resources") {
+group("resources") {
+  public_deps = [
+    ":launchscreen_xib",
+    ":quick_action_icons",
+    ":system_strings",
+    ios_application_icons_target,
+    ios_packed_resources_target,
+  ]
+}
+
+grit("ios_resources") {
   source = "ios_resources.grd"
   output_dir = "$root_gen_dir/ios/chrome"
   use_qualified_include = true
@@ -49,7 +63,7 @@ repack("repack_unscaled_resources") {
     "$root_gen_dir/ui/resources/webui_resources.pak",
   ]
   deps = [
-    ":resources",
+    ":ios_resources",
     "//components/resources",
     "//ios/web:resources",
     "//net:net_resources",
@@ -57,4 +71,71 @@ repack("repack_unscaled_resources") {
   ]
   output = "$target_gen_dir/resources.pak"
   copy_data_to_bundle = true
+}
+
+bundle_data("chromium_icons") {
+  sources = [
+    "chromium/Icon-120.png",
+    "chromium/Icon-152.png",
+    "chromium/Icon-167.png",
+    "chromium/Icon-180.png",
+    "chromium/Icon-29.png",
+    "chromium/Icon-40.png",
+    "chromium/Icon-58.png",
+    "chromium/Icon-76.png",
+    "chromium/Icon-80.png",
+    "chromium/Icon-87.png",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_file_part}}",
+  ]
+}
+
+bundle_data("quick_action_icons") {
+  sources = [
+    "quick_action_new_incognito_tab@2x.png",
+    "quick_action_new_incognito_tab@3x.png",
+    "quick_action_new_tab@2x.png",
+    "quick_action_new_tab@3x.png",
+    "quick_action_qr_scanner@2x.png",
+    "quick_action_qr_scanner@3x.png",
+    "quick_action_voice_search@2x.png",
+    "quick_action_voice_search@3x.png",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_file_part}}",
+  ]
+}
+
+bundle_data("launchscreen_assets") {
+  sources = [
+    "launchscreen_images.xcassets/Contents.json",
+    "launchscreen_images.xcassets/launchscreen_app_logo.imageset/Contents.json",
+    "launchscreen_images.xcassets/launchscreen_app_logo.imageset/launchscreen_app_logo.png",
+    "launchscreen_images.xcassets/launchscreen_brand_name.imageset/Contents.json",
+    "launchscreen_images.xcassets/launchscreen_brand_name.imageset/launchscreen_brand_name.png",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_file_part}}",
+  ]
+}
+
+bundle_data_ib_file("launchscreen_xib") {
+  source = "LaunchScreen.xib"
+  deps = [
+    ios_launchscreen_assets_target,
+  ]
+}
+
+generate_localizable_strings("system_strings") {
+  config_file = "chrome_localize_strings_config.plist"
+  datapack_dir = get_label_info(ios_packed_resources_target, "target_gen_dir")
+  packed_locales = ios_packed_locales_as_mac_outputs
+  output_filenames = [
+    "InfoPlist.strings",
+    "Localizable.strings",
+  ]
+  deps = [
+    ios_packed_resources_target,
+  ]
 }

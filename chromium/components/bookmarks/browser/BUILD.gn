@@ -14,10 +14,6 @@ static_library("browser") {
     "bookmark_codec.h",
     "bookmark_expanded_state_tracker.cc",
     "bookmark_expanded_state_tracker.h",
-    "bookmark_index.cc",
-    "bookmark_index.h",
-    "bookmark_match.cc",
-    "bookmark_match.h",
     "bookmark_model.cc",
     "bookmark_model.h",
     "bookmark_model_observer.h",
@@ -39,6 +35,15 @@ static_library("browser") {
     "scoped_group_bookmark_actions.h",
     "startup_task_runner_service.cc",
     "startup_task_runner_service.h",
+    "titled_url_index.cc",
+    "titled_url_index.h",
+    "titled_url_match.cc",
+    "titled_url_match.h",
+    "titled_url_node.cc",
+    "titled_url_node.h",
+    "titled_url_node_sorter.h",
+    "typed_count_sorter.cc",
+    "typed_count_sorter.h",
   ]
 
   public_deps = [
@@ -96,6 +101,7 @@ source_set("unit_tests") {
     "bookmark_index_unittest.cc",
     "bookmark_model_unittest.cc",
     "bookmark_utils_unittest.cc",
+    "titled_url_match_unittest.cc",
   ]
 
   if (toolkit_views) {

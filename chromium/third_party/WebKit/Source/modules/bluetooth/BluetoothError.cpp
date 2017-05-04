@@ -6,15 +6,12 @@
 
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
-#include "third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom-blink.h"
 
 namespace blink {
 
-DOMException* BluetoothError::take(
-    ScriptPromiseResolver*,
-    int32_t
-        webError /* Corresponds to WebBluetoothResult in web_bluetooth.mojom */) {
-  switch (static_cast<mojom::blink::WebBluetoothResult>(webError)) {
+DOMException* BluetoothError::take(ScriptPromiseResolver*,
+                                   mojom::blink::WebBluetoothResult error) {
+  switch (error) {
     case mojom::blink::WebBluetoothResult::SUCCESS:
       ASSERT_NOT_REACHED();
       return DOMException::create(UnknownError);
@@ -95,6 +92,10 @@ DOMException* BluetoothError::take(
                 "No Characteristics with specified UUID found in Service.");
       MAP_ERROR(NO_CHARACTERISTICS_FOUND, NotFoundError,
                 "No Characteristics found in service.");
+      MAP_ERROR(DESCRIPTOR_NOT_FOUND, NotFoundError,
+                "No Descriptors with specified UUID found in Characteristic.");
+      MAP_ERROR(NO_DESCRIPTORS_FOUND, NotFoundError,
+                "No Descriptors found in Characteristic.");
       MAP_ERROR(BLUETOOTH_LOW_ENERGY_NOT_AVAILABLE, NotFoundError,
                 "Bluetooth Low Energy not available.");
 
@@ -114,6 +115,9 @@ DOMException* BluetoothError::take(
                 "GATT operation not authorized.");
       MAP_ERROR(BLOCKLISTED_CHARACTERISTIC_UUID, SecurityError,
                 "getCharacteristic(s) called with blocklisted UUID. "
+                "https://goo.gl/4NeimX");
+      MAP_ERROR(BLOCKLISTED_DESCRIPTOR_UUID, SecurityError,
+                "getDescriptor(s) called with blocklisted UUID. "
                 "https://goo.gl/4NeimX");
       MAP_ERROR(BLOCKLISTED_READ, SecurityError,
                 "readValue() called on blocklisted object marked "

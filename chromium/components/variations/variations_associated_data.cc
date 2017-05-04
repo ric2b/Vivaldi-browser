@@ -11,15 +11,15 @@
 #include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
+#include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_param_associator.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "components/variations/variations_http_header_provider.h"
 
 namespace variations {
 
 namespace {
-
-const char kGroupTesting[] = "Testing";
 
 // The internal singleton accessor for the map, used to keep it thread-safe.
 class GroupMapAccessor {
@@ -199,29 +199,67 @@ std::string GetVariationParamValueByFeature(const base::Feature& feature,
   return GetVariationParamValue(trial->trial_name(), param_name);
 }
 
+int GetVariationParamByFeatureAsInt(const base::Feature& feature,
+                                    const std::string& param_name,
+                                    int default_value) {
+  std::string value_as_string =
+      GetVariationParamValueByFeature(feature, param_name);
+  int value_as_int = 0;
+  if (!base::StringToInt(value_as_string, &value_as_int)) {
+    if (!value_as_string.empty()) {
+      DLOG(WARNING) << "Failed to parse variation param " << param_name
+                    << " with string value " << value_as_string
+                    << " under feature " << feature.name
+                    << " into an int. Falling back to default value of "
+                    << default_value;
+    }
+    value_as_int = default_value;
+  }
+  return value_as_int;
+}
+
+double GetVariationParamByFeatureAsDouble(const base::Feature& feature,
+                                          const std::string& param_name,
+                                          double default_value) {
+  std::string value_as_string =
+      GetVariationParamValueByFeature(feature, param_name);
+  double value_as_double = 0;
+  if (!base::StringToDouble(value_as_string, &value_as_double)) {
+    if (!value_as_string.empty()) {
+      DLOG(WARNING) << "Failed to parse variation param " << param_name
+                    << " with string value " << value_as_string
+                    << " under feature " << feature.name
+                    << " into a double. Falling back to default value of "
+                    << default_value;
+    }
+    value_as_double = default_value;
+  }
+  return value_as_double;
+}
+
+bool GetVariationParamByFeatureAsBool(const base::Feature& feature,
+                                      const std::string& param_name,
+                                      bool default_value) {
+  std::string value_as_string =
+      variations::GetVariationParamValueByFeature(feature, param_name);
+  if (value_as_string == "true")
+    return true;
+  if (value_as_string == "false")
+    return false;
+
+  if (!value_as_string.empty()) {
+    DLOG(WARNING) << "Failed to parse variation param " << param_name
+                  << " with string value " << value_as_string
+                  << " under feature " << feature.name
+                  << " into a bool. Falling back to default value of "
+                  << default_value;
+  }
+  return default_value;
+}
+
 // Functions below are exposed for testing explicitly behind this namespace.
 // They simply wrap existing functions in this file.
 namespace testing {
-
-VariationParamsManager::VariationParamsManager(
-    const std::string& trial_name,
-    const std::map<std::string, std::string>& params) {
-  SetVariationParams(trial_name, params);
-}
-
-VariationParamsManager::~VariationParamsManager() {
-  ClearAllVariationIDs();
-  ClearAllVariationParams();
-  field_trial_list_.reset();
-}
-
-void VariationParamsManager::SetVariationParams(
-    const std::string& trial_name,
-    const std::map<std::string, std::string>& params) {
-  field_trial_list_.reset(new base::FieldTrialList(nullptr));
-  variations::AssociateVariationParams(trial_name, kGroupTesting, params);
-  base::FieldTrialList::CreateFieldTrial(trial_name, kGroupTesting);
-}
 
 void ClearAllVariationIDs() {
   GroupMapAccessor::GetInstance()->ClearAllMapsForTesting();

@@ -25,7 +25,7 @@ namespace media {
 TestMojoMediaClient::TestMojoMediaClient() {}
 
 TestMojoMediaClient::~TestMojoMediaClient() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   // AudioManager destructor requires MessageLoop.
   // Destroy it before the message loop goes away.
   audio_manager_.reset();
@@ -33,7 +33,8 @@ TestMojoMediaClient::~TestMojoMediaClient() {
   base::RunLoop().RunUntilIdle();
 }
 
-void TestMojoMediaClient::Initialize() {
+void TestMojoMediaClient::Initialize(
+    service_manager::Connector* /* connector */) {
   InitializeMediaLibrary();
   // TODO(dalecurtis): We should find a single owner per process for the audio
   // manager or make it a lazy instance.  It's not safe to call Get()/Create()
@@ -68,8 +69,8 @@ std::unique_ptr<RendererFactory> TestMojoMediaClient::CreateRendererFactory(
 }
 
 std::unique_ptr<CdmFactory> TestMojoMediaClient::CreateCdmFactory(
-    service_manager::mojom::InterfaceProvider* /* interface_provider */) {
-  DVLOG(1) << __FUNCTION__;
+    service_manager::mojom::InterfaceProvider* /* host_interfaces */) {
+  DVLOG(1) << __func__;
   return base::MakeUnique<DefaultCdmFactory>();
 }
 

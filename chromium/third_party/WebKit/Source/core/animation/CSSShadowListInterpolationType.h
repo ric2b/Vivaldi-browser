@@ -16,15 +16,15 @@ class CSSShadowListInterpolationType : public CSSInterpolationType {
   CSSShadowListInterpolationType(PropertyHandle property)
       : CSSInterpolationType(property) {}
 
-  InterpolationValue maybeConvertUnderlyingValue(
-      const InterpolationEnvironment&) const final;
+  InterpolationValue maybeConvertStandardPropertyUnderlyingValue(
+      const StyleResolverState&) const final;
   void composite(UnderlyingValueOwner&,
                  double underlyingFraction,
                  const InterpolationValue&,
                  double interpolationFraction) const final;
-  void apply(const InterpolableValue&,
-             const NonInterpolableValue*,
-             InterpolationEnvironment&) const final;
+  void applyStandardPropertyValue(const InterpolableValue&,
+                                  const NonInterpolableValue*,
+                                  StyleResolverState&) const final;
 
  private:
   InterpolationValue convertShadowList(const ShadowList*, double zoom) const;

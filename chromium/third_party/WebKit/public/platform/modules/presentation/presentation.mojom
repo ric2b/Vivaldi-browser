@@ -40,21 +40,35 @@ struct PresentationError {
 
 enum PresentationMessageType {
   TEXT,
-  ARRAY_BUFFER,
-  BLOB,
+  BINARY,
 };
 
-struct SessionMessage {
+struct ConnectionMessage {
   PresentationMessageType type;
   // Used when message type is TEXT.
   string? message;
-  // Used when message type is ARRAY_BUFFER or BLOB.
+  // Used when message type is BINARY.
+  // TODO(lethalantidote): Make this a mojo union.
+  // See https://crbug.com/632623.
   array<uint8>? data;
+};
+
+interface PresentationConnection {
+   // TODO(zhaobin): migrate SendConnectionMessage from PresentationService =>
+   // PresentationConnection.Send(). http://crbug.com/658474
+
+   // Called when a message is sent by the target connection.
+   OnMessage(ConnectionMessage message) => (bool success);
+
+   // Called when target connection notifies connection state change.
+   DidChangeState(PresentationConnectionState state);
 };
 
 interface PresentationService {
   // Sets the PresentationServiceClient.
   SetClient(PresentationServiceClient client);
+
+  ///////////// Functions here are for the controller part of the API. /////////
 
   // Called when the frame sets or changes the default presentation URLs.
   // When the default presentation is started on this frame,
@@ -90,13 +104,23 @@ interface PresentationService {
   JoinSession(array<url.mojom.Url> presentation_urls, string? presentation_id)
       => (PresentationSessionInfo? sessionInfo, PresentationError? error);
 
+  // Called in StartSession's callback function for offscreen presentation only.
+  // It passes in controlling frame's PresentationConnection and
+  // PresentationConnectionRequest to PresentationService.
+  SetPresentationConnection(
+      PresentationSessionInfo sessionInfo,
+      PresentationConnection controller_connection_ptr,
+      PresentationConnection& receiver_connection_request);
+
+  //////////////////////////////////////////////////////////////////////////////
+
   // Called when send() is called by the frame. The true in the
   // result callback notifies that the service is ready for next message.
   // The false in the result callback notifies the renderer to stop sending
   // the send requests and invalidate all pending requests. This occurs
   // for eg., when frame is deleted or navigated away.
-  SendSessionMessage(PresentationSessionInfo sessionInfo,
-                     SessionMessage message_request) => (bool success);
+  SendConnectionMessage(PresentationSessionInfo sessionInfo,
+                     ConnectionMessage message_request) => (bool success);
 
   // Called when close() is called by the frame.
   CloseConnection(url.mojom.Url presentation_url, string presentation_id);
@@ -106,12 +130,15 @@ interface PresentationService {
 
   // Starts listening for messages for session with |sessionInfo|.
   // Messages will be received in
-  // PresentationServiceClient::OnSessionMessagesReceived.
+  // PresentationServiceClient::OnConnectionMessagesReceived.
   // This is called after a presentation session is created.
-  ListenForSessionMessages(PresentationSessionInfo sessionInfo);
+  ListenForConnectionMessages(PresentationSessionInfo sessionInfo);
 };
 
 interface PresentationServiceClient {
+
+  ////////////Functions here are called only on the controlling page.///////////
+
   // Called when the client tries to listen for screen availability changes for
   // presentation of |url| but it is not supported by the device or underlying
   // platform. This can also be called if the device is currently in a mode
@@ -124,6 +151,11 @@ interface PresentationServiceClient {
   // the current known state. It will then be called to notify of state updates.
   OnScreenAvailabilityUpdated(url.mojom.Url url, bool available);
 
+  // See PresentationService::SetDefaultPresentationURL.
+  OnDefaultSessionStarted(PresentationSessionInfo sessionInfo);
+
+  //////////////////////////////////////////////////////////////////////////////
+
   // Called when the state of PresentationConnection |connection| started on
   // this frame has changed to |newState|.
   OnConnectionStateChanged(PresentationSessionInfo connection,
@@ -135,13 +167,14 @@ interface PresentationServiceClient {
                      PresentationConnectionCloseReason reason,
                      string message);
 
-  // See PresentationService::ListenForSessionMessages.
-  OnSessionMessagesReceived(PresentationSessionInfo sessionInfo,
-                            array<SessionMessage> messages);
+  // See PresentationService::ListenForConnectionMessages.
+  OnConnectionMessagesReceived(PresentationSessionInfo sessionInfo,
+                            array<ConnectionMessage> messages);
 
-  // See PresentationService::SetDefaultPresentationURL.
-  OnDefaultSessionStarted(PresentationSessionInfo sessionInfo);
-
-  // See PresentationService::ListeningForReceiverPageRendered.
-  OnReceiverConnectionAvailable(PresentationSessionInfo sessionInfo);
+  // Called on a presentation receiver when presentation connection is available
+  // from the controlling page.
+  OnReceiverConnectionAvailable(
+      PresentationSessionInfo sessionInfo,
+      PresentationConnection controller_connection_ptr,
+      PresentationConnection& receiver_connection_request);
 };

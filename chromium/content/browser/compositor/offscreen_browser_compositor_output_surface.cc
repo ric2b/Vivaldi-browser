@@ -14,10 +14,11 @@
 #include "components/display_compositor/compositor_overlay_candidate_validator.h"
 #include "content/browser/compositor/reflector_impl.h"
 #include "content/browser/compositor/reflector_texture.h"
-#include "content/common/gpu/client/context_provider_command_buffer.h"
+#include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 
@@ -29,14 +30,12 @@ static cc::ResourceFormat kFboTextureFormat = cc::RGBA_8888;
 
 OffscreenBrowserCompositorOutputSurface::
     OffscreenBrowserCompositorOutputSurface(
-        scoped_refptr<ContextProviderCommandBuffer> context,
-        scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-        cc::SyntheticBeginFrameSource* begin_frame_source,
+        scoped_refptr<ui::ContextProviderCommandBuffer> context,
+        const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
         std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
             overlay_candidate_validator)
     : BrowserCompositorOutputSurface(std::move(context),
-                                     std::move(vsync_manager),
-                                     begin_frame_source,
+                                     update_vsync_parameters_callback,
                                      std::move(overlay_candidate_validator)),
       weak_ptr_factory_(this) {
   capabilities_.uses_default_gl_framebuffer = false;
@@ -113,7 +112,8 @@ void OffscreenBrowserCompositorOutputSurface::Reshape(
     const gfx::Size& size,
     float scale_factor,
     const gfx::ColorSpace& color_space,
-    bool alpha) {
+    bool alpha,
+    bool stencil) {
   reshape_size_ = size;
   DiscardBackbuffer();
   EnsureBackbuffer();
@@ -158,7 +158,7 @@ void OffscreenBrowserCompositorOutputSurface::SwapBuffers(
       sync_token,
       base::Bind(
           &OffscreenBrowserCompositorOutputSurface::OnSwapBuffersComplete,
-          weak_ptr_factory_.GetWeakPtr()));
+          weak_ptr_factory_.GetWeakPtr(), frame.latency_info));
 }
 
 bool OffscreenBrowserCompositorOutputSurface::IsDisplayedAsOverlayPlane()
@@ -187,7 +187,9 @@ void OffscreenBrowserCompositorOutputSurface::OnReflectorChanged() {
   }
 }
 
-void OffscreenBrowserCompositorOutputSurface::OnSwapBuffersComplete() {
+void OffscreenBrowserCompositorOutputSurface::OnSwapBuffersComplete(
+    const std::vector<ui::LatencyInfo>& latency_info) {
+  RenderWidgetHostImpl::CompositorFrameDrawn(latency_info);
   client_->DidReceiveSwapBuffersAck();
 }
 

@@ -6,8 +6,9 @@
 
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "services/ui/public/interfaces/constants.mojom.h"
-#include "services/ui/public/interfaces/ime.mojom.h"
+#include "services/ui/public/interfaces/ime/ime.mojom.h"
 #include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/mus/text_input_client_impl.h"
 #include "ui/aura/mus/window_port_mus.h"
@@ -33,7 +34,8 @@ InputMethodMus::InputMethodMus(ui::internal::InputMethodDelegate* delegate,
 InputMethodMus::~InputMethodMus() {}
 
 void InputMethodMus::Init(service_manager::Connector* connector) {
-  connector->ConnectToInterface(ui::mojom::kServiceName, &ime_server_);
+  if (connector)
+    connector->BindInterface(ui::mojom::kServiceName, &ime_server_);
 }
 
 void InputMethodMus::DispatchKeyEvent(
@@ -90,10 +92,8 @@ void InputMethodMus::OnTextInputTypeChanged(const ui::TextInputClient* client) {
     UpdateTextInputType();
   InputMethodBase::OnTextInputTypeChanged(client);
 
-  if (input_method_) {
-    input_method_->OnTextInputTypeChanged(
-        static_cast<ui::mojom::TextInputType>(client->GetTextInputType()));
-  }
+  if (input_method_)
+    input_method_->OnTextInputTypeChanged(client->GetTextInputType());
 }
 
 void InputMethodMus::OnCaretBoundsChanged(const ui::TextInputClient* client) {
@@ -123,9 +123,23 @@ void InputMethodMus::OnDidChangeFocusedClient(
   InputMethodBase::OnDidChangeFocusedClient(focused_before, focused);
   UpdateTextInputType();
 
+  // TODO(moshayedi): crbug.com/681563. Handle when there is no focused clients.
+  if (!focused)
+    return;
+
   text_input_client_ = base::MakeUnique<TextInputClientImpl>(focused);
-  ime_server_->StartSession(text_input_client_->CreateInterfacePtrAndBind(),
-                            GetProxy(&input_method_));
+  if (ime_server_) {
+    ui::mojom::StartSessionDetailsPtr details =
+        ui::mojom::StartSessionDetails::New();
+    details->client = text_input_client_->CreateInterfacePtrAndBind();
+    details->input_method_request = MakeRequest(&input_method_);
+    details->text_input_type = focused->GetTextInputType();
+    details->text_input_mode = focused->GetTextInputMode();
+    details->text_direction = focused->GetTextDirection();
+    details->text_input_flags = focused->GetTextInputFlags();
+    details->caret_bounds = focused->GetCaretBounds();
+    ime_server_->StartSession(std::move(details));
+  }
 }
 
 void InputMethodMus::UpdateTextInputType() {

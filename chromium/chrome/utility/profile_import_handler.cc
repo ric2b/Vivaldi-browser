@@ -6,57 +6,41 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "chrome/common/importer/profile_import_process_messages.h"
 #include "chrome/utility/importer/external_process_importer_bridge.h"
 #include "chrome/utility/importer/importer.h"
 #include "chrome/utility/importer/importer_creator.h"
 #include "content/public/utility/utility_thread.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 
-#include "importer/vivaldi_profile_import_process_messages.h"
-
-namespace {
-
-bool Send(IPC::Message* message) {
-  return content::UtilityThread::Get()->Send(message);
-}
-
-}  // namespace
+using chrome::mojom::ThreadSafeProfileImportObserverPtr;
 
 ProfileImportHandler::ProfileImportHandler() : items_to_import_(0) {}
 
 ProfileImportHandler::~ProfileImportHandler() {}
 
-bool ProfileImportHandler::OnMessageReceived(const IPC::Message& message) {
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(ProfileImportHandler, message)
-    IPC_MESSAGE_HANDLER(ProfileImportProcessMsg_StartImport, OnImportStart)
-    IPC_MESSAGE_HANDLER(ProfileImportProcessMsg_CancelImport, OnImportCancel)
-    IPC_MESSAGE_HANDLER(ProfileImportProcessMsg_ReportImportItemFinished,
-                        OnImportItemFinished)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  return handled;
+// static
+void ProfileImportHandler::Create(
+    mojo::InterfaceRequest<chrome::mojom::ProfileImport> request) {
+  mojo::MakeStrongBinding(base::MakeUnique<ProfileImportHandler>(),
+                          std::move(request));
 }
 
-void ProfileImportHandler::OnImportStart(
+void ProfileImportHandler::StartImport(
     const importer::SourceProfile& source_profile,
-    const importer::ImportConfig &import_config,
-    const base::DictionaryValue& localized_strings) {
+    const importer::ImportConfig& import_config,
+    std::unique_ptr<base::DictionaryValue> localized_strings,
+    chrome::mojom::ProfileImportObserverPtr observer) {
   content::UtilityThread::Get()->EnsureBlinkInitialized();
-  bridge_ = new ExternalProcessImporterBridge(
-      localized_strings,
-      content::UtilityThread::Get(),
-      base::ThreadTaskRunnerHandle::Get().get());
   importer_ = importer::CreateImporterByType(source_profile.importer_type,
                                              import_config);
   if (!importer_.get()) {
-    Send(new ProfileImportProcessHostMsg_Import_Finished(
-        false, "Importer could not be created."));
+    observer->OnImportFinished(false, "Importer could not be created.");
     return;
   }
 
@@ -71,21 +55,22 @@ void ProfileImportHandler::OnImportStart(
     NOTREACHED();
     ImporterCleanup();
   }
+  bridge_ = new ExternalProcessImporterBridge(
+      *localized_strings,
+      ThreadSafeProfileImportObserverPtr::Create(std::move(observer)));
   import_thread_->task_runner()->PostTask(
       FROM_HERE, base::Bind(&Importer::StartImport, importer_,
                             source_profile, import_config.imported_items,
                             base::RetainedRef(bridge_)));
 }
 
-void ProfileImportHandler::OnImportCancel() {
+void ProfileImportHandler::CancelImport() {
   ImporterCleanup();
 }
 
-void ProfileImportHandler::OnImportItemFinished(uint16_t item) {
+void ProfileImportHandler::ReportImportItemFinished(importer::ImportItem item) {
   items_to_import_ ^= item;  // Remove finished item from mask.
-  // If we've finished with all items, notify the browser process.
   if (items_to_import_ == 0) {
-    Send(new ProfileImportProcessHostMsg_Import_Finished(true, std::string()));
     ImporterCleanup();
   }
 }

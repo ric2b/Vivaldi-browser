@@ -30,6 +30,7 @@
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/test/zoom_test_utils.h"
@@ -47,6 +48,7 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/manifest_handlers/mime_types_handler.h"
 #include "extensions/test/result_catcher.h"
@@ -283,7 +285,6 @@ class PDFExtensionTest : public ExtensionApiTest,
 
     point->SetPoint(x, y);
   }
-
 };
 
 IN_PROC_BROWSER_TEST_P(PDFExtensionTest, Load) {
@@ -295,21 +296,14 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionTest, Load) {
   LoadAllPdfsTest("pdf", GetParam());
 }
 
-class DisablePluginHelper : public content::DownloadManager::Observer,
-                            public content::NotificationObserver {
+class DisablePluginHelper : public content::DownloadManager::Observer {
  public:
   DisablePluginHelper() {}
   ~DisablePluginHelper() override {}
 
   void DisablePlugin(Profile* profile) {
-    registrar_.Add(this, chrome::NOTIFICATION_PLUGIN_ENABLE_STATUS_CHANGED,
-                   content::Source<Profile>(profile));
-    scoped_refptr<PluginPrefs> prefs(PluginPrefs::GetForProfile(profile));
-    DCHECK(prefs.get());
-    prefs->EnablePluginGroup(
-        false, base::UTF8ToUTF16(ChromeContentClient::kPDFPluginName));
-    // Wait until the plugin has been disabled.
-    disable_run_loop_.Run();
+    profile->GetPrefs()->SetBoolean(
+        prefs::kPluginsAlwaysOpenPdfExternally, true);
   }
 
   const GURL& GetLastUrl() {
@@ -325,17 +319,8 @@ class DisablePluginHelper : public content::DownloadManager::Observer,
     download_run_loop_.Quit();
   }
 
-  // content::NotificationObserver implementation.
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override {
-    DCHECK_EQ(chrome::NOTIFICATION_PLUGIN_ENABLE_STATUS_CHANGED, type);
-    disable_run_loop_.Quit();
-  }
-
  private:
   content::NotificationRegistrar registrar_;
-  base::RunLoop disable_run_loop_;
   base::RunLoop download_run_loop_;
   GURL last_url_;
 };
@@ -742,6 +727,21 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PdfAccessibilityInOOPIF) {
   ASSERT_MULTILINE_STREQ(kExpectedPDFAXTree, ax_tree_dump);
 }
 
+#if defined(GOOGLE_CHROME_BUILD)
+// Test a particular PDF encountered in the wild that triggered a crash
+// when accessibility is enabled.  (http://crbug.com/668724)
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PdfAccessibilityTextRunCrash) {
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  GURL test_pdf_url(embedded_test_server()->GetURL(
+      "/pdf_private/accessibility_crash_2.pdf"));
+
+  content::WebContents* guest_contents = LoadPdfGetGuestContents(test_pdf_url);
+  ASSERT_TRUE(guest_contents);
+
+  WaitForAccessibilityTreeToContainNodeWithName(guest_contents, "Page 1");
+}
+#endif
+
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, LinkCtrlLeftClick) {
   host_resolver()->AddRule("www.example.com", "127.0.0.1");
   GURL test_pdf_url(embedded_test_server()->GetURL("/pdf/test-link.pdf"));
@@ -920,4 +920,95 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, LinkShiftLeftClick) {
 // the redirect, which can have security implications. https://crbug.com/653749.
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, RedirectsFailInPlugin) {
   RunTestsInFile("redirects_fail_test.js", "test.pdf");
+}
+
+// Test that even if a different tab is selected when a navigation occurs,
+// the correct tab still gets navigated (see crbug.com/672563).
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, NavigationOnCorrectTab) {
+  GURL test_pdf_url(embedded_test_server()->GetURL("/pdf/test.pdf"));
+  content::WebContents* guest_contents = LoadPdfGetGuestContents(test_pdf_url);
+  ASSERT_TRUE(guest_contents);
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL("about:blank"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_TAB |
+          ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+  content::WebContents* active_web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_NE(web_contents, active_web_contents);
+
+  ASSERT_TRUE(content::ExecuteScript(
+      guest_contents,
+      "viewer.navigator_.navigate("
+      "    'www.example.com', Navigator.WindowOpenDisposition.CURRENT_TAB);"));
+
+  EXPECT_TRUE(web_contents->GetController().GetPendingEntry());
+  EXPECT_FALSE(active_web_contents->GetController().GetPendingEntry());
+}
+
+// This test opens a PDF by clicking a link via javascript and verifies that
+// the PDF is loaded and functional by clicking a link in the PDF. The link
+// click in the PDF opens a new tab. The main page handles the pageShow event
+// and updates the history state.
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, OpenPDFOnLinkClickWithReplaceState) {
+  host_resolver()->AddRule("www.example.com", "127.0.0.1");
+
+  // Navigate to the main page.
+  GURL test_url(
+      embedded_test_server()->GetURL("/pdf/pdf_href_replace_state.html"));
+  ui_test_utils::NavigateToURL(browser(), test_url);
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(web_contents);
+
+  // Click on the link which opens the PDF via JS.
+  content::TestNavigationObserver navigation_observer(web_contents);
+  const char kPdfLinkClick[] = "document.getElementById('link').click();";
+  ASSERT_TRUE(content::ExecuteScript(web_contents->GetRenderViewHost(),
+                                     kPdfLinkClick));
+  navigation_observer.Wait();
+  const GURL& current_url = web_contents->GetURL();
+  ASSERT_TRUE(current_url.path() == "/pdf/test-link.pdf");
+
+  ASSERT_TRUE(pdf_extension_test_util::EnsurePDFHasLoaded(web_contents));
+
+  // Now click on the link to example.com in the PDF. This should open up a new
+  // tab.
+  content::BrowserPluginGuestManager* guest_manager =
+      web_contents->GetBrowserContext()->GetGuestManager();
+  content::WebContents* guest_contents =
+      guest_manager->GetFullPageGuest(web_contents);
+  ASSERT_TRUE(guest_contents);
+  // The link position of the test-link.pdf in page coordinates is (110, 110).
+  // Convert the link position from page coordinates to screen coordinates.
+  gfx::Point link_position(110, 110);
+  ConvertPageCoordToScreenCoord(guest_contents, &link_position);
+
+  content::WindowedNotificationObserver observer(
+      chrome::NOTIFICATION_TAB_ADDED,
+      content::NotificationService::AllSources());
+  content::SimulateMouseClickAt(web_contents, kDefaultKeyModifier,
+                                blink::WebMouseEvent::Button::Left,
+                                link_position);
+  observer.Wait();
+
+  // We should have two tabs now. One with the PDF and the second for
+  // example.com
+  int tab_count = browser()->tab_strip_model()->count();
+  ASSERT_EQ(2, tab_count);
+
+  content::WebContents* active_web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_EQ(web_contents, active_web_contents);
+
+  content::WebContents* new_web_contents =
+      browser()->tab_strip_model()->GetWebContentsAt(1);
+  ASSERT_TRUE(new_web_contents);
+  ASSERT_NE(web_contents, new_web_contents);
+
+  const GURL& url = new_web_contents->GetURL();
+  ASSERT_EQ(GURL("http://www.example.com"), url);
 }

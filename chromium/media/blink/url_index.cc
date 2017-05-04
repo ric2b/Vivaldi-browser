@@ -172,6 +172,11 @@ void UrlData::set_etag(const std::string& etag) {
   etag_ = etag;
 }
 
+void UrlData::set_mime_type(std::string mime_type) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  mime_type_ = mime_type;
+}
+
 void UrlData::set_range_supported() {
   DCHECK(thread_checker_.CalledOnValidThread());
   range_supported_ = true;

@@ -13,9 +13,9 @@ Polymer({
     settings.RouteObserverBehavior,
     I18nBehavior,
     WebUIListenerBehavior,
-<if expr="chromeos">
+// <if expr="chromeos">
     LockStateBehavior,
-</if>
+// </if>
   ],
 
   properties: {
@@ -48,13 +48,30 @@ Polymer({
      */
     profileManagesSupervisedUsers_: Boolean,
 
-<if expr="not chromeos">
+    /**
+     * The profile deletion warning. The message indicates the number of
+     * profile stats that will be deleted if a non-zero count for the profile
+     * stats is returned from the browser.
+     */
+    deleteProfileWarning_: String,
+
+    /**
+     * True if the profile deletion warning is visible.
+     */
+    deleteProfileWarningVisible_: Boolean,
+
+    /**
+     * True if the checkbox to delete the profile has been checked.
+     */
+    deleteProfile_: Boolean,
+
+// <if expr="not chromeos">
     /** @private */
     showImportDataDialog_: {
       type: Boolean,
       value: false,
     },
-</if>
+// </if>
 
     /** @private {!settings.SyncBrowserProxy} */
     syncBrowserProxy_: {
@@ -64,7 +81,7 @@ Polymer({
       },
     },
 
-<if expr="chromeos">
+// <if expr="chromeos">
     /**
      * True if quick unlock settings should be displayed on this machine.
      * @private
@@ -117,7 +134,13 @@ Polymer({
       },
       readOnly: true,
     },
-</if>
+
+    /** @private */
+    showEasyUnlockTurnOffDialog_: {
+      type: Boolean,
+      value: false,
+    },
+// </if>
   },
 
   /** @override */
@@ -132,12 +155,15 @@ Polymer({
     this.addWebUIListener('profile-manages-supervised-users-changed',
                           this.handleProfileManagesSupervisedUsers_.bind(this));
 
+    this.addWebUIListener('profile-stats-count-ready',
+                          this.handleProfileStatsCount_.bind(this));
+
     this.syncBrowserProxy_.getSyncStatus().then(
         this.handleSyncStatus_.bind(this));
     this.addWebUIListener('sync-status-changed',
                           this.handleSyncStatus_.bind(this));
 
-<if expr="chromeos">
+// <if expr="chromeos">
     if (this.easyUnlockAllowed_) {
       this.addWebUIListener(
           'easy-unlock-enabled-status',
@@ -145,7 +171,7 @@ Polymer({
       this.easyUnlockBrowserProxy_.getEnabledStatus().then(
           this.handleEasyUnlockEnabledStatusChanged_.bind(this));
     }
-</if>
+// </if>
   },
 
   /** @protected */
@@ -166,7 +192,7 @@ Polymer({
     }
   },
 
-<if expr="chromeos">
+// <if expr="chromeos">
   /** @private */
   getPasswordState_: function(hasPin, enableScreenLock) {
     if (!enableScreenLock)
@@ -175,7 +201,7 @@ Polymer({
       return this.i18n('lockScreenPinOrPassword');
     return this.i18n('lockScreenPasswordOnly');
   },
-</if>
+// </if>
 
   /**
    * Handler for when the profile's icon and name is updated.
@@ -197,6 +223,22 @@ Polymer({
   },
 
   /**
+   * Handler for when the profile stats count is pushed from the browser.
+   * @param {number} count
+   * @private
+   */
+  handleProfileStatsCount_: function(count) {
+    this.deleteProfileWarning_ = (count > 0) ?
+        (count == 1) ?
+            loadTimeData.getStringF('deleteProfileWarningWithCountsSingular',
+                                    this.syncStatus.signedInUsername) :
+            loadTimeData.getStringF('deleteProfileWarningWithCountsPlural',
+                                    count, this.syncStatus.signedInUsername) :
+        loadTimeData.getStringF('deleteProfileWarningWithoutCounts',
+                                this.syncStatus.signedInUsername);
+  },
+
+  /**
    * Handler for when the sync state is pushed from the browser.
    * @param {?settings.SyncStatus} syncStatus
    * @private
@@ -205,38 +247,45 @@ Polymer({
     if (!this.syncStatus && syncStatus && !syncStatus.signedIn)
       chrome.metricsPrivate.recordUserAction('Signin_Impression_FromSettings');
 
+// <if expr="not chromeos">
+    if (syncStatus.signedIn)
+      settings.ProfileInfoBrowserProxyImpl.getInstance().getProfileStatsCount();
+// </if>
+
     if (!syncStatus.signedIn && this.$.disconnectDialog.open)
       this.$.disconnectDialog.close();
 
     this.syncStatus = syncStatus;
   },
 
-<if expr="chromeos">
+// <if expr="chromeos">
   /**
    * Handler for when the Easy Unlock enabled status has changed.
    * @private
    */
   handleEasyUnlockEnabledStatusChanged_: function(easyUnlockEnabled) {
     this.easyUnlockEnabled_ = easyUnlockEnabled;
+    this.showEasyUnlockTurnOffDialog_ =
+        easyUnlockEnabled && this.showEasyUnlockTurnOffDialog_;
   },
-</if>
+// </if>
 
   /** @private */
   onPictureTap_: function() {
-<if expr="chromeos">
+// <if expr="chromeos">
     settings.navigateTo(settings.Route.CHANGE_PICTURE);
-</if>
-<if expr="not chromeos">
+// </if>
+// <if expr="not chromeos">
     settings.navigateTo(settings.Route.MANAGE_PROFILE);
-</if>
+// </if>
   },
 
-<if expr="not chromeos">
+// <if expr="not chromeos">
   /** @private */
   onProfileNameTap_: function() {
     settings.navigateTo(settings.Route.MANAGE_PROFILE);
   },
-</if>
+// </if>
 
   /** @private */
   onActivityControlsTap_: function() {
@@ -267,8 +316,7 @@ Polymer({
 
   /** @private */
   onDisconnectConfirm_: function() {
-    var deleteProfile = !!this.syncStatus.domain ||
-        (this.$.deleteProfile && this.$.deleteProfile.checked);
+    var deleteProfile = !!this.syncStatus.domain || this.deleteProfile_;
     // Trigger the sign out event after the navigateToPreviousRoute().
     // So that the navigation to the setting page could be finished before the
     // sign out if navigateToPreviousRoute() returns synchronously even the
@@ -295,10 +343,10 @@ Polymer({
         this.syncBrowserProxy_.startSignIn();
         break;
       case settings.StatusAction.SIGNOUT_AND_SIGNIN:
-<if expr="chromeos">
+// <if expr="chromeos">
         this.syncBrowserProxy_.attemptUserExit();
-</if>
-<if expr="not chromeos">
+// </if>
+// <if expr="not chromeos">
         if (this.syncStatus.domain)
           settings.navigateTo(settings.Route.SIGN_OUT);
         else {
@@ -307,7 +355,7 @@ Polymer({
           this.syncBrowserProxy_.signOut(false);
           this.syncBrowserProxy_.startSignIn();
         }
-</if>
+// </if>
         break;
       case settings.StatusAction.UPGRADE_CLIENT:
         settings.navigateTo(settings.Route.ABOUT);
@@ -319,7 +367,7 @@ Polymer({
     }
   },
 
-<if expr="chromeos">
+// <if expr="chromeos">
   /** @private */
   onConfigureLockTap_: function() {
     settings.navigateTo(settings.Route.LOCK_SCREEN);
@@ -330,20 +378,29 @@ Polymer({
     this.easyUnlockBrowserProxy_.startTurnOnFlow();
   },
 
-  /** @private */
-  onEasyUnlockTurnOffTap_: function() {
-    this.$$('#easyUnlockTurnOffDialog').open();
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onEasyUnlockTurnOffTap_: function(e) {
+    e.preventDefault();
+    this.showEasyUnlockTurnOffDialog_ = true;
   },
-</if>
+
+  /** @private */
+  onEasyUnlockTurnOffDialogClose_: function() {
+    this.showEasyUnlockTurnOffDialog_ = false;
+  },
+// </if>
 
   /** @private */
   onManageOtherPeople_: function() {
-<if expr="not chromeos">
+// <if expr="not chromeos">
     this.syncBrowserProxy_.manageOtherPeople();
-</if>
-<if expr="chromeos">
+// </if>
+// <if expr="chromeos">
     settings.navigateTo(settings.Route.ACCOUNTS);
-</if>
+// </if>
   },
 
   /** @private */
@@ -351,7 +408,7 @@ Polymer({
     window.open(loadTimeData.getString('supervisedUsersUrl'));
   },
 
-<if expr="not chromeos">
+// <if expr="not chromeos">
   /**
    * @private
    * @param {string} domain
@@ -372,7 +429,7 @@ Polymer({
   onImportDataDialogClosed_: function() {
     settings.navigateToPreviousRoute();
   },
-</if>
+// </if>
 
   /**
    * @private
@@ -380,13 +437,13 @@ Polymer({
    * @return {string}
    */
   getDisconnectExplanationHtml_: function(domain) {
-<if expr="not chromeos">
+// <if expr="not chromeos">
     if (domain) {
       return loadTimeData.getStringF(
           'syncDisconnectManagedProfileExplanation',
           '<span id="managed-by-domain-name">' + domain + '</span>');
     }
-</if>
+// </if>
     return loadTimeData.getString('syncDisconnectExplanation');
   },
 

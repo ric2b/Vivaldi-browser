@@ -21,7 +21,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/threading/worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #import "chrome/browser/mac/keystone_registration.h"
 #include "chrome/common/channel_info.h"
@@ -62,8 +62,7 @@ NSString* SystemBrandFilePath() {
   return [kBrandSystemFile stringByStandardizingPath];
 }
 
-// Adaptor for scheduling an Objective-C method call on a |WorkerPool|
-// thread.
+// Adaptor for scheduling an Objective-C method call in TaskScheduler.
 class PerformBridge : public base::RefCountedThreadSafe<PerformBridge> {
  public:
 
@@ -74,8 +73,13 @@ class PerformBridge : public base::RefCountedThreadSafe<PerformBridge> {
     DCHECK(sel);
 
     scoped_refptr<PerformBridge> op = new PerformBridge(target, sel, arg);
-    base::WorkerPool::PostTask(
-        FROM_HERE, base::Bind(&PerformBridge::Run, op.get()), true);
+    base::PostTaskWithTraits(
+        FROM_HERE, base::TaskTraits()
+                       .MayBlock()
+                       .WithPriority(base::TaskPriority::BACKGROUND)
+                       .WithShutdownBehavior(
+                           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN),
+        base::Bind(&PerformBridge::Run, op.get()));
   }
 
   // Convenience for the no-argument case.
@@ -837,6 +841,10 @@ NSString* const kVersionKey = @"KSVersion";
   }
 
   return (statfsBuf.f_flags & MNT_RDONLY) != 0;
+}
+
+- (BOOL)isAutoupdateEnabledForAllUsers {
+  return [self isSystemKeystone] && ![self isUserTicket];
 }
 
 - (BOOL)needsPromotion {

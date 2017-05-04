@@ -8,6 +8,7 @@
 #include "core/layout/LayoutTestHelper.h"
 #include "core/layout/LayoutView.h"
 #include "platform/json/JSONValues.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -93,7 +94,7 @@ TEST_F(
 
 TEST_F(
     LayoutObjectTest,
-    ContainingBlockAbsoluteLayoutObjectShouldNotBeNonStaticlyPositionedInlineAncestor) {
+    ContainingBlockAbsoluteLayoutObjectShouldNotBeNonStaticallyPositionedInlineAncestor) {
   setBodyInnerHTML(
       "<span style='position:relative'><bar "
       "style='position:absolute'></bar></span>");
@@ -122,6 +123,95 @@ TEST_F(LayoutObjectTest, PaintingLayerOfOverflowClipLayerUnderColumnSpanAll) {
       getLayoutObjectByElementId("overflow-clip-layer");
   LayoutBlock* columns = toLayoutBlock(getLayoutObjectByElementId("columns"));
   EXPECT_EQ(columns->layer(), overflowClipObject->paintingLayer());
+}
+
+TEST_F(LayoutObjectTest, FloatUnderBlock) {
+  setBodyInnerHTML(
+      "<div id='layered-div' style='position: absolute'>"
+      "  <div id='container'>"
+      "    <div id='floating' style='float: left'>FLOAT</div>"
+      "  </div>"
+      "</div>");
+
+  LayoutBoxModelObject* layeredDiv =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("layered-div"));
+  LayoutBoxModelObject* container =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("container"));
+  LayoutObject* floating = getLayoutObjectByElementId("floating");
+
+  EXPECT_EQ(layeredDiv->layer(), layeredDiv->paintingLayer());
+  EXPECT_EQ(layeredDiv->layer(), floating->paintingLayer());
+  EXPECT_EQ(container, floating->container());
+  EXPECT_EQ(container, floating->containingBlock());
+}
+
+TEST_F(LayoutObjectTest, FloatUnderInline) {
+  setBodyInnerHTML(
+      "<div id='layered-div' style='position: absolute'>"
+      "  <div id='container'>"
+      "    <span id='layered-span' style='position: relative'>"
+      "      <div id='floating' style='float: left'>FLOAT</div>"
+      "    </span>"
+      "  </div>"
+      "</div>");
+
+  LayoutBoxModelObject* layeredDiv =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("layered-div"));
+  LayoutBoxModelObject* container =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("container"));
+  LayoutBoxModelObject* layeredSpan =
+      toLayoutBoxModelObject(getLayoutObjectByElementId("layered-span"));
+  LayoutObject* floating = getLayoutObjectByElementId("floating");
+
+  EXPECT_EQ(layeredDiv->layer(), layeredDiv->paintingLayer());
+  EXPECT_EQ(layeredSpan->layer(), layeredSpan->paintingLayer());
+  EXPECT_EQ(layeredDiv->layer(), floating->paintingLayer());
+  EXPECT_EQ(container, floating->container());
+  EXPECT_EQ(container, floating->containingBlock());
+
+  LayoutObject::AncestorSkipInfo skipInfo(layeredSpan);
+  EXPECT_EQ(container, floating->container(&skipInfo));
+  EXPECT_TRUE(skipInfo.ancestorSkipped());
+
+  skipInfo = LayoutObject::AncestorSkipInfo(container);
+  EXPECT_EQ(container, floating->container(&skipInfo));
+  EXPECT_FALSE(skipInfo.ancestorSkipped());
+}
+
+TEST_F(LayoutObjectTest, MutableForPaintingClearPaintFlags) {
+  LayoutObject* object = document().body()->layoutObject();
+  object->setShouldDoFullPaintInvalidation();
+  EXPECT_TRUE(object->shouldDoFullPaintInvalidation());
+  object->m_bitfields.setChildShouldCheckForPaintInvalidation(true);
+  EXPECT_TRUE(object->m_bitfields.childShouldCheckForPaintInvalidation());
+  object->setMayNeedPaintInvalidation();
+  EXPECT_TRUE(object->mayNeedPaintInvalidation());
+  object->setMayNeedPaintInvalidationSubtree();
+  EXPECT_TRUE(object->mayNeedPaintInvalidationSubtree());
+  object->setMayNeedPaintInvalidationAnimatedBackgroundImage();
+  EXPECT_TRUE(object->mayNeedPaintInvalidationAnimatedBackgroundImage());
+  object->setShouldInvalidateSelection();
+  EXPECT_TRUE(object->shouldInvalidateSelection());
+  object->setBackgroundChangedSinceLastPaintInvalidation();
+  EXPECT_TRUE(object->backgroundChangedSinceLastPaintInvalidation());
+  object->setNeedsPaintPropertyUpdate();
+  EXPECT_TRUE(object->needsPaintPropertyUpdate());
+  object->m_bitfields.setDescendantNeedsPaintPropertyUpdate(true);
+  EXPECT_TRUE(object->descendantNeedsPaintPropertyUpdate());
+
+  ScopedSlimmingPaintV2ForTest enableSPv2(true);
+  document().lifecycle().advanceTo(DocumentLifecycle::InPrePaint);
+  object->getMutableForPainting().clearPaintFlags();
+
+  EXPECT_FALSE(object->shouldDoFullPaintInvalidation());
+  EXPECT_FALSE(object->m_bitfields.childShouldCheckForPaintInvalidation());
+  EXPECT_FALSE(object->mayNeedPaintInvalidation());
+  EXPECT_FALSE(object->mayNeedPaintInvalidationSubtree());
+  EXPECT_FALSE(object->mayNeedPaintInvalidationAnimatedBackgroundImage());
+  EXPECT_FALSE(object->shouldInvalidateSelection());
+  EXPECT_FALSE(object->backgroundChangedSinceLastPaintInvalidation());
+  EXPECT_FALSE(object->needsPaintPropertyUpdate());
+  EXPECT_FALSE(object->descendantNeedsPaintPropertyUpdate());
 }
 
 }  // namespace blink

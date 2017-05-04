@@ -24,7 +24,6 @@
 
 #include "bindings/core/v8/DOMDataStore.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/SVGNames.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/ExceptionCode.h"
@@ -59,7 +58,7 @@ Node* Text::mergeNextSiblingNodesIfPossible() {
   if (!length()) {
     // Care must be taken to get the next node before removing the current node.
     Node* nextNode = NodeTraversal::nextPostOrder(*this);
-    remove(IGNORE_EXCEPTION);
+    remove(IGNORE_EXCEPTION_FOR_TESTING);
     return nextNode;
   }
 
@@ -72,7 +71,7 @@ Node* Text::mergeNextSiblingNodesIfPossible() {
 
     // Remove empty text nodes.
     if (!nextText->length()) {
-      nextText->remove(IGNORE_EXCEPTION);
+      nextText->remove(IGNORE_EXCEPTION_FOR_TESTING);
       continue;
     }
 
@@ -83,11 +82,11 @@ Node* Text::mergeNextSiblingNodesIfPossible() {
     setDataWithoutUpdate(data() + nextTextData);
     updateTextLayoutObject(oldTextData.length(), 0);
 
+    document().didMergeTextNodes(*this, *nextText, offset);
+
     // Empty nextText for layout update.
     nextText->setDataWithoutUpdate(emptyString());
     nextText->updateTextLayoutObject(0, nextTextData.length());
-
-    document().didMergeTextNodes(*nextText, offset);
 
     // Restore nextText for mutation event.
     nextText->setDataWithoutUpdate(nextTextData);
@@ -95,7 +94,7 @@ Node* Text::mergeNextSiblingNodesIfPossible() {
 
     document().incDOMTreeVersion();
     didModifyData(oldTextData, CharacterData::UpdateFromNonParser);
-    nextText->remove(IGNORE_EXCEPTION);
+    nextText->remove(IGNORE_EXCEPTION_FOR_TESTING);
   }
 
   return NodeTraversal::nextPostOrder(*this);
@@ -203,7 +202,7 @@ Text* Text::replaceWholeText(const String& newText) {
        n && n != this && n->isTextNode() && n->parentNode() == parent;) {
     Node* nodeToRemove = n;
     n = nodeToRemove->nextSibling();
-    parent->removeChild(nodeToRemove, IGNORE_EXCEPTION);
+    parent->removeChild(nodeToRemove, IGNORE_EXCEPTION_FOR_TESTING);
   }
 
   if (this != endText) {
@@ -212,13 +211,13 @@ Text* Text::replaceWholeText(const String& newText) {
                                   n->parentNode() == parent;) {
       Node* nodeToRemove = n;
       n = nodeToRemove->nextSibling();
-      parent->removeChild(nodeToRemove, IGNORE_EXCEPTION);
+      parent->removeChild(nodeToRemove, IGNORE_EXCEPTION_FOR_TESTING);
     }
   }
 
   if (newText.isEmpty()) {
     if (parent && parentNode() == parent)
-      parent->removeChild(this, IGNORE_EXCEPTION);
+      parent->removeChild(this, IGNORE_EXCEPTION_FOR_TESTING);
     return nullptr;
   }
 
@@ -274,7 +273,7 @@ bool Text::textLayoutObjectIsNeeded(const ComputedStyle& style,
     return false;
 
   // pre-wrap in SVG never makes layoutObject.
-  if (style.whiteSpace() == PRE_WRAP && parent.isSVG())
+  if (style.whiteSpace() == EWhiteSpace::kPreWrap && parent.isSVG())
     return false;
 
   // pre/pre-wrap/pre-line always make layoutObjects.

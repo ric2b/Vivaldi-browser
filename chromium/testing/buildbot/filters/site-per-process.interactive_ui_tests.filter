@@ -1,3 +1,1 @@
-# crbug.com/647249: Implement Drag-and-Drop for OOPIF, WebView+OOPIF
--*DragAndDropBrowserTest.DropTextFromOutside*
--*DragAndDropBrowserTest.DragStartInFrame*
+# List below tests to be excluded from running.

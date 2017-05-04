@@ -6,16 +6,17 @@
 #define NGInlineLayoutAlgorithm_h
 
 #include "core/CoreExport.h"
-#include "core/layout/ng/ng_inline_box.h"
 #include "core/layout/ng/ng_layout_algorithm.h"
 #include "wtf/RefPtr.h"
 
 namespace blink {
 
 class ComputedStyle;
-class NGConstraintSpace;
-class NGPhysicalFragment;
 class NGBreakToken;
+class NGConstraintSpace;
+class NGFragmentBuilder;
+class NGInlineNode;
+class NGLineBuilder;
 
 // A class for inline layout (e.g. a anonymous block with inline-level children
 // only).
@@ -32,12 +33,12 @@ class CORE_EXPORT NGInlineLayoutAlgorithm : public NGLayoutAlgorithm {
   // @param space The constraint space which the algorithm should generate a
   //              fragment within.
   NGInlineLayoutAlgorithm(PassRefPtr<const ComputedStyle>,
-                          NGInlineBox* first_child,
+                          NGInlineNode* first_child,
                           NGConstraintSpace* space,
                           NGBreakToken* break_token = nullptr);
 
-  NGLayoutStatus Layout(NGFragmentBase*,
-                        NGPhysicalFragmentBase**,
+  NGLayoutStatus Layout(NGPhysicalFragment*,
+                        NGPhysicalFragment**,
                         NGLayoutAlgorithm**) override;
 
   DECLARE_VIRTUAL_TRACE();
@@ -46,10 +47,20 @@ class CORE_EXPORT NGInlineLayoutAlgorithm : public NGLayoutAlgorithm {
   // Read-only Getters.
   const ComputedStyle& Style() const { return *style_; }
 
+  bool LayoutCurrentChild();
+  NGConstraintSpace* CreateConstraintSpaceForCurrentChild() const;
+
+  enum State { kStateInit, kStateChildLayout, kStateFinalize };
+  State state_ = kStateInit;
+
   RefPtr<const ComputedStyle> style_;
-  Member<NGInlineBox> first_child_;
+  Member<NGInlineNode> first_child_;
   Member<NGConstraintSpace> constraint_space_;
   Member<NGBreakToken> break_token_;
+  Member<NGFragmentBuilder> builder_;
+  Member<NGConstraintSpace> space_for_current_child_;
+  Member<NGInlineNode> current_child_;
+  Member<NGLineBuilder> line_builder_;
 };
 
 }  // namespace blink

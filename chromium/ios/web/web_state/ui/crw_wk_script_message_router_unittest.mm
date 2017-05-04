@@ -5,11 +5,11 @@
 #import "ios/web/web_state/ui/crw_wk_script_message_router.h"
 
 #include "base/mac/scoped_block.h"
-#include "base/mac/scoped_nsobject.h"
+#import "base/mac/scoped_nsobject.h"
 #include "base/memory/ptr_util.h"
+#include "ios/web/public/test/fakes/test_browser_state.h"
+#import "ios/web/public/test/fakes/test_web_client.h"
 #include "ios/web/public/test/scoped_testing_web_client.h"
-#include "ios/web/public/test/test_browser_state.h"
-#import "ios/web/public/test/test_web_client.h"
 #include "ios/web/public/test/web_test.h"
 #import "ios/web/public/web_view_creation_util.h"
 #include "third_party/ocmock/OCMock/OCMock.h"
@@ -54,9 +54,9 @@ class CRWWKScriptMessageRouterTest : public web::WebTest {
     name1_.reset([@"name1" copy]);
     name2_.reset([@"name2" copy]);
     name3_.reset([@"name3" copy]);
-    web_view1_.reset(web::CreateWKWebView(CGRectZero, &browser_state_));
-    web_view2_.reset(web::CreateWKWebView(CGRectZero, &browser_state_));
-    web_view3_.reset(web::CreateWKWebView(CGRectZero, &browser_state_));
+    web_view1_.reset([web::BuildWKWebView(CGRectZero, &browser_state_) retain]);
+    web_view2_.reset([web::BuildWKWebView(CGRectZero, &browser_state_) retain]);
+    web_view3_.reset([web::BuildWKWebView(CGRectZero, &browser_state_) retain]);
   }
   void TearDown() override {
     EXPECT_OCMOCK_VERIFY(controller_mock_);

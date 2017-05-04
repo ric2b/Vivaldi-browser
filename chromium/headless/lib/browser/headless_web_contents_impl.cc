@@ -26,7 +26,6 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/origin_util.h"
-#include "content/public/renderer/render_frame.h"
 #include "headless/lib/browser/headless_browser_context_impl.h"
 #include "headless/lib/browser/headless_browser_impl.h"
 #include "headless/lib/browser/headless_browser_main_parts.h"
@@ -56,6 +55,8 @@ class WebContentsObserverAdapter : public content::WebContentsObserver {
     DCHECK(web_contents()->GetMainFrame()->IsRenderFrameLive());
     observer_->DevToolsTargetReady();
   }
+
+  HeadlessWebContents::Observer* observer() { return observer_; }
 
  private:
   HeadlessWebContents::Observer* observer_;  // Not owned.
@@ -157,12 +158,16 @@ HeadlessWebContentsImpl::HeadlessWebContentsImpl(
           new HeadlessWebContentsImpl::Delegate(browser_context)),
       web_contents_(web_contents),
       agent_host_(content::DevToolsAgentHost::GetOrCreateFor(web_contents)),
-      browser_context_(browser_context) {
+      browser_context_(browser_context),
+      render_process_host_(web_contents->GetRenderProcessHost()) {
   web_contents_->SetDelegate(web_contents_delegate_.get());
+  render_process_host_->AddObserver(this);
 }
 
 HeadlessWebContentsImpl::~HeadlessWebContentsImpl() {
   web_contents_->Close();
+  if (render_process_host_)
+    render_process_host_->RemoveObserver(this);
 }
 
 void HeadlessWebContentsImpl::RenderFrameCreated(
@@ -214,17 +219,45 @@ void HeadlessWebContentsImpl::RemoveObserver(Observer* observer) {
   observer_map_.erase(it);
 }
 
+void HeadlessWebContentsImpl::RenderProcessExited(
+    content::RenderProcessHost* host,
+    base::TerminationStatus status,
+    int exit_code) {
+  DCHECK_EQ(render_process_host_, host);
+  for (const auto& pair : observer_map_) {
+    pair.second->observer()->RenderProcessExited(status, exit_code);
+  }
+}
+
+void HeadlessWebContentsImpl::RenderProcessHostDestroyed(
+    content::RenderProcessHost* host) {
+  DCHECK_EQ(render_process_host_, host);
+  render_process_host_ = nullptr;
+}
+
 HeadlessDevToolsTarget* HeadlessWebContentsImpl::GetDevToolsTarget() {
   return web_contents()->GetMainFrame()->IsRenderFrameLive() ? this : nullptr;
 }
 
-void HeadlessWebContentsImpl::AttachClient(HeadlessDevToolsClient* client) {
-  HeadlessDevToolsClientImpl::From(client)->AttachToHost(agent_host_.get());
+bool HeadlessWebContentsImpl::AttachClient(HeadlessDevToolsClient* client) {
+  return HeadlessDevToolsClientImpl::From(client)->AttachToHost(
+      agent_host_.get());
+}
+
+void HeadlessWebContentsImpl::ForceAttachClient(
+    HeadlessDevToolsClient* client) {
+  HeadlessDevToolsClientImpl::From(client)->ForceAttachToHost(
+      agent_host_.get());
 }
 
 void HeadlessWebContentsImpl::DetachClient(HeadlessDevToolsClient* client) {
   DCHECK(agent_host_);
   HeadlessDevToolsClientImpl::From(client)->DetachFromHost(agent_host_.get());
+}
+
+bool HeadlessWebContentsImpl::IsAttached() {
+  DCHECK(agent_host_);
+  return agent_host_->IsAttached();
 }
 
 content::WebContents* HeadlessWebContentsImpl::web_contents() const {

@@ -155,16 +155,36 @@ static inline void ExpandBoundsToIncludePoint(float* xmin,
   *ymax = std::max(p.y(), *ymax);
 }
 
-static inline void AddVertexToClippedQuad(const gfx::PointF& new_vertex,
-                                          gfx::PointF clipped_quad[8],
-                                          int* num_vertices_in_clipped_quad) {
-  clipped_quad[*num_vertices_in_clipped_quad] = new_vertex;
-  (*num_vertices_in_clipped_quad)++;
+static inline bool IsNearlyTheSame(float f, float g) {
+  // The idea behind this is to use this fraction of the larger of the
+  // two numbers as the limit of the difference.  This breaks down near
+  // zero, so we reuse this as the minimum absolute size we will use
+  // for the base of the scale too.
+  static const float epsilon_scale = 0.00001f;
+  return std::abs(f - g) <
+         epsilon_scale *
+             std::max(std::max(std::abs(f), std::abs(g)), epsilon_scale);
+}
+
+static inline bool IsNearlyTheSame(const gfx::PointF& lhs,
+                                   const gfx::PointF& rhs) {
+  return IsNearlyTheSame(lhs.x(), rhs.x()) && IsNearlyTheSame(lhs.y(), rhs.y());
+}
+
+static inline bool IsNearlyTheSame(const gfx::Point3F& lhs,
+                                   const gfx::Point3F& rhs) {
+  return IsNearlyTheSame(lhs.x(), rhs.x()) &&
+         IsNearlyTheSame(lhs.y(), rhs.y()) && IsNearlyTheSame(lhs.z(), rhs.z());
 }
 
 static inline void AddVertexToClippedQuad3d(const gfx::Point3F& new_vertex,
-                                            gfx::Point3F clipped_quad[8],
+                                            gfx::Point3F clipped_quad[6],
                                             int* num_vertices_in_clipped_quad) {
+  if (*num_vertices_in_clipped_quad > 0 &&
+      IsNearlyTheSame(clipped_quad[*num_vertices_in_clipped_quad - 1],
+                      new_vertex))
+    return;
+
   clipped_quad[*num_vertices_in_clipped_quad] = new_vertex;
   (*num_vertices_in_clipped_quad)++;
 }
@@ -287,70 +307,9 @@ gfx::Rect MathUtil::MapEnclosedRectWith2dAxisAlignedTransform(
   return gfx::ToEnclosedRect(gfx::BoundingRect(top_left, bottom_right));
 }
 
-void MathUtil::MapClippedQuad(const gfx::Transform& transform,
-                              const gfx::QuadF& src_quad,
-                              gfx::PointF clipped_quad[8],
-                              int* num_vertices_in_clipped_quad) {
-  HomogeneousCoordinate h1 =
-      MapHomogeneousPoint(transform, gfx::Point3F(src_quad.p1()));
-  HomogeneousCoordinate h2 =
-      MapHomogeneousPoint(transform, gfx::Point3F(src_quad.p2()));
-  HomogeneousCoordinate h3 =
-      MapHomogeneousPoint(transform, gfx::Point3F(src_quad.p3()));
-  HomogeneousCoordinate h4 =
-      MapHomogeneousPoint(transform, gfx::Point3F(src_quad.p4()));
-
-  // The order of adding the vertices to the array is chosen so that
-  // clockwise / counter-clockwise orientation is retained.
-
-  *num_vertices_in_clipped_quad = 0;
-
-  if (!h1.ShouldBeClipped()) {
-    AddVertexToClippedQuad(
-        h1.CartesianPoint2d(), clipped_quad, num_vertices_in_clipped_quad);
-  }
-
-  if (h1.ShouldBeClipped() ^ h2.ShouldBeClipped()) {
-    AddVertexToClippedQuad(ComputeClippedCartesianPoint2dForEdge(h1, h2),
-                           clipped_quad, num_vertices_in_clipped_quad);
-  }
-
-  if (!h2.ShouldBeClipped()) {
-    AddVertexToClippedQuad(
-        h2.CartesianPoint2d(), clipped_quad, num_vertices_in_clipped_quad);
-  }
-
-  if (h2.ShouldBeClipped() ^ h3.ShouldBeClipped()) {
-    AddVertexToClippedQuad(ComputeClippedCartesianPoint2dForEdge(h2, h3),
-                           clipped_quad, num_vertices_in_clipped_quad);
-  }
-
-  if (!h3.ShouldBeClipped()) {
-    AddVertexToClippedQuad(
-        h3.CartesianPoint2d(), clipped_quad, num_vertices_in_clipped_quad);
-  }
-
-  if (h3.ShouldBeClipped() ^ h4.ShouldBeClipped()) {
-    AddVertexToClippedQuad(ComputeClippedCartesianPoint2dForEdge(h3, h4),
-                           clipped_quad, num_vertices_in_clipped_quad);
-  }
-
-  if (!h4.ShouldBeClipped()) {
-    AddVertexToClippedQuad(
-        h4.CartesianPoint2d(), clipped_quad, num_vertices_in_clipped_quad);
-  }
-
-  if (h4.ShouldBeClipped() ^ h1.ShouldBeClipped()) {
-    AddVertexToClippedQuad(ComputeClippedCartesianPoint2dForEdge(h4, h1),
-                           clipped_quad, num_vertices_in_clipped_quad);
-  }
-
-  DCHECK_LE(*num_vertices_in_clipped_quad, 8);
-}
-
 bool MathUtil::MapClippedQuad3d(const gfx::Transform& transform,
                                 const gfx::QuadF& src_quad,
-                                gfx::Point3F clipped_quad[8],
+                                gfx::Point3F clipped_quad[6],
                                 int* num_vertices_in_clipped_quad) {
   HomogeneousCoordinate h1 =
       MapHomogeneousPoint(transform, gfx::Point3F(src_quad.p1()));
@@ -406,7 +365,12 @@ bool MathUtil::MapClippedQuad3d(const gfx::Transform& transform,
                              clipped_quad, num_vertices_in_clipped_quad);
   }
 
-  DCHECK_LE(*num_vertices_in_clipped_quad, 8);
+  if (*num_vertices_in_clipped_quad > 2 &&
+      IsNearlyTheSame(clipped_quad[0],
+                      clipped_quad[*num_vertices_in_clipped_quad - 1]))
+    *num_vertices_in_clipped_quad -= 1;
+
+  DCHECK_LE(*num_vertices_in_clipped_quad, 6);
   return (*num_vertices_in_clipped_quad >= 4);
 }
 
@@ -933,6 +897,20 @@ ScopedSubnormalFloatDisabler::~ScopedSubnormalFloatDisabler() {
 #ifdef __SSE__
   _mm_setcsr(orig_state_);
 #endif
+}
+
+bool MathUtil::IsNearlyTheSameForTesting(float left, float right) {
+  return IsNearlyTheSame(left, right);
+}
+
+bool MathUtil::IsNearlyTheSameForTesting(const gfx::PointF& left,
+                                         const gfx::PointF& right) {
+  return IsNearlyTheSame(left, right);
+}
+
+bool MathUtil::IsNearlyTheSameForTesting(const gfx::Point3F& left,
+                                         const gfx::Point3F& right) {
+  return IsNearlyTheSame(left, right);
 }
 
 }  // namespace cc

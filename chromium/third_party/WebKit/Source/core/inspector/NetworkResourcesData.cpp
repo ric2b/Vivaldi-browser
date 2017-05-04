@@ -61,7 +61,7 @@ XHRReplayData::XHRReplayData(ExecutionContext* executionContext,
                              bool async,
                              PassRefPtr<EncodedFormData> formData,
                              bool includeCredentials)
-    : ContextLifecycleObserver(executionContext),
+    : m_executionContext(executionContext),
       m_method(method),
       m_url(url),
       m_async(async),
@@ -69,7 +69,7 @@ XHRReplayData::XHRReplayData(ExecutionContext* executionContext,
       m_includeCredentials(includeCredentials) {}
 
 DEFINE_TRACE(XHRReplayData) {
-  ContextLifecycleObserver::trace(visitor);
+  visitor->trace(m_executionContext);
 }
 
 // ResourceData
@@ -87,6 +87,7 @@ NetworkResourcesData::ResourceData::ResourceData(
       m_type(InspectorPageAgent::OtherResource),
       m_httpStatusCode(0),
       m_rawHeaderSize(0),
+      m_pendingEncodedDataLength(0),
       m_cachedResource(nullptr) {}
 
 DEFINE_TRACE(NetworkResourcesData::ResourceData) {
@@ -210,10 +211,7 @@ void NetworkResourcesData::responseReceived(const String& requestId,
   resourceData->setMimeType(response.mimeType());
   resourceData->setTextEncodingName(response.textEncodingName());
   resourceData->setHTTPStatusCode(response.httpStatusCode());
-  resourceData->setRawHeaderSize(
-      response.resourceLoadInfo()
-          ? response.resourceLoadInfo()->encodedDataLength
-          : 0);
+  resourceData->setRawHeaderSize(response.encodedDataLength());
 
   String filePath = response.downloadedFilePath();
   if (!filePath.isEmpty()) {
@@ -353,8 +351,28 @@ HeapVector<Member<NetworkResourcesData::ResourceData>>
 NetworkResourcesData::resources() {
   HeapVector<Member<ResourceData>> result;
   for (auto& request : m_requestIdToResourceDataMap)
-    result.append(request.value);
+    result.push_back(request.value);
   return result;
+}
+
+int NetworkResourcesData::getAndClearPendingEncodedDataLength(
+    const String& requestId) {
+  ResourceData* resourceData = resourceDataForRequestId(requestId);
+  if (!resourceData)
+    return 0;
+
+  int pendingEncodedDataLength = resourceData->pendingEncodedDataLength();
+  resourceData->clearPendingEncodedDataLength();
+  return pendingEncodedDataLength;
+}
+
+void NetworkResourcesData::addPendingEncodedDataLength(const String& requestId,
+                                                       int encodedDataLength) {
+  ResourceData* resourceData = resourceDataForRequestId(requestId);
+  if (!resourceData)
+    return;
+
+  resourceData->addPendingEncodedDataLength(encodedDataLength);
 }
 
 void NetworkResourcesData::clear(const String& preservedLoaderId) {

@@ -33,9 +33,9 @@
 #include "cc/animation/scroll_offset_animation_curve.h"
 #include "platform/animation/CompositorAnimation.h"
 #include "platform/graphics/GraphicsLayer.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/scroll/MainThreadScrollingReason.h"
 #include "platform/scroll/ScrollableArea.h"
-#include "platform/tracing/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "wtf/CurrentTime.h"
@@ -190,8 +190,8 @@ bool ScrollAnimator::willAnimateToOffset(const ScrollOffset& targetOffset) {
 void ScrollAnimator::adjustAnimationAndSetScrollOffset(
     const ScrollOffset& offset,
     ScrollType scrollType) {
-  IntSize adjustment =
-      roundedIntSize(offset) - roundedIntSize(m_scrollableArea->scrollOffset());
+  IntSize adjustment = roundedIntSize(offset) -
+                       roundedIntSize(m_scrollableArea->getScrollOffset());
   scrollOffsetChanged(offset, scrollType);
 
   if (m_runState == RunState::Idle) {
@@ -361,6 +361,11 @@ void ScrollAnimator::updateCompositorAnimations() {
 }
 
 void ScrollAnimator::addMainThreadScrollingReason() {
+  // Usually main thread scrolling reasons should be updated from
+  // one frame to all its descendants. khandlingScrollFromMainThread
+  // is a special case because its subframes cannot be scrolled
+  // when the reason is set. When the subframes are ready to scroll
+  // the reason has benn reset.
   if (WebLayer* scrollLayer =
           toWebLayer(getScrollableArea()->layerForScrolling())) {
     scrollLayer->addMainThreadScrollingReasons(

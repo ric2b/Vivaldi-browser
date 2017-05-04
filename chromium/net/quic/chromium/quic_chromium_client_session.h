@@ -7,8 +7,8 @@
 // a non-owning pointer to the helper so this session needs to ensure that
 // the helper outlives the connection.
 
-#ifndef NET_QUIC_QUIC_CHROMIUM_CLIENT_SESSION_H_
-#define NET_QUIC_QUIC_CHROMIUM_CLIENT_SESSION_H_
+#ifndef NET_QUIC_CHROMIUM_QUIC_CHROMIUM_CLIENT_SESSION_H_
+#define NET_QUIC_CHROMIUM_QUIC_CHROMIUM_CLIENT_SESSION_H_
 
 #include <stddef.h>
 
@@ -34,10 +34,11 @@
 #include "net/quic/chromium/quic_connection_logger.h"
 #include "net/quic/core/quic_client_session_base.h"
 #include "net/quic/core/quic_crypto_client_stream.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/quic/core/quic_time.h"
 #include "net/socket/socket_performance_watcher.h"
+#include "net/spdy/multiplexed_session.h"
 #include "net/spdy/server_push_delegate.h"
 
 namespace net {
@@ -61,6 +62,7 @@ class QuicChromiumClientSessionPeer;
 
 class NET_EXPORT_PRIVATE QuicChromiumClientSession
     : public QuicClientSessionBase,
+      public MultiplexedSession,
       public QuicChromiumPacketReader::Visitor,
       public QuicChromiumPacketWriter::Delegate {
  public:
@@ -106,6 +108,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     base::WeakPtr<QuicChromiumClientSession> session_;
     CompletionCallback callback_;
     QuicChromiumClientStream** stream_;
+    // For tracking how much time pending stream requests wait.
+    base::TimeTicks pending_start_time_;
 
     DISALLOW_COPY_AND_ASSIGN(StreamRequest);
   };
@@ -131,6 +135,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       base::TimeTicks dns_resolution_start_time,
       base::TimeTicks dns_resolution_end_time,
       QuicClientPushPromiseIndex* push_promise_index,
+      ServerPushDelegate* push_delegate,
       base::TaskRunner* task_runner,
       std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
       NetLog* net_log);
@@ -200,15 +205,12 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
                 IPEndPoint local_address,
                 IPEndPoint peer_address) override;
 
-  // Gets the SSL connection information.
-  bool GetSSLInfo(SSLInfo* ssl_info) const;
-
-  // Generates the signature used in Token Binding using key |*key| and for a
-  // Token Binding of type |tb_type|, putting the signature in |*out|. Returns a
-  // net error code.
+  // MultiplexedSession methods:
+  bool GetRemoteEndpoint(IPEndPoint* endpoint) override;
+  bool GetSSLInfo(SSLInfo* ssl_info) const override;
   Error GetTokenBindingSignature(crypto::ECPrivateKey* key,
                                  TokenBindingType tb_type,
-                                 std::vector<uint8_t>* out);
+                                 std::vector<uint8_t>* out) override;
 
   // Performs a crypto handshake with the server.
   int CryptoConnect(bool require_confirmation,
@@ -306,10 +308,6 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   void DeletePromised(QuicClientPromisedInfo* promised) override;
 
   void OnPushStreamTimedOut(QuicStreamId stream_id) override;
-
-  void set_push_delegate(ServerPushDelegate* push_delegate) {
-    push_delegate_ = push_delegate;
-  }
 
   // Cancels the push if the push stream for |url| has not been claimed and is
   // still active. Otherwise, no-op.
@@ -416,4 +414,4 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_CHROMIUM_CLIENT_SESSION_H_
+#endif  // NET_QUIC_CHROMIUM_QUIC_CHROMIUM_CLIENT_SESSION_H_

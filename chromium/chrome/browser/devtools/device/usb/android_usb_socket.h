@@ -18,10 +18,6 @@
 #include "net/log/net_log_with_source.h"
 #include "net/socket/stream_socket.h"
 
-namespace base {
-class MessageLoop;
-}
-
 class AndroidUsbSocket : public net::StreamSocket,
                          public base::NonThreadSafe {
  public:
@@ -54,7 +50,7 @@ class AndroidUsbSocket : public net::StreamSocket,
   void SetSubresourceSpeculation() override;
   void SetOmniboxSpeculation() override;
   bool WasEverUsed() const override;
-  bool WasNpnNegotiated() const override;
+  bool WasAlpnNegotiated() const override;
   net::NextProto GetNegotiatedProtocol() const override;
   bool GetSSLInfo(net::SSLInfo* ssl_info) override;
   void GetConnectionAttempts(net::ConnectionAttempts* out) const override;

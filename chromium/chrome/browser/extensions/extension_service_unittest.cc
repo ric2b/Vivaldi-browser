@@ -44,6 +44,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/blacklist.h"
 #include "chrome/browser/extensions/chrome_app_sorting.h"
+#include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/default_apps.h"
@@ -132,6 +133,7 @@
 #include "net/cookies/cookie_store.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "ppapi/features/features.h"
 #include "storage/browser/database/database_tracker.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/common/database/database_identifier.h"
@@ -493,7 +495,7 @@ class MockProviderVisitor
     std::unique_ptr<base::Value> json_value =
         deserializer.Deserialize(NULL, NULL);
 
-    if (!json_value || !json_value->IsType(base::Value::TYPE_DICTIONARY)) {
+    if (!json_value || !json_value->IsType(base::Value::Type::DICTIONARY)) {
       ADD_FAILURE() << "Unable to deserialize json data";
       return std::unique_ptr<base::DictionaryValue>();
     } else {
@@ -591,6 +593,15 @@ class ExtensionServiceTest
   void AddMockExternalProvider(
       extensions::ExternalProviderInterface* provider) {
     service()->AddProviderForTesting(base::WrapUnique(provider));
+  }
+
+  // Checks for external extensions and waits for one to complete installing.
+  void WaitForExternalExtensionInstalled() {
+    content::WindowedNotificationObserver observer(
+        extensions::NOTIFICATION_CRX_INSTALLER_DONE,
+        content::NotificationService::AllSources());
+    service()->CheckForExternalUpdates();
+    observer.Wait();
   }
 
  protected:
@@ -759,7 +770,7 @@ class ExtensionServiceTest
   }
 
   void InitPluginService() {
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
     PluginService::GetInstance()->Init();
 #endif
   }
@@ -4198,6 +4209,91 @@ TEST_F(ExtensionServiceTest, MAYBE_ExternalExtensionAutoAcknowledgement) {
   ASSERT_TRUE(prefs->IsExternalExtensionAcknowledged(page_action));
 }
 
+// Tests that an extension added through an external source is initially
+// disabled with the "prompt for external extensions" feature.
+TEST_F(ExtensionServiceTest, ExternalExtensionDisabledOnInstallation) {
+  FeatureSwitch::ScopedOverride external_prompt_override(
+      FeatureSwitch::prompt_for_external_extensions(), true);
+  InitializeEmptyExtensionService();
+
+  // Register and install an external extension.
+  MockExtensionProvider* provider =
+      new MockExtensionProvider(service(), Manifest::EXTERNAL_PREF);
+  AddMockExternalProvider(provider);  // Takes ownership.
+  provider->UpdateOrAddExtension(good_crx, "1.0.0.0",
+                                 data_dir().AppendASCII("good.crx"));
+
+  WaitForExternalExtensionInstalled();
+
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(good_crx));
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+  EXPECT_FALSE(prefs->IsExternalExtensionAcknowledged(good_crx));
+  EXPECT_EQ(Extension::DISABLE_EXTERNAL_EXTENSION,
+            prefs->GetDisableReasons(good_crx));
+
+  // Updating the extension shouldn't cause it to be enabled.
+  provider->UpdateOrAddExtension(good_crx, "1.0.0.1",
+                                 data_dir().AppendASCII("good2.crx"));
+  WaitForExternalExtensionInstalled();
+
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(good_crx));
+  EXPECT_FALSE(prefs->IsExternalExtensionAcknowledged(good_crx));
+  EXPECT_EQ(Extension::DISABLE_EXTERNAL_EXTENSION,
+            prefs->GetDisableReasons(good_crx));
+  const Extension* extension =
+      registry()->disabled_extensions().GetByID(good_crx);
+  ASSERT_TRUE(extension);
+  // Double check that we did, in fact, update the extension.
+  EXPECT_EQ("1.0.0.1", extension->version()->GetString());
+}
+
+// Test that if an extension is installed before the "prompt for external
+// extensions" feature is enabled, but is updated when the feature is
+// enabled, the extension is not disabled.
+TEST_F(ExtensionServiceTest, ExternalExtensionIsNotDisabledOnUpdate) {
+  auto external_prompt_override =
+      base::MakeUnique<FeatureSwitch::ScopedOverride>(
+          FeatureSwitch::prompt_for_external_extensions(), false);
+  InitializeEmptyExtensionService();
+
+  // Register and install an external extension.
+  MockExtensionProvider* provider =
+      new MockExtensionProvider(service(), Manifest::EXTERNAL_PREF);
+  AddMockExternalProvider(provider);
+  provider->UpdateOrAddExtension(good_crx, "1.0.0.0",
+                                 data_dir().AppendASCII("good.crx"));
+
+  WaitForExternalExtensionInstalled();
+
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(good_crx));
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+  EXPECT_FALSE(prefs->IsExternalExtensionAcknowledged(good_crx));
+  EXPECT_EQ(Extension::DISABLE_NONE, prefs->GetDisableReasons(good_crx));
+
+  provider->UpdateOrAddExtension(good_crx, "1.0.0.1",
+                                 data_dir().AppendASCII("good2.crx"));
+
+  // We explicitly reset the override first. ScopedOverrides reset the value
+  // to the original value on destruction, but if we reset by passing a new
+  // object, the new object is constructed (overriding the current value)
+  // before the old is destructed (which will immediately reset to the
+  // original).
+  external_prompt_override.reset();
+  external_prompt_override = base::MakeUnique<FeatureSwitch::ScopedOverride>(
+      FeatureSwitch::prompt_for_external_extensions(), true);
+  WaitForExternalExtensionInstalled();
+
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(good_crx));
+  {
+    const Extension* extension =
+        registry()->enabled_extensions().GetByID(good_crx);
+    ASSERT_TRUE(extension);
+    EXPECT_EQ("1.0.0.1", extension->version()->GetString());
+  }
+  EXPECT_FALSE(prefs->IsExternalExtensionAcknowledged(good_crx));
+  EXPECT_EQ(Extension::DISABLE_NONE, prefs->GetDisableReasons(good_crx));
+}
+
 #if !defined(OS_CHROMEOS)
 // This tests if default apps are installed correctly.
 TEST_F(ExtensionServiceTest, DefaultAppsInstall) {
@@ -5623,7 +5719,7 @@ class ExtensionServiceTestSimple : public testing::Test {
 TEST_F(ExtensionServiceTestSimple, Enabledness) {
   // Make sure the PluginService singleton is destroyed at the end of the test.
   base::ShadowingAtExitManager at_exit_manager;
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   content::PluginService::GetInstance()->Init();
 #endif
 
@@ -6803,6 +6899,55 @@ TEST_F(ExtensionServiceTest, ExternalInstallClickToKeep) {
   EXPECT_FALSE(HasExternalInstallErrors(service_));
 }
 
+// Test that the external install bubble only takes disabled extensions into
+// account - enabled extensions, even those that weren't acknowledged, should
+// not be warned about. This lets us grandfather extensions in.
+TEST_F(ExtensionServiceTest,
+       ExternalInstallBubbleDoesntShowForEnabledExtensions) {
+  auto external_prompt_override =
+      base::MakeUnique<FeatureSwitch::ScopedOverride>(
+          FeatureSwitch::prompt_for_external_extensions(), false);
+  InitializeEmptyExtensionService();
+
+  // Register and install an external extension.
+  MockExtensionProvider* provider =
+      new MockExtensionProvider(service(), Manifest::EXTERNAL_PREF);
+  AddMockExternalProvider(provider);
+  provider->UpdateOrAddExtension(good_crx, "1.0.0.0",
+                                 data_dir().AppendASCII("good.crx"));
+
+  WaitForExternalExtensionInstalled();
+
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(good_crx));
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+  EXPECT_FALSE(prefs->IsExternalExtensionAcknowledged(good_crx));
+  EXPECT_EQ(Extension::DISABLE_NONE, prefs->GetDisableReasons(good_crx));
+
+  // We explicitly reset the override first. ScopedOverrides reset the value
+  // to the original value on destruction, but if we reset by passing a new
+  // object, the new object is constructed (overriding the current value)
+  // before the old is destructed (which will immediately reset to the
+  // original).
+  external_prompt_override.reset();
+  external_prompt_override = base::MakeUnique<FeatureSwitch::ScopedOverride>(
+      FeatureSwitch::prompt_for_external_extensions(), true);
+
+  extensions::ExternalInstallManager* external_manager =
+      service()->external_install_manager();
+  external_manager->UpdateExternalExtensionAlert();
+  EXPECT_FALSE(external_manager->has_currently_visible_install_alert());
+  EXPECT_TRUE(external_manager->GetErrorsForTesting().empty());
+
+  provider->UpdateOrAddExtension(good_crx, "1.0.0.1",
+                                 data_dir().AppendASCII("good2.crx"));
+
+  WaitForExternalExtensionInstalled();
+
+  external_manager->UpdateExternalExtensionAlert();
+  EXPECT_FALSE(external_manager->has_currently_visible_install_alert());
+  EXPECT_TRUE(external_manager->GetErrorsForTesting().empty());
+}
+
 TEST_F(ExtensionServiceTest, InstallBlacklistedExtension) {
   InitializeEmptyExtensionService();
 
@@ -6953,4 +7098,66 @@ TEST_F(ExtensionServiceTest, CorruptExtensionUpdate) {
 
   EXPECT_FALSE(registry()->disabled_extensions().Contains(id));
   EXPECT_FALSE(prefs->HasDisableReason(id, Extension::DISABLE_CORRUPTED));
+}
+
+// Try re-enabling a reloading extension. Regression test for crbug.com/676815.
+TEST_F(ExtensionServiceTest, ReloadAndReEnableExtension) {
+  InitializeEmptyExtensionService();
+
+  // Add an extension in an unpacked location.
+  scoped_refptr<const Extension> extension =
+      extensions::ChromeTestExtensionLoader(profile()).
+          LoadExtension(data_dir().AppendASCII("simple_with_file"));
+  const std::string kExtensionId = extension->id();
+  ASSERT_TRUE(extension);
+  ASSERT_TRUE(extensions::Manifest::IsUnpackedLocation(extension->location()));
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(kExtensionId));
+
+  // Begin the reload process.
+  service()->ReloadExtension(extension->id());
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(kExtensionId));
+
+  // While the extension is reloading, try to re-enable it. This is the flow
+  // that could happen if, e.g., the user hit the enable toggle in the
+  // chrome://extensions page while it was reloading.
+  service()->GrantPermissionsAndEnableExtension(extension.get());
+  EXPECT_FALSE(registry()->enabled_extensions().Contains(kExtensionId));
+
+  // Wait for the reload to complete. This previously crashed (see
+  // crbug.com/676815).
+  base::RunLoop().RunUntilIdle();
+  // The extension should be enabled again...
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(kExtensionId));
+  // ...and should have reloaded (for ease, we just compare the extension
+  // objects).
+  EXPECT_NE(extension, registry()->enabled_extensions().GetByID(kExtensionId));
+}
+
+// Test reloading a shared module. Regression test for crbug.com/676815.
+TEST_F(ExtensionServiceTest, ReloadSharedModule) {
+  InitializeEmptyExtensionService();
+
+  // Add a shared module and an extension that depends on it (the latter is
+  // important to ensure we don't remove the unused shared module).
+  scoped_refptr<const Extension> shared_module =
+      extensions::ChromeTestExtensionLoader(profile()).LoadExtension(
+          data_dir().AppendASCII("api_test/shared_module/shared"));
+  scoped_refptr<const Extension> dependent =
+      extensions::ChromeTestExtensionLoader(profile()).LoadExtension(
+          data_dir().AppendASCII("api_test/shared_module/import_pass"));
+  ASSERT_TRUE(shared_module);
+  ASSERT_TRUE(dependent);
+  const std::string kExtensionId = shared_module->id();
+  ASSERT_TRUE(
+      extensions::Manifest::IsUnpackedLocation(shared_module->location()));
+  ASSERT_EQ(extensions::Manifest::TYPE_SHARED_MODULE,
+            shared_module->manifest()->type());
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(kExtensionId));
+
+  // Reload the extension and wait for it to complete. This previously crashed
+  // (see crbug.com/676815).
+  service()->ReloadExtension(kExtensionId);
+  base::RunLoop().RunUntilIdle();
+  // The shared module should be enabled.
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(kExtensionId));
 }

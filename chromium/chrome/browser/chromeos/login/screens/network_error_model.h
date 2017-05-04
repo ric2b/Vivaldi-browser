@@ -7,13 +7,9 @@
 
 #include "base/callback_list.h"
 #include "base/memory/ref_counted.h"
+#include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
 #include "chrome/browser/chromeos/login/screens/network_error.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_screen.h"
-
-namespace base {
-class ListValue;
-}
 
 namespace chromeos {
 
@@ -38,9 +34,6 @@ class NetworkErrorModel : public BaseScreen {
 
   explicit NetworkErrorModel(BaseScreenDelegate* base_screen_delegate);
   ~NetworkErrorModel() override;
-
-  // BaseScreen:
-  std::string GetName() const override;
 
   // Toggles the guest sign-in prompt.
   virtual void AllowGuestSignin(bool allowed) = 0;

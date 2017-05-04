@@ -133,11 +133,11 @@ bool WebAXObject::updateLayoutAndCheckValidity() {
   return !isDetached();
 }
 
-WebString WebAXObject::actionVerb() const {
+WebAXSupportedAction WebAXObject::action() const {
   if (isDetached())
-    return WebString();
+    return WebAXSupportedAction::None;
 
-  return m_private->actionVerb();
+  return static_cast<WebAXSupportedAction>(m_private->action());
 }
 
 bool WebAXObject::canDecrement() const {
@@ -608,6 +608,13 @@ bool WebAXObject::canvasHasFallbackContent() const {
   return m_private->canvasHasFallbackContent();
 }
 
+WebString WebAXObject::imageDataUrl(const WebSize& maxSize) const {
+  if (isDetached())
+    return WebString();
+
+  return m_private->imageDataUrl(maxSize);
+}
+
 WebAXInvalidState WebAXObject::invalidState() const {
   if (isDetached())
     return WebAXInvalidStateUndefined;
@@ -978,14 +985,11 @@ WebString WebAXObject::description(
   return result;
 }
 
-WebString WebAXObject::placeholder(WebAXNameFrom nameFrom,
-                                   WebAXDescriptionFrom descriptionFrom) const {
+WebString WebAXObject::placeholder(WebAXNameFrom nameFrom) const {
   if (isDetached())
     return WebString();
 
-  return m_private->placeholder(
-      static_cast<AXNameFrom>(nameFrom),
-      static_cast<AXDescriptionFrom>(descriptionFrom));
+  return m_private->placeholder(static_cast<AXNameFrom>(nameFrom));
 }
 
 bool WebAXObject::supportsRangeValue() const {
@@ -1103,6 +1107,49 @@ bool WebAXObject::lineBreaks(WebVector<int>& result) const {
   return true;
 }
 
+int WebAXObject::ariaColumnCount() const {
+  if (isDetached())
+    return 0;
+
+  if (!m_private->isAXTable())
+    return 0;
+
+  return toAXTable(m_private.get())->ariaColumnCount();
+}
+
+unsigned WebAXObject::ariaColumnIndex() const {
+  if (isDetached())
+    return 0;
+
+  if (!m_private->isTableCell())
+    return 0;
+
+  return toAXTableCell(m_private.get())->ariaColumnIndex();
+}
+
+int WebAXObject::ariaRowCount() const {
+  if (isDetached())
+    return 0;
+
+  if (!m_private->isAXTable())
+    return 0;
+
+  return toAXTable(m_private.get())->ariaRowCount();
+}
+
+unsigned WebAXObject::ariaRowIndex() const {
+  if (isDetached())
+    return 0;
+
+  if (m_private->isTableCell())
+    return toAXTableCell(m_private.get())->ariaRowIndex();
+
+  if (m_private->isTableRow())
+    return toAXTableRow(m_private.get())->ariaRowIndex();
+
+  return 0;
+}
+
 unsigned WebAXObject::columnCount() const {
   if (isDetached())
     return false;
@@ -1115,7 +1162,7 @@ unsigned WebAXObject::columnCount() const {
 
 unsigned WebAXObject::rowCount() const {
   if (isDetached())
-    return false;
+    return 0;
 
   if (!m_private->isAXTable())
     return 0;
@@ -1397,11 +1444,11 @@ bool WebAXObject::isScrollableContainer() const {
   return m_private->isScrollableContainer();
 }
 
-WebPoint WebAXObject::scrollOffset() const {
+WebPoint WebAXObject::getScrollOffset() const {
   if (isDetached())
     return WebPoint();
 
-  return m_private->scrollOffset();
+  return m_private->getScrollOffset();
 }
 
 WebPoint WebAXObject::minimumScrollOffset() const {

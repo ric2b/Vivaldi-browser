@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/logging.h"
 #include "base/macros.h"
 #include "cc/base/cc_export.h"
 
@@ -27,7 +28,53 @@ enum TexCoordPrecision {
   TEX_COORD_PRECISION_NA = 0,
   TEX_COORD_PRECISION_MEDIUM = 1,
   TEX_COORD_PRECISION_HIGH = 2,
-  LAST_TEX_COORD_PRECISION = 2
+};
+
+// Texture coordinate sources for the vertex shader.
+enum TexCoordSource {
+  // Vertex shader does not populate a texture coordinate.
+  TEX_COORD_SOURCE_NONE,
+  // Texture coordinate is set to the untransformed position.
+  TEX_COORD_SOURCE_POSITION,
+  // Texture coordinate has its own attribute.
+  TEX_COORD_SOURCE_ATTRIBUTE,
+};
+
+// Texture coordinate transformation modes for the vertex shader.
+enum TexCoordTransform {
+  // Texture coordinates are not transformed.
+  TEX_COORD_TRANSFORM_NONE,
+  // Texture coordinates are transformed by a uniform vec4, scaling by zw and
+  // then translating by xy.
+  TEX_COORD_TRANSFORM_VEC4,
+  // Same as the above, but add vec2(0.5) to the texture coordinate first.
+  TEX_COORD_TRANSFORM_TRANSLATED_VEC4,
+  // Texture coordiantes are transformed by a uniform mat4.
+  TEX_COORD_TRANSFORM_MATRIX,
+};
+
+// Position source for the vertex shader.
+enum PositionSource {
+  // The position is read directly from the position attribute.
+  POSITION_SOURCE_ATTRIBUTE,
+  // The position is read by attribute index into a uniform array for xy, and
+  // getting zw from the attribute.
+  POSITION_SOURCE_ATTRIBUTE_INDEXED_UNIFORM,
+};
+
+enum AAMode {
+  NO_AA = 0,
+  USE_AA = 1,
+};
+
+enum SwizzleMode {
+  NO_SWIZZLE = 0,
+  DO_SWIZZLE = 1,
+};
+
+enum PremultipliedAlphaMode {
+  PREMULTIPLIED_ALPHA = 0,
+  NON_PREMULTIPLIED_ALPHA = 1,
 };
 
 enum SamplerType {
@@ -35,7 +82,6 @@ enum SamplerType {
   SAMPLER_TYPE_2D = 1,
   SAMPLER_TYPE_2D_RECT = 2,
   SAMPLER_TYPE_EXTERNAL_OES = 3,
-  LAST_SAMPLER_TYPE = 3
 };
 
 enum BlendMode {
@@ -59,30 +105,48 @@ enum BlendMode {
   LAST_BLEND_MODE = BLEND_MODE_LUMINOSITY
 };
 
+enum InputColorSource {
+  // This includes RGB and RGBA textures.
+  INPUT_COLOR_SOURCE_RGBA_TEXTURE,
+  // This includes Y and either UV or U-and-V textures.
+  INPUT_COLOR_SOURCE_YUV_TEXTURES,
+  // A solid color specified as a uniform value.
+  INPUT_COLOR_SOURCE_UNIFORM,
+};
+
+enum UVTextureMode {
+  // Shader does not use YUV textures.
+  UV_TEXTURE_MODE_NA,
+  // UV plane is a single texture.
+  UV_TEXTURE_MODE_UV,
+  // U and V planes have separate textures.
+  UV_TEXTURE_MODE_U_V,
+};
+
+enum YUVAlphaTextureMode {
+  YUV_ALPHA_TEXTURE_MODE_NA,
+  YUV_NO_ALPHA_TEXTURE,
+  YUV_HAS_ALPHA_TEXTURE,
+};
+
+enum ColorConversionMode {
+  // No color conversion is performed.
+  COLOR_CONVERSION_MODE_NONE,
+  // Conversion is done directly from YUV to output RGB space, via a 3D texture
+  // represented as a 2D texture.
+  COLOR_CONVERSION_MODE_LUT_FROM_YUV,
+};
+
+// TODO(ccameron): Merge this with BlendMode.
+enum FragColorMode {
+  FRAG_COLOR_MODE_DEFAULT,
+  FRAG_COLOR_MODE_OPAQUE,
+  FRAG_COLOR_MODE_APPLY_BLEND_MODE,
+};
+
 enum MaskMode {
   NO_MASK = 0,
   HAS_MASK = 1,
-  LAST_MASK_VALUE = HAS_MASK
-};
-
-struct ShaderLocations {
-  ShaderLocations();
-
-  int sampler = -1;
-  int quad = -1;
-  int edge = -1;
-  int viewport = -1;
-  int mask_sampler = -1;
-  int mask_tex_coord_scale = -1;
-  int mask_tex_coord_offset = -1;
-  int matrix = -1;
-  int alpha = -1;
-  int color_matrix = -1;
-  int color_offset = -1;
-  int tex_transform = -1;
-  int backdrop = -1;
-  int backdrop_rect = -1;
-  int original_backdrop = -1;
 };
 
 // Note: The highp_threshold_cache must be provided by the caller to make
@@ -101,751 +165,152 @@ CC_EXPORT TexCoordPrecision TexCoordPrecisionRequired(
     int highp_threshold_min,
     const gfx::Size& max_size);
 
-class VertexShaderPosTex {
+class VertexShader {
  public:
-  VertexShaderPosTex();
-
+  VertexShader();
   void Init(gpu::gles2::GLES2Interface* context,
             unsigned program,
             int* base_uniform_index);
   std::string GetShaderString() const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-
-  int matrix_location() const { return matrix_location_; }
-
- private:
-  int matrix_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(VertexShaderPosTex);
-};
-
-class VertexShaderPosTexYUVStretchOffset {
- public:
-  VertexShaderPosTexYUVStretchOffset();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  std::string GetShaderString() const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-
-  int matrix_location() const { return matrix_location_; }
-  int ya_tex_scale_location() const { return ya_tex_scale_location_; }
-  int ya_tex_offset_location() const { return ya_tex_offset_location_; }
-  int uv_tex_scale_location() const { return uv_tex_scale_location_; }
-  int uv_tex_offset_location() const { return uv_tex_offset_location_; }
-
- private:
-  int matrix_location_;
-  int ya_tex_scale_location_;
-  int ya_tex_offset_location_;
-  int uv_tex_scale_location_;
-  int uv_tex_offset_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(VertexShaderPosTexYUVStretchOffset);
-};
-
-class VertexShaderPos {
- public:
-  VertexShaderPos();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  std::string GetShaderString() const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-
-  int matrix_location() const { return matrix_location_; }
-
- private:
-  int matrix_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(VertexShaderPos);
-};
-
-class VertexShaderPosTexIdentity {
- public:
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index) {}
-  std::string GetShaderString() const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-};
-
-class VertexShaderPosTexTransform {
- public:
-  VertexShaderPosTexTransform();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  std::string GetShaderString() const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-  void FillLocations(ShaderLocations* locations) const;
-
-  int matrix_location() const { return matrix_location_; }
-  int tex_transform_location() const { return tex_transform_location_; }
-  int vertex_opacity_location() const { return vertex_opacity_location_; }
-
- private:
-  int matrix_location_;
-  int tex_transform_location_;
-  int vertex_opacity_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(VertexShaderPosTexTransform);
-};
-
-class VertexShaderQuad {
- public:
-  VertexShaderQuad();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-           unsigned program,
-           int* base_uniform_index);
-  std::string GetShaderString() const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-
-  int matrix_location() const { return matrix_location_; }
-  int viewport_location() const { return -1; }
-  int quad_location() const { return quad_location_; }
-  int edge_location() const { return -1; }
-
- private:
-  int matrix_location_;
-  int quad_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(VertexShaderQuad);
-};
-
-class VertexShaderQuadAA {
- public:
-  VertexShaderQuadAA();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-           unsigned program,
-           int* base_uniform_index);
-  std::string GetShaderString() const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-
-  int matrix_location() const { return matrix_location_; }
-  int viewport_location() const { return viewport_location_; }
-  int quad_location() const { return quad_location_; }
-  int edge_location() const { return edge_location_; }
-
- private:
-  int matrix_location_;
-  int viewport_location_;
-  int quad_location_;
-  int edge_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(VertexShaderQuadAA);
-};
-
-
-class VertexShaderQuadTexTransformAA {
- public:
-  VertexShaderQuadTexTransformAA();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-           unsigned program,
-           int* base_uniform_index);
-  std::string GetShaderString() const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-  void FillLocations(ShaderLocations* locations) const;
-
-  int matrix_location() const { return matrix_location_; }
-  int viewport_location() const { return viewport_location_; }
-  int quad_location() const { return quad_location_; }
-  int edge_location() const { return edge_location_; }
-  int tex_transform_location() const { return tex_transform_location_; }
-
- private:
-  int matrix_location_;
-  int viewport_location_;
-  int quad_location_;
-  int edge_location_;
-  int tex_transform_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(VertexShaderQuadTexTransformAA);
-};
-
-class VertexShaderTile {
- public:
-  VertexShaderTile();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  std::string GetShaderString() const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-
-  int matrix_location() const { return matrix_location_; }
-  int viewport_location() const { return -1; }
-  int quad_location() const { return quad_location_; }
-  int edge_location() const { return -1; }
-  int vertex_tex_transform_location() const {
-    return vertex_tex_transform_location_;
-  }
-
- private:
-  int matrix_location_;
-  int quad_location_;
-  int vertex_tex_transform_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(VertexShaderTile);
-};
-
-class VertexShaderTileAA {
- public:
-  VertexShaderTileAA();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  std::string GetShaderString() const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-
-  int matrix_location() const { return matrix_location_; }
-  int viewport_location() const { return viewport_location_; }
-  int quad_location() const { return quad_location_; }
-  int edge_location() const { return edge_location_; }
-  int vertex_tex_transform_location() const {
-    return vertex_tex_transform_location_;
-  }
-
- private:
-  int matrix_location_;
-  int viewport_location_;
-  int quad_location_;
-  int edge_location_;
-  int vertex_tex_transform_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(VertexShaderTileAA);
-};
-
-class VertexShaderVideoTransform {
- public:
-  VertexShaderVideoTransform();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  std::string GetShaderString() const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-
-  int matrix_location() const { return matrix_location_; }
-  int tex_matrix_location() const { return tex_matrix_location_; }
-
- private:
-  int matrix_location_;
-  int tex_matrix_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(VertexShaderVideoTransform);
-};
-
-class FragmentTexBlendMode {
- public:
-  int backdrop_location() const { return backdrop_location_; }
-  int original_backdrop_location() const { return original_backdrop_location_; }
-  int backdrop_rect_location() const { return backdrop_rect_location_; }
-
-  BlendMode blend_mode() const { return blend_mode_; }
-  void set_blend_mode(BlendMode blend_mode) { blend_mode_ = blend_mode; }
-  bool has_blend_mode() const { return blend_mode_ != BLEND_MODE_NONE; }
-  void set_mask_for_background(bool mask_for_background) {
-    mask_for_background_ = mask_for_background;
-  }
-  bool mask_for_background() const { return mask_for_background_; }
 
  protected:
-  FragmentTexBlendMode();
+  friend class Program;
+
+  // Use arrays of uniforms for matrix, texTransform, and opacity.
+  bool use_uniform_arrays_ = false;
+
+  PositionSource position_source_ = POSITION_SOURCE_ATTRIBUTE;
+  TexCoordSource tex_coord_source_ = TEX_COORD_SOURCE_NONE;
+  TexCoordTransform tex_coord_transform_ = TEX_COORD_TRANSFORM_NONE;
+
+  // Used only with TEX_COORD_TRANSFORM_VEC4.
+  int vertex_tex_transform_location_ = -1;
+
+  // Used only with TEX_COORD_TRANSFORM_MATRIX.
+  int tex_matrix_location_ = -1;
+
+  // Uniforms for YUV textures.
+  bool is_ya_uv_ = false;
+  int ya_tex_scale_location_ = -1;
+  int ya_tex_offset_location_ = -1;
+  int uv_tex_scale_location_ = -1;
+  int uv_tex_offset_location_ = -1;
+
+  // Matrix to transform the position.
+  bool has_matrix_ = false;
+  int matrix_location_ = -1;
+
+  // Used only with POSITION_SOURCE_ATTRIBUTE_INDEXED_UNIFORM.
+  int quad_location_ = -1;
+
+  // Extra dummy variables to work around bugs on Android.
+  // TODO(ccameron): This is likley unneeded cargo-culting.
+  // http://crbug.com/240602
+  bool has_dummy_variables_ = false;
+
+  bool has_vertex_opacity_ = false;
+  int vertex_opacity_location_ = -1;
+
+  AAMode aa_mode_ = NO_AA;
+  int viewport_location_ = -1;
+  int edge_location_ = -1;
+};
+
+class FragmentShader {
+ public:
+  virtual void Init(gpu::gles2::GLES2Interface* context,
+                    unsigned program,
+                    int* base_uniform_index);
+  std::string GetShaderString() const;
+
+ protected:
+  FragmentShader();
+  virtual std::string GetShaderSource() const;
+  bool has_blend_mode() const { return blend_mode_ != BLEND_MODE_NONE; }
 
   std::string SetBlendModeFunctions(const std::string& shader_string) const;
 
-  int backdrop_location_;
-  int original_backdrop_location_;
-  int backdrop_rect_location_;
+  // Settings that are modified by sub-classes.
+  AAMode aa_mode_ = NO_AA;
+  bool has_varying_alpha_ = false;
+  SwizzleMode swizzle_mode_ = NO_SWIZZLE;
+  PremultipliedAlphaMode premultiply_alpha_mode_ = PREMULTIPLIED_ALPHA;
+  FragColorMode frag_color_mode_ = FRAG_COLOR_MODE_DEFAULT;
+  InputColorSource input_color_type_ = INPUT_COLOR_SOURCE_RGBA_TEXTURE;
+
+  // Used only if |blend_mode_| is not BLEND_MODE_NONE.
+  int backdrop_location_ = -1;
+  int original_backdrop_location_ = -1;
+  int backdrop_rect_location_ = -1;
+
+  // Used only if |input_color_type_| is INPUT_COLOR_SOURCE_RGBA_TEXTURE.
+  bool has_rgba_fragment_tex_transform_ = false;
+  int sampler_location_ = -1;
+  int fragment_tex_transform_location_ = -1;
+
+  // Always use sampler2D and texture2D for the RGBA texture, regardless of the
+  // specified SamplerType.
+  // TODO(ccameron): Change GLRenderer to always specify the correct
+  // SamplerType.
+  bool ignore_sampler_type_ = false;
+
+  // Used only if |input_color_type_| is INPUT_COLOR_SOURCE_UNIFORM.
+  int color_location_ = -1;
+
+  MaskMode mask_mode_ = NO_MASK;
+  int mask_sampler_location_ = -1;
+  int mask_tex_coord_scale_location_ = -1;
+  int mask_tex_coord_offset_location_ = -1;
+
+  bool has_color_matrix_ = false;
+  int color_matrix_location_ = -1;
+  int color_offset_location_ = -1;
+
+  bool has_uniform_alpha_ = false;
+  int alpha_location_ = -1;
+
+  bool has_background_color_ = false;
+  int background_color_location_ = -1;
+
+  TexCoordPrecision tex_coord_precision_ = TEX_COORD_PRECISION_NA;
+  SamplerType sampler_type_ = SAMPLER_TYPE_NA;
+
+  BlendMode blend_mode_ = BLEND_MODE_NONE;
+  bool mask_for_background_ = false;
+
+  // YUV-only parameters.
+  YUVAlphaTextureMode yuv_alpha_texture_mode_ = YUV_ALPHA_TEXTURE_MODE_NA;
+  UVTextureMode uv_texture_mode_ = UV_TEXTURE_MODE_UV;
+
+  ColorConversionMode color_conversion_mode_ = COLOR_CONVERSION_MODE_NONE;
+
+  // YUV uniform locations.
+  int y_texture_location_ = -1;
+  int u_texture_location_ = -1;
+  int v_texture_location_ = -1;
+  int uv_texture_location_ = -1;
+  int a_texture_location_ = -1;
+  int ya_clamp_rect_location_ = -1;
+  int uv_clamp_rect_location_ = -1;
+
+  // Analytic YUV to RGB convertion.
+  int yuv_matrix_location_ = -1;
+  int yuv_adj_location_ = -1;
+
+  // LUT YUV to color-converted RGB.
+  int lut_texture_location_ = -1;
+  int lut_size_location_ = -1;
+  int resource_multiplier_location_ = -1;
+  int resource_offset_location_ = -1;
 
  private:
-  BlendMode blend_mode_;
-  bool mask_for_background_;
+  friend class Program;
 
   std::string GetHelperFunctions() const;
   std::string GetBlendFunction() const;
   std::string GetBlendFunctionBodyForRGB() const;
-};
 
-class FragmentTexAlphaBinding : public FragmentTexBlendMode {
- public:
-  FragmentTexAlphaBinding();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  int alpha_location() const { return alpha_location_; }
-  int fragment_tex_transform_location() const { return -1; }
-  int sampler_location() const { return sampler_location_; }
-
- private:
-  int sampler_location_;
-  int alpha_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(FragmentTexAlphaBinding);
-};
-
-class FragmentTexColorMatrixAlphaBinding : public FragmentTexBlendMode {
- public:
-    FragmentTexColorMatrixAlphaBinding();
-
-    void Init(gpu::gles2::GLES2Interface* context,
-              unsigned program,
-              int* base_uniform_index);
-    int alpha_location() const { return alpha_location_; }
-    int color_matrix_location() const { return color_matrix_location_; }
-    int color_offset_location() const { return color_offset_location_; }
-    int fragment_tex_transform_location() const { return -1; }
-    int sampler_location() const { return sampler_location_; }
-
- private:
-    int sampler_location_;
-    int alpha_location_;
-    int color_matrix_location_;
-    int color_offset_location_;
-};
-
-class FragmentTexOpaqueBinding : public FragmentTexBlendMode {
- public:
-  FragmentTexOpaqueBinding();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  int alpha_location() const { return -1; }
-  int fragment_tex_transform_location() const { return -1; }
-  int background_color_location() const { return -1; }
-  int sampler_location() const { return sampler_location_; }
-
- private:
-  int sampler_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(FragmentTexOpaqueBinding);
-};
-
-class FragmentTexBackgroundBinding : public FragmentTexBlendMode {
- public:
-  FragmentTexBackgroundBinding();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  int background_color_location() const { return background_color_location_; }
-  int sampler_location() const { return sampler_location_; }
-
- private:
-  int background_color_location_;
-  int sampler_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(FragmentTexBackgroundBinding);
-};
-
-class FragmentShaderRGBATexVaryingAlpha : public FragmentTexOpaqueBinding {
- public:
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-};
-
-class FragmentShaderRGBATexPremultiplyAlpha : public FragmentTexOpaqueBinding {
- public:
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-};
-
-class FragmentShaderTexBackgroundVaryingAlpha
-    : public FragmentTexBackgroundBinding {
- public:
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-};
-
-class FragmentShaderTexBackgroundPremultiplyAlpha
-    : public FragmentTexBackgroundBinding {
- public:
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-};
-
-class FragmentShaderRGBATexAlpha : public FragmentTexAlphaBinding {
- public:
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-  void FillLocations(ShaderLocations* locations) const;
-};
-
-class FragmentShaderRGBATexColorMatrixAlpha
-    : public FragmentTexColorMatrixAlphaBinding {
- public:
-  std::string GetShaderString(TexCoordPrecision precision,
-                              SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-  void FillLocations(ShaderLocations* locations) const;
-};
-
-class FragmentShaderRGBATexOpaque : public FragmentTexOpaqueBinding {
- public:
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-};
-
-class FragmentShaderRGBATex : public FragmentTexOpaqueBinding {
- public:
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-};
-
-// Swizzles the red and blue component of sampled texel with alpha.
-class FragmentShaderRGBATexSwizzleAlpha : public FragmentTexAlphaBinding {
- public:
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-};
-
-// Swizzles the red and blue component of sampled texel without alpha.
-class FragmentShaderRGBATexSwizzleOpaque : public FragmentTexOpaqueBinding {
- public:
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-};
-
-class FragmentShaderRGBATexAlphaAA : public FragmentTexBlendMode {
- public:
-  FragmentShaderRGBATexAlphaAA();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-  void FillLocations(ShaderLocations* locations) const;
-
-  int alpha_location() const { return alpha_location_; }
-  int sampler_location() const { return sampler_location_; }
-
- private:
-  int sampler_location_;
-  int alpha_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(FragmentShaderRGBATexAlphaAA);
-};
-
-class FragmentTexClampAlphaAABinding : public FragmentTexBlendMode {
- public:
-  FragmentTexClampAlphaAABinding();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  int alpha_location() const { return alpha_location_; }
-  int sampler_location() const { return sampler_location_; }
-  int fragment_tex_transform_location() const {
-    return fragment_tex_transform_location_;
-  }
-
- private:
-  int sampler_location_;
-  int alpha_location_;
-  int fragment_tex_transform_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(FragmentTexClampAlphaAABinding);
-};
-
-class FragmentShaderRGBATexClampAlphaAA
-    : public FragmentTexClampAlphaAABinding {
- public:
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-};
-
-// Swizzles the red and blue component of sampled texel.
-class FragmentShaderRGBATexClampSwizzleAlphaAA
-    : public FragmentTexClampAlphaAABinding {
- public:
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-};
-
-class FragmentShaderRGBATexAlphaMask : public FragmentTexBlendMode {
- public:
-  FragmentShaderRGBATexAlphaMask();
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-  void FillLocations(ShaderLocations* locations) const;
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  int alpha_location() const { return alpha_location_; }
-  int sampler_location() const { return sampler_location_; }
-  int mask_sampler_location() const { return mask_sampler_location_; }
-  int mask_tex_coord_scale_location() const {
-    return mask_tex_coord_scale_location_;
-  }
-  int mask_tex_coord_offset_location() const {
-    return mask_tex_coord_offset_location_;
-  }
-
- private:
-  int sampler_location_;
-  int mask_sampler_location_;
-  int alpha_location_;
-  int mask_tex_coord_scale_location_;
-  int mask_tex_coord_offset_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(FragmentShaderRGBATexAlphaMask);
-};
-
-class FragmentShaderRGBATexAlphaMaskAA : public FragmentTexBlendMode {
- public:
-  FragmentShaderRGBATexAlphaMaskAA();
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-  void FillLocations(ShaderLocations* locations) const;
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  int alpha_location() const { return alpha_location_; }
-  int sampler_location() const { return sampler_location_; }
-  int mask_sampler_location() const { return mask_sampler_location_; }
-  int mask_tex_coord_scale_location() const {
-    return mask_tex_coord_scale_location_;
-  }
-  int mask_tex_coord_offset_location() const {
-    return mask_tex_coord_offset_location_;
-  }
-
- private:
-  int sampler_location_;
-  int mask_sampler_location_;
-  int alpha_location_;
-  int mask_tex_coord_scale_location_;
-  int mask_tex_coord_offset_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(FragmentShaderRGBATexAlphaMaskAA);
-};
-
-class FragmentShaderRGBATexAlphaMaskColorMatrixAA
-    : public FragmentTexBlendMode {
- public:
-  FragmentShaderRGBATexAlphaMaskColorMatrixAA();
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-  void FillLocations(ShaderLocations* locations) const;
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  int alpha_location() const { return alpha_location_; }
-  int sampler_location() const { return sampler_location_; }
-  int mask_sampler_location() const { return mask_sampler_location_; }
-  int mask_tex_coord_scale_location() const {
-    return mask_tex_coord_scale_location_;
-  }
-  int mask_tex_coord_offset_location() const {
-    return mask_tex_coord_offset_location_;
-  }
-  int color_matrix_location() const { return color_matrix_location_; }
-  int color_offset_location() const { return color_offset_location_; }
-
- private:
-  int sampler_location_;
-  int mask_sampler_location_;
-  int alpha_location_;
-  int mask_tex_coord_scale_location_;
-  int mask_tex_coord_offset_location_;
-  int color_matrix_location_;
-  int color_offset_location_;
-};
-
-class FragmentShaderRGBATexAlphaColorMatrixAA : public FragmentTexBlendMode {
- public:
-  FragmentShaderRGBATexAlphaColorMatrixAA();
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-  void FillLocations(ShaderLocations* locations) const;
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  int alpha_location() const { return alpha_location_; }
-  int sampler_location() const { return sampler_location_; }
-  int color_matrix_location() const { return color_matrix_location_; }
-  int color_offset_location() const { return color_offset_location_; }
-
- private:
-  int sampler_location_;
-  int alpha_location_;
-  int color_matrix_location_;
-  int color_offset_location_;
-};
-
-class FragmentShaderRGBATexAlphaMaskColorMatrix : public FragmentTexBlendMode {
- public:
-  FragmentShaderRGBATexAlphaMaskColorMatrix();
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-  void FillLocations(ShaderLocations* locations) const;
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  int alpha_location() const { return alpha_location_; }
-  int sampler_location() const { return sampler_location_; }
-  int mask_sampler_location() const { return mask_sampler_location_; }
-  int mask_tex_coord_scale_location() const {
-    return mask_tex_coord_scale_location_;
-  }
-  int mask_tex_coord_offset_location() const {
-    return mask_tex_coord_offset_location_;
-  }
-  int color_matrix_location() const { return color_matrix_location_; }
-  int color_offset_location() const { return color_offset_location_; }
-
- private:
-  int sampler_location_;
-  int mask_sampler_location_;
-  int alpha_location_;
-  int mask_tex_coord_scale_location_;
-  int mask_tex_coord_offset_location_;
-  int color_matrix_location_;
-  int color_offset_location_;
-};
-
-class FragmentShaderYUVVideo : public FragmentTexBlendMode {
- public:
-  FragmentShaderYUVVideo();
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-
-  void SetFeatures(bool use_alpha_texture, bool use_nv12, bool use_color_lut);
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  int y_texture_location() const { return y_texture_location_; }
-  int u_texture_location() const { return u_texture_location_; }
-  int v_texture_location() const { return v_texture_location_; }
-  int uv_texture_location() const { return uv_texture_location_; }
-  int a_texture_location() const { return a_texture_location_; }
-  int lut_texture_location() const { return lut_texture_location_; }
-  int alpha_location() const { return alpha_location_; }
-  int yuv_matrix_location() const { return yuv_matrix_location_; }
-  int yuv_adj_location() const { return yuv_adj_location_; }
-  int ya_clamp_rect_location() const { return ya_clamp_rect_location_; }
-  int uv_clamp_rect_location() const { return uv_clamp_rect_location_; }
-  int resource_multiplier_location() const {
-    return resource_multiplier_location_;
-  }
-  int resource_offset_location() const { return resource_offset_location_; }
-
- private:
-  bool use_alpha_texture_;
-  bool use_nv12_;
-  bool use_color_lut_;
-
-  int y_texture_location_;
-  int u_texture_location_;
-  int v_texture_location_;
-  int uv_texture_location_;
-  int a_texture_location_;
-  int lut_texture_location_;
-  int alpha_location_;
-  int yuv_matrix_location_;
-  int yuv_adj_location_;
-  int ya_clamp_rect_location_;
-  int uv_clamp_rect_location_;
-  int resource_multiplier_location_;
-  int resource_offset_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(FragmentShaderYUVVideo);
-};
-
-class FragmentShaderColor : public FragmentTexBlendMode {
- public:
-  FragmentShaderColor();
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  int color_location() const { return color_location_; }
-
- private:
-  int color_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(FragmentShaderColor);
-};
-
-class FragmentShaderColorAA : public FragmentTexBlendMode {
- public:
-  FragmentShaderColorAA();
-  std::string GetShaderString(
-      TexCoordPrecision precision, SamplerType sampler) const;
-  static std::string GetShaderHead();
-  static std::string GetShaderBody();
-
-  void Init(gpu::gles2::GLES2Interface* context,
-            unsigned program,
-            int* base_uniform_index);
-  int color_location() const { return color_location_; }
-
- private:
-  int color_location_;
-
-  DISALLOW_COPY_AND_ASSIGN(FragmentShaderColorAA);
+  DISALLOW_COPY_AND_ASSIGN(FragmentShader);
 };
 
 }  // namespace cc

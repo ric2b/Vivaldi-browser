@@ -95,6 +95,11 @@ MediaDevicesDispatcherHost::MediaDevicesDispatcherHost(
 
 MediaDevicesDispatcherHost::~MediaDevicesDispatcherHost() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  // It may happen that media_devices_manager() is destroyed before MDDH on some
+  // shutdown scenarios.
+  if (!media_stream_manager_->media_devices_manager())
+    return;
+
   for (size_t i = 0; i < NUM_MEDIA_DEVICE_TYPES; ++i) {
     if (!device_change_subscriptions_[i].empty()) {
       media_stream_manager_->media_devices_manager()
@@ -229,7 +234,7 @@ void MediaDevicesDispatcherHost::NotifyDeviceChangeOnUIThread(
       return;
 
     render_frame_host->GetRemoteInterfaces()->GetInterface(
-        mojo::GetProxy(&media_devices_listener));
+        mojo::MakeRequest(&media_devices_listener));
     if (!media_devices_listener)
       return;
   }

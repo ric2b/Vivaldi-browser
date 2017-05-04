@@ -16,10 +16,13 @@ namespace battor {
 
 namespace {
 
-// The maximum number of times to retry when init'ing a battor.
+// The maximum number of times to retry when initializing a BattOr.
 const uint8_t kMaxInitAttempts = 20;
 
-// The number of milliseconds to wait before trying to init again.
+// The maximum number of times to retry the StartTracing command.
+const uint8_t kMaxStartTracingAttempts = 5;
+
+// The number of milliseconds to wait before retrying initialization.
 const uint16_t kInitRetryDelayMilliseconds = 100;
 
 // The maximum number of times to retry when reading a message.
@@ -121,6 +124,7 @@ BattOrAgent::BattOrAgent(
       last_action_(Action::INVALID),
       command_(Command::INVALID),
       num_init_attempts_(0),
+      num_start_tracing_attempts_(0),
       num_read_attempts_(0) {
   // We don't care what thread the constructor is called on - we only care that
   // all of the other method invocations happen on the same thread.
@@ -138,6 +142,7 @@ void BattOrAgent::StartTracing() {
   clock_sync_markers_.clear();
   last_clock_sync_time_ = base::TimeTicks();
 
+  num_start_tracing_attempts_ = 1;
   command_ = Command::START_TRACING;
   PerformAction(Action::REQUEST_CONNECTION);
 }
@@ -193,7 +198,8 @@ void BattOrAgent::OnConnectionOpened(bool success) {
       PerformAction(Action::SEND_CURRENT_SAMPLE_REQUEST);
       return;
     case Command::GET_FIRMWARE_GIT_HASH:
-      PerformAction(Action::SEND_GIT_HASH_REQUEST);
+      num_init_attempts_ = 1;
+      PerformAction(Action::SEND_INIT);
       return;
     case Command::INVALID:
       NOTREACHED();
@@ -282,6 +288,16 @@ void BattOrAgent::OnMessageRead(bool success,
 
         return;
 
+      case Action::READ_START_TRACING_ACK:
+        if (num_start_tracing_attempts_++ < kMaxStartTracingAttempts) {
+          num_init_attempts_ = 1;
+          PerformAction(Action::SEND_INIT);
+        } else {
+          CompleteCommand(BATTOR_ERROR_TOO_MANY_START_TRACING_RETRIES);
+        }
+
+        return;
+
       default:
         CompleteCommand(BATTOR_ERROR_RECEIVE_ERROR);
         return;
@@ -302,8 +318,17 @@ void BattOrAgent::OnMessageRead(bool success,
         return;
       }
 
-      PerformAction(Action::SEND_SET_GAIN);
-      return;
+      switch (command_) {
+        case Command::START_TRACING:
+          PerformAction(Action::SEND_SET_GAIN);
+          return;
+        case Command::GET_FIRMWARE_GIT_HASH:
+          PerformAction(Action::SEND_GIT_HASH_REQUEST);
+          return;
+        default:
+          CompleteCommand(BATTOR_ERROR_UNEXPECTED_MESSAGE);
+          return;
+      }
 
     case Action::READ_SET_GAIN_ACK:
       if (!IsAckOfControlCommand(type, BATTOR_CONTROL_MESSAGE_TYPE_SET_GAIN,
@@ -318,7 +343,13 @@ void BattOrAgent::OnMessageRead(bool success,
     case Action::READ_START_TRACING_ACK:
       if (!IsAckOfControlCommand(
               type, BATTOR_CONTROL_MESSAGE_TYPE_START_SAMPLING_SD, *bytes)) {
-        CompleteCommand(BATTOR_ERROR_UNEXPECTED_MESSAGE);
+        if (num_start_tracing_attempts_++ < kMaxStartTracingAttempts) {
+          num_init_attempts_ = 1;
+          PerformAction(Action::SEND_INIT);
+        } else {
+          CompleteCommand(BATTOR_ERROR_TOO_MANY_START_TRACING_RETRIES);
+        }
+
         return;
       }
 
@@ -496,6 +527,7 @@ void BattOrAgent::PerformAction(Action action) {
       return;
 
     case Action::SEND_GIT_HASH_REQUEST:
+      connection_->Flush();
       SendControlMessage(
           BATTOR_CONTROL_MESSAGE_TYPE_GET_FIRMWARE_GIT_HASH, 0, 0);
       return;
@@ -524,14 +556,29 @@ void BattOrAgent::OnActionTimeout() {
       } else {
         CompleteCommand(BATTOR_ERROR_TOO_MANY_INIT_RETRIES);
       }
+      return;
 
+    // TODO(crbug.com/672631): There's currently a BattOr firmware bug that's
+    // causing the BattOr to reset when it's sent the START_TRACING command.
+    // When the BattOr resets, it emits 0x00 to the serial connection. This 0x00
+    // isn't long enough for the connection to consider it a full ack of the
+    // START_TRACING command, so it continues to wait for more data. We handle
+    // this case here by assuming any timeouts while waiting for the
+    // StartTracing ack are related to this bug and retrying the full
+    // initialization sequence.
+    case Action::READ_START_TRACING_ACK:
+      if (num_start_tracing_attempts_ < kMaxStartTracingAttempts) {
+        // OnMessageRead() will fail and retry StartTracing.
+        connection_->CancelReadMessage();
+      } else {
+        CompleteCommand(BATTOR_ERROR_TOO_MANY_START_TRACING_RETRIES);
+      }
       return;
 
     default:
       CompleteCommand(BATTOR_ERROR_TIMEOUT);
+      timeout_callback_.Cancel();
   }
-
-  timeout_callback_.Cancel();
 }
 
 void BattOrAgent::SendControlMessage(BattOrControlMessageType type,

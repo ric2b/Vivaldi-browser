@@ -5,22 +5,14 @@
 #ifndef DEVICE_VR_VR_DEVICE_H
 #define DEVICE_VR_VR_DEVICE_H
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "device/vr/vr_export.h"
 #include "device/vr/vr_service.mojom.h"
 
-namespace blink {
-struct WebHMDSensorState;
-}
-
-namespace ui {
-class BaseWindow;
-}
-
 namespace device {
 
 class VRDisplayImpl;
-class VRServiceImpl;
 
 const unsigned int VR_DEVICE_LAST_ID = 0xFFFFFFFF;
 
@@ -42,13 +34,11 @@ class DEVICE_VR_EXPORT VRDevice {
   virtual void UpdateLayerBounds(mojom::VRLayerBoundsPtr left_bounds,
                                  mojom::VRLayerBoundsPtr right_bounds) = 0;
 
-  virtual void AddService(VRServiceImpl* service);
-  virtual void RemoveService(VRServiceImpl* service);
+  virtual void AddDisplay(VRDisplayImpl* display);
+  virtual void RemoveDisplay(VRDisplayImpl* display);
 
-  // TODO(shaobo.yan@intel.com): Checks should be done against VRDisplayImpl and
-  // the name should be considered.
-  virtual bool IsAccessAllowed(VRServiceImpl* service);
-  virtual bool IsPresentingService(VRServiceImpl* service);
+  virtual bool IsAccessAllowed(VRDisplayImpl* display);
+  virtual bool CheckPresentingDisplay(VRDisplayImpl* display);
 
   virtual void OnChanged();
   virtual void OnExitPresent();
@@ -59,19 +49,14 @@ class DEVICE_VR_EXPORT VRDevice {
 
  protected:
   friend class VRDisplayImpl;
+  friend class VRDisplayImplTest;
 
-  void SetPresentingService(VRServiceImpl* service);
+  void SetPresentingDisplay(VRDisplayImpl* display);
 
  private:
-  // Each Service have one VRDisplay with one VRDevice.
-  // TODO(shaobo.yan@intel.com): Since the VRDisplayImpl knows its VRServiceImpl
-  // we should
-  // only need to store the VRDisplayImpl.
-  using DisplayClientMap = std::map<VRServiceImpl*, VRDisplayImpl*>;
-  DisplayClientMap displays_;
+  std::set<VRDisplayImpl*> displays_;
 
-  // TODO(shaobo.yan@intel.com): Should track presenting VRDisplayImpl instead.
-  VRServiceImpl* presenting_service_;
+  VRDisplayImpl* presenting_display_;
 
   unsigned int id_;
 

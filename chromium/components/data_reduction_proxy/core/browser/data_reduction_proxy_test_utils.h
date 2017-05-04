@@ -21,6 +21,7 @@
 #include "base/time/time.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_bypass_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_service_client.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_delegate.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_service.h"
@@ -34,10 +35,6 @@
 
 class GURL;
 class TestingPrefServiceSimple;
-
-namespace base {
-class MessageLoopForUI;
-}
 
 namespace net {
 class MockClientSocketFactory;
@@ -53,8 +50,8 @@ class DataReductionProxyConfigurator;
 class DataReductionProxyEventCreator;
 class DataReductionProxyMutableConfigValues;
 class DataReductionProxyRequestOptions;
+class DataReductionProxyServer;
 class DataReductionProxySettings;
-class DataReductionProxyCompressionStats;
 class MockDataReductionProxyConfig;
 class TestDataReductionProxyConfig;
 class TestDataReductionProxyEventStorageDelegate;
@@ -75,6 +72,8 @@ class TestDataReductionProxyRequestOptions
 
   // Time after the unix epoch that Now() reports.
   void set_offset(const base::TimeDelta& now_offset);
+
+  using DataReductionProxyRequestOptions::GetHeaderValueForTesting;
 
  private:
   base::TimeDelta now_offset_;
@@ -191,7 +190,7 @@ class TestDataReductionProxyIOData : public DataReductionProxyIOData {
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       std::unique_ptr<DataReductionProxyConfig> config,
       std::unique_ptr<DataReductionProxyEventCreator> event_creator,
-      std::unique_ptr<DataReductionProxyRequestOptions> request_options,
+      std::unique_ptr<TestDataReductionProxyRequestOptions> request_options,
       std::unique_ptr<DataReductionProxyConfigurator> configurator,
       net::NetLog* net_log,
       bool enabled);
@@ -210,6 +209,15 @@ class TestDataReductionProxyIOData : public DataReductionProxyIOData {
   }
   DataReductionProxyConfigServiceClient* config_client() const {
     return config_client_.get();
+  }
+
+  TestDataReductionProxyRequestOptions* test_request_options() const {
+    return test_request_options_;
+  }
+
+  void set_proxy_delegate(
+      std::unique_ptr<DataReductionProxyDelegate> proxy_delegate) {
+    proxy_delegate_ = std::move(proxy_delegate);
   }
 
   void SetSimpleURLRequestContextGetter(
@@ -234,6 +242,8 @@ class TestDataReductionProxyIOData : public DataReductionProxyIOData {
 
   // Reporting fraction last set via SetPingbackReportingFraction.
   float pingback_reporting_fraction_;
+
+  TestDataReductionProxyRequestOptions* test_request_options_;
 };
 
 // Test version of |DataStore|. Uses an in memory hash map to store data.
@@ -267,6 +277,8 @@ class DataReductionProxyTestContext {
   class Builder {
    public:
     Builder();
+
+    ~Builder();
 
     // |DataReductionProxyParams| flags to use.
     Builder& WithParamsFlags(int params_flags);
@@ -312,6 +324,10 @@ class DataReductionProxyTestContext {
     // Construct, but do not initialize the |DataReductionProxySettings| object.
     Builder& SkipSettingsInitialization();
 
+    // Specifies the data reduction proxy servers.
+    Builder& WithProxiesForHttp(
+        const std::vector<DataReductionProxyServer>& proxy_servers);
+
     // Creates a |DataReductionProxyTestContext|. Owned by the caller.
     std::unique_ptr<DataReductionProxyTestContext> Build();
 
@@ -328,6 +344,7 @@ class DataReductionProxyTestContext {
     bool use_config_client_;
     bool use_test_config_client_;
     bool skip_settings_initialization_;
+    std::vector<DataReductionProxyServer> proxy_servers_;
   };
 
   virtual ~DataReductionProxyTestContext();

@@ -14,13 +14,13 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/animation/ink_drop_ripple.h"
 #include "ui/views/animation/square_ink_drop_ripple.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/painter.h"
 #include "ui/views/resources/grit/views_resources.h"
+#include "ui/views/resources/vector_icons/vector_icons.h"
 #include "ui/views/style/platform_style.h"
 
 namespace views {
@@ -125,6 +125,15 @@ void Checkbox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ui::AX_ROLE_CHECK_BOX;
   if (checked())
     node_data->AddStateFlag(ui::AX_STATE_CHECKED);
+  if (enabled()) {
+    if (checked()) {
+      node_data->AddIntAttribute(ui::AX_ATTR_ACTION,
+                                 ui::AX_SUPPORTED_ACTION_UNCHECK);
+    } else {
+      node_data->AddIntAttribute(ui::AX_ATTR_ACTION,
+                                 ui::AX_SUPPORTED_ACTION_CHECK);
+    }
+  }
 }
 
 void Checkbox::OnPaint(gfx::Canvas* canvas) {
@@ -180,7 +189,7 @@ SkColor Checkbox::GetInkDropBaseColor() const {
 gfx::ImageSkia Checkbox::GetImage(ButtonState for_state) const {
   if (UseMd()) {
     return gfx::CreateVectorIcon(
-        GetVectorIconId(), 16,
+        GetVectorIcon(), 16,
         // When not checked, the icon color matches the button text color.
         GetNativeTheme()->GetSystemColor(
             checked_ ? ui::NativeTheme::kColorId_FocusedBorderColor
@@ -210,9 +219,8 @@ void Checkbox::PaintFocusRing(gfx::Canvas* canvas, const SkPaint& paint) {
   canvas->DrawRoundRect(focus_rect, 2.f, paint);
 }
 
-gfx::VectorIconId Checkbox::GetVectorIconId() const {
-  return checked() ? gfx::VectorIconId::CHECKBOX_ACTIVE
-                   : gfx::VectorIconId::CHECKBOX_NORMAL;
+const gfx::VectorIcon& Checkbox::GetVectorIcon() const {
+  return checked() ? kCheckboxActiveIcon : kCheckboxNormalIcon;
 }
 
 void Checkbox::NotifyClick(const ui::Event& event) {

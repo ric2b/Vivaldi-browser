@@ -11,7 +11,8 @@ namespace chromeos {
 
 WrongHWIDScreen::WrongHWIDScreen(BaseScreenDelegate* base_screen_delegate,
                                  WrongHWIDScreenActor* actor)
-    : BaseScreen(base_screen_delegate), actor_(actor) {
+    : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_WRONG_HWID),
+      actor_(actor) {
   DCHECK(actor_);
   if (actor_)
     actor_->SetDelegate(this);
@@ -22,11 +23,6 @@ WrongHWIDScreen::~WrongHWIDScreen() {
     actor_->SetDelegate(NULL);
 }
 
-void WrongHWIDScreen::PrepareToShow() {
-  if (actor_)
-    actor_->PrepareToShow();
-}
-
 void WrongHWIDScreen::Show() {
   if (actor_)
     actor_->Show();
@@ -35,10 +31,6 @@ void WrongHWIDScreen::Show() {
 void WrongHWIDScreen::Hide() {
   if (actor_)
     actor_->Hide();
-}
-
-std::string WrongHWIDScreen::GetName() const {
-  return WizardController::kWrongHWIDScreenName;
 }
 
 void WrongHWIDScreen::OnExit() {

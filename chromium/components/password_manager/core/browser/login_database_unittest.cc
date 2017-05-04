@@ -12,7 +12,6 @@
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/scoped_vector.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -401,7 +400,7 @@ TEST_F(LoginDatabaseTest, TestFederatedMatching) {
   form2.action = GURL("https://mobile.foo.com/login");
   form2.signon_realm = "federation://mobile.foo.com/accounts.google.com";
   form2.username_value = ASCIIToUTF16("test1@gmail.com");
-  form2.type = autofill::PasswordForm::TYPE_API;
+  form2.type = PasswordForm::TYPE_API;
   form2.federation_origin = url::Origin(GURL("https://accounts.google.com/"));
 
   // Add it and make sure it is there.
@@ -414,13 +413,18 @@ TEST_F(LoginDatabaseTest, TestFederatedMatching) {
   PasswordStore::FormDigest form_request = {
       PasswordForm::SCHEME_HTML, "https://foo.com/", GURL("https://foo.com/")};
   EXPECT_TRUE(db().GetLogins(form_request, &result));
-  EXPECT_THAT(result, testing::ElementsAre(Pointee(form)));
+  // Both forms are matched, only form2 is a PSL match.
+  form.is_public_suffix_match = false;
+  form2.is_public_suffix_match = true;
+  EXPECT_THAT(result, UnorderedElementsAre(Pointee(form), Pointee(form2)));
 
   // Match against the mobile site.
   form_request.origin = GURL("https://mobile.foo.com/");
   form_request.signon_realm = "https://mobile.foo.com/";
   EXPECT_TRUE(db().GetLogins(form_request, &result));
+  // Both forms are matched, only form is a PSL match.
   form.is_public_suffix_match = true;
+  form2.is_public_suffix_match = false;
   EXPECT_THAT(result, UnorderedElementsAre(Pointee(form), Pointee(form2)));
 }
 
@@ -510,7 +514,7 @@ TEST_F(LoginDatabaseTest, TestFederatedMatchingWithoutPSLMatching) {
   form2.action = GURL("https://some.other.google.com/login");
   form2.signon_realm = "federation://some.other.google.com/accounts.google.com";
   form2.username_value = ASCIIToUTF16("test1@gmail.com");
-  form2.type = autofill::PasswordForm::TYPE_API;
+  form2.type = PasswordForm::TYPE_API;
   form2.federation_origin = url::Origin(GURL("https://accounts.google.com/"));
 
   // Add it and make sure it is there.
@@ -533,6 +537,28 @@ TEST_F(LoginDatabaseTest, TestFederatedMatchingWithoutPSLMatching) {
   EXPECT_TRUE(db().GetLogins(form_request, &result));
   form.is_public_suffix_match = true;
   EXPECT_THAT(result, testing::ElementsAre(Pointee(form2)));
+}
+
+TEST_F(LoginDatabaseTest, TestFederatedPSLMatching) {
+  // Save a federated credential for the PSL matched site.
+  PasswordForm form;
+  form.origin = GURL("https://psl.example.com/");
+  form.action = GURL("https://psl.example.com/login");
+  form.signon_realm = "federation://psl.example.com/accounts.google.com";
+  form.username_value = ASCIIToUTF16("test1@gmail.com");
+  form.type = PasswordForm::TYPE_API;
+  form.federation_origin = url::Origin(GURL("https://accounts.google.com/"));
+  form.scheme = PasswordForm::SCHEME_HTML;
+  EXPECT_EQ(AddChangeForForm(form), db().AddLogin(form));
+
+  // Match against.
+  PasswordStore::FormDigest form_request = {PasswordForm::SCHEME_HTML,
+                                            "https://example.com/",
+                                            GURL("https://example.com/login")};
+  std::vector<std::unique_ptr<PasswordForm>> result;
+  EXPECT_TRUE(db().GetLogins(form_request, &result));
+  form.is_public_suffix_match = true;
+  EXPECT_THAT(result, testing::ElementsAre(Pointee(form)));
 }
 
 // This test fails if the implementation of GetLogins uses GetCachedStatement
@@ -780,13 +806,10 @@ TEST_F(LoginDatabaseTest, ClearPrivateData_SavedPasswords) {
   EXPECT_EQ(4U, result.size());
   result.clear();
 
-  // TODO(crbug.com/555132) Replace |result_scopedvector| back with |result|.
-  ScopedVector<PasswordForm> result_scopedvector;
   // Get everything from today's date and on.
-  EXPECT_TRUE(
-      db().GetLoginsCreatedBetween(now, base::Time(), &result_scopedvector));
-  EXPECT_EQ(2U, result_scopedvector.size());
-  result_scopedvector.clear();
+  EXPECT_TRUE(db().GetLoginsCreatedBetween(now, base::Time(), &result));
+  EXPECT_EQ(2U, result.size());
+  result.clear();
 
   // Delete everything from today's date and on.
   db().RemoveLoginsCreatedBetween(now, base::Time());
@@ -825,15 +848,12 @@ TEST_F(LoginDatabaseTest, RemoveLoginsSyncedBetween) {
   EXPECT_EQ(4U, result.size());
   result.clear();
 
-  // TODO(crbug.com/555132) Replace |result_scopedvector| back with |result|.
-  ScopedVector<PasswordForm> result_scopedvector;
   // Get everything from today's date and on.
-  EXPECT_TRUE(
-      db().GetLoginsSyncedBetween(now, base::Time(), &result_scopedvector));
-  ASSERT_EQ(2U, result_scopedvector.size());
-  EXPECT_EQ("http://3.com", result_scopedvector[0]->signon_realm);
-  EXPECT_EQ("http://4.com", result_scopedvector[1]->signon_realm);
-  result_scopedvector.clear();
+  EXPECT_TRUE(db().GetLoginsSyncedBetween(now, base::Time(), &result));
+  ASSERT_EQ(2U, result.size());
+  EXPECT_EQ("http://3.com", result[0]->signon_realm);
+  EXPECT_EQ("http://4.com", result[1]->signon_realm);
+  result.clear();
 
   // Delete everything from today's date and on.
   db().RemoveLoginsSyncedBetween(now, base::Time());
@@ -854,7 +874,7 @@ TEST_F(LoginDatabaseTest, RemoveLoginsSyncedBetween) {
 }
 
 TEST_F(LoginDatabaseTest, GetAutoSignInLogins) {
-  ScopedVector<PasswordForm> result;
+  std::vector<std::unique_ptr<PasswordForm>> result;
 
   GURL origin("https://example.com");
   EXPECT_TRUE(AddZeroClickableLogin(&db(), "foo1", origin));
@@ -864,7 +884,7 @@ TEST_F(LoginDatabaseTest, GetAutoSignInLogins) {
 
   EXPECT_TRUE(db().GetAutoSignInLogins(&result));
   EXPECT_EQ(4U, result.size());
-  for (const auto* form : result)
+  for (const auto& form : result)
     EXPECT_FALSE(form->skip_zero_click);
 
   EXPECT_TRUE(db().DisableAutoSignInForOrigin(origin));

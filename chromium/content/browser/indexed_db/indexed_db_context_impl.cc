@@ -12,6 +12,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
@@ -236,13 +237,8 @@ base::ListValue* IndexedDBContextImpl::GetAllOriginsDetails() {
           }
 
           transaction_info->SetDouble(
-              "pid",
-              IndexedDBDispatcherHost::TransactionIdToProcessId(
-                  transaction->id()));
-          transaction_info->SetDouble(
-              "tid",
-              IndexedDBDispatcherHost::TransactionIdToRendererTransactionId(
-                  transaction->id()));
+              "pid", transaction->connection()->child_process_id());
+          transaction_info->SetDouble("tid", transaction->id());
           transaction_info->SetDouble(
               "age",
               (base::Time::Now() - transaction->diagnostics().creation_time)

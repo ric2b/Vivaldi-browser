@@ -42,8 +42,6 @@ class VarDictionary;
 
 namespace chrome_pdf {
 
-class Stream;
-
 // Do one time initialization of the SDK.
 bool InitializeSDK();
 // Tells the SDK that we're shutting down.
@@ -186,9 +184,6 @@ class PDFEngine {
     // Get the background color of the PDF.
     virtual uint32_t GetBackgroundColor() = 0;
 
-    // Cancel browser initiated document download.
-    virtual void CancelBrowserDownload() = 0;
-
     // Sets selection status.
     virtual void IsSelectingChanged(bool is_selecting) {}
   };
@@ -301,6 +296,8 @@ class PDFEngine {
   virtual void SetScrollPosition(const pp::Point& position) = 0;
 #endif
 
+  virtual bool IsProgressiveLoad() = 0;
+
   virtual std::string GetMetadata(const std::string& key) = 0;
 };
 
@@ -344,6 +341,8 @@ class PDFEngineExports {
       PDFEnsureTypefaceCharactersAccessible func) = 0;
 
   virtual void SetPDFUseGDIPrinting(bool enable) = 0;
+
+  virtual void SetPDFPostscriptPrintingLevel(int postscript_level) = 0;
 #endif  // defined(OS_WIN)
 
   // See the definition of RenderPDFPageToBitmap in pdf.cc for details.

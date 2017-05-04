@@ -28,6 +28,7 @@ import org.chromium.content_public.browser.MessagePortService;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
+import org.chromium.ui.OverscrollRefreshHandler;
 import org.chromium.ui.accessibility.AXTextStyle;
 
 import java.util.ArrayList;
@@ -335,10 +336,10 @@ import java.util.UUID;
     }
 
     @Override
-    public void postMessageToFrame(
-            String frameName, String message, String targetOrigin, int[] sentPortIds) {
-        nativePostMessageToFrame(
-                mNativeWebContentsAndroid, frameName, message, targetOrigin, sentPortIds);
+    public void postMessageToFrame(String frameName, String message,
+            String sourceOrigin, String targetOrigin, int[] sentPortIds) {
+        nativePostMessageToFrame(mNativeWebContentsAndroid, frameName, message,
+                sourceOrigin, targetOrigin, sentPortIds);
     }
 
     @Override
@@ -368,6 +369,14 @@ import java.util.UUID;
     @Override
     public void requestAccessibilitySnapshot(AccessibilitySnapshotCallback callback) {
         nativeRequestAccessibilitySnapshot(mNativeWebContentsAndroid, callback);
+    }
+
+    @Override
+    @VisibleForTesting
+    public void simulateRendererKilledForTesting(boolean wasOomProtected) {
+        if (mObserverProxy != null) {
+            mObserverProxy.renderProcessGone(wasOomProtected);
+        }
     }
 
     // root node can be null if parsing fails.
@@ -421,8 +430,13 @@ import java.util.UUID;
     }
 
     @Override
-    public void getContentBitmapAsync(Bitmap.Config config, float scale, Rect srcRect,
-            ContentBitmapCallback callback) {
+    public void setOverscrollRefreshHandler(OverscrollRefreshHandler handler) {
+        nativeSetOverscrollRefreshHandler(mNativeWebContentsAndroid, handler);
+    }
+
+    @Override
+    public void getContentBitmapAsync(
+            Bitmap.Config config, float scale, Rect srcRect, ContentBitmapCallback callback) {
         nativeGetContentBitmap(mNativeWebContentsAndroid, callback, config, scale,
                 srcRect.left, srcRect.top, srcRect.width(), srcRect.height());
     }
@@ -525,7 +539,7 @@ import java.util.UUID;
     private native void nativeAddMessageToDevToolsConsole(
             long nativeWebContentsAndroid, int level, String message);
     private native void nativePostMessageToFrame(long nativeWebContentsAndroid, String frameName,
-            String message, String targetOrigin, int[] sentPortIds);
+            String message, String sourceOrigin, String targetOrigin, int[] sentPortIds);
     private native void nativeCreateMessageChannel(
             long nativeWebContentsAndroid, AppWebMessagePort[] ports);
     private native boolean nativeHasAccessedInitialDocument(
@@ -533,6 +547,8 @@ import java.util.UUID;
     private native int nativeGetThemeColor(long nativeWebContentsAndroid);
     private native void nativeRequestAccessibilitySnapshot(
             long nativeWebContentsAndroid, AccessibilitySnapshotCallback callback);
+    private native void nativeSetOverscrollRefreshHandler(
+            long nativeWebContentsAndroid, OverscrollRefreshHandler nativeOverscrollRefreshHandler);
     private native void nativeGetContentBitmap(long nativeWebContentsAndroid,
             ContentBitmapCallback callback, Bitmap.Config config, float scale,
             float x, float y, float width, float height);

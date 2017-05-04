@@ -18,3 +18,12 @@ post_process_target("//chrome/installer/install_static:install_static_util") {
     "//vivaldi/installer/vivaldi_install_modes.h",
   ]
 }
+
+post_process_target("//chrome/installer/util:with_no_strings") {
+  if (is_win) {
+    sources += [
+      "//vivaldi/installer/util/vivaldi_install_util.cc",
+      "//vivaldi/installer/util/vivaldi_install_util.h",
+    ]
+  }
+}

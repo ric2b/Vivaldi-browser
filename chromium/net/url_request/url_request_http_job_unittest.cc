@@ -40,6 +40,12 @@
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
+#if defined(OS_ANDROID)
+#include "base/android/build_info.h"
+#include "base/android/jni_android.h"
+#include "jni/AndroidNetworkLibraryTestUtil_jni.h"
+#endif
+
 using net::test::IsError;
 using net::test::IsOk;
 
@@ -161,8 +167,7 @@ TEST_F(URLRequestHttpJobSetUpSourceTest, UnknownEncoding) {
 }
 
 // Received a malformed SDCH encoded response when there is no SdchManager.
-TEST_F(URLRequestHttpJobSetUpSourceTest,
-       SdchNotAdvertisedGotMalformedSdchResponse) {
+TEST_F(URLRequestHttpJobSetUpSourceTest, SdchNotAdvertisedGotSdchResponse) {
   MockWrite writes[] = {MockWrite(kSimpleGetMockWrite)};
   MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
                                "Content-Encoding: sdch\r\n"
@@ -184,7 +189,9 @@ TEST_F(URLRequestHttpJobSetUpSourceTest,
   request->Start();
 
   base::RunLoop().Run();
-  EXPECT_EQ(ERR_CONTENT_DECODING_INIT_FAILED, delegate_.request_status());
+  // Pass through the raw response the same way as if received unknown encoding.
+  EXPECT_EQ(OK, delegate_.request_status());
+  EXPECT_EQ("Test Content", delegate_.data_received());
 }
 
 class URLRequestHttpJobTest : public ::testing::Test {
@@ -776,6 +783,44 @@ class URLRequestHttpJobWithSdchSupportTest : public ::testing::Test {
   TestURLRequestContext context_;
 };
 
+// Received a malformed SDCH encoded response that has no valid dictionary id.
+TEST_F(URLRequestHttpJobWithSdchSupportTest,
+       SdchAdvertisedGotMalformedSdchResponse) {
+  MockWrite writes[] = {
+      MockWrite("GET / HTTP/1.1\r\n"
+                "Host: www.example.com\r\n"
+                "Connection: keep-alive\r\n"
+                "User-Agent:\r\n"
+                "Accept-Encoding: gzip, deflate, sdch\r\n"
+                "Accept-Language: en-us,fr\r\n\r\n")};
+  MockRead reads[] = {MockRead("HTTP/1.1 200 OK\r\n"
+                               "Content-Encoding: sdch\r\n"
+                               "Content-Length: 12\r\n\r\n"),
+                      MockRead("Test Content")};
+
+  StaticSocketDataProvider socket_data(reads, arraysize(reads), writes,
+                                       arraysize(writes));
+  socket_factory_.AddSocketDataProvider(&socket_data);
+
+  MockSdchObserver sdch_observer;
+  SdchManager sdch_manager;
+  sdch_manager.AddObserver(&sdch_observer);
+  context_.set_sdch_manager(&sdch_manager);
+  TestDelegate delegate;
+  std::unique_ptr<URLRequest> request = context_.CreateRequest(
+      GURL("http://www.example.com"), DEFAULT_PRIORITY, &delegate);
+  request->Start();
+
+  base::RunLoop().Run();
+  // SdchPolicyDelegate::OnDictionaryIdError() detects that the response is
+  // malformed (missing dictionary), and will issue a pass-through of the raw
+  // response.
+  EXPECT_EQ(OK, delegate.request_status());
+  EXPECT_EQ("Test Content", delegate.data_received());
+  // Cleanup manager.
+  sdch_manager.RemoveObserver(&sdch_observer);
+}
+
 TEST_F(URLRequestHttpJobWithSdchSupportTest, GetDictionary) {
   MockWrite writes[] = {
       MockWrite("GET / HTTP/1.1\r\n"
@@ -898,6 +943,46 @@ TEST_F(URLRequestHttpJobWithBrotliSupportTest, BrotliAdvertisement) {
   EXPECT_EQ(CountReadBytes(reads, arraysize(reads)),
             request->GetTotalReceivedBytes());
 }
+
+#if defined(OS_ANDROID)
+TEST_F(URLRequestHttpJobTest, AndroidCleartextPermittedTest) {
+  context_.set_check_cleartext_permitted(true);
+
+  struct TestCase {
+    const char* url;
+    bool cleartext_permitted;
+    bool should_block;
+  } cases[] = {
+      {"http://blocked.test/", true, false},
+      {"https://blocked.test/", true, false},
+      {"http://blocked.test/", false, true},
+      {"https://blocked.test/", false, false},
+  };
+
+  for (const TestCase& test : cases) {
+    JNIEnv* env = base::android::AttachCurrentThread();
+    Java_AndroidNetworkLibraryTestUtil_setUpSecurityPolicyForTesting(
+        env, test.cleartext_permitted);
+
+    TestDelegate delegate;
+    std::unique_ptr<URLRequest> request =
+        context_.CreateRequest(GURL(test.url), DEFAULT_PRIORITY, &delegate);
+    request->Start();
+    base::RunLoop().Run();
+
+    int sdk_int = base::android::BuildInfo::GetInstance()->sdk_int();
+    bool expect_blocked = (sdk_int >= base::android::SDK_VERSION_MARSHMALLOW &&
+                           test.should_block);
+    if (expect_blocked) {
+      EXPECT_THAT(delegate.request_status(),
+                  IsError(ERR_CLEARTEXT_NOT_PERMITTED));
+    } else {
+      // Should fail since there's no test server running
+      EXPECT_THAT(delegate.request_status(), IsError(ERR_FAILED));
+    }
+  }
+}
+#endif
 
 // This base class just serves to set up some things before the TestURLRequest
 // constructor is called.

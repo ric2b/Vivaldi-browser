@@ -39,12 +39,15 @@ using base::ASCIIToUTF16;
 
 namespace autofill {
 
-const base::char16 kMidlineEllipsis[] = { 0x22ef, 0 };
+const base::char16 kMidlineEllipsis[] = { 0x0020, 0x0020,
+                                          0x2022, 0x2006,
+                                          0x2022, 0x2006,
+                                          0x2022, 0x2006,
+                                          0x2022, 0x2006, 0 };
 
 namespace {
 
 const base::char16 kCreditCardObfuscationSymbol = '*';
-const base::char16 kNonBreakingSpace[] = { 0x00a0, 0 };
 
 bool ConvertYear(const base::string16& year, int* num) {
   // If the |year| is empty, clear the stored value.
@@ -72,6 +75,8 @@ base::string16 TypeForFill(const std::string& type) {
     return l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_JCB);
   if (type == kMasterCard)
     return l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_MASTERCARD);
+  if (type == kMirCard)
+    return l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_MIR);
   if (type == kUnionPay)
     return l10n_util::GetStringUTF16(IDS_AUTOFILL_CC_UNION_PAY);
   if (type == kVisaCard)
@@ -130,13 +135,15 @@ int CreditCard::IconResourceId(const std::string& type) {
   if (type == kAmericanExpressCard)
     return IDR_AUTOFILL_CC_AMEX;
   if (type == kDinersCard)
-    return IDR_AUTOFILL_CC_GENERIC;
+    return IDR_AUTOFILL_CC_DINERS;
   if (type == kDiscoverCard)
     return IDR_AUTOFILL_CC_DISCOVER;
   if (type == kJCBCard)
-    return IDR_AUTOFILL_CC_GENERIC;
+    return IDR_AUTOFILL_CC_JCB;
   if (type == kMasterCard)
     return IDR_AUTOFILL_CC_MASTERCARD;
+  if (type == kMirCard)
+    return IDR_AUTOFILL_CC_MIR;
   if (type == kUnionPay)
     return IDR_AUTOFILL_CC_GENERIC;
   if (type == kVisaCard)
@@ -187,6 +194,9 @@ const char* CreditCard::GetCreditCardType(const base::string16& number) {
   int first_two_digits = 0;
   if (!base::StringToInt(number.substr(0, 2), &first_two_digits))
     return kGenericCard;
+
+  if (first_two_digits == 22)
+    return kMirCard;
 
   if (first_two_digits == 34 || first_two_digits == 37)
     return kAmericanExpressCard;
@@ -492,8 +502,7 @@ base::string16 CreditCard::TypeAndLastFourDigits() const {
     return type;
 
   // TODO(estade): i18n?
-  return type + base::string16(kNonBreakingSpace) +
-         base::string16(kMidlineEllipsis) + digits;
+  return type + base::string16(kMidlineEllipsis) + digits;
 }
 
 base::string16 CreditCard::AbbreviatedExpirationDateForDisplay() const {
@@ -865,6 +874,7 @@ const char kDiscoverCard[] = "discoverCC";
 const char kGenericCard[] = "genericCC";
 const char kJCBCard[] = "jcbCC";
 const char kMasterCard[] = "masterCardCC";
+const char kMirCard[] = "mirCC";
 const char kUnionPay[] = "unionPayCC";
 const char kVisaCard[] = "visaCC";
 

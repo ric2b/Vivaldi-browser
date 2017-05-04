@@ -26,10 +26,10 @@
 #include "core/dom/Document.h"
 #include "core/dom/IncrementLoadEventDelayCount.h"
 #include "core/dom/StyleEngine.h"
-#include "core/fetch/CSSStyleSheetResource.h"
 #include "core/fetch/FetchInitiatorTypeNames.h"
 #include "core/fetch/FetchRequest.h"
 #include "core/fetch/ResourceFetcher.h"
+#include "core/loader/resource/CSSStyleSheetResource.h"
 #include "core/loader/resource/XSLStyleSheetResource.h"
 #include "core/xml/DocumentXSLT.h"
 #include "core/xml/XSLStyleSheet.h"
@@ -195,7 +195,8 @@ void ProcessingInstruction::setCSSStyleSheet(
   }
 
   DCHECK(m_isCSS);
-  CSSParserContext parserContext(document(), nullptr, baseURL, charset);
+  CSSParserContext* parserContext =
+      CSSParserContext::create(document(), baseURL, charset);
 
   StyleSheetContents* newSheet =
       StyleSheetContents::create(href, parserContext);
@@ -204,8 +205,7 @@ void ProcessingInstruction::setCSSStyleSheet(
   cssSheet->setDisabled(m_alternate);
   cssSheet->setTitle(m_title);
   if (!m_alternate && !m_title.isEmpty())
-    document().styleEngine().setPreferredStylesheetSetNameIfNotSet(
-        m_title, StyleEngine::DontUpdateActiveSheets);
+    document().styleEngine().setPreferredStylesheetSetNameIfNotSet(m_title);
   cssSheet->setMediaQueries(MediaQuerySet::create(m_media));
 
   m_sheet = cssSheet;
@@ -269,10 +269,12 @@ void ProcessingInstruction::removedFrom(ContainerNode* insertionPoint) {
     return;
 
   // No need to remove XSLStyleSheet from StyleEngine.
-  if (!DocumentXSLT::processingInstructionRemovedFromDocument(document(), this))
-    document().styleEngine().removeStyleSheetCandidateNode(*this);
+  if (!DocumentXSLT::processingInstructionRemovedFromDocument(document(),
+                                                              this)) {
+    document().styleEngine().removeStyleSheetCandidateNode(*this,
+                                                           *insertionPoint);
+  }
 
-  StyleSheet* removedSheet = m_sheet;
   if (m_sheet) {
     DCHECK_EQ(m_sheet->ownerNode(), this);
     clearSheet();
@@ -280,12 +282,6 @@ void ProcessingInstruction::removedFrom(ContainerNode* insertionPoint) {
 
   // No need to remove pending sheets.
   clearResource();
-
-  // If we're in document teardown, then we don't need to do any notification of
-  // our sheet's removal.
-  if (document().isActive())
-    document().styleEngine().setNeedsActiveStyleUpdate(removedSheet,
-                                                       FullStyleUpdate);
 }
 
 void ProcessingInstruction::clearSheet() {

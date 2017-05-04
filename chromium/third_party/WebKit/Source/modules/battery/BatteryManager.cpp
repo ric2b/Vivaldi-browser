@@ -21,8 +21,7 @@ BatteryManager* BatteryManager::create(ExecutionContext* context) {
 BatteryManager::~BatteryManager() {}
 
 BatteryManager::BatteryManager(ExecutionContext* context)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : SuspendableObject(context),
       PlatformEventController(toDocument(context)->page()) {}
 
 ScriptPromise BatteryManager::startRequest(ScriptState* scriptState) {
@@ -31,8 +30,7 @@ ScriptPromise BatteryManager::startRequest(ScriptState* scriptState) {
                                             this, BatteryProperty::Ready);
 
     // If the context is in a stopped state already, do not start updating.
-    if (!getExecutionContext() ||
-        getExecutionContext()->activeDOMObjectsAreStopped()) {
+    if (!getExecutionContext() || getExecutionContext()->isContextDestroyed()) {
       m_batteryProperty->resolve(this);
     } else {
       m_hasEventListener = true;
@@ -72,8 +70,7 @@ void BatteryManager::didUpdateData() {
 
   Document* document = toDocument(getExecutionContext());
   DCHECK(document);
-  if (document->activeDOMObjectsAreSuspended() ||
-      document->activeDOMObjectsAreStopped())
+  if (document->isContextSuspended() || document->isContextDestroyed())
     return;
 
   if (m_batteryStatus.charging() != oldStatus.charging())
@@ -108,23 +105,23 @@ void BatteryManager::resume() {
   startUpdating();
 }
 
-void BatteryManager::contextDestroyed() {
+void BatteryManager::contextDestroyed(ExecutionContext*) {
   m_hasEventListener = false;
-  m_batteryProperty.clear();
+  m_batteryProperty = nullptr;
   stopUpdating();
 }
 
 bool BatteryManager::hasPendingActivity() const {
   // Prevent V8 from garbage collecting the wrapper object if there are
   // event listeners attached to it.
-  return hasEventListeners();
+  return getExecutionContext() && hasEventListeners();
 }
 
 DEFINE_TRACE(BatteryManager) {
   visitor->trace(m_batteryProperty);
   PlatformEventController::trace(visitor);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  SuspendableObject::trace(visitor);
 }
 
 }  // namespace blink

@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <list>
 #include <map>
 #include <set>
 #include <string>
@@ -29,6 +30,7 @@
 #include "content/common/accessibility_mode_enums.h"
 #include "content/common/ax_content_node_data.h"
 #include "content/common/content_export.h"
+#include "content/common/download/mhtml_save_status.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/frame_replication_state.h"
@@ -36,6 +38,7 @@
 #include "content/common/navigation_params.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/javascript_message_type.h"
+#include "content/public/common/previews_state.h"
 #include "media/mojo/interfaces/interface_factory.mojom.h"
 #include "net/http/http_response_headers.h"
 #include "services/service_manager/public/cpp/interface_factory.h"
@@ -80,6 +83,7 @@ class AssociatedInterfaceProviderImpl;
 class CrossProcessFrameConnector;
 class FrameTree;
 class FrameTreeNode;
+class MediaInterfaceProxy;
 class NavigationHandleImpl;
 class PermissionServiceContext;
 class RenderFrameHostDelegate;
@@ -100,6 +104,10 @@ struct FileChooserParams;
 struct FrameOwnerProperties;
 struct FileChooserParams;
 struct ResourceResponse;
+
+namespace mojom {
+class CreateNewWindowParams;
+}
 
 class CONTENT_EXPORT RenderFrameHostImpl
     : public RenderFrameHost,
@@ -135,7 +143,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   const std::string& GetFrameName() override;
   bool IsCrossProcessSubframe() override;
   const GURL& GetLastCommittedURL() override;
-  url::Origin GetLastCommittedOrigin() override;
+  const url::Origin& GetLastCommittedOrigin() override;
   gfx::NativeView GetNativeView() override;
   void AddMessageToConsole(ConsoleMessageLevel level,
                            const std::string& message) override;
@@ -169,6 +177,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void RequestTextSurroundingSelection(
       const TextSurroundingSelectionCallback& callback,
       int max_length) override;
+  void RequestFocusedFormFieldData(FormFieldDataCallback& callback) override;
 
   // mojom::FrameHost
   void GetInterfaceProvider(
@@ -196,10 +205,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // SiteInstanceImpl::Observer
   void RenderProcessGone(SiteInstanceImpl* site_instance) override;
 
-  // service_manager::InterfaceFactory<media::mojom::InterfaceFactory>
-  void Create(const service_manager::Identity& remote_identity,
-              media::mojom::InterfaceFactoryRequest request) override;
-
   // Creates a RenderFrame in the renderer process.
   bool CreateRenderFrame(int proxy_routing_id,
                          int opener_routing_id,
@@ -216,12 +221,27 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void Init();
 
   int routing_id() const { return routing_id_; }
+
+  // Called when this frame has added a child. This is a continuation of an IPC
+  // that was partially handled on the IO thread (to allocate |new_routing_id|),
+  // and is forwarded here. The renderer has already been told to create a
+  // RenderFrame with |new_routing_id|.
   void OnCreateChildFrame(int new_routing_id,
                           blink::WebTreeScopeType scope,
                           const std::string& frame_name,
                           const std::string& frame_unique_name,
                           blink::WebSandboxFlags sandbox_flags,
                           const FrameOwnerProperties& frame_owner_properties);
+
+  // Called when this frame tries to open a new WebContents, e.g. via a script
+  // call to window.open(). The renderer has already been told to create the
+  // RenderView and RenderFrame with the specified route ids, which were
+  // assigned on the IO thread.
+  void OnCreateNewWindow(int32_t render_view_route_id,
+                         int32_t main_frame_route_id,
+                         int32_t main_frame_widget_route_id,
+                         const mojom::CreateNewWindowParams& params,
+                         SessionStorageNamespace* session_storage_namespace);
 
   RenderViewHostImpl* render_view_host() { return render_view_host_; }
   RenderFrameHostDelegate* delegate() { return delegate_; }
@@ -241,6 +261,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
   const GURL& last_successful_url() { return last_successful_url_; }
   void set_last_successful_url(const GURL& url) {
     last_successful_url_ = url;
+  }
+
+  // Update this frame's last committed origin.
+  void set_last_committed_origin(const url::Origin& origin) {
+    last_committed_origin_ = origin;
   }
 
   // Returns the associated WebUI or null if none applies.
@@ -443,8 +468,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
                               const base::string16& user_input,
                               bool dialog_was_suppressed);
 
-  // Send a message to the renderer process to change the accessibility mode.
-  void SetAccessibilityMode(AccessibilityMode AccessibilityMode);
+  // Get the accessibility mode from the delegate and Send a message to the
+  // renderer process to change the accessibility mode.
+  void UpdateAccessibilityMode();
 
   // Request a one-time snapshot of the accessibility tree without changing
   // the accessibility mode.
@@ -571,10 +597,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   void ClearFocusedElement();
 
-  // PlzNavigate: returns the LoFi state of the last successful navigation that
-  // made a network request.
-  LoFiState last_navigation_lofi_state() const {
-    return last_navigation_lofi_state_;
+  // PlzNavigate: returns the PreviewsState of the last successful navigation
+  // that made a network request. The PreviewsState is a bitmask of potentially
+  // several Previews optimizations.
+  PreviewsState last_navigation_previews_state() const {
+    return last_navigation_previews_state_;
   }
 
   bool has_focused_editable_element() const {
@@ -615,11 +642,16 @@ class CONTENT_EXPORT RenderFrameHostImpl
                            UnloadPushStateOnCrossProcessNavigation);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest,
                            WebUIJavascriptDisallowedAfterSwapOut);
+  FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest, LastCommittedOrigin);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest, CrashSubframe);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            RenderViewHostIsNotReusedAfterDelayedSwapOutACK);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
+                           RenderViewHostStaysActiveWithLateSwapoutACK);
+  FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            LoadEventForwardingWhilePendingDeletion);
+  FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
+                           ContextMenuAfterCrossProcessNavigation);
 
   // IPC Message handlers.
   void OnDidAddMessageToConsole(int32_t level,
@@ -666,9 +698,12 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnTextSurroundingSelectionResponse(const base::string16& content,
                                           uint32_t start_offset,
                                           uint32_t end_offset);
+  void OnFocusedFormFieldDataResponse(int request_id,
+                                      const FormFieldData& field_data);
   void OnDidAccessInitialDocument();
   void OnDidChangeOpener(int32_t opener_routing_id);
   void OnDidChangeName(const std::string& name, const std::string& unique_name);
+  void OnDidSetFeaturePolicyHeader(const ParsedFeaturePolicy& parsed_header);
   void OnDidAddContentSecurityPolicy(const ContentSecurityPolicyHeader& header);
   void OnEnforceInsecureRequestPolicy(blink::WebInsecureRequestPolicy policy);
   void OnUpdateToUniqueOrigin(bool is_potentially_trustworthy_unique_origin);
@@ -701,7 +736,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnDidChangeLoadProgress(double load_progress);
   void OnSerializeAsMHTMLResponse(
       int job_id,
-      bool success,
+      MhtmlSaveStatus save_status,
       const std::set<std::string>& digests_of_uris_of_serialized_resources,
       base::TimeDelta renderer_main_thread_time);
   void OnSelectionChanged(const base::string16& text,
@@ -709,6 +744,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
                           const gfx::Range& range);
   void OnFocusedNodeChanged(bool is_editable_element,
                             const gfx::Rect& bounds_in_frame_widget);
+  void OnSetHasReceivedUserGesture();
   void OnDidChangeLoadProgressExtended(
       const FrameMsg_ExtendedLoadingProgress_Params& params);
 
@@ -716,6 +752,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnShowPopup(const FrameHostMsg_ShowPopup_Params& params);
   void OnHidePopup();
 #endif
+  void OnShowCreatedWindow(int pending_widget_routing_id,
+                           WindowOpenDisposition disposition,
+                           const gfx::Rect& initial_rect,
+                           bool user_gesture);
 
   // Registers Mojo interfaces that this frame host makes available.
   void RegisterMojoInterfaces();
@@ -810,7 +850,15 @@ class CONTENT_EXPORT RenderFrameHostImpl
       mojo::InterfaceRequest<blink::mojom::WebBluetoothService> request);
 
   // Deletes the Web Bluetooth Service owned by the frame.
-  void DeleteWebBluetoothService();
+  void DeleteWebBluetoothService(
+      WebBluetoothServiceImpl* web_bluetooth_service);
+
+  // service_manager::InterfaceFactory<media::mojom::InterfaceFactory>
+  void Create(const service_manager::Identity& remote_identity,
+              media::mojom::InterfaceFactoryRequest request) override;
+
+  // Callback for connection error on the media::mojom::InterfaceFactory client.
+  void OnMediaInterfaceFactoryConnectionError();
 
   // Allows tests to disable the swapout event timer to simulate bugs that
   // happen before it fires (to avoid flakiness).
@@ -880,6 +928,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Track this frame's last committed URL.
   GURL last_committed_url_;
 
+  // Track this frame's last committed origin.
+  url::Origin last_committed_origin_;
+
   // The most recent non-error URL to commit in this frame.  Remove this in
   // favor of GetLastCommittedURL() once PlzNavigate is enabled or cross-process
   // transfers work for net errors.  See https://crbug.com/588314.
@@ -889,6 +940,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // ExecuteJavaScript and their corresponding callbacks.
   std::map<int, JavaScriptResultCallback> javascript_callbacks_;
   std::map<uint64_t, VisualStateCallback> visual_state_callbacks_;
+
+  // Callbacks for getting text input info.
+  std::map<int, FormFieldDataCallback> form_field_data_callbacks_;
 
   // RenderFrameHosts that need management of the rendering and input events
   // for their frame subtrees require RenderWidgetHosts. This typically
@@ -978,7 +1032,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
       app_web_message_port_message_filter_;
 #endif
 
-  std::unique_ptr<WebBluetoothServiceImpl> web_bluetooth_service_;
+  std::list<std::unique_ptr<WebBluetoothServiceImpl>> web_bluetooth_services_;
 
   // The object managing the accessibility tree for this frame.
   std::unique_ptr<BrowserAccessibilityManager> browser_accessibility_manager_;
@@ -1048,10 +1102,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // If true, then the RenderFrame has selected text.
   bool has_selection_;
 
-  // PlzNavigate: The LoFi state of the last navigation. This is used during
+  // PlzNavigate: The Previews state of the last navigation. This is used during
   // history navigation of subframes to ensure that subframes navigate with the
-  // same LoFi status as the top-level frame.
-  LoFiState last_navigation_lofi_state_;
+  // same Previews status as the top-level frame.
+  PreviewsState last_navigation_previews_state_;
 
   mojo::Binding<mojom::FrameHost> frame_host_binding_;
   mojom::FramePtr frame_;
@@ -1072,11 +1126,16 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // |FrameHostMsg_TextSurroundingSelectionResponse| message comes.
   TextSurroundingSelectionCallback text_surrounding_selection_callback_;
 
+  // Hosts media::mojom::InterfaceFactory for the RenderFrame and forwards
+  // media::mojom::InterfaceFactory calls to the remote "media" service.
+  std::unique_ptr<MediaInterfaceProxy> media_interface_proxy_;
+
   std::vector<std::unique_ptr<service_manager::InterfaceRegistry>>
       media_registries_;
 
   std::unique_ptr<AssociatedInterfaceProviderImpl>
       remote_associated_interfaces_;
+
   // NOTE: This must be the last member.
   base::WeakPtrFactory<RenderFrameHostImpl> weak_ptr_factory_;
 

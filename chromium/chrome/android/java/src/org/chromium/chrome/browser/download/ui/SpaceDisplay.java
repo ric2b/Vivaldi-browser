@@ -10,7 +10,6 @@ import android.os.Environment;
 import android.os.StatFs;
 import android.support.v7.widget.RecyclerView;
 import android.view.ViewGroup;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
@@ -19,6 +18,8 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.download.DownloadUtils;
+import org.chromium.chrome.browser.widget.MaterialProgressBar;
 
 import java.io.File;
 import java.util.concurrent.ExecutionException;
@@ -33,9 +34,6 @@ public class SpaceDisplay extends RecyclerView.AdapterDataObserver {
     }
 
     private static final String TAG = "download_ui";
-    private static final long BYTES_PER_KILOBYTE = 1024;
-    private static final long BYTES_PER_MEGABYTE = 1024 * 1024;
-    private static final long BYTES_PER_GIGABYTE = 1024 * 1024 * 1024;
 
     private static final int[] USED_STRINGS = {
         R.string.download_manager_ui_space_used_kb,
@@ -108,7 +106,7 @@ public class SpaceDisplay extends RecyclerView.AdapterDataObserver {
     private TextView mSpaceUsedByDownloadsTextView;
     private TextView mSpaceUsedByOtherAppsTextView;
     private TextView mSpaceFreeTextView;
-    private ProgressBar mSpaceBar;
+    private MaterialProgressBar mSpaceBar;
     private long mFreeBytes;
 
     SpaceDisplay(final ViewGroup parent, DownloadHistoryAdapter historyAdapter) {
@@ -116,7 +114,7 @@ public class SpaceDisplay extends RecyclerView.AdapterDataObserver {
         mSpaceUsedByDownloadsTextView = (TextView) parent.findViewById(R.id.size_downloaded);
         mSpaceUsedByOtherAppsTextView = (TextView) parent.findViewById(R.id.size_other_apps);
         mSpaceFreeTextView = (TextView) parent.findViewById(R.id.size_free);
-        mSpaceBar = (ProgressBar) parent.findViewById(R.id.space_bar);
+        mSpaceBar = (MaterialProgressBar) parent.findViewById(R.id.space_bar);
         mFileSystemBytesTask =
                 new StorageSizeTask(true).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
@@ -171,11 +169,13 @@ public class SpaceDisplay extends RecyclerView.AdapterDataObserver {
         long bytesUsedByOtherApps = Math.max(0, bytesUsedTotal - bytesUsedByDownloads);
 
         // Describe how much space has been used by downloads in text.
+        Context context = mSpaceUsedByDownloadsTextView.getContext();
         mSpaceUsedByDownloadsTextView.setText(
-                getStringForBytes(USED_STRINGS, bytesUsedByDownloads));
+                DownloadUtils.getStringForBytes(context, USED_STRINGS, bytesUsedByDownloads));
         mSpaceUsedByOtherAppsTextView.setText(
-                getStringForBytes(OTHER_STRINGS, bytesUsedByOtherApps));
-        mSpaceFreeTextView.setText(getStringForBytes(FREE_STRINGS, mFreeBytes));
+                DownloadUtils.getStringForBytes(context, OTHER_STRINGS, bytesUsedByOtherApps));
+        mSpaceFreeTextView.setText(
+                DownloadUtils.getStringForBytes(context, FREE_STRINGS, mFreeBytes));
 
         // Set a minimum size for the download size so that it shows up in the progress bar.
         long onePercentOfSystem = fileSystemBytes == 0 ? 0 : fileSystemBytes / 100;
@@ -190,25 +190,6 @@ public class SpaceDisplay extends RecyclerView.AdapterDataObserver {
         mSpaceBar.setSecondaryProgress(percentageOtherApps);
 
         for (Observer observer : mObservers) observer.onSpaceDisplayUpdated(this);
-    }
-
-    private String getStringForBytes(int[] stringSet, long bytes) {
-        int resourceId;
-        float bytesInCorrectUnits;
-
-        if (bytes < BYTES_PER_MEGABYTE) {
-            resourceId = stringSet[0];
-            bytesInCorrectUnits = bytes / (float) BYTES_PER_KILOBYTE;
-        } else if (bytes < BYTES_PER_GIGABYTE) {
-            resourceId = stringSet[1];
-            bytesInCorrectUnits = bytes / (float) BYTES_PER_MEGABYTE;
-        } else {
-            resourceId = stringSet[2];
-            bytesInCorrectUnits = bytes / (float) BYTES_PER_GIGABYTE;
-        }
-
-        Context context = mSpaceUsedByDownloadsTextView.getContext();
-        return context.getResources().getString(resourceId, bytesInCorrectUnits);
     }
 
     private int computePercentage(long numerator, long denominator) {

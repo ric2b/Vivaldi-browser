@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "chrome/browser/chromeos/net/network_throttling_observer.h"
 #include "chrome/common/pref_names.h"
@@ -41,6 +42,7 @@ class NetworkThrottlingObserverTest : public ::testing::Test {
   }
 
   ~NetworkThrottlingObserverTest() override {
+    network_state_handler_->Shutdown();
     observer_.reset();
     local_state_.reset();
     network_state_handler_.reset();

@@ -20,6 +20,8 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace gcm {
 
 namespace {
@@ -131,6 +133,10 @@ GCMChannelStatusSyncer::~GCMChannelStatusSyncer() {
 }
 
 void GCMChannelStatusSyncer::EnsureStarted() {
+#if defined(VIVALDI_BUILD)
+  if (vivaldi::IsVivaldiRunning())
+    return;
+#endif
   // Bail out if the request is already scheduled or started.
   if (started_)
     return;

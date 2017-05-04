@@ -5,14 +5,14 @@
 // The Chrome-specific helper for QuicConnection which uses
 // a TaskRunner for alarms, and uses a DatagramClientSocket for writing data.
 
-#ifndef NET_QUIC_QUIC_CHROMIUM_CONNECTION_HELPER_H_
-#define NET_QUIC_QUIC_CHROMIUM_CONNECTION_HELPER_H_
+#ifndef NET_QUIC_CHROMIUM_QUIC_CHROMIUM_CONNECTION_HELPER_H_
+#define NET_QUIC_CHROMIUM_QUIC_CHROMIUM_CONNECTION_HELPER_H_
 
 #include "base/macros.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_export.h"
 #include "net/quic/core/quic_connection.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_simple_buffer_allocator.h"
 #include "net/quic/core/quic_time.h"
 #include "net/socket/datagram_client_socket.h"
@@ -44,4 +44,4 @@ class NET_EXPORT_PRIVATE QuicChromiumConnectionHelper
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_CHROMIUM_CONNECTION_HELPER_H_
+#endif  // NET_QUIC_CHROMIUM_QUIC_CHROMIUM_CONNECTION_HELPER_H_

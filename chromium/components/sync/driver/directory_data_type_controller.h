@@ -29,21 +29,22 @@ class DirectoryDataTypeController : public DataTypeController {
   // Directory based data types don't need to register with backend.
   // ModelTypeRegistry will create all necessary objects in
   // SetEnabledDirectoryTypes based on routing info.
-  void RegisterWithBackend(BackendDataTypeConfigurer* configurer) override;
+  void RegisterWithBackend(base::Callback<void(bool)> set_downloaded,
+                           ModelTypeConfigurer* configurer) override;
 
   // Directory specific implementation of ActivateDataType with the
   // type specific ChangeProcessor and ModelSafeGroup.
   // Activates change processing on the controlled data type.
   // This is called by DataTypeManager, synchronously with data type's
   // model association.
-  // See BackendDataTypeConfigurer::ActivateDataType for more details.
-  void ActivateDataType(BackendDataTypeConfigurer* configurer) override;
+  // See ModelTypeConfigurer::ActivateDataType for more details.
+  void ActivateDataType(ModelTypeConfigurer* configurer) override;
 
   // Directory specific implementation of DeactivateDataType.
   // Deactivates change processing on the controlled data type (by removing
   // the data type's ChangeProcessor registration with the backend).
-  // See BackendDataTypeConfigurer::DeactivateDataType for more details.
-  void DeactivateDataType(BackendDataTypeConfigurer* configurer) override;
+  // See ModelTypeConfigurer::DeactivateDataType for more details.
+  void DeactivateDataType(ModelTypeConfigurer* configurer) override;
 
   // Returns a ListValue representing all nodes for a specified type by querying
   // the directory.
@@ -55,18 +56,26 @@ class DirectoryDataTypeController : public DataTypeController {
   // |dump_stack| is called when an unrecoverable error occurs.
   DirectoryDataTypeController(ModelType type,
                               const base::Closure& dump_stack,
-                              SyncClient* sync_client);
+                              SyncClient* sync_client,
+                              ModelSafeGroup model_safe_group);
 
-  // The model safe group of this data type.  This should reflect the
-  // thread that should be used to modify the data type's native
-  // model.
-  virtual ModelSafeGroup model_safe_group() const = 0;
+  // Create an error handler that reports back to this controller.
+  virtual std::unique_ptr<DataTypeErrorHandler> CreateErrorHandler() = 0;
 
   // Access to the ChangeProcessor for the type being controlled by |this|.
   // Returns null if the ChangeProcessor isn't created or connected.
   virtual ChangeProcessor* GetChangeProcessor() const = 0;
 
+  // Function to capture and upload a stack trace when an error occurs.
+  base::Closure dump_stack_;
+
   SyncClient* const sync_client_;
+
+ private:
+  // The model safe group of this data type.  This should reflect the
+  // thread that should be used to modify the data type's native
+  // model.
+  ModelSafeGroup model_safe_group_;
 };
 
 }  // namespace syncer

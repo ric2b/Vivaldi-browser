@@ -14,8 +14,10 @@
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/browser/service_worker/service_worker_version.h"
+#include "content/common/url_schemes.h"
 #include "content/public/common/origin_util.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_utils.h"
 #include "content/test/test_content_browser_client.h"
 #include "content/test/test_content_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -26,8 +28,8 @@ const char kServiceWorkerScheme[] = "i-can-use-service-worker";
 
 class ServiceWorkerTestContentClient : public TestContentClient {
  public:
-  void AddServiceWorkerSchemes(std::set<std::string>* schemes) override {
-    schemes->insert(kServiceWorkerScheme);
+  void AddAdditionalSchemes(Schemes* schemes) override {
+    schemes->service_worker_schemes.push_back(kServiceWorkerScheme);
   }
 };
 
@@ -42,6 +44,7 @@ class ServiceWorkerProviderHostTest : public testing::Test {
   void SetUp() override {
     old_content_browser_client_ =
         SetBrowserClientForTesting(&test_content_browser_client_);
+    ResetSchemesAndOriginsWhitelist();
 
     helper_.reset(new EmbeddedWorkerTestHelper(base::FilePath()));
     context_ = helper_->context();
@@ -79,13 +82,15 @@ class ServiceWorkerProviderHostTest : public testing::Test {
     registration2_ = 0;
     helper_.reset();
     SetBrowserClientForTesting(old_content_browser_client_);
+    // Reset cached security schemes so we don't affect other tests.
+    ResetSchemesAndOriginsWhitelist();
   }
 
   bool PatternHasProcessToRun(const GURL& pattern) const {
     return context_->process_manager()->PatternHasProcessToRun(pattern);
   }
 
-  content::TestBrowserThreadBundle thread_bundle_;
+  TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<EmbeddedWorkerTestHelper> helper_;
   ServiceWorkerContextCore* context_;
   scoped_refptr<ServiceWorkerRegistration> registration1_;
@@ -102,10 +107,7 @@ class ServiceWorkerProviderHostTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerProviderHostTest);
 };
 
-class ServiceWorkerProviderHostTestP
-    : public MojoServiceWorkerTestP<ServiceWorkerProviderHostTest> {};
-
-TEST_P(ServiceWorkerProviderHostTestP, PotentialRegistration_ProcessStatus) {
+TEST_F(ServiceWorkerProviderHostTest, PotentialRegistration_ProcessStatus) {
   // Matching registrations have already been set by SetDocumentUrl.
   ASSERT_TRUE(PatternHasProcessToRun(registration1_->pattern()));
 
@@ -134,7 +136,7 @@ TEST_P(ServiceWorkerProviderHostTestP, PotentialRegistration_ProcessStatus) {
   ASSERT_TRUE(PatternHasProcessToRun(registration3_->pattern()));   // host1,2
 }
 
-TEST_P(ServiceWorkerProviderHostTestP, AssociatedRegistration_ProcessStatus) {
+TEST_F(ServiceWorkerProviderHostTest, AssociatedRegistration_ProcessStatus) {
   // Associating the registration will also increase the process refs for
   // the registration's pattern.
   provider_host1_->AssociateRegistration(registration1_.get(),
@@ -147,7 +149,7 @@ TEST_P(ServiceWorkerProviderHostTestP, AssociatedRegistration_ProcessStatus) {
   ASSERT_TRUE(PatternHasProcessToRun(registration1_->pattern()));
 }
 
-TEST_P(ServiceWorkerProviderHostTestP, MatchRegistration) {
+TEST_F(ServiceWorkerProviderHostTest, MatchRegistration) {
   // Match registration should return the longest matching one.
   ASSERT_EQ(registration2_, provider_host1_->MatchRegistration());
   provider_host1_->RemoveMatchingRegistration(registration2_.get());
@@ -170,9 +172,8 @@ TEST_P(ServiceWorkerProviderHostTestP, MatchRegistration) {
   ASSERT_EQ(nullptr, provider_host1_->MatchRegistration());
 }
 
-TEST_P(ServiceWorkerProviderHostTestP, ContextSecurity) {
+TEST_F(ServiceWorkerProviderHostTest, ContextSecurity) {
   using FrameSecurityLevel = ServiceWorkerProviderHost::FrameSecurityLevel;
-  content::ResetSchemesAndOriginsWhitelistForTesting();
 
   // Insecure document URL.
   provider_host1_->SetDocumentUrl(GURL("http://host"));
@@ -202,9 +203,5 @@ TEST_P(ServiceWorkerProviderHostTestP, ContextSecurity) {
   provider_host1_->parent_frame_security_level_ = FrameSecurityLevel::INSECURE;
   EXPECT_FALSE(provider_host1_->IsContextSecureForServiceWorker());
 }
-
-INSTANTIATE_TEST_CASE_P(ServiceWorkerProviderHostTest,
-                        ServiceWorkerProviderHostTestP,
-                        ::testing::Values(false, true));
 
 }  // namespace content

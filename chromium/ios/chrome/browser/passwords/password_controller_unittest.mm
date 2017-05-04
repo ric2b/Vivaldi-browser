@@ -11,7 +11,6 @@
 
 #include "base/json/json_reader.h"
 #include "base/mac/bind_objc_block.h"
-#import "base/mac/scoped_nsobject.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/sys_string_conversions.h"
@@ -29,15 +28,22 @@
 #import "ios/chrome/browser/autofill/form_suggestion_controller.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/passwords/js_password_manager.h"
-#import "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/navigation_item.h"
+#import "ios/web/public/navigation_manager.h"
+#include "ios/web/public/ssl_status.h"
+#import "ios/web/public/test/fakes/test_web_state.h"
 #import "ios/web/public/test/web_test_with_web_state.h"
-#import "ios/web/public/test/test_web_state.h"
+#import "ios/web/public/web_state/web_state.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/OCMock/OCPartialMockObject.h"
 #include "url/gurl.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 using autofill::PasswordForm;
 using autofill::PasswordFormFillData;
@@ -85,17 +91,16 @@ class MockLogManager : public password_manager::LogManager {
 // using the given |store|. If not null, |weak_client| is filled with a
 // non-owning pointer to the created client. The created controller is
 // returned.
-base::scoped_nsobject<PasswordController> CreatePasswordController(
+PasswordController* CreatePasswordController(
     web::WebState* web_state,
     password_manager::PasswordStore* store,
     MockPasswordManagerClient** weak_client) {
   auto client = base::MakeUnique<MockPasswordManagerClient>(store);
   if (weak_client)
     *weak_client = client.get();
-  return base::scoped_nsobject<PasswordController>([[PasswordController alloc]
-         initWithWebState:web_state
-      passwordsUiDelegate:nil
-                   client:std::move(client)]);
+  return [[PasswordController alloc] initWithWebState:web_state
+                                  passwordsUiDelegate:nil
+                                               client:std::move(client)];
 }
 
 }  // namespace
@@ -129,8 +134,6 @@ base::scoped_nsobject<PasswordController> CreatePasswordController(
 
 @property(nonatomic, copy) NSArray* suggestions;
 
-- (void)dealloc;
-
 @end
 
 @implementation PasswordsTestSuggestionController
@@ -141,10 +144,6 @@ base::scoped_nsobject<PasswordController> CreatePasswordController(
   self.suggestions = suggestions;
 }
 
-- (void)dealloc {
-  [_suggestions release];
-  [super dealloc];
-}
 
 @end
 
@@ -164,12 +163,12 @@ class PasswordControllerTest : public web::WebTestWithWebState {
       // otherwise [passwordController_ suggestionProvider] will be retained
       // until PlatformTest teardown, at which point all Chrome objects are
       // already gone and teardown may access invalid memory.
-      suggestionController_.reset([[PasswordsTestSuggestionController alloc]
+      suggestionController_ = [[PasswordsTestSuggestionController alloc]
           initWithWebState:web_state()
-                 providers:@[ [passwordController_ suggestionProvider] ]]);
-      accessoryViewController_.reset([[FormInputAccessoryViewController alloc]
+                 providers:@[ [passwordController_ suggestionProvider] ]];
+      accessoryViewController_ = [[FormInputAccessoryViewController alloc]
           initWithWebState:web_state()
-                 providers:@[ [suggestionController_ accessoryViewProvider] ]]);
+                 providers:@[ [suggestionController_ accessoryViewProvider] ]];
     }
   }
 
@@ -218,7 +217,7 @@ class PasswordControllerTest : public web::WebTestWithWebState {
         ++failure_count;
         // Fetches the completion handler from |invocation| and calls it with
         // failure status.
-        void (^completionHandler)(BOOL);
+        __unsafe_unretained void (^completionHandler)(BOOL);
         const NSInteger kArgOffset = 1;
         const NSInteger kCompletionHandlerArgIndex = 4;
         [invocation getArgument:&completionHandler
@@ -235,15 +234,13 @@ class PasswordControllerTest : public web::WebTestWithWebState {
   }
 
   // SuggestionController for testing.
-  base::scoped_nsobject<PasswordsTestSuggestionController>
-      suggestionController_;
+  PasswordsTestSuggestionController* suggestionController_;
 
   // FormInputAccessoryViewController for testing.
-  base::scoped_nsobject<FormInputAccessoryViewController>
-      accessoryViewController_;
+  FormInputAccessoryViewController* accessoryViewController_;
 
   // PasswordController for testing.
-  base::scoped_nsobject<PasswordController> passwordController_;
+  PasswordController* passwordController_;
 
   scoped_refptr<password_manager::PasswordStore> store_;
 };
@@ -987,6 +984,10 @@ TEST_F(PasswordControllerTest, FLAKY_DontFillReadOnly) {
        "</form>"));
 }
 
+// An HTML page without a password form.
+static NSString* kHtmlWithoutPasswordForm =
+    @"<h2>The rain in Spain stays <i>mainly</i> in the plain.</h2>";
+
 // An HTML page containing one password form.  The username input field
 // also has custom event handlers.  We need to verify that those event
 // handlers are still triggered even though we override them with our own.
@@ -1266,7 +1267,7 @@ TEST(PasswordControllerTestSimple, SaveOnNonHTMLLandingPage) {
       .WillByDefault(testing::Return(browser_state.get()));
 
   MockPasswordManagerClient* weak_client = nullptr;
-  base::scoped_nsobject<PasswordController> passwordController =
+  PasswordController* passwordController =
       CreatePasswordController(&web_state, nullptr, &weak_client);
   static_cast<TestingPrefServiceSimple*>(weak_client->GetPrefs())
       ->registry()
@@ -1290,5 +1291,49 @@ TEST(PasswordControllerTestSimple, SaveOnNonHTMLLandingPage) {
 
   web_state.SetContentIsHTML(false);
   web_state.SetCurrentURL(GURL("https://example.com"));
-  [passwordController webStateDidLoadPage:&web_state];
+  [passwordController webState:&web_state didLoadPageWithSuccess:YES];
+}
+
+// Tests that an HTTP page without a password field does not update the SSL
+// status to indicate DISPLAYED_PASSWORD_FIELD_ON_HTTP.
+TEST_F(PasswordControllerTest, HTTPNoPassword) {
+  LoadHtml(kHtmlWithoutPasswordForm, GURL("http://chromium.test"));
+
+  web::SSLStatus ssl_status =
+      web_state()->GetNavigationManager()->GetLastCommittedItem()->GetSSL();
+  EXPECT_FALSE(ssl_status.content_status &
+               web::SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
+}
+
+// Tests that an HTTP page with a password field updates the SSL status
+// to indicate DISPLAYED_PASSWORD_FIELD_ON_HTTP.
+TEST_F(PasswordControllerTest, HTTPPassword) {
+  LoadHtml(kHtmlWithPasswordForm, GURL("http://chromium.test"));
+
+  web::SSLStatus ssl_status =
+      web_state()->GetNavigationManager()->GetLastCommittedItem()->GetSSL();
+  EXPECT_TRUE(ssl_status.content_status &
+              web::SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
+}
+
+// Tests that an HTTPS page without a password field does not update the SSL
+// status to indicate DISPLAYED_PASSWORD_FIELD_ON_HTTP.
+TEST_F(PasswordControllerTest, HTTPSNoPassword) {
+  LoadHtml(kHtmlWithoutPasswordForm, GURL("https://chromium.test"));
+
+  web::SSLStatus ssl_status =
+      web_state()->GetNavigationManager()->GetLastCommittedItem()->GetSSL();
+  EXPECT_FALSE(ssl_status.content_status &
+               web::SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
+}
+
+// Tests that an HTTPS page with a password field does not update the SSL status
+// to indicate DISPLAYED_PASSWORD_FIELD_ON_HTTP.
+TEST_F(PasswordControllerTest, HTTPSPassword) {
+  LoadHtml(kHtmlWithPasswordForm, GURL("https://chromium.test"));
+
+  web::SSLStatus ssl_status =
+      web_state()->GetNavigationManager()->GetLastCommittedItem()->GetSSL();
+  EXPECT_FALSE(ssl_status.content_status &
+               web::SSLStatus::DISPLAYED_PASSWORD_FIELD_ON_HTTP);
 }

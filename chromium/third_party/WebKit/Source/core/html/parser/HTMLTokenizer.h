@@ -44,7 +44,7 @@ class CORE_EXPORT HTMLTokenizer {
  public:
   static std::unique_ptr<HTMLTokenizer> create(
       const HTMLParserOptions& options) {
-    return wrapUnique(new HTMLTokenizer(options));
+    return WTF::wrapUnique(new HTMLTokenizer(options));
   }
   ~HTMLTokenizer();
 
@@ -123,9 +123,8 @@ class CORE_EXPORT HTMLTokenizer {
     AfterDOCTYPESystemIdentifierState,
     BogusDOCTYPEState,
     CDATASectionState,
-    // These CDATA states are not in the HTML5 spec, but we use them internally.
-    CDATASectionRightSquareBracketState,
-    CDATASectionDoubleRightSquareBracketState,
+    CDATASectionBracketState,
+    CDATASectionEndState,
   };
 
   // This function returns true if it emits a token. Otherwise, callers

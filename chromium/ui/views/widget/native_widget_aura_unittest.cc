@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
@@ -75,7 +76,7 @@ class NativeWidgetAuraTest : public aura::test::AuraTestBase {
     test_focus_rules_ = new TestFocusRules;
     focus_controller_.reset(new wm::FocusController(test_focus_rules_));
     aura::client::SetActivationClient(root_window(), focus_controller_.get());
-    host()->SetBounds(gfx::Rect(640, 480));
+    host()->SetBoundsInPixels(gfx::Rect(640, 480));
   }
 
  private:
@@ -308,9 +309,10 @@ class PropertyTestLayoutManager : public TestLayoutManagerBase {
  private:
   // aura::LayoutManager:
   void OnWindowAddedToLayout(aura::Window* child) override {
-    EXPECT_TRUE(child->GetProperty(aura::client::kCanMaximizeKey));
-    EXPECT_TRUE(child->GetProperty(aura::client::kCanMinimizeKey));
-    EXPECT_TRUE(child->GetProperty(aura::client::kCanResizeKey));
+    EXPECT_EQ(ui::mojom::kResizeBehaviorCanResize |
+                  ui::mojom::kResizeBehaviorCanMaximize |
+                  ui::mojom::kResizeBehaviorCanMinimize,
+              child->GetProperty(aura::client::kResizeBehaviorKey));
     added_ = true;
   }
 
@@ -337,8 +339,7 @@ class PropertyTestWidgetDelegate : public views::WidgetDelegate {
   DISALLOW_COPY_AND_ASSIGN(PropertyTestWidgetDelegate);
 };
 
-// Verifies that the kCanMaximizeKey/kCanMinimizeKey/kCanResizeKey have the
-// correct value when added to the layout manager.
+// Verifies the resize behavior when added to the layout manager.
 TEST_F(NativeWidgetAuraTest, TestPropertiesWhenAddedToLayout) {
   root_window()->SetBounds(gfx::Rect(0, 0, 640, 480));
   PropertyTestLayoutManager* layout_manager = new PropertyTestLayoutManager();

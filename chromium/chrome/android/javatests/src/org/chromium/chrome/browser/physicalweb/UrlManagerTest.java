@@ -4,10 +4,9 @@
 
 package org.chromium.chrome.browser.physicalweb;
 
-import android.content.Context;
 import android.content.SharedPreferences;
+import android.support.test.filters.SmallTest;
 import android.test.InstrumentationTestCase;
-import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.FlakyTest;
@@ -41,16 +40,15 @@ public class UrlManagerTest extends InstrumentationTestCase {
     private UrlManager mUrlManager = null;
     private MockPwsClient mMockPwsClient = null;
     private MockNotificationManagerProxy mMockNotificationManagerProxy = null;
-    private SharedPreferences mSharedPreferences = null;
 
     @Override
     protected void setUp() throws Exception {
         super.setUp();
-        Context context = getInstrumentation().getTargetContext().getApplicationContext();
-        mSharedPreferences = ContextUtils.getAppSharedPreferences();
-        mSharedPreferences.edit().putInt(PREF_PHYSICAL_WEB, PHYSICAL_WEB_ON).apply();
-        UrlManager.clearPrefsForTesting(context);
-        mUrlManager = new UrlManager(context);
+        ContextUtils.getAppSharedPreferences().edit()
+                .putInt(PREF_PHYSICAL_WEB, PHYSICAL_WEB_ON)
+                .apply();
+        UrlManager.clearPrefsForTesting();
+        mUrlManager = new UrlManager();
         mMockPwsClient = new MockPwsClient();
         mUrlManager.overridePwsClientForTesting(mMockPwsClient);
         mMockNotificationManagerProxy = new MockNotificationManagerProxy();
@@ -90,7 +88,9 @@ public class UrlManagerTest extends InstrumentationTestCase {
     }
 
     private void setOnboarding() {
-        mSharedPreferences.edit().putInt(PREF_PHYSICAL_WEB, PHYSICAL_WEB_ONBOARDING).apply();
+        ContextUtils.getAppSharedPreferences().edit()
+                .putInt(PREF_PHYSICAL_WEB, PHYSICAL_WEB_ONBOARDING)
+                .apply();
     }
 
     @SmallTest
@@ -263,6 +263,30 @@ public class UrlManagerTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    public void testAddUrlUpdatesCache() throws Exception {
+        addEmptyPwsResult();
+        addEmptyPwsResult();
+
+        UrlInfo urlInfo = new UrlInfo(URL1);
+        mUrlManager.addUrl(urlInfo);
+        List<UrlInfo> urls = mUrlManager.getUrls(true);
+        assertEquals(1, urls.size());
+        assertEquals(urlInfo.getDistance(), urls.get(0).getDistance());
+        assertEquals(urlInfo.getDeviceAddress(), urls.get(0).getDeviceAddress());
+        assertEquals(urlInfo.getScanTimestamp(), urls.get(0).getScanTimestamp());
+
+        urlInfo = new UrlInfo(URL1)
+                .setDistance(100.0)
+                .setDeviceAddress("00:11:22:33:AA:BB");
+        mUrlManager.addUrl(urlInfo);
+        urls = mUrlManager.getUrls(true);
+        assertEquals(1, urls.size());
+        assertEquals(urlInfo.getDistance(), urls.get(0).getDistance());
+        assertEquals(urlInfo.getDeviceAddress(), urls.get(0).getDeviceAddress());
+        assertEquals(urlInfo.getScanTimestamp(), urls.get(0).getScanTimestamp());
+    }
+
+    @SmallTest
     @RetryOnFailure
     public void testAddUrlTwiceWorks() throws Exception {
         // Add and remove an old URL twice and add new URL twice before removing.
@@ -409,6 +433,31 @@ public class UrlManagerTest extends InstrumentationTestCase {
     }
 
     @SmallTest
+    public void testSerializationWorksWithPoorlySerializedResult() throws Exception {
+        addPwsResult1();
+        addPwsResult2();
+        long curTime = System.currentTimeMillis();
+        mUrlManager.addUrl(new UrlInfo(URL1, 99.5, curTime + 42));
+        mUrlManager.addUrl(new UrlInfo(URL2, 100.5, curTime + 43));
+        getInstrumentation().waitForIdleSync();
+
+        // Create an invalid serialization.
+        Set<String> serializedUrls = new HashSet<>();
+        serializedUrls.add(new UrlInfo(URL1, 99.5, curTime + 42).jsonSerialize().toString());
+        serializedUrls.add("{\"not_a_value\": \"This is totally not a serialized UrlInfo.\"}");
+        ContextUtils.getAppSharedPreferences().edit()
+                .putStringSet("physicalweb_all_urls", serializedUrls)
+                .apply();
+
+        // Make sure only the properly serialized URL is restored.
+        UrlManager urlManager = new UrlManager();
+        List<UrlInfo> urlInfos = urlManager.getUrls();
+        assertEquals(0, urlInfos.size());
+        assertTrue(urlManager.containsInAnyCache(URL1));
+        assertTrue(urlManager.containsInAnyCache(URL2));
+    }
+
+    @SmallTest
     @RetryOnFailure
     public void testSerializationWorksWithoutGarbageCollection() throws Exception {
         addPwsResult1();
@@ -419,10 +468,11 @@ public class UrlManagerTest extends InstrumentationTestCase {
         getInstrumentation().waitForIdleSync();
 
         // Make sure all URLs are restored.
-        Context context = getInstrumentation().getTargetContext().getApplicationContext();
-        UrlManager urlManager = new UrlManager(context);
+        UrlManager urlManager = new UrlManager();
         List<UrlInfo> urlInfos = urlManager.getUrls();
-        assertEquals(2, urlInfos.size());
+        assertEquals(0, urlInfos.size());
+        assertTrue(urlManager.containsInAnyCache(URL1));
+        assertTrue(urlManager.containsInAnyCache(URL2));
         Set<String> resolvedUrls = urlManager.getResolvedUrls();
         assertEquals(2, resolvedUrls.size());
     }
@@ -437,8 +487,7 @@ public class UrlManagerTest extends InstrumentationTestCase {
         getInstrumentation().waitForIdleSync();
 
         // Make sure all URLs are restored.
-        Context context = getInstrumentation().getTargetContext().getApplicationContext();
-        UrlManager urlManager = new UrlManager(context);
+        UrlManager urlManager = new UrlManager();
         List<UrlInfo> urlInfos = urlManager.getUrls();
         assertEquals(0, urlInfos.size());
         Set<String> resolvedUrls = urlManager.getResolvedUrls();
@@ -449,23 +498,30 @@ public class UrlManagerTest extends InstrumentationTestCase {
     public void testUpgradeFromNone() throws Exception {
         Set<String> oldResolvedUrls = new HashSet<String>();
         oldResolvedUrls.add("old");
-        Context context = getInstrumentation().getTargetContext().getApplicationContext();
-        mSharedPreferences.edit()
+        ContextUtils.getAppSharedPreferences().edit()
                 .remove(UrlManager.getVersionKey())
-                .putStringSet("physicalweb_resolved_urls", oldResolvedUrls)
+                .putStringSet("physicalweb_nearby_urls", oldResolvedUrls)
+                .putInt("org.chromium.chrome.browser.physicalweb.VERSION", 1)
+                .putInt("org.chromium.chrome.browser.physicalweb.BOTTOM_BAR_DISPLAY_COUNT", 1)
                 .apply();
-        new UrlManager(context);
+        new UrlManager();
 
         // Make sure the new prefs are populated and old prefs are gone.
+        final SharedPreferences sharedPreferences = ContextUtils.getAppSharedPreferences();
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                return mSharedPreferences.contains(UrlManager.getVersionKey())
-                        && !mSharedPreferences.contains("physicalweb_resolved_urls");
+                SharedPreferences sharedPreferences = ContextUtils.getAppSharedPreferences();
+                return sharedPreferences.contains(UrlManager.getVersionKey())
+                        && !sharedPreferences.contains("physicalweb_nearby_urls")
+                        && !sharedPreferences.contains(
+                                "org.chromium.chrome.browser.physicalweb.VERSION")
+                        && !sharedPreferences.contains("org.chromium.chrome.browser.physicalweb"
+                                + ".BOTTOM_BAR_DISPLAY_COUNT");
             }
         }, 5000, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
 
         assertEquals(UrlManager.getVersion(),
-                mSharedPreferences.getInt(UrlManager.getVersionKey(), 0));
+                sharedPreferences.getInt(UrlManager.getVersionKey(), 0));
     }
 }

@@ -52,7 +52,7 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
       panel.showCertificateViewer();
     }
 
-    return createTextButton(text, showCertificateViewer, 'security-certificate-button');
+    return UI.createTextButton(text, showCertificateViewer, 'security-certificate-button');
   }
 
   /**
@@ -73,7 +73,7 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
       SDK.multitargetNetworkManager.getCertificate(origin, certificateCallback);
     }
 
-    return createTextButton(text, showCertificateViewer, 'security-certificate-button');
+    return UI.createTextButton(text, showCertificateViewer, 'security-certificate-button');
   }
 
   /**
@@ -92,13 +92,15 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
 
   /**
    * @param {!Protocol.Security.SecurityState} newSecurityState
+   * @param {boolean} schemeIsCryptographic
    * @param {!Array<!Protocol.Security.SecurityStateExplanation>} explanations
    * @param {?Protocol.Security.InsecureContentStatus} insecureContentStatus
-   * @param {boolean} schemeIsCryptographic
+   * @param {?string} summary
    */
-  _updateSecurityState(newSecurityState, explanations, insecureContentStatus, schemeIsCryptographic) {
+  _updateSecurityState(newSecurityState, schemeIsCryptographic, explanations, insecureContentStatus, summary) {
     this._sidebarMainViewElement.setSecurityState(newSecurityState);
-    this._mainView.updateSecurityState(newSecurityState, explanations, insecureContentStatus, schemeIsCryptographic);
+    this._mainView.updateSecurityState(
+        newSecurityState, schemeIsCryptographic, explanations, insecureContentStatus, summary);
   }
 
   /**
@@ -107,15 +109,16 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
   _onSecurityStateChanged(event) {
     var data = /** @type {!Security.PageSecurityState} */ (event.data);
     var securityState = /** @type {!Protocol.Security.SecurityState} */ (data.securityState);
+    var schemeIsCryptographic = /** @type {boolean} */ (data.schemeIsCryptographic);
     var explanations = /** @type {!Array<!Protocol.Security.SecurityStateExplanation>} */ (data.explanations);
     var insecureContentStatus = /** @type {?Protocol.Security.InsecureContentStatus} */ (data.insecureContentStatus);
-    var schemeIsCryptographic = /** @type {boolean} */ (data.schemeIsCryptographic);
-    this._updateSecurityState(securityState, explanations, insecureContentStatus, schemeIsCryptographic);
+    var summary = /** @type {?string} */ (data.summary);
+    this._updateSecurityState(securityState, schemeIsCryptographic, explanations, insecureContentStatus, summary);
   }
 
   selectAndSwitchToMainView() {
     // The sidebar element will trigger displaying the main view. Rather than making a redundant call to display the main view, we rely on this.
-    this._sidebarMainViewElement.select();
+    this._sidebarMainViewElement.select(true);
   }
   /**
    * @param {!Security.SecurityPanel.Origin} origin
@@ -173,7 +176,7 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
    * @param {!SDK.NetworkRequest} request
    */
   _processRequest(request) {
-    var origin = Common.ParsedURL.extractOrigin(request.url);
+    var origin = Common.ParsedURL.extractOrigin(request.url());
 
     if (!origin) {
       // We don't handle resources like data: URIs. Most of them don't affect the lock icon.
@@ -291,6 +294,9 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
         resourceTreeModel.addEventListener(
             SDK.ResourceTreeModel.Events.InterstitialHidden, this._onInterstitialHidden, this),
       ]);
+
+      if (resourceTreeModel.isInterstitialShowing())
+        this._onInterstitialShown();
     }
 
     var networkManager = SDK.NetworkManager.fromTarget(target);
@@ -342,7 +348,7 @@ Security.SecurityPanel = class extends UI.PanelWithSidebar {
     this._mainView.refreshExplanations();
 
     if (request) {
-      var origin = Common.ParsedURL.extractOrigin(request.url);
+      var origin = Common.ParsedURL.extractOrigin(request.url());
       this._sidebarTree.setMainOrigin(origin);
       this._processRequest(request);
     }
@@ -377,7 +383,7 @@ Security.SecurityPanel.OriginState;
 /**
  * @unrestricted
  */
-Security.SecurityPanelSidebarTree = class extends TreeOutlineInShadow {
+Security.SecurityPanelSidebarTree = class extends UI.TreeOutlineInShadow {
   /**
    * @param {!Security.SecurityPanelSidebarTreeElement} mainViewElement
    * @param {function(!Security.SecurityPanel.Origin)} showOriginInPanel
@@ -391,12 +397,12 @@ Security.SecurityPanelSidebarTree = class extends TreeOutlineInShadow {
     this._showOriginInPanel = showOriginInPanel;
     this._mainOrigin = null;
 
-    /** @type {!Map<!Security.SecurityPanelSidebarTree.OriginGroupName, !TreeElement>} */
+    /** @type {!Map<!Security.SecurityPanelSidebarTree.OriginGroupName, !UI.TreeElement>} */
     this._originGroups = new Map();
 
     for (var key in Security.SecurityPanelSidebarTree.OriginGroupName) {
       var originGroupName = Security.SecurityPanelSidebarTree.OriginGroupName[key];
-      var originGroup = new TreeElement(originGroupName, true);
+      var originGroup = new UI.TreeElement(originGroupName, true);
       originGroup.selectable = false;
       originGroup.expand();
       originGroup.listItemElement.classList.add('security-sidebar-origins');
@@ -406,7 +412,7 @@ Security.SecurityPanelSidebarTree = class extends TreeOutlineInShadow {
     this._clearOriginGroups();
 
     // This message will be removed by clearOrigins() during the first new page load after the panel was opened.
-    var mainViewReloadMessage = new TreeElement(Common.UIString('Reload to view details'));
+    var mainViewReloadMessage = new UI.TreeElement(Common.UIString('Reload to view details'));
     mainViewReloadMessage.selectable = false;
     mainViewReloadMessage.listItemElement.classList.add('security-main-view-reload-message');
     this._originGroups.get(Security.SecurityPanelSidebarTree.OriginGroupName.MainOrigin)
@@ -514,7 +520,7 @@ Security.SecurityPanelSidebarTree.OriginGroupName = {
 /**
  * @unrestricted
  */
-Security.SecurityPanelSidebarTreeElement = class extends TreeElement {
+Security.SecurityPanelSidebarTreeElement = class extends UI.TreeElement {
   /**
    * @param {string} text
    * @param {function()} selectCallback
@@ -635,11 +641,12 @@ Security.SecurityMainView = class extends UI.VBox {
 
   /**
    * @param {!Protocol.Security.SecurityState} newSecurityState
+   * @param {boolean} schemeIsCryptographic
    * @param {!Array<!Protocol.Security.SecurityStateExplanation>} explanations
    * @param {?Protocol.Security.InsecureContentStatus} insecureContentStatus
-   * @param {boolean} schemeIsCryptographic
+   * @param {?string} summary
    */
-  updateSecurityState(newSecurityState, explanations, insecureContentStatus, schemeIsCryptographic) {
+  updateSecurityState(newSecurityState, schemeIsCryptographic, explanations, insecureContentStatus, summary) {
     // Remove old state.
     // It's safe to call this even when this._securityState is undefined.
     this._summarySection.classList.remove('security-summary-' + this._securityState);
@@ -653,7 +660,9 @@ Security.SecurityMainView = class extends UI.VBox {
       'neutral': Common.UIString('This page is not secure.'),
       'secure': Common.UIString('This page is secure (valid HTTPS).')
     };
-    this._summaryText.textContent = summaryExplanationStrings[this._securityState];
+
+    // Use override summary if present, otherwise use base explanation
+    this._summaryText.textContent = summary || summaryExplanationStrings[this._securityState];
 
     this._explanations = explanations, this._insecureContentStatus = insecureContentStatus;
     this._schemeIsCryptographic = schemeIsCryptographic;

@@ -8,9 +8,13 @@ import android.graphics.Bitmap;
 
 import org.chromium.base.Callback;
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.chrome.browser.ntp.NewTabPageUma;
+import org.chromium.chrome.browser.ntp.cards.ActionItem;
 import org.chromium.chrome.browser.ntp.cards.SuggestionsCategoryInfo;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus.CategoryStatusEnum;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.suggestions.SuggestionsMetricsReporter;
+import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,11 +22,12 @@ import java.util.List;
 /**
  * Provides access to the snippets to display on the NTP using the C++ ContentSuggestionsService.
  */
-public class SnippetsBridge implements SuggestionsSource {
+public class SnippetsBridge implements SuggestionsSource, SuggestionsMetricsReporter {
     private static final String TAG = "SnippetsBridge";
 
     private long mNativeSnippetsBridge;
     private SuggestionsSource.Observer mObserver;
+    private SuggestionsRanker mSuggestionsRanker;
 
     public static boolean isCategoryStatusAvailable(@CategoryStatusEnum int status) {
         // Note: This code is duplicated in content_suggestions_category_status.cc.
@@ -66,17 +71,22 @@ public class SnippetsBridge implements SuggestionsSource {
     }
 
     /**
-     * Fetches new snippets.
-     */
-    public static void fetchSnippets(boolean forceRequest) {
-        nativeFetchSnippets(forceRequest);
-    }
-
-    /**
      * Reschedules the fetching of snippets.
      */
     public static void rescheduleFetching() {
-        nativeRescheduleFetching();
+        nativeRemoteSuggestionsSchedulerRescheduleFetching();
+    }
+
+    /**
+     * Fetches remote suggestions in background.
+     */
+    public static void fetchRemoteSuggestionsFromBackground() {
+        nativeRemoteSuggestionsSchedulerOnFetchDue();
+    }
+
+    @Override
+    public void fetchRemoteSuggestions() {
+        nativeReloadSuggestions(mNativeSnippetsBridge);
     }
 
     @Override
@@ -114,8 +124,8 @@ public class SnippetsBridge implements SuggestionsSource {
     @Override
     public void dismissSuggestion(SnippetArticle suggestion) {
         assert mNativeSnippetsBridge != 0;
-        nativeDismissSuggestion(mNativeSnippetsBridge, suggestion.mUrl, suggestion.mGlobalPosition,
-                suggestion.mCategory, suggestion.mPosition, suggestion.mIdWithinCategory);
+        nativeDismissSuggestion(mNativeSnippetsBridge, suggestion.mUrl, suggestion.getGlobalRank(),
+                suggestion.mCategory, suggestion.getPerSectionRank(), suggestion.mIdWithinCategory);
     }
 
     @Override
@@ -130,69 +140,115 @@ public class SnippetsBridge implements SuggestionsSource {
         nativeRestoreDismissedCategories(mNativeSnippetsBridge);
     }
 
+    @Override
     public void onPageShown(int[] categories, int[] suggestionsPerCategory) {
         assert mNativeSnippetsBridge != 0;
         nativeOnPageShown(mNativeSnippetsBridge, categories, suggestionsPerCategory);
     }
 
+    @Override
     public void onSuggestionShown(SnippetArticle suggestion) {
         assert mNativeSnippetsBridge != 0;
-        nativeOnSuggestionShown(mNativeSnippetsBridge, suggestion.mGlobalPosition,
-                suggestion.mCategory, suggestion.mPosition,
+        nativeOnSuggestionShown(mNativeSnippetsBridge, suggestion.getGlobalRank(),
+                suggestion.mCategory, suggestion.getPerSectionRank(),
                 suggestion.mPublishTimestampMilliseconds, suggestion.mScore);
     }
 
+    @Override
     public void onSuggestionOpened(SnippetArticle suggestion, int windowOpenDisposition) {
         assert mNativeSnippetsBridge != 0;
-        nativeOnSuggestionOpened(mNativeSnippetsBridge, suggestion.mGlobalPosition,
-                suggestion.mCategory, suggestion.mPosition,
+        int categoryIndex = mSuggestionsRanker.getCategoryRank(suggestion.mCategory);
+        nativeOnSuggestionOpened(mNativeSnippetsBridge, suggestion.getGlobalRank(),
+                suggestion.mCategory, categoryIndex, suggestion.getPerSectionRank(),
                 suggestion.mPublishTimestampMilliseconds, suggestion.mScore, windowOpenDisposition);
     }
 
+    @Override
     public void onSuggestionMenuOpened(SnippetArticle suggestion) {
         assert mNativeSnippetsBridge != 0;
-        nativeOnSuggestionMenuOpened(mNativeSnippetsBridge, suggestion.mGlobalPosition,
-                suggestion.mCategory, suggestion.mPosition,
+        nativeOnSuggestionMenuOpened(mNativeSnippetsBridge, suggestion.getGlobalRank(),
+                suggestion.mCategory, suggestion.getPerSectionRank(),
                 suggestion.mPublishTimestampMilliseconds, suggestion.mScore);
     }
 
-    public void onMoreButtonShown(int category, int position) {
+    @Override
+    public void onMoreButtonShown(ActionItem actionItem) {
         assert mNativeSnippetsBridge != 0;
-        nativeOnMoreButtonShown(mNativeSnippetsBridge, category, position);
+        nativeOnMoreButtonShown(
+                mNativeSnippetsBridge, actionItem.getCategory(), actionItem.getPerSectionRank());
     }
 
-    public void onMoreButtonClicked(int category, int position) {
+    @Override
+    public void onMoreButtonClicked(ActionItem actionItem) {
         assert mNativeSnippetsBridge != 0;
-        nativeOnMoreButtonClicked(mNativeSnippetsBridge, category, position);
+        @CategoryInt
+        int category = actionItem.getCategory();
+        nativeOnMoreButtonClicked(mNativeSnippetsBridge, category, actionItem.getPerSectionRank());
+        switch (category) {
+            case KnownCategories.BOOKMARKS:
+                NewTabPageUma.recordAction(NewTabPageUma.ACTION_OPENED_BOOKMARKS_MANAGER);
+                break;
+            // MORE button in both categories leads to the recent tabs manager
+            case KnownCategories.FOREIGN_TABS:
+            case KnownCategories.RECENT_TABS:
+                NewTabPageUma.recordAction(NewTabPageUma.ACTION_OPENED_RECENT_TABS_MANAGER);
+                break;
+            case KnownCategories.DOWNLOADS:
+                NewTabPageUma.recordAction(NewTabPageUma.ACTION_OPENED_DOWNLOADS_MANAGER);
+                break;
+            default:
+                // No action associated
+                break;
+        }
+    }
+
+    /**
+     * Notifies the scheduler to adjust the plan due to a newly opened NTP.
+     */
+    public void onNtpInitialized() {
+        assert mNativeSnippetsBridge != 0;
+        nativeOnNTPInitialized(mNativeSnippetsBridge);
+    }
+
+    public static void notifySchedulerAboutWarmResume() {
+        SnippetsBridge snippetsBridge = new SnippetsBridge(Profile.getLastUsedProfile());
+        snippetsBridge.onActivityWarmResumed();
+    }
+
+    public static void notifySchedulerAboutColdStart() {
+        SnippetsBridge snippetsBridge = new SnippetsBridge(Profile.getLastUsedProfile());
+        snippetsBridge.onColdStart();
     }
 
     public static void onSuggestionTargetVisited(int category, long visitTimeMs) {
         nativeOnSuggestionTargetVisited(category, visitTimeMs);
     }
 
-    /**
-     * Sets the recipient for the fetched snippets.
-     *
-     * An observer needs to be set before the native code attempts to transmit snippets them to
-     * java. Upon registration, the observer will be notified of already fetched snippets.
-     *
-     * @param observer object to notify when snippets are received, or {@code null} if we want to
-     *                 stop observing.
-     */
     @Override
-    public void setObserver(SuggestionsSource.Observer observer) {
-        assert mObserver == null || mObserver == observer;
-
+    public void setObserver(Observer observer) {
+        assert observer != null;
         mObserver = observer;
-        nativeSetObserver(mNativeSnippetsBridge, observer == null ? null : this);
+    }
+
+    @Override
+    public void setRanker(SuggestionsRanker suggestionsRanker) {
+        assert suggestionsRanker != null;
+        mSuggestionsRanker = suggestionsRanker;
     }
 
     @Override
     public void fetchSuggestions(@CategoryInt int category, String[] displayedSuggestionIds) {
-        assert mNativeSnippetsBridge != 0;
-        assert mObserver != null;
-
         nativeFetch(mNativeSnippetsBridge, category, displayedSuggestionIds);
+    }
+
+    private void onActivityWarmResumed() {
+        assert mNativeSnippetsBridge != 0;
+        nativeOnActivityWarmResumed(mNativeSnippetsBridge);
+    }
+
+    private void onColdStart() {
+        assert mNativeSnippetsBridge != 0;
+        nativeOnColdStart(mNativeSnippetsBridge);
     }
 
     @CalledByNative
@@ -201,35 +257,31 @@ public class SnippetsBridge implements SuggestionsSource {
     }
 
     @CalledByNative
-    private static void addSuggestion(List<SnippetArticle> suggestions, int category, String id,
-            String title, String publisher, String previewText, String url, String ampUrl,
-            long timestamp, float score, int cardLayout) {
+    private static SnippetArticle addSuggestion(List<SnippetArticle> suggestions, int category,
+            String id, String title, String publisher, String previewText, String url,
+            long timestamp, float score) {
         int position = suggestions.size();
-        suggestions.add(new SnippetArticle(category, id, title, publisher, previewText, url, ampUrl,
-                timestamp, score, position, cardLayout));
-    }
-
-    // TODO(vitaliii): Remove all |.*ForLastSuggestion| methods and instead make |addSuggestion|
-    // return the suggestion and set the values there.
-    @CalledByNative
-    private static void setDownloadAssetDataForLastSuggestion(
-            List<SnippetArticle> suggestions, String filePath, String mimeType) {
-        assert suggestions.size() > 0;
-        suggestions.get(suggestions.size() - 1).setDownloadAssetData(filePath, mimeType);
+        suggestions.add(new SnippetArticle(
+                category, id, title, publisher, previewText, url, timestamp, score));
+        return suggestions.get(position);
     }
 
     @CalledByNative
-    private static void setDownloadOfflinePageDataForLastSuggestion(
-            List<SnippetArticle> suggestions, long offlinePageId) {
-        assert suggestions.size() > 0;
-        suggestions.get(suggestions.size() - 1).setDownloadOfflinePageData(offlinePageId);
+    private static void setAssetDownloadDataForSuggestion(
+            SnippetArticle suggestion, String filePath, String mimeType) {
+        suggestion.setAssetDownloadData(filePath, mimeType);
     }
 
     @CalledByNative
-    private static void setRecentTabDataForLastSuggestion(
-            List<SnippetArticle> suggestions, String tabId, long offlinePageId) {
-        assert suggestions.size() > 0;
-        suggestions.get(suggestions.size() - 1).setRecentTabData(tabId, offlinePageId);
+    private static void setOfflinePageDownloadDataForSuggestion(
+            SnippetArticle suggestion, long offlinePageId) {
+        suggestion.setOfflinePageDownloadData(offlinePageId);
+    }
+
+    @CalledByNative
+    private static void setRecentTabDataForSuggestion(
+            SnippetArticle suggestion, String tabId, long offlinePageId) {
+        suggestion.setRecentTabData(tabId, offlinePageId);
     }
 
     @CalledByNative
@@ -242,16 +294,12 @@ public class SnippetsBridge implements SuggestionsSource {
 
     @CalledByNative
     private void onNewSuggestions(@CategoryInt int category) {
-        assert mNativeSnippetsBridge != 0;
-        assert mObserver != null;
-        mObserver.onNewSuggestions(category);
+        if (mObserver != null) mObserver.onNewSuggestions(category);
     }
 
     @CalledByNative
     private void onMoreSuggestions(@CategoryInt int category, List<SnippetArticle> suggestions) {
-        assert mNativeSnippetsBridge != 0;
-        assert mObserver != null;
-        mObserver.onMoreSuggestions(category, suggestions);
+        if (mObserver != null) mObserver.onMoreSuggestions(category, suggestions);
     }
 
     @CalledByNative
@@ -265,10 +313,16 @@ public class SnippetsBridge implements SuggestionsSource {
         if (mObserver != null) mObserver.onSuggestionInvalidated(category, idWithinCategory);
     }
 
+    @CalledByNative
+    private void onFullRefreshRequired() {
+        if (mObserver != null) mObserver.onFullRefreshRequired();
+    }
+
     private native long nativeInit(Profile profile);
     private native void nativeDestroy(long nativeNTPSnippetsBridge);
-    private static native void nativeFetchSnippets(boolean forceRequest);
-    private static native void nativeRescheduleFetching();
+    private native void nativeReloadSuggestions(long nativeNTPSnippetsBridge);
+    private static native void nativeRemoteSuggestionsSchedulerOnFetchDue();
+    private static native void nativeRemoteSuggestionsSchedulerRescheduleFetching();
     private native int[] nativeGetCategories(long nativeNTPSnippetsBridge);
     private native int nativeGetCategoryStatus(long nativeNTPSnippetsBridge, int category);
     private native SuggestionsCategoryInfo nativeGetCategoryInfo(
@@ -280,23 +334,25 @@ public class SnippetsBridge implements SuggestionsSource {
     private native void nativeFetch(
             long nativeNTPSnippetsBridge, int category, String[] knownSuggestions);
     private native void nativeDismissSuggestion(long nativeNTPSnippetsBridge, String url,
-            int globalPosition, int category, int categoryPosition, String idWithinCategory);
+            int globalPosition, int category, int positionInCategory, String idWithinCategory);
     private native void nativeDismissCategory(long nativeNTPSnippetsBridge, int category);
     private native void nativeRestoreDismissedCategories(long nativeNTPSnippetsBridge);
     private native void nativeOnPageShown(
             long nativeNTPSnippetsBridge, int[] categories, int[] suggestionsPerCategory);
     private native void nativeOnSuggestionShown(long nativeNTPSnippetsBridge, int globalPosition,
-            int category, int categoryPosition, long publishTimestampMs, float score);
+            int category, int positionInCategory, long publishTimestampMs, float score);
     private native void nativeOnSuggestionOpened(long nativeNTPSnippetsBridge, int globalPosition,
-            int category, int categoryPosition, long publishTimestampMs, float score,
-            int windowOpenDisposition);
+            int category, int categoryIndex, int positionInCategory, long publishTimestampMs,
+            float score, int windowOpenDisposition);
     private native void nativeOnSuggestionMenuOpened(long nativeNTPSnippetsBridge,
-            int globalPosition, int category, int categoryPosition, long publishTimestampMs,
+            int globalPosition, int category, int positionInCategory, long publishTimestampMs,
             float score);
     private native void nativeOnMoreButtonShown(
             long nativeNTPSnippetsBridge, int category, int position);
     private native void nativeOnMoreButtonClicked(
             long nativeNTPSnippetsBridge, int category, int position);
+    private native void nativeOnActivityWarmResumed(long nativeNTPSnippetsBridge);
+    private native void nativeOnColdStart(long nativeNTPSnippetsBridge);
     private static native void nativeOnSuggestionTargetVisited(int category, long visitTimeMs);
-    private native void nativeSetObserver(long nativeNTPSnippetsBridge, SnippetsBridge bridge);
+    private static native void nativeOnNTPInitialized(long nativeNTPSnippetsBridge);
 }

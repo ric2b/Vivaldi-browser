@@ -20,8 +20,8 @@
 IPC_ENUM_TRAITS_MAX_VALUE(content::MediaStreamType,
                           content::NUM_MEDIA_TYPES - 1)
 
-IPC_ENUM_TRAITS_MAX_VALUE(content::VideoFacingMode,
-                          content::NUM_MEDIA_VIDEO_FACING_MODE - 1)
+IPC_ENUM_TRAITS_MAX_VALUE(media::VideoFacingMode,
+                          media::NUM_MEDIA_VIDEO_FACING_MODE - 1)
 
 IPC_ENUM_TRAITS_MAX_VALUE(content::MediaStreamRequestResult,
                           content::NUM_MEDIA_REQUEST_RESULTS - 1)
@@ -29,8 +29,7 @@ IPC_ENUM_TRAITS_MAX_VALUE(content::MediaStreamRequestResult,
 IPC_STRUCT_TRAITS_BEGIN(content::TrackControls)
   IPC_STRUCT_TRAITS_MEMBER(requested)
   IPC_STRUCT_TRAITS_MEMBER(stream_source)
-  IPC_STRUCT_TRAITS_MEMBER(device_ids)
-  IPC_STRUCT_TRAITS_MEMBER(alternate_device_ids)
+  IPC_STRUCT_TRAITS_MEMBER(device_id)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::StreamControls)
@@ -76,13 +75,6 @@ IPC_MESSAGE_ROUTED2(MediaStreamMsg_StreamGenerationFailed,
 IPC_MESSAGE_ROUTED2(MediaStreamMsg_DeviceStopped,
                     std::string /* label */,
                     content::StreamDeviceInfo /* the device */)
-
-// The browser has enumerated devices. If no devices are found
-// |device_list| is empty.
-// Used by Pepper and WebRTC.
-IPC_MESSAGE_ROUTED2(MediaStreamMsg_DevicesEnumerated,
-                    int /* request id */,
-                    content::StreamDeviceInfoArray /* device_list */)
 
 // TODO(wjia): should DeviceOpen* messages be merged with
 // StreamGenerat* ones?

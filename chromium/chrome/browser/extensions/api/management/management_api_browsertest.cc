@@ -179,6 +179,7 @@ class ExtensionManagementApiEscalationTest :
   static const char kId[];
 
   void SetUpOnMainThread() override {
+    ExtensionManagementApiBrowserTest::SetUpOnMainThread();
     EXPECT_TRUE(scoped_temp_dir_.CreateUniqueTempDir());
     base::FilePath pem_path = test_data_dir_.
         AppendASCII("permissions_increase").AppendASCII("permissions.pem");
@@ -243,7 +244,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementApiEscalationTest,
   std::unique_ptr<base::Value> result(util::RunFunctionAndReturnSingleResult(
       function.get(), base::StringPrintf("[\"%s\"]", kId), browser()));
   ASSERT_TRUE(result.get() != NULL);
-  ASSERT_TRUE(result->IsType(base::Value::TYPE_DICTIONARY));
+  ASSERT_TRUE(result->IsType(base::Value::Type::DICTIONARY));
   base::DictionaryValue* dict =
       static_cast<base::DictionaryValue*>(result.get());
   std::string reason;

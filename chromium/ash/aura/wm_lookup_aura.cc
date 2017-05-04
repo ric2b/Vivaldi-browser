@@ -4,11 +4,12 @@
 
 #include "ash/aura/wm_lookup_aura.h"
 
-#include "ash/aura/wm_root_window_controller_aura.h"
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/wm_layout_manager.h"
+#include "ash/common/wm_window.h"
 #include "ash/display/window_tree_host_manager.h"
+#include "ash/root_window_controller.h"
 #include "ash/shell.h"
+#include "ui/views/widget/widget.h"
 
 namespace ash {
 
@@ -20,15 +21,16 @@ WmLookupAura::~WmLookupAura() {
   WmLookup::Set(nullptr);
 }
 
-WmRootWindowController* WmLookupAura::GetRootWindowControllerWithDisplayId(
+RootWindowController* WmLookupAura::GetRootWindowControllerWithDisplayId(
     int64_t id) {
-  return WmRootWindowControllerAura::Get(Shell::GetInstance()
-                                             ->window_tree_host_manager()
-                                             ->GetRootWindowForDisplayId(id));
+  aura::Window* root_window = Shell::GetInstance()
+                                  ->window_tree_host_manager()
+                                  ->GetRootWindowForDisplayId(id);
+  return root_window ? RootWindowController::ForWindow(root_window) : nullptr;
 }
 
 WmWindow* WmLookupAura::GetWindowForWidget(views::Widget* widget) {
-  return WmWindowAura::Get(widget->GetNativeWindow());
+  return WmWindow::Get(widget->GetNativeWindow());
 }
 
 }  // namespace ash

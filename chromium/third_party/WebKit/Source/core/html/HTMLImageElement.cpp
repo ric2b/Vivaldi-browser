@@ -33,10 +33,10 @@
 #include "core/dom/Attribute.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
-#include "core/fetch/ImageResource.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/html/FormAssociated.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLFormElement.h"
@@ -50,12 +50,13 @@
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/api/LayoutImageItem.h"
+#include "core/loader/resource/ImageResourceContent.h"
 #include "core/page/Page.h"
 #include "core/style/ContentData.h"
 #include "core/svg/graphics/SVGImageForContainer.h"
-#include "platform/ContentType.h"
 #include "platform/EventDispatchForbiddenScope.h"
-#include "platform/MIMETypeRegistry.h"
+#include "platform/network/mime/ContentType.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
 
 namespace blink {
@@ -85,26 +86,17 @@ class HTMLImageElement::ViewportChangeListener final
   Member<HTMLImageElement> m_element;
 };
 
-HTMLImageElement::HTMLImageElement(Document& document,
-                                   HTMLFormElement* form,
-                                   bool createdByParser)
+HTMLImageElement::HTMLImageElement(Document& document, bool createdByParser)
     : HTMLElement(imgTag, document),
-      ActiveScriptWrappable(this),
       m_imageLoader(HTMLImageLoader::create(this)),
       m_imageDevicePixelRatio(1.0f),
       m_source(nullptr),
+      m_layoutDisposition(LayoutDisposition::PrimaryContent),
       m_formWasSetByParser(false),
       m_elementCreatedByParser(createdByParser),
-      m_useFallbackContent(false),
       m_isFallbackImage(false),
       m_referrerPolicy(ReferrerPolicyDefault) {
   setHasCustomStyleCallbacks();
-  if (form && form->isConnected()) {
-    m_form = form;
-    m_formWasSetByParser = true;
-    m_form->associate(*this);
-    m_form->didAssociateByParser();
-  }
 }
 
 HTMLImageElement* HTMLImageElement::create(Document& document) {
@@ -112,9 +104,8 @@ HTMLImageElement* HTMLImageElement::create(Document& document) {
 }
 
 HTMLImageElement* HTMLImageElement::create(Document& document,
-                                           HTMLFormElement* form,
                                            bool createdByParser) {
-  return new HTMLImageElement(document, form, createdByParser);
+  return new HTMLImageElement(document, createdByParser);
 }
 
 HTMLImageElement::~HTMLImageElement() {}
@@ -257,27 +248,30 @@ void HTMLImageElement::setBestFitURLAndDPRFromImageCandidate(
   }
 }
 
-void HTMLImageElement::parseAttribute(const QualifiedName& name,
-                                      const AtomicString& oldValue,
-                                      const AtomicString& value) {
+void HTMLImageElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  const QualifiedName& name = params.name;
   if (name == altAttr || name == titleAttr) {
     if (userAgentShadowRoot()) {
       Element* text = userAgentShadowRoot()->getElementById("alttext");
       String value = altText();
-      if (text && text->textContent() != value)
+      if (text && text->textContent() != params.newValue)
         text->setTextContent(altText());
     }
   } else if (name == srcAttr || name == srcsetAttr || name == sizesAttr) {
     selectSourceURL(ImageLoader::UpdateIgnorePreviousError);
   } else if (name == usemapAttr) {
-    setIsLink(!value.isNull());
+    setIsLink(!params.newValue.isNull());
   } else if (name == referrerpolicyAttr) {
     m_referrerPolicy = ReferrerPolicyDefault;
-    if (!value.isNull())
+    if (!params.newValue.isNull()) {
       SecurityPolicy::referrerPolicyFromStringWithLegacyKeywords(
-          value, &m_referrerPolicy);
+          params.newValue, &m_referrerPolicy);
+      UseCounter::count(document(),
+                        UseCounter::HTMLImageElementReferrerPolicyAttribute);
+    }
   } else {
-    HTMLElement::parseAttribute(name, oldValue, value);
+    HTMLElement::parseAttribute(params);
   }
 }
 
@@ -339,6 +333,11 @@ ImageCandidate HTMLImageElement::findBestFitImageFromPictureParent() {
   return ImageCandidate();
 }
 
+bool HTMLImageElement::layoutObjectIsNeeded(const ComputedStyle& style) {
+  return m_layoutDisposition != LayoutDisposition::Collapsed &&
+         HTMLElement::layoutObjectIsNeeded(style);
+}
+
 LayoutObject* HTMLImageElement::createLayoutObject(const ComputedStyle& style) {
   const ContentData* contentData = style.contentData();
   if (contentData && contentData->isImage()) {
@@ -349,13 +348,20 @@ LayoutObject* HTMLImageElement::createLayoutObject(const ComputedStyle& style) {
       return LayoutObject::createObject(this, style);
   }
 
-  if (m_useFallbackContent)
-    return new LayoutBlockFlow(this);
-
-  LayoutImage* image = new LayoutImage(this);
-  image->setImageResource(LayoutImageResource::create());
-  image->setImageDevicePixelRatio(m_imageDevicePixelRatio);
-  return image;
+  switch (m_layoutDisposition) {
+    case LayoutDisposition::FallbackContent:
+      return new LayoutBlockFlow(this);
+    case LayoutDisposition::PrimaryContent: {
+      LayoutImage* image = new LayoutImage(this);
+      image->setImageResource(LayoutImageResource::create());
+      image->setImageDevicePixelRatio(m_imageDevicePixelRatio);
+      return image;
+    }
+    case LayoutDisposition::Collapsed:  // Falls through.
+    default:
+      NOTREACHED();
+      return nullptr;
+  }
 }
 
 void HTMLImageElement::attachLayoutTree(const AttachContext& context) {
@@ -367,9 +373,9 @@ void HTMLImageElement::attachLayoutTree(const AttachContext& context) {
     if (m_isFallbackImage) {
       float deviceScaleFactor = blink::deviceScaleFactor(layoutImage->frame());
       std::pair<Image*, float> brokenImageAndImageScaleFactor =
-          ImageResource::brokenImage(deviceScaleFactor);
-      ImageResource* newImageResource =
-          ImageResource::create(brokenImageAndImageScaleFactor.first);
+          ImageResourceContent::brokenImage(deviceScaleFactor);
+      ImageResourceContent* newImageResource =
+          ImageResourceContent::create(brokenImageAndImageScaleFactor.first);
       layoutImage->imageResource()->setImageResource(newImageResource);
     }
     if (layoutImageResource->hasImage())
@@ -447,10 +453,7 @@ unsigned HTMLImageElement::width() {
     }
   }
 
-  LayoutBox* box = layoutBox();
-  return box ? adjustForAbsoluteZoom(box->contentBoxRect().pixelSnappedWidth(),
-                                     box)
-             : 0;
+  return layoutBoxWidth();
 }
 
 unsigned HTMLImageElement::height() {
@@ -474,10 +477,7 @@ unsigned HTMLImageElement::height() {
     }
   }
 
-  LayoutBox* box = layoutBox();
-  return box ? adjustForAbsoluteZoom(box->contentBoxRect().pixelSnappedHeight(),
-                                     box)
-             : 0;
+  return layoutBoxHeight();
 }
 
 unsigned HTMLImageElement::naturalWidth() const {
@@ -488,7 +488,7 @@ unsigned HTMLImageElement::naturalWidth() const {
       .image()
       ->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject()),
                   m_imageDevicePixelRatio,
-                  ImageResource::IntrinsicCorrectedToDPR)
+                  ImageResourceContent::IntrinsicCorrectedToDPR)
       .width()
       .toUnsigned();
 }
@@ -501,9 +501,23 @@ unsigned HTMLImageElement::naturalHeight() const {
       .image()
       ->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject()),
                   m_imageDevicePixelRatio,
-                  ImageResource::IntrinsicCorrectedToDPR)
+                  ImageResourceContent::IntrinsicCorrectedToDPR)
       .height()
       .toUnsigned();
+}
+
+unsigned HTMLImageElement::layoutBoxWidth() const {
+  LayoutBox* box = layoutBox();
+  return box ? adjustForAbsoluteZoom(box->contentBoxRect().pixelSnappedWidth(),
+                                     box)
+             : 0;
+}
+
+unsigned HTMLImageElement::layoutBoxHeight() const {
+  LayoutBox* box = layoutBox();
+  return box ? adjustForAbsoluteZoom(box->contentBoxRect().pixelSnappedHeight(),
+                                     box)
+             : 0;
 }
 
 const String& HTMLImageElement::currentSrc() const {
@@ -655,7 +669,7 @@ bool HTMLImageElement::isSVGSource() const {
 
 bool HTMLImageElement::wouldTaintOrigin(
     SecurityOrigin* destinationSecurityOrigin) const {
-  ImageResource* image = cachedImage();
+  ImageResourceContent* image = cachedImage();
   if (!image)
     return false;
   return !image->isAccessAllowed(destinationSecurityOrigin);
@@ -663,7 +677,7 @@ bool HTMLImageElement::wouldTaintOrigin(
 
 FloatSize HTMLImageElement::elementSize(
     const FloatSize& defaultObjectSize) const {
-  ImageResource* image = cachedImage();
+  ImageResourceContent* image = cachedImage();
   if (!image)
     return FloatSize();
 
@@ -677,7 +691,7 @@ FloatSize HTMLImageElement::elementSize(
 
 FloatSize HTMLImageElement::defaultDestinationSize(
     const FloatSize& defaultObjectSize) const {
-  ImageResource* image = cachedImage();
+  ImageResourceContent* image = cachedImage();
   if (!image)
     return FloatSize();
 
@@ -770,6 +784,7 @@ void HTMLImageElement::selectSourceURL(
         fastGetAttribute(srcAttr), fastGetAttribute(srcsetAttr), &document());
     setBestFitURLAndDPRFromImageCandidate(candidate);
   }
+
   imageLoader().updateFromElement(behavior, m_referrerPolicy);
 
   // Images such as data: uri's can return immediately and may already have
@@ -788,7 +803,7 @@ void HTMLImageElement::selectSourceURL(
 
   // Icky special case for deferred images:
   // A deferred image is not loading, does have pending activity, does not
-  // have an error, but it does have an ImageResource associated
+  // have an error, but it does have an ImageResourceContent associated
   // with it, so imageHasLoaded will be true even though the image hasn't
   // actually loaded. Fixing the definition of imageHasLoaded isn't
   // sufficient, because a deferred image does have pending activity, does not
@@ -796,12 +811,12 @@ void HTMLImageElement::selectSourceURL(
   // was correct, imageStillLoading would become wrong.
   //
   // Instead of dealing with that, there's a separate check that the
-  // ImageResource has non-null image data associated with it, which isn't
-  // folded into imageHasLoaded above.
+  // ImageResourceContent has non-null image data associated with it, which
+  // isn't folded into imageHasLoaded above.
   if ((imageHasLoaded && imageHasImage) || imageStillLoading || imageIsDocument)
     ensurePrimaryContent();
   else
-    ensureFallbackContent();
+    ensureCollapsedOrFallbackContent();
 }
 
 const KURL& HTMLImageElement::sourceURL() const {
@@ -813,49 +828,62 @@ void HTMLImageElement::didAddUserAgentShadowRoot(ShadowRoot&) {
 }
 
 void HTMLImageElement::ensureFallbackForGeneratedContent() {
-  setUseFallbackContent();
-  reattachFallbackContent();
+  // The special casing for generated content in createLayoutObject breaks the
+  // invariant that the layout object attached to this element will always be
+  // appropriate for |m_layoutDisposition|. Force recreate it.
+  // TODO(engedy): Remove this hack. See: https://crbug.com/671953.
+  setLayoutDisposition(LayoutDisposition::FallbackContent,
+                       true /* forceReattach */);
 }
 
-void HTMLImageElement::ensureFallbackContent() {
-  if (m_useFallbackContent || m_isFallbackImage)
+void HTMLImageElement::ensureCollapsedOrFallbackContent() {
+  if (m_isFallbackImage)
     return;
-  setUseFallbackContent();
-  reattachFallbackContent();
+
+  bool resourceErrorIndicatesElementShouldBeCollapsed =
+      imageLoader().image() &&
+      imageLoader().image()->resourceError().shouldCollapseInitiator();
+  setLayoutDisposition(resourceErrorIndicatesElementShouldBeCollapsed
+                           ? LayoutDisposition::Collapsed
+                           : LayoutDisposition::FallbackContent);
 }
 
 void HTMLImageElement::ensurePrimaryContent() {
-  if (!m_useFallbackContent)
-    return;
-  m_useFallbackContent = false;
-  reattachFallbackContent();
+  setLayoutDisposition(LayoutDisposition::PrimaryContent);
 }
 
-void HTMLImageElement::reattachFallbackContent() {
+void HTMLImageElement::setLayoutDisposition(LayoutDisposition layoutDisposition,
+                                            bool forceReattach) {
+  if (m_layoutDisposition == layoutDisposition && !forceReattach)
+    return;
+
+  m_layoutDisposition = layoutDisposition;
+
   // This can happen inside of attachLayoutTree() in the middle of a recalcStyle
   // so we need to reattach synchronously here.
-  if (document().inStyleRecalc())
+  if (document().inStyleRecalc()) {
     reattachLayoutTree();
-  else
+  } else {
+    if (m_layoutDisposition == LayoutDisposition::FallbackContent) {
+      EventDispatchForbiddenScope::AllowUserAgentEvents allowEvents;
+      ensureUserAgentShadowRoot();
+    }
     lazyReattachIfAttached();
+  }
 }
 
 PassRefPtr<ComputedStyle> HTMLImageElement::customStyleForLayoutObject() {
-  RefPtr<ComputedStyle> newStyle = originalStyleForLayoutObject();
-
-  if (!m_useFallbackContent)
-    return newStyle;
-
-  RefPtr<ComputedStyle> style = ComputedStyle::clone(*newStyle);
-  return HTMLImageFallbackHelper::customStyleForAltText(*this, style);
-}
-
-void HTMLImageElement::setUseFallbackContent() {
-  m_useFallbackContent = true;
-  if (document().inStyleRecalc())
-    return;
-  EventDispatchForbiddenScope::AllowUserAgentEvents allowEvents;
-  ensureUserAgentShadowRoot();
+  switch (m_layoutDisposition) {
+    case LayoutDisposition::PrimaryContent:  // Fall through.
+    case LayoutDisposition::Collapsed:
+      return originalStyleForLayoutObject();
+    case LayoutDisposition::FallbackContent:
+      return HTMLImageFallbackHelper::customStyleForAltText(
+          *this, ComputedStyle::clone(*originalStyleForLayoutObject()));
+    default:
+      NOTREACHED();
+      return nullptr;
+  }
 }
 
 bool HTMLImageElement::isOpaque() const {
@@ -867,8 +895,7 @@ int HTMLImageElement::sourceWidth() {
   SourceImageStatus status;
   FloatSize defaultObjectSize(width(), height());
   RefPtr<Image> image = getSourceImageForCanvas(
-      &status, PreferNoAcceleration, SnapshotReasonCopyToWebGLTexture,
-      defaultObjectSize);
+      &status, PreferNoAcceleration, SnapshotReasonUnknown, defaultObjectSize);
   return image->width();
 }
 
@@ -876,13 +903,12 @@ int HTMLImageElement::sourceHeight() {
   SourceImageStatus status;
   FloatSize defaultObjectSize(width(), height());
   RefPtr<Image> image = getSourceImageForCanvas(
-      &status, PreferNoAcceleration, SnapshotReasonCopyToWebGLTexture,
-      defaultObjectSize);
+      &status, PreferNoAcceleration, SnapshotReasonUnknown, defaultObjectSize);
   return image->height();
 }
 
 IntSize HTMLImageElement::bitmapSourceSize() const {
-  ImageResource* image = cachedImage();
+  ImageResourceContent* image = cachedImage();
   if (!image)
     return IntSize();
   LayoutSize lSize = image->imageSize(
@@ -890,5 +916,14 @@ IntSize HTMLImageElement::bitmapSourceSize() const {
   DCHECK(lSize.fraction().isZero());
   return IntSize(lSize.width().toInt(), lSize.height().toInt());
 }
+
+void HTMLImageElement::associateWith(HTMLFormElement* form) {
+  if (form && form->isConnected()) {
+    m_form = form;
+    m_formWasSetByParser = true;
+    m_form->associate(*this);
+    m_form->didAssociateByParser();
+  }
+};
 
 }  // namespace blink

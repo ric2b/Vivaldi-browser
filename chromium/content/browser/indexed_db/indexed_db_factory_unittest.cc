@@ -9,6 +9,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_simple_task_runner.h"
@@ -227,7 +228,8 @@ class DiskFullFactory : public IndexedDBFactoryImpl {
 class LookingForQuotaErrorMockCallbacks : public IndexedDBCallbacks {
  public:
   LookingForQuotaErrorMockCallbacks()
-      : IndexedDBCallbacks(nullptr, 0, 0), error_called_(false) {}
+      : IndexedDBCallbacks(nullptr, url::Origin(), nullptr),
+        error_called_(false) {}
   void OnError(const IndexedDBDatabaseError& error) override {
     error_called_ = true;
     EXPECT_EQ(blink::WebIDBDatabaseExceptionQuotaError, error.code());
@@ -250,7 +252,7 @@ TEST_F(IndexedDBFactoryTest, QuotaErrorOnDiskFull) {
   scoped_refptr<LookingForQuotaErrorMockCallbacks> callbacks =
       new LookingForQuotaErrorMockCallbacks;
   scoped_refptr<IndexedDBDatabaseCallbacks> dummy_database_callbacks =
-      new IndexedDBDatabaseCallbacks(nullptr, 0, nullptr);
+      new IndexedDBDatabaseCallbacks(nullptr, nullptr);
   const base::string16 name(ASCIIToUTF16("name"));
   std::unique_ptr<IndexedDBPendingConnection> connection(
       base::MakeUnique<IndexedDBPendingConnection>(
@@ -468,7 +470,7 @@ TEST_F(IndexedDBFactoryTest, DatabaseFailedOpen) {
 
   // Open at version 2, then close.
   {
-    scoped_refptr<MockIndexedDBCallbacks> callbacks(
+    scoped_refptr<UpgradeNeededCallbacks> callbacks(
         new UpgradeNeededCallbacks());
     std::unique_ptr<IndexedDBPendingConnection> connection(
         base::MakeUnique<IndexedDBPendingConnection>(
@@ -482,7 +484,8 @@ TEST_F(IndexedDBFactoryTest, DatabaseFailedOpen) {
     // Pump the message loop so the upgrade transaction can run.
     base::RunLoop().RunUntilIdle();
     EXPECT_TRUE(callbacks->connection());
-    callbacks->connection()->database()->Commit(transaction_id);
+    callbacks->connection()->database()->Commit(
+        callbacks->connection()->GetTransaction(transaction_id));
 
     callbacks->connection()->Close();
     EXPECT_FALSE(factory()->IsDatabaseOpen(origin, db_name));

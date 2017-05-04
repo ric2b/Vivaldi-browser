@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
 
 if (enable_nacl) {
   # This is separate so it can be used by ../broker:nacl64.
@@ -15,9 +16,9 @@ if (enable_nacl) {
       "nacl_messages.cc",
       "nacl_messages.h",
       "nacl_process_type.h",
-      "nacl_renderer_messages.cc",
-      "nacl_renderer_messages.h",
       "nacl_sandbox_type.h",
+      "nacl_service.cc",
+      "nacl_service.h",
       "nacl_types.cc",
       "nacl_types.h",
       "nacl_types_param_traits.cc",
@@ -25,14 +26,19 @@ if (enable_nacl) {
     ]
 
     public_deps = [
+      ":minimal_content_dummy",
       ":switches",
     ]
 
     deps = [
-      ":minimal_content_dummy",
+      ":nacl_error_code",
       "//base",
       "//base:base_static",
+      "//content/public/common:service_names",
       "//ipc",
+      "//ipc:mojom",
+      "//mojo/edk/system",
+      "//services/service_manager/public/cpp",
     ]
   }
 
@@ -43,9 +49,16 @@ if (enable_nacl) {
   source_set("minimal_content_dummy") {
     check_includes = false
     sources = [
+      "//content/public/common/content_descriptors.h",
       "//content/public/common/content_switches.h",
+      "//content/public/common/mojo_channel_switches.h",
       "//content/public/common/process_type.h",
       "//content/public/common/sandbox_type.h",
+    ]
+
+    # Deps required by the above headers.
+    deps = [
+      "//media:media_features",
     ]
   }
 
@@ -61,6 +74,7 @@ if (enable_nacl) {
 
     public_deps = [
       ":minimal",
+      ":mojo_bindings",
       ":switches",
     ]
 
@@ -89,6 +103,18 @@ if (enable_nacl) {
 
     deps = [
       "//base",
+    ]
+  }
+
+  source_set("nacl_error_code") {
+    sources = [
+      "//native_client/src/trusted/service_runtime/nacl_error_code.h",
+    ]
+  }
+
+  mojom("mojo_bindings") {
+    sources = [
+      "nacl.mojom",
     ]
   }
 }

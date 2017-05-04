@@ -39,6 +39,12 @@ const TableColumnData kColumns[] = {
 
   { IDS_TASK_MANAGER_CPU_COLUMN, ui::TableColumn::RIGHT, -1, 0,
     arraysize("99.9") * kCharWidth, -1, true, false, true },
+#if defined(OS_WIN)
+  { IDS_TASK_MANAGER_CPU_TIME_COLUMN, ui::TableColumn::RIGHT, -1, 0,
+    arraysize("1234h 42m 30s") * kCharWidth, -1, true, false, false },
+  { IDS_TASK_MANAGER_START_TIME_COLUMN, ui::TableColumn::RIGHT, -1, 0,
+    arraysize("12/13/14 11:44:30 PM") * kCharWidth, -1, true, true, false },
+#endif
   { IDS_TASK_MANAGER_NET_COLUMN, ui::TableColumn::RIGHT, -1, 0,
     arraysize("150 kiB/s") * kCharWidth, -1, true, false, true },
   { IDS_TASK_MANAGER_PROCESS_ID_COLUMN, ui::TableColumn::RIGHT, -1, 0,
@@ -80,6 +86,8 @@ const TableColumnData kColumns[] = {
 #endif  // defined(OS_LINUX)
   { IDS_TASK_MANAGER_PROCESS_PRIORITY_COLUMN, ui::TableColumn::LEFT, -1, 0,
     arraysize("background") * kCharWidth, -1, true, true, false },
+  { IDS_TASK_MANAGER_MEMORY_STATE_COLUMN, ui::TableColumn::LEFT, -1, 0,
+    arraysize("throttled") * kCharWidth, -1, true, false, false },
 };
 
 const size_t kColumnsSize = arraysize(kColumns);
@@ -101,6 +109,8 @@ const char kSortIsAscendingKey[] = "sort_is_ascending";
   def(IDS_TASK_MANAGER_PRIVATE_MEM_COLUMN) \
   def(IDS_TASK_MANAGER_SWAPPED_MEM_COLUMN) \
   def(IDS_TASK_MANAGER_CPU_COLUMN) \
+  def(IDS_TASK_MANAGER_START_TIME_COLUMN) \
+  def(IDS_TASK_MANAGER_CPU_TIME_COLUMN) \
   def(IDS_TASK_MANAGER_NET_COLUMN) \
   def(IDS_TASK_MANAGER_PROCESS_ID_COLUMN) \
   def(IDS_TASK_MANAGER_GDI_HANDLES_COLUMN) \
@@ -114,7 +124,8 @@ const char kSortIsAscendingKey[] = "sort_is_ascending";
   def(IDS_TASK_MANAGER_JAVASCRIPT_MEMORY_ALLOCATED_COLUMN) \
   def(IDS_TASK_MANAGER_IDLE_WAKEUPS_COLUMN) \
   def(IDS_TASK_MANAGER_OPEN_FD_COUNT_COLUMN) \
-  def(IDS_TASK_MANAGER_PROCESS_PRIORITY_COLUMN)
+  def(IDS_TASK_MANAGER_PROCESS_PRIORITY_COLUMN) \
+  def(IDS_TASK_MANAGER_MEMORY_STATE_COLUMN)
 // Add to the above list in the macro any new IDs added in the future. Also
 // remove the removed ones.
 

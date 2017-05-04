@@ -134,7 +134,7 @@ void ExternalDataUseObserver::OnDataUse(const data_usage::DataUse& data_use) {
   DCHECK(registered_as_data_use_observer_);
 
   if (!data_use_list_) {
-    data_use_list_.reset(new std::deque<const data_usage::DataUse>());
+    data_use_list_.reset(new std::vector<const data_usage::DataUse>());
     // Post a task to the same IO thread, that will get invoked when some of the
     // data use objects are batched.
     io_task_runner_->PostTask(
@@ -215,6 +215,19 @@ base::WeakPtr<ExternalDataUseObserver> ExternalDataUseObserver::GetWeakPtr() {
 DataUseTabModel* ExternalDataUseObserver::GetDataUseTabModel() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return data_use_tab_model_;
+}
+
+void ExternalDataUseObserver::SetRegisterGoogleVariationID(
+    bool register_google_variation_id) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  // It is okay to use base::Unretained here since
+  // |external_data_use_observer_bridge_| is owned by |this|, and is destroyed
+  // on UI thread when |this| is destroyed.
+  ui_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&ExternalDataUseObserverBridge::SetRegisterGoogleVariationID,
+                 base::Unretained(external_data_use_observer_bridge_),
+                 register_google_variation_id));
 }
 
 }  // namespace android

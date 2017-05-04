@@ -26,7 +26,6 @@
 #include "core/inspector/InspectorStyleSheet.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "bindings/core/v8/ScriptRegexp.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSImportRule.h"
@@ -67,8 +66,8 @@ namespace {
 
 using namespace blink;
 
-static CSSParserContext parserContextForDocument(Document* document) {
-  return document ? CSSParserContext(*document, nullptr)
+static const CSSParserContext* parserContextForDocument(Document* document) {
+  return document ? CSSParserContext::create(*document)
                   : strictCSSParserContext();
 }
 
@@ -195,7 +194,7 @@ void StyleSheetHandler::startRuleHeader(StyleRule::RuleType type,
   RefPtr<CSSRuleSourceData> data = CSSRuleSourceData::create(type);
   data->ruleHeaderRange.start = offset;
   m_currentRuleData = data.get();
-  m_currentRuleDataStack.append(data.release());
+  m_currentRuleDataStack.push_back(std::move(data));
 }
 
 template <typename CharacterType>
@@ -208,9 +207,9 @@ inline void StyleSheetHandler::setRuleHeaderEnd(const CharacterType* dataStart,
       break;
   }
 
-  m_currentRuleDataStack.last()->ruleHeaderRange.end = listEndOffset;
-  if (!m_currentRuleDataStack.last()->selectorRanges.isEmpty())
-    m_currentRuleDataStack.last()->selectorRanges.last().end = listEndOffset;
+  m_currentRuleDataStack.back()->ruleHeaderRange.end = listEndOffset;
+  if (!m_currentRuleDataStack.back()->selectorRanges.isEmpty())
+    m_currentRuleDataStack.back()->selectorRanges.back().end = listEndOffset;
 }
 
 void StyleSheetHandler::endRuleHeader(unsigned offset) {
@@ -225,7 +224,7 @@ void StyleSheetHandler::endRuleHeader(unsigned offset) {
 void StyleSheetHandler::observeSelector(unsigned startOffset,
                                         unsigned endOffset) {
   ASSERT(m_currentRuleDataStack.size());
-  m_currentRuleDataStack.last()->selectorRanges.append(
+  m_currentRuleDataStack.back()->selectorRanges.push_back(
       SourceRange(startOffset, endOffset));
 }
 
@@ -234,30 +233,30 @@ void StyleSheetHandler::startRuleBody(unsigned offset) {
   ASSERT(!m_currentRuleDataStack.isEmpty());
   if (m_parsedText[offset] == '{')
     ++offset;  // Skip the rule body opening brace.
-  m_currentRuleDataStack.last()->ruleBodyRange.start = offset;
+  m_currentRuleDataStack.back()->ruleBodyRange.start = offset;
 }
 
 void StyleSheetHandler::endRuleBody(unsigned offset) {
   ASSERT(!m_currentRuleDataStack.isEmpty());
-  m_currentRuleDataStack.last()->ruleBodyRange.end = offset;
+  m_currentRuleDataStack.back()->ruleBodyRange.end = offset;
   RefPtr<CSSRuleSourceData> rule = popRuleData();
 
   fixUnparsedPropertyRanges(rule.get());
-  addNewRuleToSourceTree(rule.release());
+  addNewRuleToSourceTree(std::move(rule));
 }
 
 void StyleSheetHandler::addNewRuleToSourceTree(
     PassRefPtr<CSSRuleSourceData> rule) {
   if (m_currentRuleDataStack.isEmpty())
-    m_result->append(rule);
+    m_result->push_back(rule);
   else
-    m_currentRuleDataStack.last()->childRules.append(rule);
+    m_currentRuleDataStack.back()->childRules.push_back(rule);
 }
 
 PassRefPtr<CSSRuleSourceData> StyleSheetHandler::popRuleData() {
   ASSERT(!m_currentRuleDataStack.isEmpty());
   m_currentRuleData = nullptr;
-  RefPtr<CSSRuleSourceData> data = m_currentRuleDataStack.last().get();
+  RefPtr<CSSRuleSourceData> data = m_currentRuleDataStack.back().get();
   m_currentRuleDataStack.pop_back();
   return data.release();
 }
@@ -330,7 +329,7 @@ void StyleSheetHandler::observeProperty(unsigned startOffset,
                                         bool isImportant,
                                         bool isParsed) {
   if (m_currentRuleDataStack.isEmpty() ||
-      !m_currentRuleDataStack.last()->styleSourceData)
+      !m_currentRuleDataStack.back()->styleSourceData)
     return;
 
   ASSERT(endOffset <= m_parsedText.length());
@@ -352,7 +351,7 @@ void StyleSheetHandler::observeProperty(unsigned startOffset,
   String value =
       propertyString.substring(colonIndex + 1, propertyString.length())
           .stripWhiteSpace();
-  m_currentRuleDataStack.last()->styleSourceData->propertyData.append(
+  m_currentRuleDataStack.back()->styleSourceData->propertyData.push_back(
       CSSPropertySourceData(name, value, isImportant, false, isParsed,
                             SourceRange(startOffset, endOffset)));
 }
@@ -362,8 +361,8 @@ void StyleSheetHandler::observeComment(unsigned startOffset,
   ASSERT(endOffset <= m_parsedText.length());
 
   if (m_currentRuleDataStack.isEmpty() ||
-      !m_currentRuleDataStack.last()->ruleHeaderRange.end ||
-      !m_currentRuleDataStack.last()->styleSourceData)
+      !m_currentRuleDataStack.back()->ruleHeaderRange.end ||
+      !m_currentRuleDataStack.back()->styleSourceData)
     return;
 
   // The lexer is not inside a property AND it is scanning a declaration-aware
@@ -389,7 +388,7 @@ void StyleSheetHandler::observeComment(unsigned startOffset,
   CSSParser::parseDeclarationListForInspector(
       parserContextForDocument(m_document), commentText, handler);
   Vector<CSSPropertySourceData>& commentPropertyData =
-      sourceData.first()->styleSourceData->propertyData;
+      sourceData.front()->styleSourceData->propertyData;
   if (commentPropertyData.size() != 1)
     return;
   CSSPropertySourceData& propertyData = commentPropertyData.at(0);
@@ -401,7 +400,7 @@ void StyleSheetHandler::observeComment(unsigned startOffset,
   if (!parsedOk || propertyData.range.length() != commentText.length())
     return;
 
-  m_currentRuleDataStack.last()->styleSourceData->propertyData.append(
+  m_currentRuleDataStack.back()->styleSourceData->propertyData.push_back(
       CSSPropertySourceData(propertyData.name, propertyData.value, false, true,
                             true, SourceRange(startOffset, endOffset)));
 }
@@ -549,12 +548,12 @@ void flattenSourceData(const RuleSourceDataList& dataList,
       case StyleRule::FontFace:
       case StyleRule::Viewport:
       case StyleRule::Keyframe:
-        result->append(data.get());
+        result->push_back(data.get());
         break;
       case StyleRule::Media:
       case StyleRule::Supports:
       case StyleRule::Keyframes:
-        result->append(data.get());
+        result->push_back(data.get());
         flattenSourceData(data->childRules, result);
         break;
       default:
@@ -597,12 +596,12 @@ void collectFlatRules(RuleList ruleList, CSSRuleVector* result) {
       case CSSRule::kFontFaceRule:
       case CSSRule::kViewportRule:
       case CSSRule::kKeyframeRule:
-        result->append(rule);
+        result->push_back(rule);
         break;
       case CSSRule::kMediaRule:
       case CSSRule::kSupportsRule:
       case CSSRule::kKeyframesRule:
-        result->append(rule);
+        result->push_back(rule);
         collectFlatRules(asCSSRuleList(rule), result);
         break;
       default:
@@ -724,7 +723,7 @@ String canonicalCSSText(CSSRule* rule) {
   Vector<String> propertyNames;
   CSSStyleDeclaration* style = styleRule->style();
   for (unsigned i = 0; i < style->length(); ++i)
-    propertyNames.append(style->item(i));
+    propertyNames.push_back(style->item(i));
 
   std::sort(propertyNames.begin(), propertyNames.end(),
             WTF::codePointCompareLessThan);
@@ -845,7 +844,7 @@ void InspectorStyle::populateAllProperties(
     Vector<CSSPropertySourceData>& sourcePropertyData =
         m_sourceData->styleSourceData->propertyData;
     for (const auto& data : sourcePropertyData) {
-      result.append(data);
+      result.push_back(data);
       sourcePropertyNames.add(data.name.lower());
     }
   }
@@ -858,7 +857,7 @@ void InspectorStyle::populateAllProperties(
     String value = m_style->getPropertyValue(name);
     if (value.isEmpty())
       continue;
-    result.append(CSSPropertySourceData(
+    result.push_back(CSSPropertySourceData(
         name, value, !m_style->getPropertyPriority(name).isEmpty(), false, true,
         SourceRange()));
   }
@@ -969,10 +968,10 @@ DEFINE_TRACE(InspectorStyle) {
 InspectorStyleSheetBase::InspectorStyleSheetBase(Listener* listener)
     : m_id(IdentifiersFactory::createIdentifier()),
       m_listener(listener),
-      m_lineEndings(makeUnique<LineEndings>()) {}
+      m_lineEndings(WTF::makeUnique<LineEndings>()) {}
 
 void InspectorStyleSheetBase::onStyleSheetTextChanged() {
-  m_lineEndings = makeUnique<LineEndings>();
+  m_lineEndings = WTF::makeUnique<LineEndings>();
   if (listener())
     listener()->styleSheetChanged(this);
 }
@@ -1468,7 +1467,7 @@ void InspectorStyleSheet::innerSetText(const String& text,
   m_parsedFlatRules.clear();
   collectFlatRules(sourceDataSheet, &m_parsedFlatRules);
 
-  m_sourceData = makeUnique<RuleSourceDataList>();
+  m_sourceData = WTF::makeUnique<RuleSourceDataList>();
   flattenSourceData(ruleTree, m_sourceData.get());
   m_text = text;
 
@@ -1862,9 +1861,9 @@ void InspectorStyleSheet::mapSourceDataToCSSOM() {
   Vector<String> cssomRulesText = Vector<String>();
   Vector<String> parsedRulesText = Vector<String>();
   for (size_t i = 0; i < cssomRules.size(); ++i)
-    cssomRulesText.append(canonicalCSSText(cssomRules.at(i)));
+    cssomRulesText.push_back(canonicalCSSText(cssomRules.at(i)));
   for (size_t j = 0; j < parsedRules.size(); ++j)
-    parsedRulesText.append(canonicalCSSText(parsedRules.at(j)));
+    parsedRulesText.push_back(canonicalCSSText(parsedRules.at(j)));
 
   diff(cssomRulesText, parsedRulesText, &m_ruleToSourceData,
        &m_sourceDataToRule);
@@ -1990,7 +1989,7 @@ InspectorStyleSheetForInlineStyle::ruleSourceData() {
                               &ruleSourceDataResult);
     CSSParser::parseDeclarationListForInspector(
         parserContextForDocument(&m_element->document()), text, handler);
-    ruleSourceData = ruleSourceDataResult.first().release();
+    ruleSourceData = std::move(ruleSourceDataResult.front());
   }
   return ruleSourceData.release();
 }

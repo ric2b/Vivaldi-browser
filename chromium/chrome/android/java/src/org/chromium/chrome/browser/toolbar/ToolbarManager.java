@@ -16,6 +16,7 @@ import android.text.TextUtils;
 import android.view.View;
 import android.view.View.OnAttachStateChangeListener;
 import android.view.View.OnClickListener;
+import android.view.ViewGroup.MarginLayoutParams;
 import android.widget.FrameLayout;
 
 import org.chromium.base.ApiCompatibilityUtils;
@@ -167,7 +168,7 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
         mActionBarDelegate = new ActionModeController.ActionBarDelegate() {
             @Override
             public void setControlTopMargin(int margin) {
-                FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams)
+                MarginLayoutParams lp = (MarginLayoutParams)
                         mControlContainer.getLayoutParams();
                 lp.topMargin = margin;
                 mControlContainer.setLayoutParams(lp);
@@ -308,11 +309,6 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
             }
 
             @Override
-            public void onWebContentsInstantSupportDisabled() {
-                mLocationBar.setUrlToPageUrl();
-            }
-
-            @Override
             public void onDidNavigateMainFrame(Tab tab, String url, String baseUrl,
                     boolean isNavigationToDifferentPage, boolean isFragmentNavigation,
                     int statusCode) {
@@ -370,6 +366,13 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
 
                 // TODO(kkimlabs): Investigate using float progress all the way up to Blink.
                 updateLoadProgress(progress);
+            }
+
+            @Override
+            public void onToggleFullscreenMode(Tab tab, boolean enable) {
+                if (mFindToolbarManager != null && enable) {
+                    mFindToolbarManager.hideToolbar();
+                }
             }
 
             @Override

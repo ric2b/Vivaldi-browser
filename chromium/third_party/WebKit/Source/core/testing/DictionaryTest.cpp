@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "DictionaryTest.h"
+#include "core/testing/DictionaryTest.h"
 
+#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8ObjectBuilder.h"
 #include "core/testing/InternalDictionary.h"
 #include "core/testing/InternalDictionaryDerived.h"
@@ -68,11 +69,12 @@ void DictionaryTest::set(const InternalDictionary& testingDictionary) {
         testingDictionary.doubleOrStringSequenceMember();
   m_eventTargetOrNullMember = testingDictionary.eventTargetOrNullMember();
   if (testingDictionary.hasDictionaryMember()) {
-    HashMap<String, String> properties;
-    testingDictionary.dictionaryMember().getOwnPropertiesAsStringHashMap(
-        properties);
-    m_dictionaryMemberProperties = properties;
+    NonThrowableExceptionState exceptionState;
+    m_dictionaryMemberProperties =
+        testingDictionary.dictionaryMember().getOwnPropertiesAsStringHashMap(
+            exceptionState);
   }
+  m_prefixGetMember = testingDictionary.getPrefixGetMember();
 }
 
 void DictionaryTest::get(InternalDictionary& result) {
@@ -119,6 +121,7 @@ void DictionaryTest::get(InternalDictionary& result) {
     result.setDoubleOrStringSequenceMember(
         m_doubleOrStringSequenceMember.get());
   result.setEventTargetOrNullMember(m_eventTargetOrNullMember);
+  result.setPrefixGetMember(m_prefixGetMember);
 }
 
 ScriptValue DictionaryTest::getDictionaryMemberProperties(
@@ -163,10 +166,11 @@ void DictionaryTest::getDerivedDerived(
 }
 
 String DictionaryTest::stringFromIterable(
-    ExecutionContext* executionContext,
+    ScriptState* scriptState,
     Dictionary iterable,
     ExceptionState& exceptionState) const {
   StringBuilder result;
+  ExecutionContext* executionContext = scriptState->getExecutionContext();
   DictionaryIterator iterator = iterable.getIterator(executionContext);
   if (iterator.isNull())
     return emptyString();
@@ -218,6 +222,7 @@ void DictionaryTest::reset() {
   m_derivedStringMemberWithDefault = String();
   m_requiredBooleanMember = false;
   m_dictionaryMemberProperties = nullptr;
+  m_prefixGetMember = ScriptValue();
 }
 
 DEFINE_TRACE(DictionaryTest) {

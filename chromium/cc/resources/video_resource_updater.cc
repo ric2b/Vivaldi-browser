@@ -91,6 +91,7 @@ VideoFrameExternalResources::ResourceType ResourceTypeForVideoFrame(
     case media::PIXEL_FORMAT_YUV444P12:
     case media::PIXEL_FORMAT_Y8:
     case media::PIXEL_FORMAT_Y16:
+    case media::PIXEL_FORMAT_I422:
     case media::PIXEL_FORMAT_UNKNOWN:
       break;
   }
@@ -406,6 +407,7 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
     case media::PIXEL_FORMAT_MJPEG:
     case media::PIXEL_FORMAT_MT21:
     case media::PIXEL_FORMAT_Y8:
+    case media::PIXEL_FORMAT_I422:
       bits_per_channel = 8;
       break;
     case media::PIXEL_FORMAT_YUV420P9:
@@ -711,8 +713,8 @@ void VideoResourceUpdater::CopyPlaneTexture(
   gl->WaitSyncTokenCHROMIUM(mailbox_holder.sync_token.GetConstData());
   uint32_t src_texture_id = gl->CreateAndConsumeTextureCHROMIUM(
       mailbox_holder.texture_target, mailbox_holder.mailbox.name);
-  gl->CopySubTextureCHROMIUM(src_texture_id, lock.texture_id(), 0, 0, 0, 0,
-                             output_plane_resource_size.width(),
+  gl->CopySubTextureCHROMIUM(src_texture_id, 0, lock.texture_id(), 0, 0, 0, 0,
+                             0, output_plane_resource_size.width(),
                              output_plane_resource_size.height(), false, false,
                              false);
   gl->DeleteTextures(1, &src_texture_id);
@@ -768,6 +770,12 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
                                  media::VideoFrameMetadata::ALLOW_OVERLAY),
                              false);
       mailbox.set_color_space(video_frame->ColorSpace());
+#if defined(OS_ANDROID)
+      mailbox.set_is_backed_by_surface_texture(video_frame->metadata()->IsTrue(
+          media::VideoFrameMetadata::SURFACE_TEXTURE));
+      mailbox.set_wants_promotion_hint(video_frame->metadata()->IsTrue(
+          media::VideoFrameMetadata::WANTS_PROMOTION_HINT));
+#endif
       external_resources.mailboxes.push_back(mailbox);
       external_resources.release_callbacks.push_back(
           base::Bind(&ReturnTexture, AsWeakPtr(), video_frame));

@@ -57,8 +57,11 @@ struct WindowPortPropertyData;
 class WindowTreeClientDelegate;
 class WindowTreeClientPrivate;
 class WindowTreeClientObserver;
-class WindowTreeHost;
 class WindowTreeHostMus;
+
+namespace client {
+class CaptureClient;
+}
 
 using EventResultCallback = base::Callback<void(ui::mojom::EventResult)>;
 
@@ -81,25 +84,25 @@ class AURA_EXPORT WindowTreeClient
       public client::TransientWindowClientObserver {
  public:
   explicit WindowTreeClient(
+      service_manager::Connector* connector,
       WindowTreeClientDelegate* delegate,
       WindowManagerDelegate* window_manager_delegate = nullptr,
       ui::mojom::WindowTreeClientRequest request = nullptr);
   ~WindowTreeClient() override;
 
   // Establishes the connection by way of the WindowTreeFactory.
-  void ConnectViaWindowTreeFactory(service_manager::Connector* connector);
+  void ConnectViaWindowTreeFactory();
 
   // Establishes the connection by way of WindowManagerWindowTreeFactory.
-  void ConnectAsWindowManager(service_manager::Connector* connector);
+  void ConnectAsWindowManager();
+
+  service_manager::Connector* connector() { return connector_; }
 
   bool connected() const { return tree_ != nullptr; }
   ClientSpecificId client_id() const { return client_id_; }
 
-  void SetClientArea(Window* window,
-                     const gfx::Insets& client_area,
-                     const std::vector<gfx::Rect>& additional_client_areas);
-  void SetHitTestMask(Window* window, const gfx::Rect& mask);
-  void ClearHitTestMask(Window* window);
+  client::CaptureClient* GetCaptureClient();
+
   void SetCanFocus(Window* window, bool can_focus);
   void SetCanAcceptDrops(Id window_id, bool can_accept_drops);
   void SetCanAcceptEvents(Id window_id, bool can_accept_events);
@@ -112,18 +115,17 @@ class AURA_EXPORT WindowTreeClient
                         bool visible,
                         mojo::TextInputStatePtr state);
 
-  // TODO: this should take a window, not an id.
-  void Embed(Id window_id,
+  // Embeds a new client in |window|. |flags| is a bitmask of the values defined
+  // by kEmbedFlag*; 0 gives default behavior. |callback| is called to indicate
+  // whether the embedding succeeded or failed and may be called immediately if
+  // the embedding is known to fail.
+  void Embed(Window* window,
              ui::mojom::WindowTreeClientPtr client,
              uint32_t flags,
              const ui::mojom::WindowTree::EmbedCallback& callback);
 
-  // TODO: this should move to WindowManager.
-  void RequestClose(Window* window);
-
   void AttachCompositorFrameSink(
       Id window_id,
-      ui::mojom::CompositorFrameSinkType type,
       cc::mojom::MojoCompositorFrameSinkRequest compositor_frame_sink,
       cc::mojom::MojoCompositorFrameSinkClientPtr client);
 
@@ -131,6 +133,9 @@ class AURA_EXPORT WindowTreeClient
 
   // Returns the root of this connection.
   std::set<Window*> GetRoots();
+
+  // Returns true if the specified window was created by this client.
+  bool WasCreatedByThisClient(const WindowMus* window) const;
 
   // Returns the current location of the mouse on screen. Note: this method may
   // race the asynchronous initialization; but in that case we return (0, 0).
@@ -164,6 +169,11 @@ class AURA_EXPORT WindowTreeClient
   friend class WindowPortMus;
   friend class WindowTreeClientPrivate;
 
+  enum class Origin {
+    CLIENT,
+    SERVER,
+  };
+
   using IdToWindowMap = std::map<Id, WindowMus*>;
 
   // TODO(sky): this assumes change_ids never wrap, which is a bad assumption.
@@ -173,8 +183,7 @@ class AURA_EXPORT WindowTreeClient
 
   WindowMus* GetWindowByServerId(Id id);
 
-  // Returns true if the specified window was created by this client.
-  bool WasCreatedByThisClient(const WindowMus* window) const;
+  bool IsWindowKnown(aura::Window* window);
 
   // Returns the oldest InFlightChange that matches |change|.
   InFlightChange* GetOldestInFlightChangeMatching(const InFlightChange& change);
@@ -188,27 +197,31 @@ class AURA_EXPORT WindowTreeClient
   // See InFlightChange for details on how InFlightChanges are used.
   bool ApplyServerChangeToExistingInFlightChange(const InFlightChange& change);
 
-  void BuildWindowTree(const mojo::Array<ui::mojom::WindowDataPtr>& windows);
+  void BuildWindowTree(const std::vector<ui::mojom::WindowDataPtr>& windows);
+
+  // If the window identified by |window_data| doesn't exist a new window is
+  // created, otherwise the existing window is updated based on |window_data|.
+  void CreateOrUpdateWindowFromWindowData(
+      const ui::mojom::WindowData& window_data);
 
   // Creates a WindowPortMus from the server side data.
   std::unique_ptr<WindowPortMus> CreateWindowPortMus(
-      const ui::mojom::WindowDataPtr& window_data,
+      const ui::mojom::WindowData& window_data,
       WindowMusType window_mus_type);
 
   // Sets local properties on the associated Window from the server properties.
   void SetLocalPropertiesFromServerProperties(
       WindowMus* window,
-      const ui::mojom::WindowDataPtr& window_data);
+      const ui::mojom::WindowData& window_data);
 
   // Creates a new WindowTreeHostMus.
   std::unique_ptr<WindowTreeHostMus> CreateWindowTreeHost(
       WindowMusType window_mus_type,
-      const ui::mojom::WindowDataPtr& window_data,
+      const ui::mojom::WindowData& window_data,
       int64_t display_id);
 
-  WindowMus* NewWindowFromWindowData(
-      WindowMus* parent,
-      const ui::mojom::WindowDataPtr& window_data);
+  WindowMus* NewWindowFromWindowData(WindowMus* parent,
+                                     const ui::mojom::WindowData& window_data);
 
   // Sets the ui::mojom::WindowTree implementation.
   void SetWindowTree(ui::mojom::WindowTreePtr window_tree_ptr);
@@ -232,9 +245,9 @@ class AURA_EXPORT WindowTreeClient
                    bool drawn);
 
   // Called by WmNewDisplayAdded().
-  WindowTreeHost* WmNewDisplayAddedImpl(const display::Display& display,
-                                        ui::mojom::WindowDataPtr root_data,
-                                        bool parent_drawn);
+  WindowTreeHostMus* WmNewDisplayAddedImpl(const display::Display& display,
+                                           ui::mojom::WindowDataPtr root_data,
+                                           bool parent_drawn);
 
   std::unique_ptr<EventResultCallback> CreateEventResultCallback(
       int32_t event_id);
@@ -244,7 +257,7 @@ class AURA_EXPORT WindowTreeClient
   // Called when a property needs to change as the result of a change in the
   // server, or the server failing to accept a change.
   void SetWindowBoundsFromServer(WindowMus* window,
-                                 const gfx::Rect& revert_bounds);
+                                 const gfx::Rect& revert_bounds_in_pixels);
   void SetWindowVisibleFromServer(WindowMus* window, bool visible);
 
   // Called from OnWindowMusBoundsChanged() and SetRootWindowBounds().
@@ -254,7 +267,7 @@ class AURA_EXPORT WindowTreeClient
 
   // Following are called from WindowMus.
   void OnWindowMusCreated(WindowMus* window);
-  void OnWindowMusDestroyed(WindowMus* window);
+  void OnWindowMusDestroyed(WindowMus* window, Origin origin);
   void OnWindowMusBoundsChanged(WindowMus* window,
                                 const gfx::Rect& old_bounds,
                                 const gfx::Rect& new_bounds);
@@ -295,7 +308,7 @@ class AURA_EXPORT WindowTreeClient
   void OnClientAreaChanged(
       uint32_t window_id,
       const gfx::Insets& new_client_area,
-      mojo::Array<gfx::Rect> new_additional_client_areas) override;
+      const std::vector<gfx::Rect>& new_additional_client_areas) override;
   void OnTransientWindowAdded(uint32_t window_id,
                               uint32_t transient_window_id) override;
   void OnTransientWindowRemoved(uint32_t window_id,
@@ -304,7 +317,7 @@ class AURA_EXPORT WindowTreeClient
       Id window_id,
       Id old_parent_id,
       Id new_parent_id,
-      mojo::Array<ui::mojom::WindowDataPtr> windows) override;
+      std::vector<ui::mojom::WindowDataPtr> windows) override;
   void OnWindowReordered(Id window_id,
                          Id relative_window_id,
                          ui::mojom::OrderDirection direction) override;
@@ -316,8 +329,8 @@ class AURA_EXPORT WindowTreeClient
   void OnWindowParentDrawnStateChanged(Id window_id, bool drawn) override;
   void OnWindowSharedPropertyChanged(
       Id window_id,
-      const mojo::String& name,
-      mojo::Array<uint8_t> transport_data) override;
+      const std::string& name,
+      const base::Optional<std::vector<uint8_t>>& transport_data) override;
   void OnWindowInputEvent(uint32_t event_id,
                           Id window_id,
                           std::unique_ptr<ui::Event> event,
@@ -328,11 +341,10 @@ class AURA_EXPORT WindowTreeClient
   void OnWindowPredefinedCursorChanged(Id window_id,
                                        ui::mojom::Cursor cursor) override;
   void OnWindowSurfaceChanged(Id window_id,
-                              const cc::SurfaceId& surface_id,
-                              const gfx::Size& frame_size,
-                              float device_scale_factor) override;
+                              const cc::SurfaceInfo& surface_info) override;
   void OnDragDropStart(
-      mojo::Map<mojo::String, mojo::Array<uint8_t>> mime_data) override;
+      const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data)
+      override;
   void OnDragEnter(Id window_id,
                    uint32_t event_flags,
                    const gfx::Point& position,
@@ -367,15 +379,17 @@ class AURA_EXPORT WindowTreeClient
   void WmDisplayModified(const display::Display& display) override;
   void WmSetBounds(uint32_t change_id,
                    Id window_id,
-                   const gfx::Rect& transit_bounds) override;
-  void WmSetProperty(uint32_t change_id,
-                     Id window_id,
-                     const mojo::String& name,
-                     mojo::Array<uint8_t> transit_data) override;
-  void WmCreateTopLevelWindow(uint32_t change_id,
-                              ClientSpecificId requesting_client_id,
-                              mojo::Map<mojo::String, mojo::Array<uint8_t>>
-                                  transport_properties) override;
+                   const gfx::Rect& transit_bounds_in_pixels) override;
+  void WmSetProperty(
+      uint32_t change_id,
+      Id window_id,
+      const std::string& name,
+      const base::Optional<std::vector<uint8_t>>& transit_data) override;
+  void WmCreateTopLevelWindow(
+      uint32_t change_id,
+      ClientSpecificId requesting_client_id,
+      const std::unordered_map<std::string, std::vector<uint8_t>>&
+          transport_properties) override;
   void WmClientJankinessChanged(ClientSpecificId client_id,
                                 bool janky) override;
   void WmPerformMoveLoop(uint32_t change_id,
@@ -383,6 +397,7 @@ class AURA_EXPORT WindowTreeClient
                          ui::mojom::MoveLoopSource source,
                          const gfx::Point& cursor_location) override;
   void WmCancelMoveLoop(uint32_t window_id) override;
+  void WmDeactivateWindow(Id window_id) override;
   void OnAccelerator(uint32_t ack_id,
                      uint32_t accelerator_id,
                      std::unique_ptr<ui::Event> event) override;
@@ -391,9 +406,8 @@ class AURA_EXPORT WindowTreeClient
   void SetFrameDecorationValues(
       ui::mojom::FrameDecorationValuesPtr values) override;
   void SetNonClientCursor(Window* window, ui::mojom::Cursor cursor_id) override;
-  void AddAccelerator(uint32_t id,
-                      ui::mojom::EventMatcherPtr event_matcher,
-                      const base::Callback<void(bool)>& callback) override;
+  void AddAccelerators(std::vector<ui::mojom::AcceleratorPtr> accelerators,
+                       const base::Callback<void(bool)>& callback) override;
   void RemoveAccelerator(uint32_t id) override;
   void AddActivationParent(Window* window) override;
   void RemoveActivationParent(Window* window) override;
@@ -402,11 +416,22 @@ class AURA_EXPORT WindowTreeClient
       Window* window,
       const gfx::Vector2d& offset,
       const gfx::Insets& hit_area) override;
+  void RequestClose(Window* window) override;
 
   // Overriden from WindowTreeHostMusDelegate:
   void OnWindowTreeHostBoundsWillChange(WindowTreeHostMus* window_tree_host,
                                         const gfx::Rect& bounds) override;
-  std::unique_ptr<WindowPortMus> CreateWindowPortForTopLevel() override;
+  void OnWindowTreeHostClientAreaWillChange(
+      WindowTreeHostMus* window_tree_host,
+      const gfx::Insets& client_area,
+      const std::vector<gfx::Rect>& additional_client_areas) override;
+  void OnWindowTreeHostHitTestMaskWillChange(
+      WindowTreeHostMus* window_tree_host,
+      const base::Optional<gfx::Rect>& mask_rect) override;
+  void OnWindowTreeHostDeactivateWindow(
+      WindowTreeHostMus* window_tree_host) override;
+  std::unique_ptr<WindowPortMus> CreateWindowPortForTopLevel(
+      const std::map<std::string, std::vector<uint8_t>>* properties) override;
   void OnWindowTreeHostCreated(WindowTreeHostMus* window_tree_host) override;
 
   // Override from client::TransientWindowClientObserver:
@@ -414,6 +439,10 @@ class AURA_EXPORT WindowTreeClient
                                    Window* transient_child) override;
   void OnTransientChildWindowRemoved(Window* parent,
                                      Window* transient_child) override;
+  void OnWillRestackTransientChildAbove(Window* parent,
+                                        Window* transient_child) override;
+  void OnDidRestackTransientChildAbove(Window* parent,
+                                       Window* transient_child) override;
 
   // Overriden from DragDropControllerHost:
   uint32_t CreateChangeIdForDrag(WindowMus* window) override;
@@ -430,6 +459,9 @@ class AURA_EXPORT WindowTreeClient
     return reinterpret_cast<base::subtle::Atomic32*>(
         cursor_location_mapping_.get());
   }
+
+  // This may be null in tests.
+  service_manager::Connector* connector_;
 
   // This is set once and only once when we get OnEmbed(). It gives the unique
   // id for this client.

@@ -341,13 +341,23 @@ ExtensionDevToolsClientHost::ExtensionDevToolsClientHost(
   // Attach to debugger and tell it we are ready.
   agent_host_->AttachClient(this);
 
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           ::switches::kSilentDebuggerExtensionAPI)) {
-    infobar_ = ExtensionDevToolsInfoBar::Create(
-        extension_id, extension_name, this,
-        base::Bind(&ExtensionDevToolsClientHost::InfoBarDismissed,
-                   base::Unretained(this)));
+    return;
   }
+
+  // We allow policy-installed extensions to circumvent the normal
+  // infobar warning. See crbug.com/693621.
+  const Extension* extension =
+      ExtensionRegistry::Get(profile)->enabled_extensions().GetByID(
+          extension_id);
+  if (extension && Manifest::IsPolicyLocation(extension->location()))
+    return;
+
+  infobar_ = ExtensionDevToolsInfoBar::Create(
+      extension_id, extension_name, this,
+      base::Bind(&ExtensionDevToolsClientHost::InfoBarDismissed,
+                 base::Unretained(this)));
 }
 
 ExtensionDevToolsClientHost::~ExtensionDevToolsClientHost() {
@@ -432,7 +442,7 @@ void ExtensionDevToolsClientHost::DispatchProtocolMessage(
     return;
 
   std::unique_ptr<base::Value> result = base::JSONReader::Read(message);
-  if (!result || !result->IsType(base::Value::TYPE_DICTIONARY))
+  if (!result || !result->IsType(base::Value::Type::DICTIONARY))
     return;
   base::DictionaryValue* dictionary =
       static_cast<base::DictionaryValue*>(result.get());

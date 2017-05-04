@@ -17,7 +17,8 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/themes/theme_service.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
-#include "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_cell.h"
+#import "chrome/browser/ui/cocoa/l10n_util.h"
+#import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_cell.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_editor.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_popup_view_mac.h"
 #include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"
@@ -80,19 +81,6 @@ namespace {
 const int kOmniboxLargeFontSizeDelta = 9;
 const int kOmniboxNormalFontSizeDelta = 1;
 const int kOmniboxSmallMaterialFontSizeDelta = -1;
-
-// TODO(shess): This is ugly, find a better way.  Using it right now
-// so that I can crib from gtk and still be able to see that I'm using
-// the same values easily.
-NSColor* ColorWithRGBBytes(int rr, int gg, int bb) {
-  DCHECK_LE(rr, 255);
-  DCHECK_LE(bb, 255);
-  DCHECK_LE(gg, 255);
-  return [NSColor colorWithCalibratedRed:static_cast<float>(rr)/255.0
-                                   green:static_cast<float>(gg)/255.0
-                                    blue:static_cast<float>(bb)/255.0
-                                   alpha:1.0];
-}
 
 NSColor* HostTextColor(bool in_dark_mode) {
   return in_dark_mode ? [NSColor whiteColor] : [NSColor blackColor];
@@ -543,6 +531,10 @@ void OmniboxViewMac::ApplyTextStyle(
   [paragraph_style setMaximumLineHeight:line_height];
   [paragraph_style setMinimumLineHeight:line_height];
   [paragraph_style setLineBreakMode:NSLineBreakByTruncatingTail];
+  // Set an explicit alignment so it isn't implied from writing direction.
+  [paragraph_style setAlignment:cocoa_l10n_util::ShouldDoExperimentalRTLLayout()
+                                    ? NSRightTextAlignment
+                                    : NSLeftTextAlignment];
   // If this is a URL, set the top-level paragraph direction to LTR (avoids RTL
   // characters from making the URL render from right to left, as per RFC 3987
   // Section 4.1).
@@ -716,19 +708,6 @@ gfx::NativeView OmniboxViewMac::GetRelativeWindowForPopup() const {
   return NULL;
 }
 
-void OmniboxViewMac::SetGrayTextAutocompletion(
-    const base::string16& suggest_text) {
-  if (suggest_text == suggest_text_)
-    return;
-  suggest_text_ = suggest_text;
-  [field_ setGrayTextAutocompletion:base::SysUTF16ToNSString(suggest_text)
-                          textColor:SuggestTextColor()];
-}
-
-base::string16 OmniboxViewMac::GetGrayTextAutocompletion() const {
-  return suggest_text_;
-}
-
 int OmniboxViewMac::GetTextWidth() const {
   // Not used on mac.
   NOTREACHED();
@@ -813,15 +792,6 @@ bool OmniboxViewMac::OnDoCommandBySelector(SEL cmd) {
         cmd == @selector(insertTabIgnoringFieldEditor:)) &&
         !model()->is_keyword_hint()) {
       model()->OnUpOrDownKeyPressed(1);
-      return true;
-    }
-  }
-
-  if (cmd == @selector(moveRight:)) {
-    // Only commit suggested text if the cursor is all the way to the right and
-    // there is no selection.
-    if (suggest_text_.length() > 0 && IsCaretAtEnd()) {
-      model()->CommitSuggestedText();
       return true;
     }
   }

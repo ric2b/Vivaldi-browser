@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/web/public/web_view_creation_util.h"
+#import "ios/web/public/web_view_creation_util.h"
 
 #include "base/logging.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
@@ -14,13 +14,20 @@
 
 namespace web {
 
-WKWebView* CreateWKWebView(CGRect frame, BrowserState* browser_state) {
+WKWebView* BuildWKWebView(CGRect frame, BrowserState* browser_state) {
+  return BuildWKWebViewWithCustomContextMenu(frame, browser_state, nil);
+}
+
+WKWebView* BuildWKWebViewWithCustomContextMenu(
+    CGRect frame,
+    BrowserState* browser_state,
+    id<CRWContextMenuDelegate> context_menu_delegate) {
   DCHECK(browser_state);
 
   WKWebViewConfigurationProvider& config_provider =
       WKWebViewConfigurationProvider::FromBrowserState(browser_state);
-  return CreateWKWebView(frame, config_provider.GetWebViewConfiguration(),
-                         browser_state);
+  return BuildWKWebView(frame, config_provider.GetWebViewConfiguration(),
+                        browser_state, NO, context_menu_delegate);
 }
 
 }  // namespace web

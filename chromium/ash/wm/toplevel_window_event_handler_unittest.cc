@@ -5,6 +5,7 @@
 #include "ash/wm/toplevel_window_event_handler.h"
 
 #include "ash/common/wm/window_state.h"
+#include "ash/common/wm/wm_event.h"
 #include "ash/common/wm/workspace_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
@@ -16,6 +17,7 @@
 #include "ash/wm/window_util.h"
 #include "base/compiler_specific.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
@@ -23,18 +25,13 @@
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/hit_test.h"
+#include "ui/display/display_layout_builder.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/public/window_move_client.h"
-
-#if defined(OS_WIN)
-// Windows headers define macros for these function names which screw with us.
-#if defined(CreateWindow)
-#undef CreateWindow
-#endif
-#endif
 
 namespace ash {
 namespace test {
@@ -107,6 +104,67 @@ TEST_F(ToplevelWindowEventHandlerTest, Caption) {
   // Position should have been offset by 100,100.
   EXPECT_EQ("200,200", w1->bounds().origin().ToString());
   // Size should not have.
+  EXPECT_EQ(size.ToString(), w1->bounds().size().ToString());
+}
+
+namespace {
+
+void ContinueAndCompleteDrag(ui::test::EventGenerator* generator,
+                             wm::WindowState* window_state,
+                             aura::Window* window) {
+  ASSERT_TRUE(window->HasCapture());
+  ASSERT_FALSE(window_state->window_position_managed());
+  generator->DragMouseBy(100, 100);
+  generator->ReleaseLeftButton();
+}
+
+}  // namespace
+
+// Tests dragging restores expected window position auto manage property
+// correctly.
+TEST_F(ToplevelWindowEventHandlerTest, WindowPositionAutoManagement) {
+  std::unique_ptr<aura::Window> w1(CreateWindow(HTNOWHERE));
+  const gfx::Size size = w1->bounds().size();
+  wm::WindowState* window_state = ash::wm::GetWindowState(w1.get());
+  ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow(), w1.get());
+
+  // Explicitly enable window position auto management, and expect it to be
+  // restored after drag completes.
+  window_state->set_window_position_managed(true);
+  generator.PressLeftButton();
+  aura::client::WindowMoveClient* move_client =
+      aura::client::GetWindowMoveClient(w1->GetRootWindow());
+  // generator.PressLeftButton();
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(&ContinueAndCompleteDrag, base::Unretained(&generator),
+                 base::Unretained(window_state), base::Unretained(w1.get())));
+  EXPECT_EQ(aura::client::MOVE_SUCCESSFUL,
+            move_client->RunMoveLoop(w1.get(), gfx::Vector2d(100, 100),
+                                     aura::client::WINDOW_MOVE_SOURCE_MOUSE));
+  // Window position auto manage property should be restored to true.
+  EXPECT_TRUE(window_state->window_position_managed());
+  // Position should have been offset by 100,100.
+  EXPECT_EQ("100,100", w1->bounds().origin().ToString());
+  // Size should remain the same.
+  EXPECT_EQ(size.ToString(), w1->bounds().size().ToString());
+
+  // Explicitly disable window position auto management, and expect it to be
+  // restored after drag completes.
+  window_state->set_window_position_managed(false);
+  generator.PressLeftButton();
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(&ContinueAndCompleteDrag, base::Unretained(&generator),
+                 base::Unretained(window_state), base::Unretained(w1.get())));
+  EXPECT_EQ(aura::client::MOVE_SUCCESSFUL,
+            move_client->RunMoveLoop(w1.get(), gfx::Vector2d(100, 100),
+                                     aura::client::WINDOW_MOVE_SOURCE_MOUSE));
+  // Window position auto manage property should be restored to true.
+  EXPECT_FALSE(window_state->window_position_managed());
+  // Position should have been offset by 100,100.
+  EXPECT_EQ("200,200", w1->bounds().origin().ToString());
+  // Size should remain the same.
   EXPECT_EQ(size.ToString(), w1->bounds().size().ToString());
 }
 
@@ -433,7 +491,10 @@ TEST_F(ToplevelWindowEventHandlerTest, GestureDrag) {
                                      target.get());
   gfx::Rect old_bounds = target->bounds();
   gfx::Point location(5, 5);
-  target->SetProperty(aura::client::kCanMaximizeKey, true);
+  target->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanResize |
+                          ui::mojom::kResizeBehaviorCanMaximize |
+                          ui::mojom::kResizeBehaviorCanMinimize);
 
   gfx::Point end = location;
 
@@ -499,8 +560,8 @@ TEST_F(ToplevelWindowEventHandlerTest,
   ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow(),
                                      target.get());
   gfx::Point location(5, 5);
-  target->SetProperty(aura::client::kCanMaximizeKey, true);
-  target->SetProperty(aura::client::kCanMinimizeKey, false);
+  target->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanMaximize);
 
   gfx::Point end = location;
   end.Offset(0, 100);
@@ -543,7 +604,8 @@ TEST_F(ToplevelWindowEventHandlerTest, GestureDragForUnresizableWindow) {
   gfx::Rect old_bounds = target->bounds();
   gfx::Point location(5, 5);
 
-  target->SetProperty(aura::client::kCanResizeKey, false);
+  target->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorNone);
 
   gfx::Point end = location;
 
@@ -589,7 +651,6 @@ TEST_F(ToplevelWindowEventHandlerTest, GestureDragMultipleWindows) {
   ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow(),
                                      target.get());
   gfx::Point location(5, 5);
-  target->SetProperty(aura::client::kCanMaximizeKey, true);
 
   // Send some touch events to start dragging |target|.
   generator.MoveTouch(location);
@@ -610,13 +671,7 @@ TEST_F(ToplevelWindowEventHandlerTest, GestureDragMultipleWindows) {
 }
 
 // Verifies pressing escape resets the bounds to the original bounds.
-// Disabled crbug.com/166219.
-#if defined(OS_WIN)
-#define MAYBE_EscapeReverts DISABLED_EscapeReverts
-#else
-#define MAYBE_EscapeReverts EscapeReverts
-#endif
-TEST_F(ToplevelWindowEventHandlerTest, MAYBE_EscapeReverts) {
+TEST_F(ToplevelWindowEventHandlerTest, EscapeReverts) {
   std::unique_ptr<aura::Window> target(CreateWindow(HTBOTTOMRIGHT));
   ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow(),
                                      target.get());
@@ -633,13 +688,7 @@ TEST_F(ToplevelWindowEventHandlerTest, MAYBE_EscapeReverts) {
 }
 
 // Verifies window minimization/maximization completes drag.
-// Disabled crbug.com/166219.
-#if defined(OS_WIN)
-#define MAYBE_MinimizeMaximizeCompletes DISABLED_MinimizeMaximizeCompletes
-#else
-#define MAYBE_MinimizeMaximizeCompletes MinimizeMaximizeCompletes
-#endif
-TEST_F(ToplevelWindowEventHandlerTest, MAYBE_MinimizeMaximizeCompletes) {
+TEST_F(ToplevelWindowEventHandlerTest, MinimizeMaximizeCompletes) {
   // Once window is minimized, window dragging completes.
   {
     std::unique_ptr<aura::Window> target(CreateWindow(HTCAPTION));
@@ -760,6 +809,46 @@ TEST_F(ToplevelWindowEventHandlerTest, GestureDragCaptureLoss) {
   EXPECT_EQ(aura::client::MOVE_SUCCESSFUL,
             move_client->RunMoveLoop(window.get(), gfx::Vector2d(),
                                      aura::client::WINDOW_MOVE_SOURCE_TOUCH));
+}
+
+// Tests that dragging a snapped window to another display updates the window's
+// bounds correctly.
+TEST_F(ToplevelWindowEventHandlerTest, DragSnappedWindowToExternalDisplay) {
+  if (!SupportsMultipleDisplays())
+    return;
+
+  UpdateDisplay("940x550,940x550");
+  int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  int64_t secondary_id = display_manager()->GetSecondaryDisplay().id();
+  display::DisplayLayoutBuilder builder(primary_id);
+  builder.SetSecondaryPlacement(secondary_id, display::DisplayPlacement::TOP,
+                                0);
+  display_manager()->SetLayoutForCurrentDisplays(builder.Build());
+
+  const gfx::Size initial_window_size(330, 230);
+  std::unique_ptr<aura::Window> w1(CreateTestWindowInShellWithDelegateAndType(
+      new TestWindowDelegate(HTCAPTION), ui::wm::WINDOW_TYPE_NORMAL, 0,
+      gfx::Rect(initial_window_size)));
+
+  // Snap the window to the right.
+  wm::WindowState* window_state = wm::GetWindowState(w1.get());
+  ASSERT_TRUE(window_state->CanSnap());
+  const wm::WMEvent event(wm::WM_EVENT_CYCLE_SNAP_DOCK_RIGHT);
+  window_state->OnWMEvent(&event);
+  ASSERT_TRUE(window_state->IsSnapped());
+
+  // Drag the window to the secondary display.
+  ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow(), w1.get());
+  generator.DragMouseTo(472, -462);
+
+  // Expect the window is no longer snapped and its size was restored to the
+  // initial size.
+  EXPECT_FALSE(window_state->IsSnapped());
+  EXPECT_EQ(initial_window_size.ToString(), w1->bounds().size().ToString());
+
+  // The window is now fully contained in the secondary display.
+  EXPECT_TRUE(display_manager()->GetSecondaryDisplay().bounds().Contains(
+      w1->GetBoundsInScreen()));
 }
 
 // Showing the resize shadows when the mouse is over the window edges is tested

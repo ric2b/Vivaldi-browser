@@ -5,3 +5,8 @@
 // On the form
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
+
+  // Proprietary media codec tests
+  DISABLE(WebRtcBrowserTest, RunsAudioVideoWebRTCCallInTwoTabsH264)
+  DISABLE(MediaTest, VideoBearRotated270)
+  DISABLE(MediaTest, VideoBearRotated90)

@@ -17,8 +17,8 @@
 #include "chrome/browser/android/offline_pages/offline_page_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "components/offline_pages/offline_page_model.h"
-#include "components/offline_pages/request_header/offline_page_header.h"
+#include "components/offline_pages/core/offline_page_model.h"
+#include "components/offline_pages/core/request_header/offline_page_header.h"
 #include "components/previews/core/previews_decider.h"
 #include "components/previews/core/previews_experiments.h"
 #include "content/public/browser/browser_thread.h"
@@ -134,6 +134,14 @@ NetworkState GetNetworkState(net::URLRequest* request,
 
   if (net::NetworkChangeNotifier::IsOffline())
     return NetworkState::DISCONNECTED_NETWORK;
+
+  // If offline header contains a reason other than RELOAD, the offline page
+  // should be forced to load even when the network is connected.
+  if (offline_header.reason != OfflinePageHeader::Reason::NONE &&
+      offline_header.reason != OfflinePageHeader::Reason::RELOAD) {
+    return NetworkState::FORCE_OFFLINE_ON_CONNECTED_NETWORK;
+  }
+
   // Checks if previews are allowed, the network is slow, and the request is
   // allowed to be shown for previews.
   if (previews_decider &&
@@ -142,12 +150,8 @@ NetworkState GetNetworkState(net::URLRequest* request,
     return NetworkState::PROHIBITIVELY_SLOW_NETWORK;
   }
 
-  // If offline header contains a reason other than RELOAD, the offline page
-  // should be forced to load even when the network is connected.
-  return (offline_header.reason != OfflinePageHeader::Reason::NONE &&
-          offline_header.reason != OfflinePageHeader::Reason::RELOAD)
-             ? NetworkState::FORCE_OFFLINE_ON_CONNECTED_NETWORK
-             : NetworkState::CONNECTED_NETWORK;
+  // Otherwise, the network state is a good network.
+  return NetworkState::CONNECTED_NETWORK;
 }
 
 OfflinePageRequestJob::AggregatedRequestResult
@@ -639,6 +643,25 @@ int OfflinePageRequestJob::GetResponseCode() const {
     return URLRequestFileJob::GetResponseCode();
 
   return net::URLRequestRedirectJob::REDIRECT_302_FOUND;
+}
+
+void OfflinePageRequestJob::OnOpenComplete(int result) {
+  UMA_HISTOGRAM_SPARSE_SLOWLY("OfflinePages.RequestJob.OpenFileErrorCode",
+                              -result);
+}
+
+void OfflinePageRequestJob::OnSeekComplete(int64_t result) {
+  if (result < 0) {
+    UMA_HISTOGRAM_SPARSE_SLOWLY("OfflinePages.RequestJob.SeekFileErrorCode",
+                                static_cast<int>(-result));
+  }
+}
+
+void OfflinePageRequestJob::OnReadComplete(net::IOBuffer* buf, int result) {
+  if (result < 0) {
+    UMA_HISTOGRAM_SPARSE_SLOWLY("OfflinePages.RequestJob.ReadFileErrorCode",
+                                -result);
+  }
 }
 
 void OfflinePageRequestJob::FallbackToDefault() {

@@ -95,7 +95,7 @@ class RequestCallbacks : public WebCredentialManagerClient::RequestCallbacks {
     SECURITY_CHECK(!frame || frame == frame->tree().top());
 
     std::unique_ptr<WebCredential> credential =
-        wrapUnique(webCredential.release());
+        WTF::wrapUnique(webCredential.release());
     if (!credential || !frame) {
       m_resolver->resolve();
       return;
@@ -177,7 +177,7 @@ ScriptPromise CredentialsContainer::get(
     for (const auto& string : providerStrings) {
       KURL url = KURL(KURL(), string);
       if (url.isValid())
-        providers.append(url);
+        providers.push_back(url);
     }
   }
 

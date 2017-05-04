@@ -14,7 +14,6 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
 #include "services/service_manager/connect_params.h"
-#include "services/service_manager/native_runner.h"
 #include "services/service_manager/public/cpp/identity.h"
 #include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/interface_provider_spec.h"
@@ -24,6 +23,7 @@
 #include "services/service_manager/public/interfaces/service.mojom.h"
 #include "services/service_manager/public/interfaces/service_factory.mojom.h"
 #include "services/service_manager/public/interfaces/service_manager.mojom.h"
+#include "services/service_manager/runner/host/service_process_launcher.h"
 #include "services/service_manager/service_overrides.h"
 
 namespace service_manager {
@@ -50,12 +50,11 @@ class ServiceManager {
     DISALLOW_COPY_AND_ASSIGN(TestAPI);
   };
 
-  // |native_runner_factory| is an instance of an object capable of vending
-  // implementations of NativeRunner, e.g. for in or out-of-process execution.
-  // See native_runner.h and RunNativeApplication().
-  // |file_task_runner| provides access to a thread to perform file copy
-  // operations on.
-  ServiceManager(std::unique_ptr<NativeRunnerFactory> native_runner_factory,
+  // |service_process_launcher_factory| is an instance of an object capable of
+  // vending implementations of ServiceProcessLauncher, e.g. for out-of-process
+  // execution.
+  ServiceManager(std::unique_ptr<ServiceProcessLauncherFactory>
+                     service_process_launcher_factory,
                  mojom::ServicePtr catalog);
   ~ServiceManager();
 
@@ -119,6 +118,10 @@ class ServiceManager {
   // running as a different user if one is available that services all users.
   Instance* GetExistingInstance(const Identity& identity) const;
 
+  // Erases any identities mapping to |instance|. Following this call it is
+  // impossible for any call to GetExistingInstance() to return |instance|.
+  void EraseInstanceIdentity(Instance* instance);
+
   void NotifyServiceStarted(const Identity& identity, base::ProcessId pid);
   void NotifyServiceFailedToStart(const Identity& identity);
 
@@ -152,23 +155,23 @@ class ServiceManager {
                          mojom::ServicePtr service,
                          bool has_source_instance,
                          base::WeakPtr<Instance> source_instance,
-                         mojom::ResolveResultPtr result);
+                         mojom::ResolveResultPtr result,
+                         mojom::ResolveResultPtr parent);
 
   base::WeakPtr<ServiceManager> GetWeakPtr();
 
   std::unique_ptr<ServiceOverrides> service_overrides_;
 
-  // Ownership of all root Instances. Non-root Instances are owned by their
-  // parent Instance.
+  // Ownership of all Instances.
   using InstanceMap = std::map<Instance*, std::unique_ptr<Instance>>;
-  InstanceMap root_instances_;
+  InstanceMap instances_;
 
   // Maps service identities to reachable instances. Note that the Instance*
   // values here are NOT owned by this map.
   std::map<Identity, Instance*> identity_to_instance_;
 
   // Always points to the ServiceManager's own Instance. Note that this
-  // Instance still has an entry in |root_instances_|.
+  // Instance still has an entry in |instances_|.
   Instance* service_manager_instance_;
 
   // Tracks the names of instances that are allowed to field connection requests
@@ -179,7 +182,8 @@ class ServiceManager {
   std::map<Identity, mojom::ResolverPtr> identity_to_resolver_;
   mojo::InterfacePtrSet<mojom::ServiceManagerListener> listeners_;
   base::Callback<void(const Identity&)> instance_quit_callback_;
-  std::unique_ptr<NativeRunnerFactory> native_runner_factory_;
+  std::unique_ptr<ServiceProcessLauncherFactory>
+      service_process_launcher_factory_;
   std::unique_ptr<ServiceContext> service_context_;
   base::WeakPtrFactory<ServiceManager> weak_ptr_factory_;
 

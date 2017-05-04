@@ -15,9 +15,10 @@
 #include "base/test/histogram_tester.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "content/browser/media/session/audio_focus_delegate.h"
+#include "content/browser/media/session/media_session_service_impl.h"
+#include "content/browser/media/session/mock_media_session_observer.h"
 #include "content/browser/media/session/mock_media_session_player_observer.h"
 #include "content/public/browser/media_session.h"
-#include "content/public/browser/media_session_observer.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/shell/browser/shell.h"
@@ -52,14 +53,11 @@ class MockAudioFocusDelegate : public AudioFocusDelegate {
   MOCK_METHOD0(AbandonAudioFocus, void());
 };
 
-class MockMediaSessionObserver : public MediaSessionObserver {
+class MockMediaSessionServiceImpl : public content::MediaSessionServiceImpl {
  public:
-  MockMediaSessionObserver(MediaSession* media_session)
-      : MediaSessionObserver(media_session) {}
-
-  MOCK_METHOD2(MediaSessionStateChanged,
-               void(bool is_controllable, bool is_suspended));
-  MOCK_METHOD0(MediaSessionDestroyed, void());
+  explicit MockMediaSessionServiceImpl(content::RenderFrameHost* rfh)
+      : MediaSessionServiceImpl(rfh) {}
+  ~MockMediaSessionServiceImpl() override = default;
 };
 
 }  // namespace
@@ -73,7 +71,7 @@ class MediaSessionImplBrowserTest : public content::ContentBrowserTest {
 
     media_session_ = MediaSessionImpl::Get(shell()->web_contents());
     mock_media_session_observer_.reset(
-        new MockMediaSessionObserver(media_session_));
+        new content::MockMediaSessionObserver(media_session_));
     mock_audio_focus_delegate_ = new MockAudioFocusDelegate;
     media_session_->SetDelegateForTests(
         base::WrapUnique(mock_audio_focus_delegate_));
@@ -82,8 +80,9 @@ class MediaSessionImplBrowserTest : public content::ContentBrowserTest {
 
   void TearDownOnMainThread() override {
     mock_media_session_observer_.reset();
-
     media_session_->RemoveAllPlayersForTest();
+    mock_media_session_service_.reset();
+
     media_session_ = nullptr;
 
     ContentBrowserTest::TearDownOnMainThread();
@@ -145,7 +144,16 @@ class MediaSessionImplBrowserTest : public content::ContentBrowserTest {
 
   void SystemStopDucking() { media_session_->StopDucking(); }
 
-  MockMediaSessionObserver* mock_media_session_observer() {
+  void EnsureMediaSessionService() {
+    mock_media_session_service_.reset(new MockMediaSessionServiceImpl(
+        shell()->web_contents()->GetMainFrame()));
+  }
+
+  void SetPlaybackState(blink::mojom::MediaSessionPlaybackState state) {
+    mock_media_session_service_->SetPlaybackState(state);
+  }
+
+  content::MockMediaSessionObserver* mock_media_session_observer() {
     return mock_media_session_observer_.get();
   }
 
@@ -163,8 +171,10 @@ class MediaSessionImplBrowserTest : public content::ContentBrowserTest {
 
  protected:
   MediaSessionImpl* media_session_;
-  std::unique_ptr<MockMediaSessionObserver> mock_media_session_observer_;
+  std::unique_ptr<content::MockMediaSessionObserver>
+      mock_media_session_observer_;
   MockAudioFocusDelegate* mock_audio_focus_delegate_;
+  std::unique_ptr<MockMediaSessionServiceImpl> mock_media_session_service_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaSessionImplBrowserTest);
 };
@@ -1024,6 +1034,95 @@ IN_PROC_BROWSER_TEST_F(MediaSessionImplBrowserTest,
   StartNewPlayer(player_observer.get(), media::MediaContentType::OneShot);
   StartNewPlayer(player_observer.get(), media::MediaContentType::Persistent);
   RemovePlayer(player_observer.get(), 0);
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionImplBrowserTest,
+                       ActualPlaybackStateWhilePlayerPaused) {
+  EnsureMediaSessionService();
+  auto player_observer = base::MakeUnique<MockMediaSessionPlayerObserver>(
+      shell()->web_contents()->GetMainFrame());
+
+  ::testing::Sequence s;
+  EXPECT_CALL(*mock_media_session_observer(),
+              MediaSessionStateChanged(true, false))
+      .InSequence(s);
+  EXPECT_CALL(*mock_media_session_observer(),
+              MediaSessionStateChanged(true, true))
+      .InSequence(s);
+  EXPECT_CALL(*mock_media_session_observer(),
+              MediaSessionStateChanged(true, false))
+      .InSequence(s);
+  EXPECT_CALL(*mock_media_session_observer(),
+              MediaSessionStateChanged(true, true))
+      .InSequence(s);
+  EXPECT_CALL(*mock_media_session_observer(),
+              MediaSessionStateChanged(true, true))
+      .InSequence(s);
+
+  StartNewPlayer(player_observer.get(), media::MediaContentType::Persistent);
+  OnPlayerPaused(player_observer.get(), 0);
+  SetPlaybackState(blink::mojom::MediaSessionPlaybackState::PLAYING);
+  SetPlaybackState(blink::mojom::MediaSessionPlaybackState::PAUSED);
+  SetPlaybackState(blink::mojom::MediaSessionPlaybackState::NONE);
+
+  // Verify before test exists. Otherwise the sequence will expire and cause
+  // weird problems.
+  ::testing::Mock::VerifyAndClear(mock_media_session_observer());
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionImplBrowserTest,
+                       ActualPlaybackStateWhilePlayerPlaying) {
+  EnsureMediaSessionService();
+  auto player_observer = base::MakeUnique<MockMediaSessionPlayerObserver>(
+      shell()->web_contents()->GetMainFrame());
+  ::testing::Sequence s;
+  EXPECT_CALL(*mock_media_session_observer(),
+              MediaSessionStateChanged(true, false))
+      .InSequence(s);
+  EXPECT_CALL(*mock_media_session_observer(),
+              MediaSessionStateChanged(true, false))
+      .InSequence(s);
+  EXPECT_CALL(*mock_media_session_observer(),
+              MediaSessionStateChanged(true, false))
+      .InSequence(s);
+  EXPECT_CALL(*mock_media_session_observer(),
+              MediaSessionStateChanged(true, false))
+      .InSequence(s);
+
+  StartNewPlayer(player_observer.get(), media::MediaContentType::Persistent);
+  SetPlaybackState(blink::mojom::MediaSessionPlaybackState::PLAYING);
+  SetPlaybackState(blink::mojom::MediaSessionPlaybackState::PAUSED);
+  SetPlaybackState(blink::mojom::MediaSessionPlaybackState::NONE);
+
+  // Verify before test exists. Otherwise the sequence will expire and cause
+  // weird problems.
+  ::testing::Mock::VerifyAndClear(mock_media_session_observer());
+}
+
+IN_PROC_BROWSER_TEST_F(MediaSessionImplBrowserTest,
+                       ActualPlaybackStateWhilePlayerRemoved) {
+  EnsureMediaSessionService();
+  auto player_observer = base::MakeUnique<MockMediaSessionPlayerObserver>(
+      shell()->web_contents()->GetMainFrame());
+
+  ::testing::Sequence s;
+  EXPECT_CALL(*mock_media_session_observer(),
+              MediaSessionStateChanged(true, false))
+      .InSequence(s);
+  EXPECT_CALL(*mock_media_session_observer(),
+              MediaSessionStateChanged(false, _))
+      .InSequence(s);
+
+  StartNewPlayer(player_observer.get(), media::MediaContentType::Persistent);
+  RemovePlayer(player_observer.get(), 0);
+
+  SetPlaybackState(blink::mojom::MediaSessionPlaybackState::PLAYING);
+  SetPlaybackState(blink::mojom::MediaSessionPlaybackState::PAUSED);
+  SetPlaybackState(blink::mojom::MediaSessionPlaybackState::NONE);
+
+  // Verify before test exists. Otherwise the sequence will expire and cause
+  // weird problems.
+  ::testing::Mock::VerifyAndClear(mock_media_session_observer());
 }
 
 IN_PROC_BROWSER_TEST_F(MediaSessionImplBrowserTest,

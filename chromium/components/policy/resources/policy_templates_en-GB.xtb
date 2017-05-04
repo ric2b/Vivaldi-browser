@@ -19,9 +19,6 @@
       When this policy is set to false or unset, cookies set by the IdP are transferred to the user's profile during their first login on a device only.
 
       This policy affects users whose domain matches the device's enrolment domain only. For all other users, cookies set by the IdP are transferred to the user's profile during their first login on the device only.</translation>
-<translation id="1029536946382325801">If true, the user can use the hardware on Chrome devices to remotely attest its identity to the privacy CA via the Enterprise Platform Keys API chrome.enterprise.platformKeys.challengeUserKey().
-
-          If it is set to false, or if it is not set, calls to the API will fail with an error code.</translation>
 <translation id="1040446814317236570">Enable PAC URL stripping (for https://)</translation>
 <translation id="1044878202534415707">Report hardware statistics such as CPU/RAM usage.
 
@@ -170,6 +167,7 @@
 <translation id="1522425503138261032">Allow sites to track the users' physical location</translation>
 <translation id="152657506688053119">List of alternative URLs for the default search provider</translation>
 <translation id="1530812829012954197">Always render the following URL patterns in the host browser</translation>
+<translation id="1547635088210394207">Sets the maximum length of the lock screen PIN.</translation>
 <translation id="1553684822621013552">When this policy is set to true, ARC will be enabled for the user
       (subject to additional policy settings checks – ARC will still be
       unavailable if either ephemeral mode or multiple sign-in is enabled
@@ -189,6 +187,15 @@
       allowed.</translation>
 <translation id="1655229863189977773">Set disk cache size in bytes</translation>
 <translation id="166427968280387991">Proxy server</translation>
+<translation id="1668836044817793277">Whether to allow the auto launched with zero delay kiosk app to control <ph name="PRODUCT_OS_NAME" /> version.
+
+      This policy controls whether to allow the auto launched with zero delay kiosk app to control <ph name="PRODUCT_OS_NAME" /> version by declaring a required_platform_version in its manifest and use it as the auto update target version prefix.
+
+      If the policy is set to true, the value of required_platform_version manifest key of the auto launched with zero delay kiosk app is used as auto update target version prefix.
+
+      If the policy is not configured or set to false, the required_platform_version manifest key is ignored and auto update proceeds as normal.
+
+      Warning: It is not recommended to delegate control of the <ph name="PRODUCT_OS_NAME" /> version to a kiosk app as it may prevent the device from receiving software updates and critical security fixes. Delegating control of the <ph name="PRODUCT_OS_NAME" /> version might leave users at risk.</translation>
 <translation id="1675002386741412210">Supported on:</translation>
 <translation id="1679420586049708690">Public session for auto-login</translation>
 <translation id="1680029600835707254">This policy controls who may start a <ph name="PRODUCT_OS_NAME" /> session. It does not prevent users from signing in to additional Google accounts within Android. If you want to prevent this, configure the Android-specific <ph name="CLOUDDPC_ACCOUNT_MANAGEMENT_POLICY" /> policy as part of <ph name="ARC_POLICY" />.</translation>
@@ -220,6 +227,7 @@
 <translation id="1808715480127969042">Block cookies on these sites</translation>
 <translation id="1827523283178827583">Use fixed proxy servers</translation>
 <translation id="1843117931376765605">Refresh rate for user policy</translation>
+<translation id="1844620919405873871">Configures quick unlock related policies.</translation>
 <translation id="1847960418907100918">Specifies the parameters used when doing instant search with POST. It consists of comma-separated name/value pairs. If a value is a template parameter, like {searchTerms} in above example, it will be replaced with real search terms data.
 
           This policy is optional. If not set, instant search request will be sent using the GET method.
@@ -325,6 +333,11 @@
 <translation id="2168397434410358693">Idle delay when running on AC power</translation>
 <translation id="2170233653554726857">Enable WPAD optimisation</translation>
 <translation id="2178899310296064282">Enforce at least Moderate Restricted Mode on YouTube</translation>
+<translation id="2183294522275408937">This setting controls how often the lock screen will request the password to be entered in order to continue using quick unlock. Each time the lock screen is entered, if the last password entry was more than this setting, the quick unlock will not be available on entering the lock screen. Should the user stay on the lock screen past this period of time, a password will be requested next time the user enters the wrong code, or re-enters the lock screen, whichever comes first.
+
+          If this setting is configured, users using quick unlock will be requested to enter their passwords on the lock screen depending on this setting.
+
+          If this setting is not configured, users using quick unlock will be requested to enter their password on the lock screen every day.</translation>
 <translation id="2188979373208322108">Enables the bookmark bar on <ph name="PRODUCT_NAME" />.
 
       If you enable this setting, <ph name="PRODUCT_NAME" /> will show a bookmark bar.
@@ -660,15 +673,6 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
 <translation id="2884728160143956392">Allow session only cookies on these sites</translation>
 <translation id="2893546967669465276">Send system logs to the management server</translation>
 <translation id="2899002520262095963">Android apps can use the network configurations and CA certificates set via this policy, but do not have access to some configuration options.</translation>
-<translation id="2901399514673504930">Treat external storage devices as read-only.
-
-      This policy is effective only when ExternalStorageDisabled is set to false or not configured.
-
-      When this policy is set to true, users cannot write anything to external storage devices.
-
-      If this setting is disabled or not configured then users can create and modify files of external storage devices which are physically writable.
-
-      Dynamic refresh of this policy is supported in M56 and later.</translation>
 <translation id="2906874737073861391">List of AppPack extensions</translation>
 <translation id="2908277604670530363">Maximum number of concurrent connections to the proxy server</translation>
 <translation id="2948087343485265211">Specifies whether audio activity affects power management.
@@ -834,7 +838,6 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
 <translation id="3322771899429619102">Allows you to set a list of URL patterns that specify sites which are allowed to use key generation. If a URL pattern is in 'KeygenBlockedForUrls', that overrides these exceptions.
 
           If this policy is left not set the global default value will be used for all sites either from the 'DefaultKeygenSetting' policy if it is set or the user's personal configuration otherwise.</translation>
-<translation id="3322902067538988734">If this policy is set to true, the user has to sign in to <ph name="PRODUCT_NAME" /> with his or her profile before using the browser. And the default value of BrowserGuestModeEnabled will be set to false. If this policy is set to false or not configured, user can use the browser without sign in to <ph name="PRODUCT_NAME" />.</translation>
 <translation id="3347687541825006165">Sets how often user has to enter password to use quick unlock.</translation>
 <translation id="3381968327636295719">Use the host browser by default</translation>
 <translation id="3417418267404583991">If this policy is set to true or not configured, <ph name="PRODUCT_OS_NAME" /> will enable guest logins. Guest logins are anonymous user sessions and do not require a password.
@@ -865,6 +868,7 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
           If this policy is set to False or left unset, power management delays and the session length limit start running immediately on session start.</translation>
 <translation id="3478024346823118645">Wipe user data on sign-out</translation>
 <translation id="348495353354674884">Enable virtual keyboard</translation>
+<translation id="3495440981030194931">Sets the minimum length of the lock screen PIN.</translation>
 <translation id="3496296378755072552">Password manager</translation>
 <translation id="349667858031092827">Never auto-detect timezone.</translation>
 <translation id="350443680860256679">Configure ARC</translation>
@@ -894,6 +898,17 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
 <translation id="3547954654003013442">Proxy settings</translation>
 <translation id="3570008976476035109">Block plug-ins on these sites</translation>
 <translation id="3591584750136265240">Configure the login authentication behaviour</translation>
+<translation id="3601614035698083789">Configures a list of managed bookmarks.
+
+      The policy consists of a list of bookmarks whereas each bookmark is a
+      dictionary containing the keys <ph name="NAME" /> and <ph name="URL_LABEL" /> which hold the bookmark's name and its target. A
+      subfolder may be configured by defining a bookmark without an <ph name="URL_LABEL" /> key but with an additional <ph name="CHILDREN" /> key which itself contains a list of
+      bookmarks as defined above (some of which may be folders again). <ph name="PRODUCT_NAME" /> amends incomplete URLs
+      as if they were submitted via the Omnibox, for example <ph name="GOOGLE_COM" /> becomes <ph name="HTTPS_GOOGLE_COM" />.
+
+      These bookmarks are placed in a "Managed bookmarks" folder that can't be modified by the user, but the user can choose to hide it from the bookmark bar. Managed bookmarks are not synced to the user account and can't be modified by extensions.
+
+      Starting with release 51, the folder name for the bookmarks is customisable by adding a {"toplevel_name": "some name"} list item.</translation>
 <translation id="3627678165642179114">Enable or disable spell checking web service</translation>
 <translation id="3646859102161347133">Set screen magnifier type</translation>
 <translation id="3653237928288822292">Default search provider icon</translation>
@@ -1013,6 +1028,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
       Setting this policy to disabled will allow the usage of SPDY.
 
       If this policy is left unset, SPDY will be available.</translation>
+<translation id="3890999316834333174">Quick unlock policies</translation>
 <translation id="3891357445869647828">Enable JavaScript</translation>
 <translation id="3891953007921334498">Disables the Developer Tools and the JavaScript console.
 
@@ -1066,6 +1082,11 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
       If this policy is set to false, user will not be able to redeem offers.</translation>
 <translation id="4010738624545340900">Allow invocation of file selection dialogues</translation>
+<translation id="4012737788880122133">Disables automatic updates when set to True.
+
+      <ph name="PRODUCT_OS_NAME" /> devices automatically check for updates when this setting is not configured or set to False.
+
+      Warning: It is recommended to keep auto-updates enabled so that users receive software updates and critical security fixes. Turning off auto-updates might leave users at risk.</translation>
 <translation id="4020682745012723568">Cookies transferred to the user's profile are not accessible to Android apps.</translation>
 <translation id="4025586928523884733">Blocks third party cookies.
 
@@ -1145,6 +1166,16 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           This policy is optional. If not set, image search request will be sent using the GET method.
 
           This policy is only respected if the 'DefaultSearchProviderEnabled' policy is enabled.</translation>
+<translation id="4294280661005713627">Sets a target version for Auto-Updates.
+
+      Specifies the prefix of a target version <ph name="PRODUCT_OS_NAME" /> should update to. If the device is running a version that's before the specified prefix, it will update to the latest version with the given prefix. If the device is already on a later version, there is no effect (i.e. no downgrades are performed) and the device will remain on the current version. The prefix format works component-wise as is demonstrated in the following example:
+
+      "" (or not configured): update to latest version available.
+      "1412.": update to any minor version of 1412 (e.g. 1412.24.34 or 1412.60.2)
+      "1412.2.": update to any minor version of 1412.2 (e.g. 1412.2.34 or 1412.2.2)
+      "1412.24.34": update to this specific version only
+
+      Warning: It is not recommended to configure version restrictions as they may prevent users from receiving software updates and critical security fixes. Restricting updates to a specific version prefix might leave users at risk.</translation>
 <translation id="4309640770189628899">Whether DHE cipher suites in TLS are enabled</translation>
 <translation id="4320376026953250541">Microsoft Windows XP SP2 or later</translation>
 <translation id="4322842393287974810">Allow the auto launched with zero delay kiosk app to control <ph name="PRODUCT_OS_NAME" /> version</translation>
@@ -1242,6 +1273,11 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           For example patterns see https://www.chromium.org/developers/how-tos/chrome-frame-getting-started.</translation>
 <translation id="467449052039111439">Open a list of URLs</translation>
 <translation id="4680961954980851756">Enable AutoFill</translation>
+<translation id="4722399051042571387">If false, users will be unable to set PINs which are weak and easy to guess.
+
+          Some example weak PINs: PINs containing only one digit (1111), PINs whose digits are increasing by 1 (1234), PINs whose digits are decreasing by 1 (4321) and PINs which are commonly used.
+
+          By default, users will get a warning, not error, if the PIN is considered weak.</translation>
 <translation id="4723829699367336876">Enable firewall traversal from remote access client</translation>
 <translation id="4725528134735324213">Enable Android Backup Service</translation>
 <translation id="4733471537137819387">Policies related to integrated HTTP authentication.</translation>
@@ -1388,6 +1424,9 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           A blacklist value of '*' means that all native messaging hosts are blacklisted unless they are explicitly listed in the whitelist.
 
           If this policy is left not set <ph name="PRODUCT_NAME" /> will load all installed native messaging hosts.</translation>
+<translation id="5272684451155669299">If true, the user can use the hardware on Chrome devices to remotely attest its identity to the privacy CA via the <ph name="ENTERPRISE_PLATFORM_KEYS_API" /> using <ph name="CHALLENGE_USER_KEY_FUNCTION" />.
+
+          If it is set to false, or if it is not set, calls to the API will fail with an error code.</translation>
 <translation id="5288772341821359899">If the policy is set, the UDP port range used by WebRTC is restricted to the specified port interval (endpoints included).
 
       If the policy is not set, or if it is set to the empty string or an invalid port range, WebRTC is allowed to use any available local UDP port.</translation>
@@ -1649,6 +1688,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
       If this policy is not set or is set to false, print commands trigger the print preview screen.</translation>
 <translation id="6022948604095165524">Action on start-up</translation>
 <translation id="602728333950205286">Default search provider instant URL</translation>
+<translation id="6029664378608427609">Enables users to set weak PINs for the lock screen PIN.</translation>
 <translation id="603410445099326293">Parameters for suggest URL which uses POST</translation>
 <translation id="6036523166753287175">Enable firewall traversal from remote access host</translation>
 <translation id="6059543311891422586">Use hardware acceleration when available.
@@ -1704,12 +1744,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="6155936611791017817">Set default state of the large cursor on the login screen</translation>
 <translation id="6157537876488211233">Comma-separated list of proxy bypass rules</translation>
 <translation id="6158324314836466367">Enterprise web store name (deprecated)</translation>
-<translation id="6166832345529129545">Controls which quick unlock modes are allowed to be set up and used.
-      This setting whitelists the allowed quick unlock modes that can be set up and used to unlock the lock screen. The value is a list of strings, each of which should be one of the following: "all", "PIN". If "all" is selected, then all supported quick modes will be available, otherwise the modes in the list will be the ones available.
-
-      If this setting is configured, quick unlock modes which have a type that is not on this list cannot be set up or used.
-
-      If this setting is left not configured, "PIN" mode will be enabled, and all other modes will be disabled.</translation>
 <translation id="6167074305866468481">Warning: SSLv3 support will be entirely removed from <ph name="PRODUCT_NAME" /> after version 43 (around July 2015) and this policy will be removed at the same time.
 
       If this policy is not configured then <ph name="PRODUCT_NAME" /> uses a default minimum version which is SSLv3 in <ph name="PRODUCT_NAME" /> 39 and TLS 1.0 in later versions.
@@ -1717,14 +1751,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
       Otherwise it may be set to one of the following values: "sslv3", "tls1", "tls1.1" or "tls1.2". When set, <ph name="PRODUCT_NAME" /> will not use SSL/TLS versions less than the specified version. An unrecognised value will be ignored.
 
       Note that, despite the number, "sslv3" is an earlier version than "tls1".</translation>
-<translation id="6177482277304066047">Sets a target version for Auto Updates.
-
-      Specifies the prefix of a target version <ph name="PRODUCT_OS_NAME" /> should update to. If the device is running a version that's before the specified prefix, it will update to the latest version with the given prefix. If the device is already on a later version, there is no effect (i.e. no downgrades are performed) and the device will remain on the current version. The prefix format works component-wise as is demonstrated in the following example:
-
-      "" (or not configured): update to latest version available.
-      "1412.": update to any minor version of 1412 (e.g. 1412.24.34 or 1412.60.2)
-      "1412.2.": update to any minor version of 1412.2 (e.g. 1412.2.34 or 1412.2.2)
-      "1412.24.34": update to this specific version only</translation>
 <translation id="6190022522129724693"> setting</translation>
 <translation id="6197453924249895891">Grants access to corporate keys to extensions.
 
@@ -1750,6 +1776,46 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="6282799760374509080">Allow or deny audio capture</translation>
 <translation id="6284362063448764300">TLS 1.1</translation>
 <translation id="6310223829319187614">Enable domain name autocomplete during user sign in</translation>
+<translation id="6312861131491040487">
+          Specifies a list of apps and extensions that are installed silently,
+          without user interaction and which cannot be uninstalled by the
+          user. All permissions requested by the apps/extensions are granted
+          implicitly, without user interaction, including any additional
+          permissions requested by future versions of the app/extension.
+          Furthermore, permissions are granted for the
+          enterprise.deviceAttributes and enterprise.platformKeys extension
+          APIs. (These two APIs are not available to apps/extensions that are
+          not force-installed.)
+
+          This policy takes precedence over a potentially conflicting
+          ExtensionsInstallBlacklist policy. If an app or extension that
+          previously had been force-installed is removed from this list, it is
+          automatically uninstalled by <ph name="PRODUCT_NAME" />.
+
+          For Windows instances that are not joined to an Active Directory
+          domain, forced installation is limited to apps and extensions listed
+          in the Chrome Web Store.
+
+          Note that the source code of any extension may be altered by users via
+          Developer Tools (potentially rendering the extension
+          dysfunctional). If this is a concern, the DeveloperToolsDisabled
+          policy should be set.
+
+          Each list item of the policy is a string that contains an extension ID
+          and an "update" URL separated by a semicolon (<ph name="SEMICOLON" />). The extension ID is the 32-letter string
+          found e.g. on <ph name="CHROME_EXTENSIONS_LINK" /> when in
+          developer mode. The "update" URL should point to an Update Manifest
+          XML document as described at <ph name="LINK_TO_EXTENSION_DOC1" />. Note
+          that the "update" URL set in this policy is only used for the initial
+          installation; subsequent updates of the extension employ the update
+          URL indicated in the extension's manifest.
+
+          For example, <ph name="EXTENSION_POLICY_EXAMPLE" />
+          installs the <ph name="EXTENSION_POLICY_EXAMPLE_EXTENSION_NAME" /> app from the standard Chrome Web Store "update"
+          URL. For more information about hosting extensions, see: <ph name="LINK_TO_EXTENSION_DOC2" />.
+
+          If this policy is left not set, no apps or extensions are installed
+          automatically and the user can uninstall any app or extension in <ph name="PRODUCT_NAME" />.</translation>
 <translation id="6315673513957120120">Chrome shows a warning page when users navigate to sites that have SSL errors. By default or when this policy is set to true, users are allowed to click through these warning pages.
       Setting this policy to false disallows users to click through any warning page.</translation>
 <translation id="6353901068939575220">Specifies the parameters used when searching a URL with POST. It consists of comma-separated name/value pairs. If a value is a template parameter, like {searchTerms} in above example, it will be replaced with real search terms data.
@@ -1760,9 +1826,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="6367755442345892511">Whether the release channel should be configurable by the user</translation>
 <translation id="6368011194414932347">Configure the home page URL</translation>
 <translation id="6368403635025849609">Allow JavaScript on these sites</translation>
-<translation id="6373222873250380826">Disables automatic updates when set to True.
-
-      <ph name="PRODUCT_OS_NAME" /> devices automatically check for updates when this setting is not configured or set to False.</translation>
 <translation id="6376659517206731212">Can Be Mandatory</translation>
 <translation id="6378076389057087301">Specify whether audio activity affects power management</translation>
 <translation id="637934607141010488">Report list of device users that have recently logged in.
@@ -1780,6 +1843,22 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="6417861582779909667">Allows you to set a list of url patterns that specify sites which are not allowed to set cookies.
 
           If this policy is left unset, the global default value will be used for all sites, either from the 'DefaultCookiesSetting' policy, if it is set, or the user's personal configuration otherwise.</translation>
+<translation id="6426205278746959912">You cannot force Android apps to use a proxy. A subset of proxy settings is made available to Android apps, which they may voluntarily choose to honour:
+
+          If you choose to never use a proxy server, Android apps are informed that no proxy is configured.
+
+          If you choose to use system proxy settings or a fixed server proxy, Android apps are provided with the http proxy server address and port.
+
+          If you choose to auto detect the proxy server, the script URL "http://wpad/wpad.dat" is provided to Android apps. No other part of the proxy auto-detection protocol is used.
+
+          If you choose to use a .pac proxy script, the script URL is provided to Android apps.</translation>
+<translation id="6435127182262044446">This setting controls the maximum PIN length.
+
+          If this setting is 0 or less, there is no maximum length; the user can set a PIN as long as they want.
+
+          If this setting is less than PinUnlockMinimumLength but greater than 0, the maximum length is the same as the minimum length.
+
+          This setting defaults to no maximum length.</translation>
 <translation id="6467433935902485842">Allows you to set a list of url patterns that specify sites which are not allowed to run plug-ins.
 
           If this policy is left unset the global default value will be used for all sites either from the 'DefaultPlug-insSetting' policy, if it is set, or the user's personal configuration otherwise.</translation>
@@ -1904,6 +1983,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="6770454900105963262">Report information about active kiosk sessions</translation>
 <translation id="6774533686631353488">Allow user-level Native Messaging hosts (installed without admin permissions).</translation>
 <translation id="6786747875388722282">Extensions</translation>
+<translation id="6786967369487349613">Set the roaming profile directory</translation>
 <translation id="6810445994095397827">Block JavaScript on these sites</translation>
 <translation id="681446116407619279">Supported authentication schemes</translation>
 <translation id="6828905844648501476">If this policy is set to true or not configured, <ph name="PRODUCT_NAME" /> will allow Add Person from the user manager.
@@ -2080,6 +2160,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="7249828445670652637">Enable <ph name="PRODUCT_OS_NAME" /> CA certificates to ARC-apps</translation>
 <translation id="7258823566580374486">Enable curtaining of remote access hosts</translation>
 <translation id="7260277299188117560">Auto update p2p enabled</translation>
+<translation id="7261252191178797385">Device wallpaper image</translation>
 <translation id="7267809745244694722">Media keys default to function keys</translation>
 <translation id="7271085005502526897">Import of homepage from default browser on first run</translation>
 <translation id="7273823081800296768">If this setting is enabled or not configured, then users can opt to pair clients and hosts at connection time, eliminating the need to enter a PIN every time.
@@ -2124,13 +2205,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="7336878834592315572">Keep cookies for the duration of the session.</translation>
 <translation id="7340034977315324840">Report device activity times</translation>
 <translation id="7384999953864505698">Allows QUIC protocol</translation>
-<translation id="7406651467768226499">Whether to allow the auto launched with zero delay kiosk app to control <ph name="PRODUCT_OS_NAME" /> version.
-
-      This policy controls whether to allow the auto launched with zero delay kiosk app to control <ph name="PRODUCT_OS_NAME" /> version by declaring a required_platform_version in its manifest and use it as the auto update target version prefix.
-
-      If the policy is set to true, the value of required_platform_version manifest key of the auto launched with zero delay kiosk app is used as auto update target version prefix.
-
-      If the policy is not configured or set to false, the required_platform_version manifest key is ignored and auto update proceeds as normal.</translation>
 <translation id="7417972229667085380">Percentage by which to scale the idle delay in presentation mode (deprecated)</translation>
 <translation id="7421483919690710988">Set media disk cache size in bytes</translation>
 <translation id="7424751532654212117">List of exceptions to the list of disabled plugins</translation>
@@ -2165,6 +2239,15 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
       Note that this policy depends on the operating system certificate verification stack allowing SHA-1 signatures. If an OS update changes the OS handling of SHA-1 certificates, this policy may no longer have effect. Furthermore, this policy is intended as a temporary workaround to give enterprises more time to move away from SHA-1. This policy will be removed on or around 1 January 2019.
 
       If this policy is not set, or it is set to false, then <ph name="PRODUCT_NAME" /> follows the publicly announced SHA-1 deprecation schedule.</translation>
+<translation id="7589150663293249656">Enables the creation of roaming copies for <ph name="PRODUCT_NAME" /> profile data.
+
+      If you enable this setting, the settings stored in <ph name="PRODUCT_NAME" /> profiles like bookmarks, autofill data, passwords, etc. will also be written to a file stored in the Roaming user profile folder or a location specified by the Administrator through the <ph name="ROAMINGPROFILELOCATION_POLICY_NAME" /> policy.
+
+      Google Sync is automatically disabled when this policy is enabled.
+
+      To prevent accidental data leaks it is advisable to also set the <ph name="SIGNINALLOWED_POLICY_NAME" /> policy to False.
+
+      If this policy is disabled or left not set only the regular local profiles will be used.</translation>
 <translation id="7593523670408385997">Configures the cache size that <ph name="PRODUCT_NAME" /> will use for storing cached files on the disk.
 
       If you set this policy, <ph name="PRODUCT_NAME" /> will use the provided cache size regardless of whether the user has specified the '--disk-cache-size' flag or not. The value specified in this policy is not a hard boundary but rather a suggestion to the caching system, any value below a few megabytes is too small and will be rounded up to a sane minimum.
@@ -2176,6 +2259,9 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="7611372873040492235">Password entry is required every twelve hours.</translation>
 <translation id="7612157962821894603">System wide flags to be applied on <ph name="PRODUCT_NAME" /> startup</translation>
 <translation id="7614663184588396421">List of disabled protocol schemes</translation>
+<translation id="7617319494457709698">This policy specifies the allowed extensions to use the <ph name="ENTERPRISE_PLATFORM_KEYS_API" /> function <ph name="CHALLENGE_USER_KEY_FUNCTION" /> for remote attestation. Extensions must be added to this list to use the API.
+
+          If an extension is not in the list, or the list is not set, the call to the API will fail with an error code.</translation>
 <translation id="7625444193696794922">Specifies the release channel that this device should be locked to.</translation>
 <translation id="7632724434767231364">GSSAPI library name</translation>
 <translation id="7635471475589566552">Configures the application locale in <ph name="PRODUCT_NAME" /> and prevents users from changing the locale.
@@ -2276,6 +2362,13 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
       If this setting is not configured then users are able to turn Android Backup Service on and off in the Android Settings app.</translation>
 <translation id="7818131573217430250">Set the default state of high contrast mode on the login screen</translation>
+<translation id="7822837118545582721">When this policy is set to true, users cannot write anything to external storage devices.
+
+      If this setting is set to false or not configured, then users can create and modify files of external storage devices which are physically writable.
+
+      The ExternalStorageDisabled policy takes precedence over this policy – if ExternalStorageDisabled is set to true, then all access to external storage is disabled and this policy is consequently ignored.
+
+      Dynamic refresh of this policy is supported in M56 and later.</translation>
 <translation id="7831595031698917016">Specifies the maximum delay in milliseconds between receiving a policy invalidation and fetching the new policy from the device management service.
 
       Setting this policy overrides the default value of 5,000 milliseconds. Valid values for this policy are in the range from 1,000 (1 second) to 300,000 (5 minutes). Any values not in this range will be clamped to the respective boundary.
@@ -2336,9 +2429,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           to an Active Directory domain.</translation>
 <translation id="7937766917976512374">Allow or deny video capture</translation>
 <translation id="7941975817681987555">Do not predict network actions on any network connection</translation>
-<translation id="7942429005743031780">This policy specifies the allowed extensions to use Enterprise Platform Keys API chrome.enterprise.platformKeys.challengeUserKey() for remote attestation. Extensions must be added to this list to use the API.
-
-          If an extension is not in the list, or the list is not set, the call to the API will fail with an error code.</translation>
 <translation id="7953256619080733119">Managed user manual exception hosts</translation>
 <translation id="7971839631300653352">SSL</translation>
 <translation id="7974114691960514888">This policy is no longer supported.
@@ -2404,6 +2494,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
       If the user has enabled sync, all this data is preserved in their sync profile just as with regular profiles. Incognito mode is also available if not explicitly disabled by policy.
 
       If the policy is set to disabled or left not set signing in leads to regular profiles.</translation>
+<translation id="8158758865057576716">Enable the creation of roaming copies for <ph name="PRODUCT_NAME" /> profile data.</translation>
 <translation id="8164246350636985940">The default behaviour for sites not in any content pack.
 
           This policy is for internal use by <ph name="PRODUCT_NAME" /> itself.</translation>
@@ -2458,6 +2549,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
       The desire is to remove this override in the future.</translation>
 <translation id="8285435910062771358">Full-screen magnifier enabled</translation>
+<translation id="8288199156259560552">Enable Android Google Location Service</translation>
 <translation id="8294750666104911727">Normally pages with X-UA-Compatible set to chrome=1 will be rendered in <ph name="PRODUCT_FRAME_NAME" /> regardless of the 'ChromeFrameRendererSettings' policy.
 
           If you enable this setting, pages will not be scanned for meta tags.
@@ -2496,6 +2588,9 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
       If this policy is set to false, the browser will not re-show the welcome page on the first launch following an OS upgrade.</translation>
 <translation id="8369602308428138533">Screen off delay when running on AC power</translation>
+<translation id="8370471134641900314">If this policy is set to true, user has to sign in to <ph name="PRODUCT_NAME" /> with their profile before using the browser. And the default value of BrowserGuestModeEnabled will be set to false.
+
+      If this policy is set to false or not configured, user can use the browser without sign in to <ph name="PRODUCT_NAME" />.</translation>
 <translation id="8382184662529825177">Enable the use of remote attestation for content protection for the device</translation>
 <translation id="838870586332499308">Enable data roaming</translation>
 <translation id="8390049129576938611">Disables the internal PDF viewer in <ph name="PRODUCT_NAME" />. Instead, it treats it as download and allows the user to open PDF files with the default application.
@@ -2545,6 +2640,17 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
       that are joined to an Active Directory domain.</translation>
 <translation id="8566842294717252664">Hide the web store from the New Tab Page and app launcher</translation>
 <translation id="8587229956764455752">Allow creation of new user accounts</translation>
+<translation id="8613640727149655305">When this policy is set to true, the Android Google Location Service is enabled. This will allow Android apps to use its data to find the device location and also will enable submitting of anonymous location data to Google.
+
+      When this policy is set to false, Android Google Location Service will be switched off.
+
+      If this setting is configured then users are not able change it themselves.
+
+      If this setting is not configured then users are able to turn Google Location Service on and off in the Android Settings app.
+
+      Note that this policy value may be overridden by the <ph name="DEFAULTGEOLOCATIONSETTING_POLICY_NAME" /> policy, when the latter is set to <ph name="BLOCK_GEOLOCATION_SETTING" />.
+
+      This policy is applicable only to the users that are able to run Android apps.</translation>
 <translation id="8614804915612153606">Disables Auto Update</translation>
 <translation id="8631434304112909927">until version <ph name="UNTIL_VERSION" /></translation>
 <translation id="863319402127182273">For Android apps, this policy affects the built-in camera only. When this policy is set to true, the camera is disabled for all Android apps, with no exceptions.</translation>
@@ -2624,15 +2730,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="8833109046074170275">Authentication via the default GAIA flow</translation>
 <translation id="8838303810937202360"><ph name="PRODUCT_OS_NAME" /> caches Apps and Extensions for installation by multiple users of a single device to avoid re-downloading them for each user.
       If this policy is not configured or the value is lower than 1 MB, <ph name="PRODUCT_OS_NAME" /> will use the default cache size.</translation>
-<translation id="8858120573534680488">You cannot force Android apps to use a proxy. A subset of proxy settings is made available to Android apps, which they may voluntarily choose to honour:
-
-          If you choose "never use a proxy server", Android apps are informed that no proxy is configured.
-
-          If you choose "use system proxy settings" or "fixed server proxy", Android apps are provided with the http proxy server address and port.
-
-          If you choose "auto detect proxy server", the script URL "http://wpad/wpad.dat" is provided to Android apps. No other part of the proxy auto-detection protocol is used.
-
-          If you choose ".pac proxy script", the script URL is provided to Android apps.</translation>
 <translation id="8858642179038618439">Force YouTube Safety Mode</translation>
 <translation id="8864975621965365890">Suppresses the turn-down prompt that appears when a site is rendered by <ph name="PRODUCT_FRAME_NAME" />.</translation>
 <translation id="8870318296973696995">Homepage</translation>
@@ -2689,6 +2786,13 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="8992176907758534924">Do not allow any site to show images</translation>
 <translation id="9035964157729712237">Extension IDs to exempt from the blacklist</translation>
 <translation id="9042911395677044526">Allows pushing network configuration to be applied per-user to a <ph name="PRODUCT_OS_NAME" /> device. The network configuration is a JSON-formatted string as defined by the Open Network Configuration format described at <ph name="ONC_SPEC_URL" /></translation>
+<translation id="908115901708809140">Configures the directory that <ph name="PRODUCT_NAME" /> will use for storing the roaming copy of the profiles.
+
+      If you set this policy, <ph name="PRODUCT_NAME" /> will use the provided directory to store the roaming copy of the profiles if the <ph name="ROAMINGPROFILESUPPORTENABLED_POLICY_NAME" /> policy has been enabled. If the <ph name="ROAMINGPROFILESUPPORTENABLED_POLICY_NAME" /> policy is disabled or left unset the value stored in this policy is not used.
+
+      See https://www.chromium.org/administrators/policy-list-3/user-data-directory-variables for a list of variables that can be used.
+
+      If this policy is left not set the default roaming profile path will be used.</translation>
 <translation id="9084985621503260744">Specify whether video activity affects power management</translation>
 <translation id="9088433379343318874">Enable the supervised user content provider</translation>
 <translation id="9088444059179765143">Configure the automatic timezone detection method</translation>
@@ -2701,6 +2805,13 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           The protocol handlers registered by policy are merged with the ones registered by the user and both are available for use. The user can override the protocol handlers installed by policy by installing a new default handler, but cannot remove a protocol handler registered by policy.</translation>
 <translation id="913195841488580904">Block access to a list of URLs</translation>
 <translation id="9135033364005346124">Enable <ph name="CLOUD_PRINT_NAME" /> proxy</translation>
+<translation id="9136253551939494882">A whitelist controlling which quick unlock modes the user can configure and use to unlock the lock screen.
+
+          This value is a list of strings; valid list entries are: 'all', 'PIN'. Adding 'all' to the list means that every quick unlock mode is available to the user, including ones implemented in the future. Otherwise, only the quick unlock modes present in the list will be available.
+
+          For example, to allow every quick unlock mode, use ['all']. To allow only PIN unlock, use ['PIN']. To disable all quick unlock modes, use [].
+
+          By default, no quick unlock modes are available for managed devices.</translation>
 <translation id="9147029539363974059">Send system logs to the management server, to allow
       admins to monitor system logs.
 
@@ -2716,6 +2827,11 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
       If this policy is left unset, this will be enabled and the user will be able to use incognito mode.</translation>
 <translation id="915194831143859291">If this policy is set to false or not configured, <ph name="PRODUCT_OS_NAME" /> will allow the user to shut down the device.
       If this policy is set to true, <ph name="PRODUCT_OS_NAME" /> will trigger a reboot when the user shuts down the device. <ph name="PRODUCT_OS_NAME" /> replaces all occurrences of shutdown buttons in the UI by reboot buttons. If the user shuts down the device using the power button, it will not automatically reboot, even if the policy is enabled.</translation>
+<translation id="917887642534332939">This setting controls the minimum PIN length.
+
+          The absolute minimum PIN length is 1; values less than 1 are treated as 1.
+
+          The default and recommended minimum PIN length is 6 digits.</translation>
 <translation id="9187743794267626640">Disable mounting of external storage</translation>
 <translation id="9197740283131855199">Percentage by which to scale the screen dim delay if the user becomes active after dimming</translation>
 <translation id="9200828125069750521">Parameters for image URL which uses POST</translation>
@@ -2724,15 +2840,21 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
       If enabled screenshots cannot be taken using keyboard shortcuts or extension APIs.
 
       If disabled or not specified, taking screenshots is allowed.</translation>
+<translation id="9213347477683611358">Configure device-level wallpaper image that is shown on the login screen if no user has yet signed in to the device. The policy is set by specifying the URL from which the Chrome OS device can download the wallpaper image and a cryptographic hash used to verify the integrity of the download. The image must be in JPEG format, its file size must not exceed 16 MB. The URL must be accessible without any authentication. The wallpaper image is downloaded and cached. It will be re-downloaded whenever the URL or the hash changes.
+
+      The policy should be specified as a string that expresses the URL and hash in JSON format, e.g.,
+      {
+        "url": "https://example.com/device_wallpaper.jpg",
+        "hash": "examplewallpaperhash"
+      }
+
+      If the device wallpaper policy is set, the Chrome OS device will download and use the wallpaper image on the login screen if no user has yet signed in to the device. Once the user logs in, the user's wallpaper policy kicks in.
+
+      If the device wallpaper policy is left not set, it's the user's wallpaper policy to decide what to show if the user's wallpaper policy is set.</translation>
 <translation id="9217154963008402249">Frequency of monitoring network packets</translation>
 <translation id="922540222991413931">Configure extension, app, and user script install sources</translation>
 <translation id="924557436754151212">Import saved passwords from default browser on first run</translation>
 <translation id="930930237275114205">Set <ph name="PRODUCT_FRAME_NAME" /> user data directory</translation>
 <translation id="944607242500063080">Configure allowed quick unlock modes.</translation>
 <translation id="944817693306670849">Set disk cache size</translation>
-<translation id="969164417253718105">This setting controls how often the lock screen will request the password to be entered in order to continue using quick unlock. Each time the lock screen is entered, if the last password entry was more than this setting, the quick unlock will not be available on entering the lock screen. Should the user stay on the lock screen past this period of time, a password will be requested next time the user enters the wrong code, or re-enters the lock screen, whichever comes first.
-
-      If this setting is configured, users using quick unlock will be requested to enter their passwords on the lock screen depending on this setting.
-
-      If this setting is not configured, users using quick unlock will be requested to enter their password on the lock screen every day.</translation>
 </translationbundle>

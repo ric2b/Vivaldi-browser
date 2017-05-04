@@ -38,6 +38,11 @@ class MashRunner {
   DISALLOW_COPY_AND_ASSIGN(MashRunner);
 };
 
+// Called during chrome --mash startup instead of ContentMain().
 int MashMain();
+
+// Called if the command line isn't mash to potentially wait for a debugger
+// to attach.
+void WaitForMashDebuggerIfNecessary();
 
 #endif  // CHROME_APP_MASH_MASH_RUNNER_H_

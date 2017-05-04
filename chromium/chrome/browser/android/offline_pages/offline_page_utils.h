@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #include "base/callback.h"
-#include "components/offline_pages/offline_page_model.h"
+#include "components/offline_pages/core/offline_page_model.h"
 
 class GURL;
 
@@ -60,6 +60,10 @@ class OfflinePageUtils {
   // Returns true if the offline page is shown for previewing purpose.
   static bool IsShowingOfflinePreview(content::WebContents* web_contents);
 
+  // Returns true if download button is shown in the error page.
+  static bool IsShowingDownloadButtonInErrorPage(
+      content::WebContents* web_contents);
+
   // Gets an Android Tab ID from a tab containing |web_contents|. Returns false,
   // when tab is not available. Returns true otherwise and sets |tab_id| to the
   // ID of the tab.
@@ -88,6 +92,9 @@ class OfflinePageUtils {
       const PagesExistCallback& callback);
 
   static bool EqualsIgnoringFragment(const GURL& lhs, const GURL& rhs);
+
+  static void StartOfflinePageDownload(content::BrowserContext* context,
+                                       const GURL& url);
 };
 
 }  // namespace offline_pages

@@ -53,14 +53,14 @@ static CSSPropertyID resolveToPhysicalProperty(
     WritingMode writingMode,
     LogicalBoxSide logicalSide,
     const StylePropertyShorthand& shorthand) {
-  if (direction == LTR) {
-    if (writingMode == TopToBottomWritingMode) {
+  if (direction == TextDirection::kLtr) {
+    if (isHorizontalWritingMode(writingMode)) {
       // The common case. The logical and physical box sides match.
       // Left = Start, Right = End, Before = Top, After = Bottom
       return shorthand.properties()[logicalSide];
     }
 
-    if (writingMode == LeftToRightWritingMode) {
+    if (isFlippedLinesWritingMode(writingMode)) {
       // Start = Top, End = Bottom, Before = Left, After = Right.
       switch (logicalSide) {
         case StartSide:
@@ -87,7 +87,7 @@ static CSSPropertyID resolveToPhysicalProperty(
     }
   }
 
-  if (writingMode == TopToBottomWritingMode) {
+  if (isHorizontalWritingMode(writingMode)) {
     // Start = Right, End = Left, Before = Top, After = Bottom
     switch (logicalSide) {
       case StartSide:
@@ -101,7 +101,7 @@ static CSSPropertyID resolveToPhysicalProperty(
     }
   }
 
-  if (writingMode == LeftToRightWritingMode) {
+  if (isFlippedLinesWritingMode(writingMode)) {
     // Start = Bottom, End = Top, Before = Left, After = Right
     switch (logicalSide) {
       case StartSide:
@@ -226,29 +226,35 @@ CSSPropertyID CSSProperty::resolveDirectionAwareProperty(
     case CSSPropertyWebkitBorderAfterWidth:
       return resolveToPhysicalProperty(direction, writingMode, AfterSide,
                                        borderWidthShorthand());
+    case CSSPropertyInlineSize:
     case CSSPropertyWebkitLogicalWidth: {
       const CSSPropertyID properties[2] = {CSSPropertyWidth, CSSPropertyHeight};
       return resolveToPhysicalProperty(writingMode, LogicalWidth, properties);
     }
+    case CSSPropertyBlockSize:
     case CSSPropertyWebkitLogicalHeight: {
       const CSSPropertyID properties[2] = {CSSPropertyWidth, CSSPropertyHeight};
       return resolveToPhysicalProperty(writingMode, LogicalHeight, properties);
     }
+    case CSSPropertyMinInlineSize:
     case CSSPropertyWebkitMinLogicalWidth: {
       const CSSPropertyID properties[2] = {CSSPropertyMinWidth,
                                            CSSPropertyMinHeight};
       return resolveToPhysicalProperty(writingMode, LogicalWidth, properties);
     }
+    case CSSPropertyMinBlockSize:
     case CSSPropertyWebkitMinLogicalHeight: {
       const CSSPropertyID properties[2] = {CSSPropertyMinWidth,
                                            CSSPropertyMinHeight};
       return resolveToPhysicalProperty(writingMode, LogicalHeight, properties);
     }
+    case CSSPropertyMaxInlineSize:
     case CSSPropertyWebkitMaxLogicalWidth: {
       const CSSPropertyID properties[2] = {CSSPropertyMaxWidth,
                                            CSSPropertyMaxHeight};
       return resolveToPhysicalProperty(writingMode, LogicalWidth, properties);
     }
+    case CSSPropertyMaxBlockSize:
     case CSSPropertyWebkitMaxLogicalHeight: {
       const CSSPropertyID properties[2] = {CSSPropertyMaxWidth,
                                            CSSPropertyMaxHeight};

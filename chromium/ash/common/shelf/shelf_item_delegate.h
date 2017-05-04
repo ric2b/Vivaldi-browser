@@ -10,7 +10,6 @@
 
 namespace ui {
 class Event;
-class MenuModel;
 }
 
 namespace ash {
@@ -45,14 +44,6 @@ class ASH_EXPORT ShelfItemDelegate {
   // Returns the action performed by selecting the item.
   virtual PerformedAction ItemSelected(const ui::Event& event) = 0;
 
-  // Returns the title to display.
-  virtual base::string16 GetTitle() = 0;
-
-  // Returns whether the user can change the pin status of this item.
-  // Pinning may be disallowed by policy if this app is pinned by pre-defined
-  // pinned app list.
-  virtual bool CanPin() const = 0;
-
   // Returns the application menu model for the specified item. There are three
   // possible return values:
   //  - A return of NULL indicates that no menu is wanted for this item.
@@ -63,12 +54,6 @@ class ASH_EXPORT ShelfItemDelegate {
   // The caller takes ownership of the returned model.
   // |event_flags| specifies the flags of the event which triggered this menu.
   virtual ShelfMenuModel* CreateApplicationMenu(int event_flags) = 0;
-
-  // Whether the launcher item is draggable.
-  virtual bool IsDraggable() = 0;
-
-  // Returns true if a tooltip should be shown.
-  virtual bool ShouldShowTooltip() = 0;
 
   // Closes all windows associated with this item.
   virtual void Close() = 0;

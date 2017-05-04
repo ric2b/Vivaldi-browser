@@ -106,18 +106,19 @@ class NavigationURLLoaderTest : public testing::Test {
   std::unique_ptr<NavigationURLLoader> MakeTestLoader(
       const GURL& url,
       NavigationURLLoaderDelegate* delegate) {
-    BeginNavigationParams begin_params(std::string(), net::LOAD_NORMAL, false,
-                                       false, REQUEST_CONTEXT_TYPE_LOCATION);
+    BeginNavigationParams begin_params(
+        std::string(), net::LOAD_NORMAL, false, false,
+        REQUEST_CONTEXT_TYPE_LOCATION,
+        blink::WebMixedContentContextType::Blockable, url::Origin(url));
     CommonNavigationParams common_params;
     common_params.url = url;
     std::unique_ptr<NavigationRequestInfo> request_info(
-        new NavigationRequestInfo(common_params, begin_params, url,
-                                  url::Origin(url), true, false, false, -1,
-                                  false, false));
-
+        new NavigationRequestInfo(common_params, begin_params, url, true, false,
+                                  false, -1, false, false,
+                                  blink::WebPageVisibilityStateVisible));
     return NavigationURLLoader::Create(browser_context_.get(),
                                        std::move(request_info), nullptr,
-                                       nullptr, delegate);
+                                       nullptr, nullptr, delegate);
   }
 
   // Helper function for fetching the body of a URL to a string.

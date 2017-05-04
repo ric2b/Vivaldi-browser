@@ -45,7 +45,7 @@ static inline TextRun constructTextRunInternal(const Font& font,
                                                TextDirection direction) {
   TextRun::ExpansionBehavior expansion =
       TextRun::AllowTrailingExpansion | TextRun::ForbidLeadingExpansion;
-  bool directionalOverride = style.rtlOrdering() == VisualOrder;
+  bool directionalOverride = style.rtlOrdering() == EOrder::kVisual;
   TextRun run(characters, length, 0, 0, expansion, direction,
               directionalOverride);
   return run;
@@ -59,12 +59,12 @@ static inline TextRun constructTextRunInternal(const Font& font,
                                                TextDirection direction,
                                                TextRunFlags flags) {
   TextDirection textDirection = direction;
-  bool directionalOverride = style.rtlOrdering() == VisualOrder;
+  bool directionalOverride = style.rtlOrdering() == EOrder::kVisual;
   if (flags != DefaultTextRunFlags) {
     if (flags & RespectDirection)
       textDirection = style.direction();
     if (flags & RespectDirectionOverride)
-      directionalOverride |= isOverride(style.unicodeBidi());
+      directionalOverride |= isOverride(style.getUnicodeBidi());
   }
 
   TextRun::ExpansionBehavior expansion =
@@ -129,7 +129,7 @@ TextRun constructTextRun(const Font& font,
                          TextRunFlags flags) {
   return constructTextRun(font, string, style,
                           string.isEmpty() || string.is8Bit()
-                              ? LTR
+                              ? TextDirection::kLtr
                               : determineDirectionality(string),
                           flags);
 }
@@ -140,15 +140,17 @@ TextRun constructTextRun(const Font& font,
                          unsigned length,
                          const ComputedStyle& style) {
   ASSERT(offset + length <= text.textLength());
-  if (text.hasEmptyText())
+  if (text.hasEmptyText()) {
     return constructTextRunInternal(font, static_cast<const LChar*>(nullptr), 0,
-                                    style, LTR);
-  if (text.is8Bit())
+                                    style, TextDirection::kLtr);
+  }
+  if (text.is8Bit()) {
     return constructTextRunInternal(font, text.characters8() + offset, length,
-                                    style, LTR);
+                                    style, TextDirection::kLtr);
+  }
 
   TextRun run = constructTextRunInternal(font, text.characters16() + offset,
-                                         length, style, LTR);
+                                         length, style, TextDirection::kLtr);
   run.setDirection(directionForRun(run));
   return run;
 }

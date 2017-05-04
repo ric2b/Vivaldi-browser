@@ -12,7 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/ref_counted_delete_on_message_loop.h"
+#include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/memory/scoped_vector.h"
 #include "base/single_thread_task_runner.h"
 #include "components/webdata/common/web_database_service.h"
@@ -23,16 +23,12 @@ class WebDatabaseTable;
 class WebDataRequest;
 class WebDataRequestManager;
 
-namespace tracked_objects {
-class Location;
-}
-
 // WebDatabaseBackend handles all database tasks posted by
 // WebDatabaseService. It is refcounted to allow asynchronous destruction on the
 // DB thread.
 
 class WEBDATA_EXPORT WebDatabaseBackend
-    : public base::RefCountedDeleteOnMessageLoop<WebDatabaseBackend> {
+    : public base::RefCountedDeleteOnSequence<WebDatabaseBackend> {
  public:
   class Delegate {
    public:
@@ -82,7 +78,7 @@ class WEBDATA_EXPORT WebDatabaseBackend
   WebDatabase* database() { return db_.get(); }
 
  protected:
-  friend class base::RefCountedDeleteOnMessageLoop<WebDatabaseBackend>;
+  friend class base::RefCountedDeleteOnSequence<WebDatabaseBackend>;
   friend class base::DeleteHelper<WebDatabaseBackend>;
 
   virtual ~WebDatabaseBackend();

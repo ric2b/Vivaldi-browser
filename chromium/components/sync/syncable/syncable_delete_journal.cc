@@ -137,6 +137,7 @@ void DeleteJournal::AddJournalBatch(BaseTransaction* trans,
 bool DeleteJournal::IsDeleteJournalEnabled(ModelType type) {
   switch (type) {
     case BOOKMARKS:
+    case NOTES:
       return true;
     default:
       return false;

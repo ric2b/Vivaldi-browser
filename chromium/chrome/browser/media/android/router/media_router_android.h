@@ -9,9 +9,9 @@
 #include <stdint.h>
 
 #include <memory>
+#include <unordered_map>
 
 #include "base/android/scoped_java_ref.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/id_map.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
@@ -64,7 +64,7 @@ class MediaRouterAndroid : public MediaRouterBase {
       const MediaRoute::Id& route_id,
       std::unique_ptr<std::vector<uint8_t>> data,
       const SendRouteMessageCallback& callback) override;
-  void AddIssue(const Issue& issue) override;
+  void AddIssue(const IssueInfo& issue_info) override;
   void ClearIssue(const Issue::Id& issue_id) override;
   void OnUserGesture() override;
   void SearchSinks(
@@ -141,7 +141,7 @@ class MediaRouterAndroid : public MediaRouterBase {
 
   base::android::ScopedJavaGlobalRef<jobject> java_media_router_;
 
-  using MediaSinkObservers = base::ScopedPtrHashMap<
+  using MediaSinkObservers = std::unordered_map<
       MediaSource::Id,
       std::unique_ptr<base::ObserverList<MediaSinksObserver>>>;
   MediaSinkObservers sinks_observers_;
@@ -160,18 +160,18 @@ class MediaRouterAndroid : public MediaRouterBase {
     std::vector<MediaRouteResponseCallback> callbacks;
   };
 
-  using MediaRouteRequests =
-      IDMap<MediaRouteRequest, IDMapOwnPointer>;
+  using MediaRouteRequests = IDMap<std::unique_ptr<MediaRouteRequest>>;
   MediaRouteRequests route_requests_;
 
   using MediaRoutes = std::vector<MediaRoute>;
   MediaRoutes active_routes_;
 
-  using SendMessageCallbacks = IDMap<SendRouteMessageCallback, IDMapOwnPointer>;
+  using SendMessageCallbacks = IDMap<std::unique_ptr<SendRouteMessageCallback>>;
   SendMessageCallbacks message_callbacks_;
 
-  using MessageObservers = base::ScopedPtrHashMap<
-    MediaRoute::Id, std::unique_ptr<base::ObserverList<RouteMessageObserver>>>;
+  using MessageObservers = std::unordered_map<
+      MediaRoute::Id,
+      std::unique_ptr<base::ObserverList<RouteMessageObserver>>>;
   MessageObservers message_observers_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaRouterAndroid);

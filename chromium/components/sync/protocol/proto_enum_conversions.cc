@@ -250,6 +250,18 @@ const char* ProtoEnumToString(
   return "";
 }
 
+const char* ProtoEnumToString(
+    sync_pb::WalletMaskedCreditCard::WalletCardClass wallet_card_class) {
+  switch (wallet_card_class) {
+    ENUM_CASE(sync_pb::WalletMaskedCreditCard, UNKNOWN_CARD_CLASS);
+    ENUM_CASE(sync_pb::WalletMaskedCreditCard, CREDIT);
+    ENUM_CASE(sync_pb::WalletMaskedCreditCard, DEBIT);
+    ENUM_CASE(sync_pb::WalletMaskedCreditCard, PREPAID);
+  }
+  NOTREACHED();
+  return "";
+}
+
 const char* ProtoEnumToString(sync_pb::SyncEnums::DeviceType device_type) {
   ASSERT_ENUM_BOUNDS(sync_pb::SyncEnums, DeviceType, TYPE_WIN, TYPE_TABLET);
   switch (device_type) {
@@ -335,14 +347,41 @@ const char* ProtoEnumToString(sync_pb::TabNavigation::PasswordState state) {
 const char* ProtoEnumToString(
     sync_pb::ReadingListSpecifics::ReadingListEntryStatus status) {
   ASSERT_ENUM_BOUNDS(sync_pb::ReadingListSpecifics, ReadingListEntryStatus,
-                     UNREAD, READ);
+                     UNREAD, UNSEEN);
   switch (status) {
     ENUM_CASE(sync_pb::ReadingListSpecifics, UNREAD);
     ENUM_CASE(sync_pb::ReadingListSpecifics, READ);
+    ENUM_CASE(sync_pb::ReadingListSpecifics, UNSEEN);
   }
   NOTREACHED();
   return "";
 }
+
+// Vivaldi specific
+const char* ProtoEnumToString(
+  sync_pb::NotesSpecifics::VivaldiSpecialNotesType special_type) {
+  ASSERT_ENUM_BOUNDS(sync_pb::NotesSpecifics, VivaldiSpecialNotesType,
+    NORMAL, TRASH_NODE);
+  switch (special_type) {
+    ENUM_CASE(sync_pb::NotesSpecifics, NORMAL);
+    ENUM_CASE(sync_pb::NotesSpecifics, TRASH_NODE);
+  }
+  NOTREACHED();
+  return "";
+}
+
+const char* ProtoEnumToString(
+  sync_pb::BookmarkSpecifics::VivaldiSpecialBookmarkType special_type) {
+  ASSERT_ENUM_BOUNDS(sync_pb::BookmarkSpecifics, VivaldiSpecialBookmarkType,
+    NORMAL, TRASH_NODE);
+  switch (special_type) {
+    ENUM_CASE(sync_pb::BookmarkSpecifics, NORMAL);
+    ENUM_CASE(sync_pb::BookmarkSpecifics, TRASH_NODE);
+  }
+  NOTREACHED();
+  return "";
+}
+// End Vivaldi specific
 
 #undef ASSERT_ENUM_BOUNDS
 #undef ENUM_CASE

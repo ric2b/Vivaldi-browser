@@ -12,10 +12,8 @@
 
 #include "ash/common/wm_shell.h"
 #include "base/macros.h"
-#include "base/observer_list.h"
-#include "services/ui/public/cpp/window_tree_client_observer.h"
 
-namespace ui {
+namespace aura {
 class WindowTreeClient;
 }
 
@@ -24,40 +22,42 @@ class PointerWatcherEventRouter;
 }
 
 namespace ash {
+
+class RootWindowController;
+
 namespace mus {
 
 class AcceleratorControllerDelegateMus;
 class AcceleratorControllerRegistrar;
 class ImmersiveHandlerFactoryMus;
 class WindowManager;
-class WmRootWindowControllerMus;
 class WmShellMusTestApi;
-class WmWindowMus;
 
 // WmShell implementation for mus.
-class WmShellMus : public WmShell, public ui::WindowTreeClientObserver {
+class WmShellMus : public WmShell {
  public:
-  WmShellMus(std::unique_ptr<ShellDelegate> shell_delegate,
+  WmShellMus(WmWindow* primary_root_window,
+             std::unique_ptr<ShellDelegate> shell_delegate,
              WindowManager* window_manager,
              views::PointerWatcherEventRouter* pointer_watcher_event_router);
   ~WmShellMus() override;
 
   static WmShellMus* Get();
 
-  void AddRootWindowController(WmRootWindowControllerMus* controller);
-  void RemoveRootWindowController(WmRootWindowControllerMus* controller);
-
-  // Returns the ancestor of |window| (including |window|) that is considered
-  // toplevel. |window| may be null.
-  static WmWindowMus* GetToplevelAncestor(ui::Window* window);
-
-  WmRootWindowControllerMus* GetRootWindowControllerWithDisplayId(int64_t id);
+  ash::RootWindowController* GetRootWindowControllerWithDisplayId(int64_t id);
 
   AcceleratorControllerDelegateMus* accelerator_controller_delegate() {
     return accelerator_controller_delegate_.get();
   }
 
+  aura::WindowTreeClient* window_tree_client();
+
+  WindowManager* window_manager() { return window_manager_; }
+
   // WmShell:
+  void Initialize(
+      const scoped_refptr<base::SequencedWorkerPool>& pool) override;
+  void Shutdown() override;
   bool IsRunningInMash() const override;
   WmWindow* NewWindow(ui::wm::WindowType window_type,
                       ui::LayerType layer_type) override;
@@ -101,8 +101,6 @@ class WmShellMus : public WmShell, public ui::WindowTreeClientObserver {
   void OnOverviewModeStarting() override;
   void OnOverviewModeEnded() override;
   SessionStateDelegate* GetSessionStateDelegate() override;
-  void AddActivationObserver(WmActivationObserver* observer) override;
-  void RemoveActivationObserver(WmActivationObserver* observer) override;
   void AddDisplayObserver(WmDisplayObserver* observer) override;
   void RemoveDisplayObserver(WmDisplayObserver* observer) override;
   void AddPointerWatcher(views::PointerWatcher* watcher,
@@ -110,29 +108,19 @@ class WmShellMus : public WmShell, public ui::WindowTreeClientObserver {
   void RemovePointerWatcher(views::PointerWatcher* watcher) override;
   void RequestShutdown() override;
   bool IsTouchDown() override;
-#if defined(OS_CHROMEOS)
   void ToggleIgnoreExternalKeyboard() override;
   void SetLaserPointerEnabled(bool enabled) override;
-#endif
+  void CreatePointerWatcherAdapter() override;
+  void CreatePrimaryHost() override;
+  void InitHosts(const ShellInitParams& init_params) override;
 
  private:
   friend class WmShellMusTestApi;
 
-  ui::WindowTreeClient* window_tree_client();
-
-  // Returns true if |window| is a window that can have active children.
-  static bool IsActivationParent(ui::Window* window);
-
-  // ui::WindowTreeClientObserver:
-  void OnWindowTreeFocusChanged(ui::Window* gained_focus,
-                                ui::Window* lost_focus) override;
-  void OnDidDestroyClient(ui::WindowTreeClient* client) override;
-
   WindowManager* window_manager_;
 
+  WmWindow* primary_root_window_;
   views::PointerWatcherEventRouter* pointer_watcher_event_router_;
-
-  std::vector<WmRootWindowControllerMus*> root_window_controllers_;
 
   std::unique_ptr<AcceleratorControllerDelegateMus>
       accelerator_controller_delegate_;
@@ -140,8 +128,6 @@ class WmShellMus : public WmShell, public ui::WindowTreeClientObserver {
       accelerator_controller_registrar_;
   std::unique_ptr<ImmersiveHandlerFactoryMus> immersive_handler_factory_;
   std::unique_ptr<SessionStateDelegate> session_state_delegate_;
-
-  base::ObserverList<WmActivationObserver> activation_observers_;
 
   DISALLOW_COPY_AND_ASSIGN(WmShellMus);
 };

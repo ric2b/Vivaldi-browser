@@ -12,10 +12,12 @@
 #include "ash/link_handler_model_factory.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
 #include "components/arc/arc_service.h"
 #include "components/arc/common/intent_helper.mojom.h"
 #include "components/arc/instance_holder.h"
+#include "components/arc/intent_helper/arc_intent_helper_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace ash {
@@ -28,8 +30,8 @@ namespace arc {
 
 class ActivityIconLoader;
 class ArcBridgeService;
+class IntentFilter;
 class LocalActivityResolver;
-class SetWallpaperDelegate;
 
 // Receives intents from ARC.
 class ArcIntentHelperBridge
@@ -53,6 +55,9 @@ class ArcIntentHelperBridge
       const scoped_refptr<LocalActivityResolver>& activity_resolver);
   ~ArcIntentHelperBridge() override;
 
+  void AddObserver(ArcIntentHelperObserver* observer);
+  void RemoveObserver(ArcIntentHelperObserver* observer);
+
   // InstanceHolder<mojom::IntentHelperInstance>::Observer
   void OnInstanceReady() override;
   void OnInstanceClosed() override;
@@ -60,7 +65,7 @@ class ArcIntentHelperBridge
   // mojom::IntentHelperHost
   void OnIconInvalidated(const std::string& package_name) override;
   void OnIntentFiltersUpdated(
-      std::vector<mojom::IntentFilterPtr> intent_filters) override;
+      std::vector<IntentFilter> intent_filters) override;
   void OnOpenDownloads() override;
   void OnOpenUrl(const std::string& url) override;
   void OpenWallpaperPicker() override;
@@ -77,17 +82,12 @@ class ArcIntentHelperBridge
   static std::vector<mojom::IntentHandlerInfoPtr> FilterOutIntentHelper(
       std::vector<mojom::IntentHandlerInfoPtr> handlers);
 
-  // Gets the mojo instance if it's available. On failure, returns nullptr and
-  // updates |out_error_code| if it's not nullptr.
-  static mojom::IntentHelperInstance* GetIntentHelperInstanceWithErrorCode(
-      const std::string& method_name_for_logging,
-      uint32_t min_instance_version,
-      GetResult* out_error_code);
+  // Checks if the intent helper interface is available. When it is not, returns
+  // false and updates |out_error_code| if it's not nullptr.
+  static bool IsIntentHelperAvailable(GetResult* out_error_code);
 
-  // Does the same as above without asking for the error code.
-  static mojom::IntentHelperInstance* GetIntentHelperInstance(
-      const std::string& method_name_for_logging,
-      uint32_t min_instance_version);
+  // For supporting ArcServiceManager::GetService<T>().
+  static const char kArcServiceName[];
 
   static const char kArcIntentHelperPackageName[];
 
@@ -97,6 +97,8 @@ class ArcIntentHelperBridge
   scoped_refptr<LocalActivityResolver> activity_resolver_;
 
   base::ThreadChecker thread_checker_;
+
+  base::ObserverList<ArcIntentHelperObserver> observer_list_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcIntentHelperBridge);
 };

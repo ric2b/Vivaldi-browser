@@ -39,7 +39,6 @@
 #include "core/layout/svg/LayoutSVGModelObject.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/layout/svg/LayoutSVGViewportContainer.h"
-#include "core/page/FrameTree.h"
 #include "core/svg/SVGAngleTearOff.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGLengthTearOff.h"
@@ -82,7 +81,6 @@ inline SVGSVGElement::SVGSVGElement(Document& doc)
                                     SVGNames::heightAttr,
                                     SVGLength::create(SVGLengthMode::Height),
                                     CSSPropertyHeight)),
-      m_useCurrentView(false),
       m_timeContainer(SMILTimeContainer::create(*this)),
       m_translation(SVGPoint::create()),
       m_currentScale(1) {
@@ -100,12 +98,6 @@ inline SVGSVGElement::SVGSVGElement(Document& doc)
 DEFINE_NODE_FACTORY(SVGSVGElement)
 
 SVGSVGElement::~SVGSVGElement() {}
-
-SVGViewSpec* SVGSVGElement::currentView() {
-  if (!m_viewSpec)
-    m_viewSpec = SVGViewSpec::create(this);
-  return m_viewSpec;
-}
 
 float SVGSVGElement::currentScale() const {
   if (!isConnected() || !isOutermostSVGSVGElement())
@@ -157,16 +149,15 @@ void SVGSVGElement::updateUserTransform() {
 }
 
 bool SVGSVGElement::zoomAndPanEnabled() const {
-  const SVGZoomAndPan* currentViewSpec = this;
-  if (m_useCurrentView)
-    currentViewSpec = m_viewSpec;
-  DCHECK(currentViewSpec);
-  return currentViewSpec->zoomAndPan() == SVGZoomAndPanMagnify;
+  SVGZoomAndPanType zoomAndPan = this->zoomAndPan();
+  if (m_viewSpec)
+    zoomAndPan = m_viewSpec->zoomAndPan();
+  return zoomAndPan == SVGZoomAndPanMagnify;
 }
 
-void SVGSVGElement::parseAttribute(const QualifiedName& name,
-                                   const AtomicString& oldValue,
-                                   const AtomicString& value) {
+void SVGSVGElement::parseAttribute(const AttributeModificationParams& params) {
+  const QualifiedName& name = params.name;
+  const AtomicString& value = params.newValue;
   if (!nearestViewportElement()) {
     bool setListener = true;
 
@@ -215,7 +206,7 @@ void SVGSVGElement::parseAttribute(const QualifiedName& name,
       property->setDefaultValueAsString("100%");
     reportAttributeParsingError(parseError, name, value);
   } else {
-    SVGElement::parseAttribute(name, oldValue, value);
+    SVGElement::parseAttribute(params);
   }
 }
 
@@ -239,21 +230,20 @@ void SVGSVGElement::collectStyleForPresentationAttribute(
     MutableStylePropertySet* style) {
   SVGAnimatedPropertyBase* property = propertyFromAttribute(name);
   if (property == m_x) {
-    addPropertyToPresentationAttributeStyle(
-        style, CSSPropertyX, m_x->currentValue()->asCSSPrimitiveValue());
+    addPropertyToPresentationAttributeStyle(style, CSSPropertyX,
+                                            m_x->cssValue());
   } else if (property == m_y) {
-    addPropertyToPresentationAttributeStyle(
-        style, CSSPropertyY, m_y->currentValue()->asCSSPrimitiveValue());
+    addPropertyToPresentationAttributeStyle(style, CSSPropertyY,
+                                            m_y->cssValue());
   } else if (isOutermostSVGSVGElement() &&
              (property == m_width || property == m_height)) {
-    if (property == m_width)
-      addPropertyToPresentationAttributeStyle(
-          style, CSSPropertyWidth,
-          m_width->currentValue()->asCSSPrimitiveValue());
-    else if (property == m_height)
-      addPropertyToPresentationAttributeStyle(
-          style, CSSPropertyHeight,
-          m_height->currentValue()->asCSSPrimitiveValue());
+    if (property == m_width) {
+      addPropertyToPresentationAttributeStyle(style, CSSPropertyWidth,
+                                              m_width->cssValue());
+    } else if (property == m_height) {
+      addPropertyToPresentationAttributeStyle(style, CSSPropertyHeight,
+                                              m_height->cssValue());
+    }
   } else {
     SVGGraphicsElement::collectStyleForPresentationAttribute(name, value,
                                                              style);
@@ -298,8 +288,8 @@ void SVGSVGElement::svgAttributeChanged(const QualifiedName& attrName) {
   if (updateRelativeLengthsOrViewBox ||
       SVGZoomAndPan::isKnownAttribute(attrName)) {
     SVGElement::InvalidationGuard invalidationGuard(this);
-    if (layoutObject())
-      markForLayoutAndParentResourceInvalidation(layoutObject());
+    if (auto* layoutObject = this->layoutObject())
+      markForLayoutAndParentResourceInvalidation(layoutObject);
     return;
   }
 
@@ -327,10 +317,11 @@ static bool isIntersectionOrEnclosureTarget(LayoutObject* layoutObject) {
 bool SVGSVGElement::checkIntersectionOrEnclosure(
     const SVGElement& element,
     const FloatRect& rect,
-    CheckIntersectionOrEnclosure mode) const {
+    GeometryMatchingMode mode) const {
   LayoutObject* layoutObject = element.layoutObject();
   ASSERT(!layoutObject || layoutObject->style());
-  if (!layoutObject || layoutObject->style()->pointerEvents() == PE_NONE)
+  if (!layoutObject ||
+      layoutObject->style()->pointerEvents() == EPointerEvents::kNone)
     return false;
 
   if (!isIntersectionOrEnclosureTarget(layoutObject))
@@ -360,7 +351,7 @@ bool SVGSVGElement::checkIntersectionOrEnclosure(
 StaticNodeList* SVGSVGElement::collectIntersectionOrEnclosureList(
     const FloatRect& rect,
     SVGElement* referenceElement,
-    CheckIntersectionOrEnclosure mode) const {
+    GeometryMatchingMode mode) const {
   HeapVector<Member<Node>> nodes;
 
   const SVGElement* root = this;
@@ -377,7 +368,7 @@ StaticNodeList* SVGSVGElement::collectIntersectionOrEnclosureList(
   for (SVGGraphicsElement& element :
        Traversal<SVGGraphicsElement>::descendantsOf(*root)) {
     if (checkIntersectionOrEnclosure(element, rect, mode))
-      nodes.append(&element);
+      nodes.push_back(&element);
   }
 
   return StaticNodeList::adopt(nodes);
@@ -502,7 +493,7 @@ AffineTransform SVGSVGElement::localCoordinateSpaceTransform(
 
       // Respect scroll offset.
       if (FrameView* view = document().view()) {
-        LayoutSize scrollOffset(view->scrollOffset());
+        LayoutSize scrollOffset(view->getScrollOffset());
         scrollOffset.scale(zoomFactor);
         transform.translate(-scrollOffset.width(), -scrollOffset.height());
       }
@@ -598,10 +589,8 @@ bool SVGSVGElement::shouldSynthesizeViewBox() const {
 }
 
 FloatRect SVGSVGElement::currentViewBoxRect() const {
-  if (m_useCurrentView) {
-    DCHECK(m_viewSpec);
-    return m_viewSpec->viewBox()->currentValue()->value();
-  }
+  if (m_viewSpec)
+    return m_viewSpec->viewBox()->value();
 
   FloatRect useViewBox = viewBox()->currentValue()->value();
   if (!useViewBox.isEmpty())
@@ -623,10 +612,9 @@ FloatRect SVGSVGElement::currentViewBoxRect() const {
 }
 
 SVGPreserveAspectRatio* SVGSVGElement::currentPreserveAspectRatio() const {
-  if (m_useCurrentView) {
-    DCHECK(m_viewSpec);
-    return m_viewSpec->preserveAspectRatio()->currentValue();
-  }
+  if (m_viewSpec)
+    return m_viewSpec->preserveAspectRatio();
+
   if (!viewBox()->currentValue()->isValid() && shouldSynthesizeViewBox()) {
     // If no viewBox is specified and we're embedded through SVGImage, then
     // synthesize a pAR with the value 'none'.
@@ -688,9 +676,8 @@ AffineTransform SVGSVGElement::viewBoxToViewTransform(float viewWidth,
   AffineTransform ctm = SVGFitToViewBox::viewBoxToViewTransform(
       currentViewBoxRect(), currentPreserveAspectRatio(), viewWidth,
       viewHeight);
-  if (!m_useCurrentView)
+  if (!m_viewSpec)
     return ctm;
-  DCHECK(m_viewSpec);
 
   SVGTransformList* transformList = m_viewSpec->transform();
   if (transformList->isEmpty())
@@ -703,73 +690,54 @@ AffineTransform SVGSVGElement::viewBoxToViewTransform(float viewWidth,
   return ctm;
 }
 
+void SVGSVGElement::setViewSpec(SVGViewSpec* viewSpec) {
+  // Even if the viewspec object itself doesn't change, it could still
+  // have been mutated, so only treat a "no viewspec" -> "no viewspec"
+  // transition as a no-op.
+  if (!m_viewSpec && !viewSpec)
+    return;
+  m_viewSpec = viewSpec;
+  if (LayoutObject* layoutObject = this->layoutObject())
+    markForLayoutAndParentResourceInvalidation(layoutObject);
+}
+
 void SVGSVGElement::setupInitialView(const String& fragmentIdentifier,
                                      Element* anchorNode) {
-  if (m_viewSpec)
-    m_viewSpec->reset();
-
-  // If we previously had a view, we need to layout again, regardless of the
-  // state after setting.
-  bool needsViewUpdate = m_useCurrentView;
-  m_useCurrentView = false;
-
   if (fragmentIdentifier.startsWith("svgView(")) {
-    SVGViewSpec* view =
-        currentView();  // Ensure the SVGViewSpec has been created.
-
-    view->inheritViewAttributesFromElement(this);
-
-    if (view->parseViewSpec(fragmentIdentifier)) {
+    SVGViewSpec* viewSpec = SVGViewSpec::createForElement(*this);
+    if (viewSpec->parseViewSpec(fragmentIdentifier)) {
       UseCounter::count(document(), UseCounter::SVGSVGElementFragmentSVGView);
-      m_useCurrentView = true;
-      needsViewUpdate = true;
-    } else {
-      view->reset();
-    }
-  } else if (isSVGViewElement(anchorNode)) {
-    // Spec: If the SVG fragment identifier addresses a 'view' element
-    // within an SVG document (e.g., MyDrawing.svg#MyView or
-    // MyDrawing.svg#xpointer(id('MyView'))) then the closest ancestor
-    // 'svg' element is displayed in the viewport.  Any view specification
-    // attributes included on the given 'view' element override the
-    // corresponding view specification attributes on the closest ancestor
-    // 'svg' element.
-    // TODO(ed): The spec text above is a bit unclear.
-    // Should the transform from outermost svg to nested svg be applied to
-    // "display" the inner svg in the viewport, then let the view element
-    // override the inner svg's view specification attributes. Should it
-    // fill/override the outer viewport?
-    SVGViewElement& viewElement = toSVGViewElement(*anchorNode);
-
-    if (SVGSVGElement* svg = viewElement.ownerSVGElement()) {
-      svg->inheritViewAttributes(&viewElement);
-
-      if (LayoutObject* layoutObject = svg->layoutObject())
-        markForLayoutAndParentResourceInvalidation(layoutObject);
-
+      setViewSpec(viewSpec);
       return;
     }
   }
 
-  LayoutObject* layoutObject = this->layoutObject();
-  if (layoutObject && needsViewUpdate)
-    markForLayoutAndParentResourceInvalidation(layoutObject);
+  setViewSpec(nullptr);
 
-  // If m_useCurrentView is true we should have a view-spec.
-  DCHECK(!m_useCurrentView || m_viewSpec);
+  if (!isSVGViewElement(anchorNode))
+    return;
 
-  // FIXME: We need to decide which <svg> to focus on, and zoom to it.
-  // FIXME: We need to actually "highlight" the viewTarget(s).
-}
+  SVGViewElement& viewElement = toSVGViewElement(*anchorNode);
 
-void SVGSVGElement::inheritViewAttributes(SVGViewElement* viewElement) {
-  SVGViewSpec* view = currentView();
-  m_useCurrentView = true;
-  UseCounter::count(document(),
+  // Spec: If the SVG fragment identifier addresses a 'view' element
+  // within an SVG document (e.g., MyDrawing.svg#MyView) then the
+  // closest ancestor 'svg' element is displayed in the
+  // viewport. Any view specification attributes included on the
+  // given 'view' element override the corresponding view
+  // specification attributes on the closest ancestor 'svg' element.
+  // TODO(ed): The spec text above is a bit unclear.
+  // Should the transform from outermost svg to nested svg be applied to
+  // "display" the inner svg in the viewport, then let the view element
+  // override the inner svg's view specification attributes. Should it
+  // fill/override the outer viewport?
+  SVGSVGElement* svg = viewElement.ownerSVGElement();
+  if (!svg)
+    return;
+  SVGViewSpec* viewSpec = SVGViewSpec::createForElement(*svg);
+  viewSpec->inheritViewAttributesFromElement(viewElement);
+  UseCounter::count(svg->document(),
                     UseCounter::SVGSVGElementFragmentSVGViewElement);
-  view->inheritViewAttributesFromElement(this);
-  view->inheritViewAttributesFromElement(viewElement);
-  DCHECK(!m_useCurrentView || m_viewSpec);
+  svg->setViewSpec(viewSpec);
 }
 
 void SVGSVGElement::finishParsingChildren() {

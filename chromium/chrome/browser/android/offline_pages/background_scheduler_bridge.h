@@ -5,13 +5,9 @@
 #ifndef CHROME_BROWSER_ANDROID_OFFLINE_PAGES_BACKGROUND_SCHEDULER_BRIDGE_H_
 #define CHROME_BROWSER_ANDROID_OFFLINE_PAGES_BACKGROUND_SCHEDULER_BRIDGE_H_
 
-#include "components/offline_pages/background/scheduler.h"
+#include "components/offline_pages/core/background/scheduler.h"
 
 #include "base/android/jni_android.h"
-
-namespace content {
-class BrowserContext;
-}
 
 namespace offline_pages {
 namespace android {
@@ -20,11 +16,15 @@ namespace android {
 // on Android.
 class BackgroundSchedulerBridge : public Scheduler {
  public:
+  BackgroundSchedulerBridge();
+  ~BackgroundSchedulerBridge() override;
+
   // Scheduler implementation.
   void Schedule(const TriggerConditions& trigger_conditions) override;
   void BackupSchedule(const TriggerConditions& trigger_conditions,
                       long delay_in_seconds) override;
   void Unschedule() override;
+  const DeviceConditions& GetCurrentDeviceConditions() override;
 
  private:
   base::android::ScopedJavaLocalRef<jobject> CreateTriggerConditions(
@@ -32,6 +32,7 @@ class BackgroundSchedulerBridge : public Scheduler {
       bool require_power_connected,
       int minimum_battery_percentage,
       bool require_unmetered_network) const;
+  std::unique_ptr<DeviceConditions> device_conditions_;
 };
 
 bool RegisterBackgroundSchedulerBridge(JNIEnv* env);

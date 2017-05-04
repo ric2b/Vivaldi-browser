@@ -29,7 +29,7 @@
 
 #include "core/html/shadow/MediaControlElementTypes.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
 #include "core/css/StylePropertySet.h"
@@ -161,7 +161,7 @@ DEFINE_TRACE(MediaControlDivElement) {
 MediaControlInputElement::MediaControlInputElement(
     MediaControls& mediaControls,
     MediaControlElementType displayType)
-    : HTMLInputElement(mediaControls.document(), 0, false),
+    : HTMLInputElement(mediaControls.document(), false),
       MediaControlElement(mediaControls, displayType, this) {}
 
 bool MediaControlInputElement::isMouseFocusable() const {

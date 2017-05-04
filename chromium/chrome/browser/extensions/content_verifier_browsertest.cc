@@ -6,6 +6,7 @@
 #include <set>
 #include <string>
 
+#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -13,9 +14,14 @@
 #include "base/scoped_observer.h"
 #include "base/strings/string_split.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/extensions/browsertest_util.h"
+#include "chrome/browser/extensions/chrome_content_verifier_delegate.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
+#include "chrome/browser/extensions/extension_management_test_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/common/chrome_switches.h"
+#include "components/policy/core/browser/browser_policy_connector.h"
+#include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/content_verifier.h"
 #include "extensions/browser/content_verify_job.h"
@@ -421,6 +427,10 @@ class ForceInstallProvider : public ManagementPolicy::Provider {
                              base::string16* error) const override {
     return extension->id() != id_;
   }
+  bool MustRemainEnabled(const Extension* extension,
+                         base::string16* error) const override {
+    return extension->id() == id_;
+  }
 
  private:
   // The extension id we want to disallow uninstall/disable for.
@@ -660,6 +670,148 @@ IN_PROC_BROWSER_TEST_F(ContentVerifierTest, PolicyCorrupted) {
     }
   }
   EXPECT_TRUE(found);
+}
+
+class ContentVerifierPolicyTest : public ContentVerifierTest {
+ public:
+  // We need to do this work here because the force-install policy values are
+  // checked pretty early on in the startup of the ExtensionService, which
+  // happens between SetUpInProcessBrowserTestFixture and SetUpOnMainThread.
+  void SetUpInProcessBrowserTestFixture() override {
+    ContentVerifierTest::SetUpInProcessBrowserTestFixture();
+
+    EXPECT_CALL(policy_provider_, IsInitializationComplete(testing::_))
+        .WillRepeatedly(testing::Return(true));
+
+    policy::BrowserPolicyConnector::SetPolicyProviderForTesting(
+        &policy_provider_);
+    ExtensionManagementPolicyUpdater management_policy(&policy_provider_);
+    management_policy.SetIndividualExtensionAutoInstalled(
+        id_, extension_urls::kChromeWebstoreUpdateURL, true /* forced */);
+
+    ExtensionDownloader::set_test_delegate(&downloader_);
+    base::FilePath crx_path =
+        test_data_dir_.AppendASCII("content_verifier/v1.crx");
+    std::string version = "2";
+    downloader_.AddResponse(id_, version, crx_path);
+  }
+
+  void SetUpOnMainThread() override {
+    extensions::browsertest_util::CreateAndInitializeLocalCache();
+  }
+
+ protected:
+  // The id of the extension we want to have force-installed.
+  std::string id_ = "npnbmohejbjohgpjnmjagbafnjhkmgko";
+
+ private:
+  policy::MockConfigurationPolicyProvider policy_provider_;
+  DownloaderTestDelegate downloader_;
+};
+
+// We want to test what happens at startup with a corroption-disabled policy
+// force installed extension. So we set that up in the PRE test here.
+IN_PROC_BROWSER_TEST_F(ContentVerifierPolicyTest,
+                       PRE_PolicyCorruptedOnStartup) {
+  ExtensionRegistry* registry = ExtensionRegistry::Get(profile());
+  RegistryObserver registry_observer(registry);
+
+  // Wait for the extension to be installed by policy we set up in
+  // SetUpInProcessBrowserTestFixture.
+  if (!registry->GetInstalledExtension(id_)) {
+    EXPECT_TRUE(registry_observer.WaitForInstall(id_));
+  }
+
+  // Simulate corruption of the extension so that we can test what happens
+  // at startup in the non-PRE test.
+  ExtensionSystem* system = ExtensionSystem::Get(profile());
+  ContentVerifier* verifier = system->content_verifier();
+  verifier->VerifyFailed(id_, ContentVerifyJob::HASH_MISMATCH);
+  EXPECT_TRUE(registry_observer.WaitForUnload(id_));
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+  int reasons = prefs->GetDisableReasons(id_);
+  EXPECT_TRUE(reasons & Extension::DISABLE_CORRUPTED);
+}
+
+// Now actually test what happens on the next startup after the PRE test above.
+IN_PROC_BROWSER_TEST_F(ContentVerifierPolicyTest, PolicyCorruptedOnStartup) {
+  // Depdending on timing, the extension may have already been reinstalled
+  // between SetUpInProcessBrowserTestFixture and now (usually not during local
+  // testing on a developer machine, but sometimes on a heavily loaded system
+  // such as the build waterfall / trybots). If the reinstall didn't already
+  // happen, wait for it.
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+  ExtensionRegistry* registry = ExtensionRegistry::Get(profile());
+  int disable_reasons = prefs->GetDisableReasons(id_);
+  if (disable_reasons & Extension::DISABLE_CORRUPTED) {
+    RegistryObserver registry_observer(registry);
+    EXPECT_TRUE(registry_observer.WaitForInstall(id_));
+    disable_reasons = prefs->GetDisableReasons(id_);
+  }
+  EXPECT_FALSE(disable_reasons & Extension::DISABLE_CORRUPTED);
+  EXPECT_TRUE(registry->enabled_extensions().Contains(id_));
+}
+
+namespace {
+
+// A helper for intercepting the normal action that
+// ChromeContentVerifierDelegate would take on discovering corruption, letting
+// us track the delay for each consecutive reinstall.
+class DelayTracker {
+ public:
+  DelayTracker() {}
+
+  const std::vector<base::TimeDelta>& calls() { return calls_; }
+
+  void ReinstallAction(base::TimeDelta delay) { calls_.push_back(delay); }
+
+ private:
+  std::vector<base::TimeDelta> calls_;
+
+  DISALLOW_COPY_AND_ASSIGN(DelayTracker);
+};
+
+}  // namespace
+
+IN_PROC_BROWSER_TEST_F(ContentVerifierPolicyTest, Backoff) {
+  ExtensionRegistry* registry = ExtensionRegistry::Get(profile());
+  ExtensionSystem* system = ExtensionSystem::Get(profile());
+  ExtensionService* service = system->extension_service();
+  ContentVerifier* verifier = system->content_verifier();
+
+  // Wait for the extension to be installed by the policy we set up in
+  // SetUpInProcessBrowserTestFixture.
+  if (!registry->GetInstalledExtension(id_)) {
+    RegistryObserver registry_observer(registry);
+    EXPECT_TRUE(registry_observer.WaitForInstall(id_));
+  }
+
+  // Setup to intercept reinstall action, so we can see what the delay would
+  // have been for the real action.
+  DelayTracker delay_tracker;
+  base::Callback<void(base::TimeDelta)> action = base::Bind(
+      &DelayTracker::ReinstallAction, base::Unretained(&delay_tracker));
+  ChromeContentVerifierDelegate::set_policy_reinstall_action_for_test(&action);
+
+  // Do 4 iterations of disabling followed by reinstall.
+  const size_t iterations = 4;
+  for (size_t i = 0; i < iterations; i++) {
+    RegistryObserver registry_observer(registry);
+    verifier->VerifyFailed(id_, ContentVerifyJob::HASH_MISMATCH);
+    EXPECT_TRUE(registry_observer.WaitForUnload(id_));
+    // Trigger reinstall manually (since we overrode default reinstall action).
+    service->CheckForExternalUpdates();
+    EXPECT_TRUE(registry_observer.WaitForInstall(id_));
+  }
+  const std::vector<base::TimeDelta>& calls = delay_tracker.calls();
+
+  // Assert that the first reinstall action happened with a delay of 0, and
+  // then kept growing each additional time.
+  ASSERT_EQ(iterations, calls.size());
+  EXPECT_EQ(base::TimeDelta(), delay_tracker.calls()[0]);
+  for (size_t i = 1; i < delay_tracker.calls().size(); i++) {
+    EXPECT_LT(calls[i - 1], calls[i]);
+  }
 }
 
 }  // namespace extensions

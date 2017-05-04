@@ -26,7 +26,7 @@
 #ifndef Node_h
 #define Node_h
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/NodeOrString.h"
 #include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
@@ -38,6 +38,7 @@
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/heap/Handle.h"
+#include "wtf/Compiler.h"
 #include "wtf/Forward.h"
 
 // This needs to be here because Element.cpp also depends on it.
@@ -45,13 +46,11 @@
 
 namespace blink {
 
-class Attribute;
 class ContainerNode;
 class Document;
 class Element;
 class ElementShadow;
 class Event;
-class EventListener;
 class ExceptionState;
 class GetRootNodeOptions;
 class HTMLQualifiedName;
@@ -75,7 +74,6 @@ class StaticNodeTypeList;
 using StaticNodeList = StaticNodeTypeList<Node>;
 class StyleChangeReasonForTracing;
 class Text;
-class TouchEvent;
 
 const int nodeStyleChangeShift = 18;
 const int nodeCustomElementShift = 20;
@@ -778,10 +776,10 @@ class CORE_EXPORT Node : public EventTarget {
 
   v8::Local<v8::Object> wrap(v8::Isolate*,
                              v8::Local<v8::Object> creationContext) override;
-  v8::Local<v8::Object> associateWithWrapper(
+  WARN_UNUSED_RESULT v8::Local<v8::Object> associateWithWrapper(
       v8::Isolate*,
       const WrapperTypeInfo*,
-      v8::Local<v8::Object> wrapper) override WARN_UNUSED_RETURN;
+      v8::Local<v8::Object> wrapper) override;
 
  private:
   enum NodeFlags {
@@ -869,6 +867,8 @@ class CORE_EXPORT Node : public EventTarget {
 
   Node(TreeScope*, ConstructionType);
 
+  virtual void willMoveToNewDocument(Document& oldDocument,
+                                     Document& newDocument);
   virtual void didMoveToNewDocument(Document& oldDocument);
 
   void addedEventListener(const AtomicString& eventType,
@@ -967,7 +967,7 @@ inline ContainerNode* Node::parentNode() const {
 }
 
 inline void Node::lazyReattachIfAttached() {
-  if (getStyleChangeType() == NeedsReattachStyleChange)
+  if (needsAttach())
     return;
   if (!inActiveDocument())
     return;

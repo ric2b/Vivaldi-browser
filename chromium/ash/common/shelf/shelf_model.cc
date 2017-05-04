@@ -22,15 +22,12 @@ int ShelfItemTypeToWeight(ShelfItemType type) {
     case TYPE_BROWSER_SHORTCUT:
     case TYPE_APP_SHORTCUT:
       return 1;
-    case TYPE_WINDOWED_APP:
-    case TYPE_PLATFORM_APP:
+    case TYPE_APP:
       return 2;
     case TYPE_DIALOG:
       return 3;
     case TYPE_APP_PANEL:
       return 4;
-    case TYPE_IME_MENU:
-      return 5;
     case TYPE_UNDEFINED:
       NOTREACHED() << "ShelfItemType must be set";
       return -1;
@@ -46,7 +43,7 @@ bool CompareByWeight(const ShelfItem& a, const ShelfItem& b) {
 
 }  // namespace
 
-ShelfModel::ShelfModel() : next_id_(1), status_(STATUS_NORMAL) {}
+ShelfModel::ShelfModel() : next_id_(1) {}
 
 ShelfModel::~ShelfModel() {}
 
@@ -93,7 +90,11 @@ void ShelfModel::Move(int index, int target_index) {
 }
 
 void ShelfModel::Set(int index, const ShelfItem& item) {
-  DCHECK(index >= 0 && index < item_count());
+  if (index < 0 || index >= item_count()) {
+    NOTREACHED();
+    return;
+  }
+
   int new_index = item.type == items_[index].type
                       ? index
                       : ValidateInsertionIndex(item.type, index);
@@ -141,12 +142,8 @@ ShelfItems::const_iterator ShelfModel::ItemByID(int id) const {
 }
 
 int ShelfModel::FirstRunningAppIndex() const {
-  // Since lower_bound only checks weights against each other, we do not need
-  // to explicitly change different running application types.
-  DCHECK_EQ(ShelfItemTypeToWeight(TYPE_WINDOWED_APP),
-            ShelfItemTypeToWeight(TYPE_PLATFORM_APP));
   ShelfItem weight_dummy;
-  weight_dummy.type = TYPE_WINDOWED_APP;
+  weight_dummy.type = TYPE_APP;
   return std::lower_bound(items_.begin(), items_.end(), weight_dummy,
                           CompareByWeight) -
          items_.begin();

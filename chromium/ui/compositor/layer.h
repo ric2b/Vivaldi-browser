@@ -22,7 +22,7 @@
 #include "cc/layers/surface_layer.h"
 #include "cc/layers/texture_layer_client.h"
 #include "cc/resources/texture_mailbox.h"
-#include "cc/surfaces/surface_id.h"
+#include "cc/surfaces/sequence_surface_reference_factory.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/compositor/compositor.h"
@@ -293,12 +293,8 @@ class COMPOSITOR_EXPORT Layer
   bool TextureFlipped() const;
 
   // Begins showing content from a surface with a particular id.
-  void SetShowSurface(const cc::SurfaceId& surface_id,
-                      const cc::SurfaceLayer::SatisfyCallback& satisfy_callback,
-                      const cc::SurfaceLayer::RequireCallback& require_callback,
-                      gfx::Size surface_size,
-                      float scale,
-                      gfx::Size frame_size_in_dip);
+  void SetShowSurface(const cc::SurfaceInfo& surface_info,
+                      scoped_refptr<cc::SurfaceReferenceFactory> surface_ref);
 
   bool has_external_content() {
     return texture_layer_.get() || surface_layer_.get();
@@ -386,6 +382,10 @@ class COMPOSITOR_EXPORT Layer
 
   const cc::Region& damaged_region_for_testing() const {
     return damaged_region_;
+  }
+
+  const gfx::Size& frame_size_in_dip_for_testing() const {
+    return frame_size_in_dip_;
   }
 
  private:

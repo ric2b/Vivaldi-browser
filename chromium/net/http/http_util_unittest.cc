@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <algorithm>
+#include <limits>
 
 #include "base/strings/string_util.h"
 #include "net/http/http_util.h"
@@ -97,49 +98,6 @@ TEST(HttpUtilTest, IsSafeHeader) {
     EXPECT_TRUE(HttpUtil::IsSafeHeader(base::ToUpperASCII(safe_headers[i])))
         << safe_headers[i];
   }
-}
-
-TEST(HttpUtilTest, HasHeader) {
-  static const struct {
-    const char* const headers;
-    const char* const name;
-    bool expected_result;
-  } tests[] = {
-    { "", "foo", false },
-    { "foo\r\nbar", "foo", false },
-    { "ffoo: 1", "foo", false },
-    { "foo: 1", "foo", true },
-    { "foo: 1\r\nbar: 2", "foo", true },
-    { "fOO: 1\r\nbar: 2", "foo", true },
-    { "g: 0\r\nfoo: 1\r\nbar: 2", "foo", true },
-  };
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    bool result = HttpUtil::HasHeader(tests[i].headers, tests[i].name);
-    EXPECT_EQ(tests[i].expected_result, result);
-  }
-}
-
-TEST(HttpUtilTest, StripHeaders) {
-  static const char* const headers =
-      "Origin: origin\r\n"
-      "Content-Type: text/plain\r\n"
-      "Cookies: foo1\r\n"
-      "Custom: baz\r\n"
-      "COOKIES: foo2\r\n"
-      "Server: Apache\r\n"
-      "OrIGin: origin2\r\n";
-
-  static const char* const header_names[] = {
-    "origin", "content-type", "cookies"
-  };
-
-  static const char* const expected_stripped_headers =
-      "Custom: baz\r\n"
-      "Server: Apache\r\n";
-
-  EXPECT_EQ(expected_stripped_headers,
-            HttpUtil::StripHeaders(headers, header_names,
-                                   arraysize(header_names)));
 }
 
 TEST(HttpUtilTest, HeadersIterator) {
@@ -378,6 +336,7 @@ TEST(HttpUtilTest, LocateEndOfAdditionalHeaders) {
   }
 }
 TEST(HttpUtilTest, AssembleRawHeaders) {
+  // clang-format off
   struct {
     const char* const input;  // with '|' representing '\0'
     const char* const expected_result;  // with '\0' changed to '|'
@@ -679,7 +638,19 @@ TEST(HttpUtilTest, AssembleRawHeaders) {
       "HTTP/1.0 200 OK\nFoo: 1|Foo2: 3\nBar: 2\n\n",
       "HTTP/1.0 200 OK|Foo: 1Foo2: 3|Bar: 2||"
     },
+
+    // The embedded NUL at the start of the line (before "Blah:") should not be
+    // interpreted as LWS (as that would mistake it for a header line
+    // continuation).
+    {
+      "HTTP/1.0 200 OK\n"
+      "Foo: 1\n"
+      "|Blah: 3\n"
+      "Bar: 2\n\n",
+      "HTTP/1.0 200 OK|Foo: 1|Blah: 3|Bar: 2||"
+    },
   };
+  // clang-format on
   for (size_t i = 0; i < arraysize(tests); ++i) {
     std::string input = tests[i].input;
     std::replace(input.begin(), input.end(), '|', '\0');
@@ -830,145 +801,75 @@ TEST(HttpUtilTest, ParseContentType) {
   }
 }
 
-TEST(HttpUtilTest, ParseRanges) {
+TEST(HttpUtilTest, ParseContentRangeHeader) {
   const struct {
-    const char* const headers;
+    const char* const content_range_header_spec;
     bool expected_return_value;
-    size_t expected_ranges_size;
-    const struct {
-      int64_t expected_first_byte_position;
-      int64_t expected_last_byte_position;
-      int64_t expected_suffix_length;
-    } expected_ranges[10];
+    int64_t expected_first_byte_position;
+    int64_t expected_last_byte_position;
+    int64_t expected_instance_length;
   } tests[] = {
-    { "Range: bytes=0-10",
-      true,
-      1,
-      { {0, 10, -1}, }
-    },
-    { "Range: bytes=10-0",
-      false,
-      0,
-      {}
-    },
-    { "Range: BytES=0-10",
-      true,
-      1,
-      { {0, 10, -1}, }
-    },
-    { "Range: megabytes=0-10",
-      false,
-      0,
-      {}
-    },
-    { "Range: bytes0-10",
-      false,
-      0,
-      {}
-    },
-    { "Range: bytes=0-0,0-10,10-20,100-200,100-,-200",
-      true,
-      6,
-      { {0, 0, -1},
-        {0, 10, -1},
-        {10, 20, -1},
-        {100, 200, -1},
-        {100, -1, -1},
-        {-1, -1, 200},
-      }
-    },
-    { "Range: bytes=0-10\r\n"
-      "Range: bytes=0-10,10-20,100-200,100-,-200",
-      true,
-      1,
-      { {0, 10, -1}
-      }
-    },
-    { "Range: bytes=",
-      false,
-      0,
-      {}
-    },
-    { "Range: bytes=-",
-      false,
-      0,
-      {}
-    },
-    { "Range: bytes=0-10-",
-      false,
-      0,
-      {}
-    },
-    { "Range: bytes=-0-10",
-      false,
-      0,
-      {}
-    },
-    { "Range: bytes =0-10\r\n",
-      true,
-      1,
-      { {0, 10, -1}
-      }
-    },
-    { "Range: bytes=  0-10      \r\n",
-      true,
-      1,
-      { {0, 10, -1}
-      }
-    },
-    { "Range: bytes  =   0  -   10      \r\n",
-      true,
-      1,
-      { {0, 10, -1}
-      }
-    },
-    { "Range: bytes=   0-1   0\r\n",
-      false,
-      0,
-      {}
-    },
-    { "Range: bytes=   0-     -10\r\n",
-      false,
-      0,
-      {}
-    },
-    { "Range: bytes=   0  -  1   ,   10 -20,   100- 200 ,  100-,  -200 \r\n",
-      true,
-      5,
-      { {0, 1, -1},
-        {10, 20, -1},
-        {100, 200, -1},
-        {100, -1, -1},
-        {-1, -1, 200},
-      }
-    },
+      {"", false, -1, -1, -1},
+      {"megabytes 0-10/50", false, -1, -1, -1},
+      {"0-10/50", false, -1, -1, -1},
+      {"Bytes 0-50/51", true, 0, 50, 51},
+      {"bytes 0-50/51", true, 0, 50, 51},
+      {"bytes\t0-50/51", false, -1, -1, -1},
+      {"    bytes 0-50/51", true, 0, 50, 51},
+      {"    bytes    0    -   50  \t / \t51", true, 0, 50, 51},
+      {"bytes 0\t-\t50\t/\t51\t", true, 0, 50, 51},
+      {"  \tbytes\t\t\t 0\t-\t50\t/\t51\t", true, 0, 50, 51},
+      {"\t   bytes \t  0    -   50   /   5   1", false, -1, -1, -1},
+      {"\t   bytes \t  0    -   5 0   /   51", false, -1, -1, -1},
+      {"bytes 50-0/51", false, -1, -1, -1},
+      {"bytes * /*", false, -1, -1, -1},
+      {"bytes *   /    *   ", false, -1, -1, -1},
+      {"bytes 0-50/*", false, -1, -1, -1},
+      {"bytes 0-50  /    * ", false, -1, -1, -1},
+      {"bytes 0-10000000000/10000000001", true, 0, 10000000000ll,
+       10000000001ll},
+      {"bytes 0-10000000000/10000000000", false, -1, -1, -1},
+      // 64 bit wraparound.
+      {"bytes 0 - 9223372036854775807 / 100", false, -1, -1, -1},
+      // 64 bit wraparound.
+      {"bytes 0 - 100 / -9223372036854775808", false, -1, -1, -1},
+      {"bytes */50", false, -1, -1, -1},
+      {"bytes 0-50/10", false, -1, -1, -1},
+      {"bytes 40-50/45", false, -1, -1, -1},
+      {"bytes 0-50/-10", false, -1, -1, -1},
+      {"bytes 0-0/1", true, 0, 0, 1},
+      {"bytes 0-40000000000000000000/40000000000000000001", false, -1, -1, -1},
+      {"bytes 1-/100", false, -1, -1, -1},
+      {"bytes -/100", false, -1, -1, -1},
+      {"bytes -1/100", false, -1, -1, -1},
+      {"bytes 0-1233/*", false, -1, -1, -1},
+      {"bytes -123 - -1/100", false, -1, -1, -1},
   };
 
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    std::vector<HttpByteRange> ranges;
-    bool return_value = HttpUtil::ParseRanges(std::string(tests[i].headers),
-                                              &ranges);
-    EXPECT_EQ(tests[i].expected_return_value, return_value);
-    if (return_value) {
-      EXPECT_EQ(tests[i].expected_ranges_size, ranges.size());
-      for (size_t j = 0; j < ranges.size(); ++j) {
-        EXPECT_EQ(tests[i].expected_ranges[j].expected_first_byte_position,
-                  ranges[j].first_byte_position());
-        EXPECT_EQ(tests[i].expected_ranges[j].expected_last_byte_position,
-                  ranges[j].last_byte_position());
-        EXPECT_EQ(tests[i].expected_ranges[j].expected_suffix_length,
-                  ranges[j].suffix_length());
-      }
-    }
+  for (const auto& test : tests) {
+    int64_t first_byte_position, last_byte_position, instance_length;
+    EXPECT_EQ(test.expected_return_value,
+              HttpUtil::ParseContentRangeHeaderFor206(
+                  test.content_range_header_spec, &first_byte_position,
+                  &last_byte_position, &instance_length))
+        << test.content_range_header_spec;
+    EXPECT_EQ(test.expected_first_byte_position, first_byte_position)
+        << test.content_range_header_spec;
+    EXPECT_EQ(test.expected_last_byte_position, last_byte_position)
+        << test.content_range_header_spec;
+    EXPECT_EQ(test.expected_instance_length, instance_length)
+        << test.content_range_header_spec;
   }
 }
 
 TEST(HttpUtilTest, ParseRetryAfterHeader) {
   base::Time::Exploded now_exploded = {2014, 11, 4, 5, 22, 39, 30, 0};
-  base::Time now = base::Time::FromUTCExploded(now_exploded);
+  base::Time now;
+  EXPECT_TRUE(base::Time::FromUTCExploded(now_exploded, &now));
 
   base::Time::Exploded later_exploded = {2015, 1, 5, 1, 12, 34, 56, 0};
-  base::Time later = base::Time::FromUTCExploded(later_exploded);
+  base::Time later;
+  EXPECT_TRUE(base::Time::FromUTCExploded(later_exploded, &later));
 
   const struct {
     const char* retry_after_string;
@@ -1406,6 +1307,19 @@ TEST(HttpUtilTest, IsToken) {
   EXPECT_FALSE(HttpUtil::IsToken("\x7F"));
   EXPECT_FALSE(HttpUtil::IsToken("\x80"));
   EXPECT_FALSE(HttpUtil::IsToken("\xff"));
+}
+
+TEST(HttpUtilTest, IsLWS) {
+  EXPECT_FALSE(HttpUtil::IsLWS('\v'));
+  EXPECT_FALSE(HttpUtil::IsLWS('\0'));
+  EXPECT_FALSE(HttpUtil::IsLWS('1'));
+  EXPECT_FALSE(HttpUtil::IsLWS('a'));
+  EXPECT_FALSE(HttpUtil::IsLWS('.'));
+  EXPECT_FALSE(HttpUtil::IsLWS('\n'));
+  EXPECT_FALSE(HttpUtil::IsLWS('\r'));
+
+  EXPECT_TRUE(HttpUtil::IsLWS('\t'));
+  EXPECT_TRUE(HttpUtil::IsLWS(' '));
 }
 
 }  // namespace net

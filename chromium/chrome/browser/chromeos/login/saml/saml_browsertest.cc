@@ -16,6 +16,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -830,7 +831,6 @@ void SAMLEnrollmentTest::SetUp() {
 void SAMLEnrollmentTest::SetUpCommandLine(base::CommandLine* command_line) {
   command_line->AppendSwitchASCII(policy::switches::kDeviceManagementUrl,
                                   test_server_->GetServiceURL().spec());
-  command_line->AppendSwitch(policy::switches::kDisablePolicyKeyVerification);
 
   SamlTest::SetUpCommandLine(command_line);
 }

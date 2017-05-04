@@ -29,32 +29,32 @@ TEST_F(DisplayInfoTest, CreateFromSpec) {
   EXPECT_EQ(10, info.id());
   EXPECT_EQ("0,0 200x100", info.bounds_in_native().ToString());
   EXPECT_EQ("200x100", info.size_in_pixel().ToString());
-  EXPECT_EQ(display::Display::ROTATE_0, info.GetActiveRotation());
+  EXPECT_EQ(Display::ROTATE_0, info.GetActiveRotation());
   EXPECT_EQ("0,0,0,0", info.overscan_insets_in_dip().ToString());
   EXPECT_EQ(1.0f, info.configured_ui_scale());
 
   info = ManagedDisplayInfo::CreateFromSpecWithID("10+20-300x400*2/o", 10);
   EXPECT_EQ("10,20 300x400", info.bounds_in_native().ToString());
   EXPECT_EQ("288x380", info.size_in_pixel().ToString());
-  EXPECT_EQ(display::Display::ROTATE_0, info.GetActiveRotation());
+  EXPECT_EQ(Display::ROTATE_0, info.GetActiveRotation());
   EXPECT_EQ("5,3,5,3", info.overscan_insets_in_dip().ToString());
 
   info = ManagedDisplayInfo::CreateFromSpecWithID("10+20-300x400*2/ob", 10);
   EXPECT_EQ("10,20 300x400", info.bounds_in_native().ToString());
   EXPECT_EQ("288x380", info.size_in_pixel().ToString());
-  EXPECT_EQ(display::Display::ROTATE_0, info.GetActiveRotation());
+  EXPECT_EQ(Display::ROTATE_0, info.GetActiveRotation());
   EXPECT_EQ("5,3,5,3", info.overscan_insets_in_dip().ToString());
 
   info = ManagedDisplayInfo::CreateFromSpecWithID("10+20-300x400*2/or", 10);
   EXPECT_EQ("10,20 300x400", info.bounds_in_native().ToString());
   EXPECT_EQ("380x288", info.size_in_pixel().ToString());
-  EXPECT_EQ(display::Display::ROTATE_90, info.GetActiveRotation());
+  EXPECT_EQ(Display::ROTATE_90, info.GetActiveRotation());
   // TODO(oshima): This should be rotated too. Fix this.
   EXPECT_EQ("5,3,5,3", info.overscan_insets_in_dip().ToString());
 
   info = ManagedDisplayInfo::CreateFromSpecWithID("10+20-300x400*2/l@1.5", 10);
   EXPECT_EQ("10,20 300x400", info.bounds_in_native().ToString());
-  EXPECT_EQ(display::Display::ROTATE_270, info.GetActiveRotation());
+  EXPECT_EQ(Display::ROTATE_270, info.GetActiveRotation());
   EXPECT_EQ(1.5f, info.configured_ui_scale());
 
   info = ManagedDisplayInfo::CreateFromSpecWithID(
@@ -145,6 +145,35 @@ TEST_F(DisplayInfoTest, InputDevicesTest) {
   EXPECT_EQ(2u, copy_info.input_devices().size());
   copy_info.ClearInputDevices();
   EXPECT_EQ(0u, copy_info.input_devices().size());
+}
+
+TEST_F(DisplayInfoTest, TouchCalibrationTest) {
+  ManagedDisplayInfo info =
+      ManagedDisplayInfo::CreateFromSpecWithID("200x100", 10);
+
+  EXPECT_FALSE(info.has_touch_calibration_data());
+
+  TouchCalibrationData::CalibrationPointPairQuad points = {{
+    std::make_pair(gfx::Point(10, 10), gfx::Point(11, 12)),
+    std::make_pair(gfx::Point(190, 10), gfx::Point(195, 8)),
+    std::make_pair(gfx::Point(10, 90), gfx::Point(12, 94)),
+    std::make_pair(gfx::Point(190, 90), gfx::Point(189, 88))
+  }};
+
+  gfx::Size size(200, 100);
+
+  TouchCalibrationData expected_data(points, size);
+
+  // Add touch data for the display.
+  info.SetTouchCalibrationData(expected_data);
+
+  EXPECT_TRUE(info.has_touch_calibration_data());
+  EXPECT_EQ(expected_data, info.GetTouchCalibrationData());
+
+  // Clear all touch calibration data for the display.
+  info.clear_touch_calibration_data();
+
+  EXPECT_FALSE(info.has_touch_calibration_data());
 }
 
 }  // namespace display

@@ -46,16 +46,24 @@ void MultiColumnFragmentainerGroup::resetColumnHeight() {
         flowThread->enclosingFragmentationContext();
     if (enclosingFragmentationContext &&
         enclosingFragmentationContext->isFragmentainerLogicalHeightKnown()) {
-      // Even if height is auto, we set an initial height, in order to tell how
-      // much content this MultiColumnFragmentainerGroup can hold, and when we
-      // need to append a new one.
+      // Set an initial height, based on the fragmentainer height in the outer
+      // fragmentation context, in order to tell how much content this
+      // MultiColumnFragmentainerGroup can hold, and when we need to append a
+      // new one.
       m_columnHeight = m_maxColumnHeight;
-    } else {
-      m_columnHeight = LayoutUnit();
+      return;
     }
+  }
+  // If the multicol container has a definite height, use it as the column
+  // height. This even applies when we are to balance the columns. We'll still
+  // use the definite height as an initial height, and lay out once at that
+  // column height. If it turns out that the content needs less than this
+  // height, we have to balance and shrink the height and lay out the columns
+  // over again.
+  if (LayoutUnit logicalHeight = flowThread->columnHeightAvailable()) {
+    setAndConstrainColumnHeight(heightAdjustedForRowOffset(logicalHeight));
   } else {
-    setAndConstrainColumnHeight(
-        heightAdjustedForRowOffset(flowThread->columnHeightAvailable()));
+    m_columnHeight = LayoutUnit();
   }
 }
 
@@ -119,12 +127,12 @@ LayoutSize MultiColumnFragmentainerGroup::flowThreadTranslationAtOffset(
 
   LayoutRect portionRect(flowThreadPortionRectAt(columnIndex));
   flowThread->flipForWritingMode(portionRect);
-  portionRect.moveBy(flowThread->topLeftLocation());
+  portionRect.moveBy(flowThread->physicalLocation());
 
   LayoutRect columnRect(columnRectAt(columnIndex));
   columnRect.move(offsetFromColumnSet());
   m_columnSet.flipForWritingMode(columnRect);
-  columnRect.moveBy(m_columnSet.topLeftLocation());
+  columnRect.moveBy(m_columnSet.physicalLocation());
 
   LayoutSize translationRelativeToFlowThread =
       columnRect.location() - portionRect.location();
@@ -173,36 +181,34 @@ LayoutUnit MultiColumnFragmentainerGroup::columnLogicalTopForOffset(
 }
 
 LayoutPoint MultiColumnFragmentainerGroup::visualPointToFlowThreadPoint(
-    const LayoutPoint& visualPoint) const {
+    const LayoutPoint& visualPoint,
+    SnapToColumnPolicy snap) const {
   unsigned columnIndex = columnIndexAtVisualPoint(visualPoint);
   LayoutRect columnRect = columnRectAt(columnIndex);
   LayoutPoint localPoint(visualPoint);
   localPoint.moveBy(-columnRect.location());
-  // Before converting to a flow thread position, if the block direction
-  // coordinate is outside the column, snap to the bounds of the column, and
-  // reset the inline direction coordinate to the start position in the column.
-  // The effect of this is that if the block position is before the column
-  // rectangle, we'll get to the beginning of this column, while if the block
-  // position is after the column rectangle, we'll get to the beginning of the
-  // next column.
   if (!m_columnSet.isHorizontalWritingMode()) {
-    LayoutUnit columnStart = m_columnSet.style()->isLeftToRightDirection()
-                                 ? LayoutUnit()
-                                 : columnRect.height();
-    if (localPoint.x() < 0)
-      localPoint = LayoutPoint(LayoutUnit(), columnStart);
-    else if (localPoint.x() > logicalHeight())
-      localPoint = LayoutPoint(logicalHeight(), columnStart);
+    if (snap == SnapToColumn) {
+      LayoutUnit columnStart = m_columnSet.style()->isLeftToRightDirection()
+                                   ? LayoutUnit()
+                                   : columnRect.height();
+      if (localPoint.x() < 0)
+        localPoint = LayoutPoint(LayoutUnit(), columnStart);
+      else if (localPoint.x() > logicalHeight())
+        localPoint = LayoutPoint(logicalHeight(), columnStart);
+    }
     return LayoutPoint(localPoint.x() + logicalTopInFlowThreadAt(columnIndex),
                        localPoint.y());
   }
-  LayoutUnit columnStart = m_columnSet.style()->isLeftToRightDirection()
-                               ? LayoutUnit()
-                               : columnRect.width();
-  if (localPoint.y() < 0)
-    localPoint = LayoutPoint(columnStart, LayoutUnit());
-  else if (localPoint.y() > logicalHeight())
-    localPoint = LayoutPoint(columnStart, logicalHeight());
+  if (snap == SnapToColumn) {
+    LayoutUnit columnStart = m_columnSet.style()->isLeftToRightDirection()
+                                 ? LayoutUnit()
+                                 : columnRect.width();
+    if (localPoint.y() < 0)
+      localPoint = LayoutPoint(columnStart, LayoutUnit());
+    else if (localPoint.y() > logicalHeight())
+      localPoint = LayoutPoint(columnStart, logicalHeight());
+  }
   return LayoutPoint(localPoint.x(),
                      localPoint.y() + logicalTopInFlowThreadAt(columnIndex));
 }

@@ -12,7 +12,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
-#include "mojo/edk/embedder/process_delegate.h"
+#include "base/values.h"
+#include "services/service_manager/runner/host/service_process_launcher.h"
 #include "services/service_manager/service_manager.h"
 #include "services/service_manager/standalone/tracer.h"
 #include "services/tracing/public/cpp/provider.h"
@@ -23,27 +24,28 @@ class SingleThreadTaskRunner;
 
 namespace catalog {
 class Catalog;
-class Store;
 }
 
 namespace service_manager {
-class NativeRunnerDelegate;
+
+constexpr size_t kThreadPoolMaxThreads = 3;
 
 // The "global" context for the service manager's main process.
-class Context : public mojo::edk::ProcessDelegate {
+class Context {
  public:
   struct InitParams {
     InitParams();
     ~InitParams();
 
-    NativeRunnerDelegate* native_runner_delegate = nullptr;
-    std::unique_ptr<catalog::Store> catalog_store;
+    ServiceProcessLauncher::Delegate*
+        service_process_launcher_delegate = nullptr;
+    std::unique_ptr<base::Value> static_catalog;
     // If true the edk is initialized.
     bool init_edk = true;
   };
 
   Context();
-  ~Context() override;
+  ~Context();
 
   static void EnsureEmbedderIsInitialized();
 
@@ -60,8 +62,7 @@ class Context : public mojo::edk::ProcessDelegate {
   ServiceManager* service_manager() { return service_manager_.get(); }
 
  private:
-  // mojo::edk::ProcessDelegate:
-  void OnShutdownComplete() override;
+  void OnShutdownComplete();
 
   // Runs the app specified by |name|.
   void Run(const std::string& name);

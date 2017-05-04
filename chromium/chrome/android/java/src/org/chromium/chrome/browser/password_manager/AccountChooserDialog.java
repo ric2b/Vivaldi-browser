@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.password_manager;
 import android.app.Activity;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.support.v7.app.AlertDialog;
 import android.text.SpannableString;
@@ -14,18 +15,24 @@ import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.method.LinkMovementMethod;
 import android.text.style.ClickableSpan;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.View.MeasureSpec;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.signin.AccountManagementFragment;
+import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.widget.Toast;
 
 /**
  *  A dialog offers the user the ability to choose credentials for authentication. User is
@@ -138,6 +145,24 @@ public class AccountChooserDialog
                     secondaryNameView.setVisibility(View.VISIBLE);
                 }
 
+                ImageButton pslInfoButton =
+                        (ImageButton) convertView.findViewById(R.id.psl_info_btn);
+                final String originUrl = credential.getOriginUrl();
+
+                if (!originUrl.isEmpty()) {
+                    pslInfoButton.setVisibility(View.VISIBLE);
+                    pslInfoButton.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View view) {
+                            showTooltip(
+                                    view,
+                                    UrlFormatter.formatUrlForSecurityDisplay(
+                                        originUrl, true /* showScheme */),
+                                    R.layout.material_tooltip);
+                        }
+                    });
+                }
+
                 return convertView;
             }
         };
@@ -179,6 +204,65 @@ public class AccountChooserDialog
         mDialog = builder.create();
         mDialog.setOnDismissListener(this);
         mDialog.show();
+    }
+
+    private void showTooltip(View view, String message, int layoutId) {
+        Context context = view.getContext();
+        Resources resources = context.getResources();
+        LayoutInflater inflater = LayoutInflater.from(context);
+
+        TextView text = (TextView) inflater.inflate(layoutId, null);
+        text.setText(message);
+        text.announceForAccessibility(message);
+
+        // This is a work-around for a bug on Android versions KitKat and below
+        // (http://crbug.com/693076). The tooltip wouldn't be shown otherwise.
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.LOLLIPOP) {
+            text.setSingleLine(false);
+        }
+
+        // The tooltip should be shown above and to the left (right for RTL) of the info button.
+        // In order to do so the tooltip's location on the screen is determined. This location is
+        // specified with regard to the top left corner and ignores RTL layouts. For this reason the
+        // location of the tooltip is also specified as offsets to the top left corner of the
+        // screen. Since the tooltip should be shown above the info button, the height of the
+        // tooltip needs to be measured. Furthermore, the height of the statusbar is ignored when
+        // obtaining the icon's screen location, but must be considered when specifying a y offset.
+        // In addition, the measured width is needed in LTR layout, so that the right end of the
+        // tooltip aligns with the right end of the info icon.
+        final int[] screenPos = new int[2];
+        view.getLocationOnScreen(screenPos);
+
+        text.measure(MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+
+        final int width = view.getWidth();
+
+        final int xOffset = ApiCompatibilityUtils.isLayoutRtl(view)
+                ? screenPos[0]
+                : screenPos[0] + width - text.getMeasuredWidth();
+
+        final int statusBarHeightResourceId =
+                resources.getIdentifier("status_bar_height", "dimen", "android");
+
+        final int statusBarHeight = statusBarHeightResourceId > 0
+                ? resources.getDimensionPixelSize(statusBarHeightResourceId)
+                : 0;
+
+        final int tooltipMargin = resources.getDimensionPixelSize(R.dimen.psl_info_tooltip_margin);
+
+        final int yOffset =
+                screenPos[1] - tooltipMargin - statusBarHeight - text.getMeasuredHeight();
+
+        // The xOffset is with regard to the left edge of the screen. Gravity.LEFT is deprecated,
+        // which is why the following line is necessary.
+        final int xGravity = ApiCompatibilityUtils.isLayoutRtl(view) ? Gravity.END : Gravity.START;
+
+        Toast toast = new Toast(context);
+        toast.setGravity(Gravity.TOP | xGravity, xOffset, yOffset);
+        toast.setDuration(Toast.LENGTH_SHORT);
+        toast.setView(text);
+        toast.show();
     }
 
     @CalledByNative
@@ -227,7 +311,7 @@ public class AccountChooserDialog
         if (!mWasDismissedByNative) {
             if (mCredential != null) {
                 nativeOnCredentialClicked(mNativeAccountChooserDialog, mCredential.getIndex(),
-                        mCredential.getType(), mSigninButtonClicked);
+                        mSigninButtonClicked);
             } else {
                 nativeCancelDialog(mNativeAccountChooserDialog);
             }
@@ -236,7 +320,7 @@ public class AccountChooserDialog
     }
 
     private native void nativeOnCredentialClicked(long nativeAccountChooserDialogAndroid,
-            int credentialId, int credentialType, boolean signinButtonClicked);
+            int credentialId, boolean signinButtonClicked);
     private native void nativeCancelDialog(long nativeAccountChooserDialogAndroid);
     private native void nativeDestroy(long nativeAccountChooserDialogAndroid);
     private native void nativeOnLinkClicked(long nativeAccountChooserDialogAndroid);

@@ -125,8 +125,7 @@ void HardwareRenderer::DrawGL(AwDrawGLInfo* draw_info) {
         std::move(child_frame_->frame);
 
     gfx::Size frame_size =
-        child_compositor_frame->delegated_frame_data->render_pass_list.back()
-            ->output_rect.size();
+        child_compositor_frame->render_pass_list.back()->output_rect.size();
     bool size_changed = frame_size != frame_size_;
     frame_size_ = frame_size;
     if (!child_id_.is_valid() || size_changed) {
@@ -168,7 +167,6 @@ void HardwareRenderer::DrawGL(AwDrawGLInfo* draw_info) {
 void HardwareRenderer::AllocateSurface() {
   DCHECK(!child_id_.is_valid());
   child_id_ = surface_id_allocator_->GenerateId();
-  surface_factory_->Create(child_id_);
   surfaces_->AddChildId(cc::SurfaceId(frame_sink_id_, child_id_));
 }
 
@@ -176,14 +174,10 @@ void HardwareRenderer::DestroySurface() {
   DCHECK(child_id_.is_valid());
 
   // Submit an empty frame to force any existing resources to be returned.
-  cc::CompositorFrame empty_frame;
-  empty_frame.delegated_frame_data =
-      base::WrapUnique(new cc::DelegatedFrameData);
-  surface_factory_->SubmitCompositorFrame(child_id_, std::move(empty_frame),
+  surface_factory_->SubmitCompositorFrame(child_id_, cc::CompositorFrame(),
                                           cc::SurfaceFactory::DrawCallback());
-
   surfaces_->RemoveChildId(cc::SurfaceId(frame_sink_id_, child_id_));
-  surface_factory_->Destroy(child_id_);
+  surface_factory_->EvictSurface();
   child_id_ = cc::LocalFrameId();
 }
 
@@ -241,9 +235,8 @@ void HardwareRenderer::ReturnChildFrame(
     return;
 
   cc::ReturnedResourceArray resources_to_return;
-  cc::TransferableResource::ReturnResources(
-      child_frame->frame->delegated_frame_data->resource_list,
-      &resources_to_return);
+  cc::TransferableResource::ReturnResources(child_frame->frame->resource_list,
+                                            &resources_to_return);
 
   // The child frame's compositor id is not necessarily same as
   // compositor_id_.

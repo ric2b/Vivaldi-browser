@@ -95,7 +95,12 @@ namespace ppapi {
 class Resource;
 struct InputEventData;
 struct PPP_Instance_Combined;
+struct URLResponseInfoData;
 class ScopedPPVar;
+}
+
+namespace printing {
+class PdfMetafileSkia;
 }
 
 namespace content {
@@ -261,7 +266,7 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   base::string16 GetSelectedText(bool html);
   base::string16 GetLinkAtPosition(const gfx::Point& point);
   void RequestSurroundingText(size_t desired_number_of_characters);
-  bool StartFind(const base::string16& search_text,
+  bool StartFind(const std::string& search_text,
                  bool case_sensitive,
                  int identifier);
   void SelectFindResult(bool forward, int identifier);
@@ -642,8 +647,10 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // Queries the plugin for supported print formats and sets |format| to the
   // best format to use. Returns false if the plugin does not support any
   // print format that we can handle (we can handle only PDF).
-  bool GetPreferredPrintOutputFormat(PP_PrintOutputFormat_Dev* format);
-  bool PrintPDFOutput(PP_Resource print_output, blink::WebCanvas* canvas);
+  bool GetPreferredPrintOutputFormat(PP_PrintOutputFormat_Dev* format,
+                                     const blink::WebPrintParams& params);
+  bool PrintPDFOutput(PP_Resource print_output,
+                      printing::PdfMetafileSkia* metafile);
 
   // Updates the layer for compositing. This creates a layer and attaches to the
   // container if:
@@ -659,7 +666,7 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // Internal helper function for PrintPage().
   void PrintPageHelper(PP_PrintPageNumberRange_Dev* page_ranges,
                        int num_ranges,
-                       blink::WebCanvas* canvas);
+                       printing::PdfMetafileSkia* metafile);
 
   void DoSetCursor(blink::WebCursorInfo* cursor);
 
@@ -833,12 +840,12 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // and Win, the entire document goes into one metafile.  However, when users
   // print only a subset of all the pages, it is impossible to know if a call
   // to PrintPage() is the last call. Thus in PrintPage(), just store the page
-  // number in |ranges_|. The hack is in PrintEnd(), where a valid |canvas_|
+  // number in |ranges_|. The hack is in PrintEnd(), where a valid |metafile_|
   // is preserved in PrintWebViewHelper::PrintPages. This makes it possible
   // to generate the entire PDF given the variables below:
   //
-  // The most recently used WebCanvas, guaranteed to be valid.
-  sk_sp<blink::WebCanvas> canvas_;
+  // The most recently used metafile_, guaranteed to be valid.
+  printing::PdfMetafileSkia* metafile_;
   // An array of page ranges.
   std::vector<PP_PrintPageNumberRange_Dev> ranges_;
 

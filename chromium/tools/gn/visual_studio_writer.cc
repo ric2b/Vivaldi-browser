@@ -330,9 +330,9 @@ bool VisualStudioWriter::RunAndWriteFiles(const BuildSettings* build_settings,
   if (writer.projects_.empty()) {
     const base::CommandLine* command_line =
         base::CommandLine::ForCurrentProcess();
-  	bool quiet = command_line->HasSwitch(switches::kQuiet);
-  	if (quiet) // Don't fail when quiet if no VS studio projects were written
-  	  return true;
+    bool quiet = command_line->HasSwitch(switches::kQuiet);
+    if (quiet) // Don't fail when quiet if no VS studio projects were written
+      return true;
     *err = Err(Location(), "No Visual Studio projects generated.");
     return false;
   }

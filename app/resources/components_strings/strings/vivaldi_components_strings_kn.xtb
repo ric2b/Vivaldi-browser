@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="kn">
+<translation id="1152921474424827756"><ph name="URL" /> ನ <ph name="BEGIN_LINK" />ಸಂಗ್ರಹಿಸಲಾಗಿರುವ ನಕಲನ್ನು<ph name="END_LINK" /> ಪ್ರವೇಶಿಸಿ</translation>
+<translation id="1158211211994409885"><ph name="HOST_NAME" /> ಅನಿರೀಕ್ಷಿತವಾಗಿ ಸಂಪರ್ಕವನ್ನು ಮುಚ್ಚಿದೆ.</translation>
+<translation id="1375198122581997741">ಆವೃತ್ತಿಯ ಕುರಿತು</translation>
+<translation id="139305205187523129"><ph name="HOST_NAME" /> ಯಾವುದೇ ಡೇಟಾ ಕಳುಹಿಸಲಾಗಿಲ್ಲ.</translation>
+<translation id="1506687042165942984">ಈ ಪುಟದ ಉಳಿಸಲಾದ (ಉದಾ. ಹಳೆಯದು ಎಂದು ಕರೆಯಲಾಗುವ) ನಕಲನ್ನು ತೋರಿಸಿ.</translation>
+<translation id="1559528461873125649">ಆ ರೀತಿಯ ಯಾವುದೇ ಫೈಲ್ ಅಥವಾ ಡೈರೆಕ್ಟರಿ ಇಲ್ಲ</translation>
+<translation id="1710259589646384581">OS</translation>
+<translation id="1838667051080421715">ನೀವು ವೆಬ್ ಪುಟದ ಮೂಲವನ್ನು ವೀಕ್ಷಿಸುತ್ತಿರುವಿರಿ.</translation>
+<translation id="194030505837763158"><ph name="LINK" /> ಗೆ ಹೋಗಿ</translation>
+<translation id="2030481566774242610">ನಿಮ್ಮ ಮಾತಿನ ಅರ್ಥ <ph name="LINK" />?</translation>
+<translation id="2089090684895656482">ಕಡಿಮೆ</translation>
+<translation id="2166378884831602661">ಈ ಸೈಟ್‌ಗೆ ಸುರಕ್ಷಿತ ಸಂಪರ್ಕವನ್ನು ಒದಗಿಸಲಾಗುವುದಿಲ್ಲ</translation>
+<translation id="2292556288342944218">ನಿಮ್ಮ ಇಂಟರ್ನೆಟ್ ಪ್ರವೇಶ ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ</translation>
+<translation id="255002559098805027"><ph name="HOST_NAME" /> ಅಮಾನ್ಯ ಪ್ರತಿಕ್ರಿಯೆ ಕಳುಹಿಸಿದೆ.</translation>
+<translation id="2609632851001447353">ಪರಿವರ್ತನೆಗಳು</translation>
+<translation id="2650446666397867134">ಫೈಲ್‌ಗೆ ಪ್ರವೇಶವನ್ನು ನಿರಾಕರಿಸಲಾಗಿದೆ</translation>
+<translation id="2705137772291741111">ಈ ಸೈಟ್‌ನ ಉಳಿಸಿದ (ಸಂಗ್ರಹವಾಗಿರುವ) ನಕಲನ್ನು ಓದಲಾಗುತ್ತಿಲ್ಲ.</translation>
+<translation id="2784949926578158345">ಸಂಪರ್ಕವನ್ನು ರೀಸೆಟ್ ಮಾಡಲಾಗಿದೆ.</translation>
+<translation id="284702764277384724"><ph name="HOST_NAME" /> ನಲ್ಲಿರುವ ಸರ್ವರ್ ಪ್ರಮಾಣಪತ್ರವು ನಕಲಿ ಎಂದು ತೋರುತ್ತಿದೆ.</translation>
+<translation id="2909946352844186028">ನೆಟ್‌ವರ್ಕ್ ಬದಲಾವಣೆಯನ್ನು ಪತ್ತೆ ಮಾಡಲಾಗಿದೆ.</translation>
+<translation id="3005723025932146533">ಉಳಿಸಲಾದ ನಕಲನ್ನು ತೋರಿಸು</translation>
+<translation id="3109728660330352905">ಈ ಪುಟ ವೀಕ್ಷಿಸುವ ಅಧಿಕಾರ ನಿಮಗಿಲ್ಲ</translation>
+<translation id="3176929007561373547">ಪ್ರಾಕ್ಸಿ ಸರ್ವರ್ ಕಾರ್ಯವನಿರ್ವಹಿಸುತ್ತಿದೆಯೇ ಎಂಬುದನ್ನು ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಲು ನಿಮ್ಮ ಪ್ರಾಕ್ಸಿ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ನಿಮ್ಮ ನೆಟ್‌ವರ್ಕ್ ನಿರ್ವಾಹಕರನ್ನು ಸಂಪರ್ಕಿಸಿ. ನೀವು ಪ್ರಾಕ್ಸಿ ಸರ್ವರ್ ಅನ್ನು ಬಳಸುತ್ತಿಲ್ಲ ಎಂಬ ಅನುಮಾನ ನಿಮಗಿದ್ದರೆ:
+      <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673"><ph name="HOST_NAME" /> ಅನ್ನು ಪ್ರಸ್ತುತ ತಲುಪಲಾಗುತ್ತಿಲ್ಲ.</translation>
+<translation id="3447661539832366887">ಈ ಸಾಧನದ ಮಾಲೀಕರು ಡೈನೊಸಾರ್ ಆಟವನ್ನು ಆಫ್ ಮಾಡಿದ್ದಾರೆ.</translation>
+<translation id="3586931643579894722">ವಿವರಗಳನ್ನು ಮರೆಮಾಡಿ</translation>
+<translation id="3630155396527302611">ಒಂದು ವೇಳೆ ನೆಟ್‌ವರ್ಕ್ ಪ್ರವೇಶಿಸಲು ಅನುಮತಿಸುವ ಒಂದು ಪ್ರೊಗ್ರಾಂನಂತೆ ಇದನ್ನು ಈಗಾಗಲೇ ಪಟ್ಟಿ ಮಾಡಲಾಗಿದ್ದರೆ, ಅದನ್ನು ಪಟ್ಟಿಯಿಂದ ತೆಗೆಯಲು ಮತ್ತು ಪುನಃ ಅದನ್ನು ಸೇರಿಸಲು ಪ್ರಯತ್ನಿಸಿ.</translation>
+<translation id="3658742229777143148">ಪರಿಷ್ಕರಣೆ</translation>
+<translation id="382518646247711829">ನೀವು ಪ್ರಾಕ್ಸಿ ಸರ್ವರ್ ಬಳಸಿದರೆ...</translation>
+<translation id="3973234410852337861"><ph name="HOST_NAME" /> ಅನ್ನು ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ</translation>
+<translation id="4021036232240155012">DNS ಎನ್ನುವುದು ನೆಟ್‌ವರ್ಕ್ ಸೇವೆಯಾಗಿದ್ದು ಇದು ವೆಬ್‌ಸೈಟ್ ಹೆಸರನ್ನು ಅದರ ಇಂಟರ್ನೆಟ್ ವಿಳಾಸವಾಗಿ ಪರಿವರ್ತಿಸುತ್ತದೆ.</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> ನಿಮ್ಮ ಲಾಗಿನ್ ಪ್ರಮಾಣಪತ್ರವನ್ನು ಸ್ವೀಕರಿಸಲಿಲ್ಲ ಅಥವಾ ಅದನ್ನು ಒದಗಿಸದೆ ಇರಬಹುದು.</translation>
+<translation id="4522570452068850558">ವಿವರಗಳು</translation>
+<translation id="4670097147947922288">ನೀವು ವಿಸ್ತರಣೆಯ ಪುಟವನ್ನು ವೀಕ್ಷಿಸುತ್ತಿರುವಿರಿ.</translation>
+<translation id="4708268264240856090">ನಿಮ್ಮ ಸಂಪರ್ಕಕ್ಕೆ ಅಡ್ಡಿಯಾಗಿದೆ</translation>
+<translation id="4744603770635761495">ಪ್ರದರ್ಶನಗೊಳ್ಳುವಂತಹ ಹಾದಿ</translation>
+<translation id="4764776831041365478"><ph name="URL" /> ನಲ್ಲಿರುವ ವೆಬ್‌ಪುಟವು ತಾತ್ಕಾಲಿಕವಾಗಿ ಕಾರ್ಯನಿರ್ವಹಿಸದೇ ಇರಬಹುದು ಅಥವಾ ಅದನ್ನು ಶಾಶ್ವತವಾಗಿ ಹೊಸ ವೆಬ್ ವಿಳಾಸಕ್ಕೆ ಸರಿಸಲಾಗಿರಬಹುದು.</translation>
+<translation id="5023310440958281426">ನಿಮ್ಮ ನಿರ್ವಾಹಕ ನೀತಿಗಳನ್ನು ಪರಿಶೀಲಿಸಿ</translation>
+<translation id="5115563688576182185">(64-ಬಿಟ್)</translation>
+<translation id="5431657950005405462">ನಿಮ್ಮ ಫೈಲ್ ಕಂಡುಬಂದಿಲ್ಲ</translation>
+<translation id="5452270690849572955">ಈ <ph name="HOST_NAME" /> ಪುಟ ಕಂಡುಬರುವುದಿಲ್ಲ</translation>
+<translation id="5492298309214877701">ಬಾಹ್ಯ ವೆಬ್‌ಸೈಟ್‌‌ನ URL ಅನ್ನೇ ಕಂಪನಿ, ಸಂಸ್ಥೆ ಅಥವಾ ಶಾಲೆಯ ಇಂಟ್ರಾನೆಟ್‌ನಲ್ಲಿನ ಈ ಸೈಟ್ ಹೊಂದಿದೆ.
+    <ph name="LINE_BREAK" />
+    ನಿಮ್ಮ ಸಿಸ್ಟಂ ನಿರ್ವಾಹಕರನ್ನು ಸಂಪರ್ಕಿಸಲು ಪ್ರಯತ್ನಿಸಿ.</translation>
+<translation id="5510766032865166053">ಈ ಫೈಲನ್ನು ಬೇರೆಡೆಗೆ ಸರಿಸಿರಬಹುದು ಇಲ್ಲವೇ ಅಳಿಸಿರಬಹುದು.</translation>
+<translation id="5556459405103347317">ಮರುಲೋಡ್‌</translation>
+<translation id="5617949217645503996"><ph name="HOST_NAME" /> ನಿಮ್ಮನ್ನು ತೀರಾ ಹೆಚ್ಚು ಬಾರಿ ಮರುನಿರ್ದೇಶಿಸಿದೆ.</translation>
+<translation id="5675650730144413517">ಈ ಪುಟ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತಿಲ್ಲ</translation>
+<translation id="5869405914158311789">ಈ ಸೈಟ್ ತಲುಪಲಾಗುವುದಿಲ್ಲ</translation>
+<translation id="5990559369517809815">ಸರ್ವರ್‌ಗಳ ವಿನಂತಿಗಳನ್ನು ವಿಸ್ತರಣೆಯಿಂದ ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ.</translation>
+<translation id="6042308850641462728">ಇನ್ನಷ್ಟು</translation>
+<translation id="6146055958333702838">ಯಾವುದೇ ಕೇಬಲ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಿ. ನೀವು ಬಳಸುತ್ತಿರಬಹುದಾದ ಯಾವುದೇ ರೂಟರ್‌ಗಳು, ಮೋಡೆಮ್‌ಗಳು ಅಥವಾ ಇತರ ನೆಟ್‌ವರ್ಕ್ ಸಾಧನಗಳನ್ನು ರೀಬೂಟ್ ಮಾಡಿ.</translation>
+<translation id="6165508094623778733">ಇನ್ನಷ್ಟು ತಿಳಿಯಿರಿ</translation>
+<translation id="6203231073485539293">ನಿಮ್ಮ ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಿ</translation>
+<translation id="6305205051461490394"><ph name="URL" /> ತಲುಪಲಾಗುವುದಿಲ್ಲ.</translation>
+<translation id="6321917430147971392">ನಿಮ್ಮ DNS ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಿ</translation>
+<translation id="6328639280570009161">ನೆಟ್‌ವರ್ಕ್ ಮುನ್ಸೂಚನೆಯನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲು ಪ್ರಯತ್ನಿಸಿ</translation>
+<translation id="6433595998831338502"><ph name="HOST_NAME" /> ಸಂಪರ್ಕಗೊಳ್ಳಲು ನಿರಾಕರಿಸಿದೆ.</translation>
+<translation id="6711464428925977395">ಪ್ರಾಕ್ಸಿ ಸರ್ವರ್‌‌ನಲ್ಲಿ ಏನೋ ದೋಷವಿದೆ ಅಥವಾ ವಿಳಾಸವು ತಪ್ಪಾಗಿದೆ.</translation>
+<translation id="6830600606572693159"><ph name="URL" /> ರಲ್ಲಿ ವೆಬ್‌ಪುಟವು ಪ್ರಸ್ತುತ ಲಭ್ಯವಿಲ್ಲ. ನಿರ್ವಹಣೆಗಾಗಿ ಇದು ಓವರ್ ಲೋಡ್ ಆಗಿರಬಹುದು ಅಥವಾ ಸ್ಥಗಿತಗೊಂಡಿರಬಹುದು. </translation>
+<translation id="6897140037006041989">ಬಳಕೆದಾರ ಏಜೆಂಟ್</translation>
+<translation id="7210863904660874423"><ph name="HOST_NAME" /> ಭದ್ರತೆ ಮಾನದಂಡಗಳನ್ನು ಅನುಸರಿಸುತ್ತಿಲ್ಲ.</translation>
+<translation id="7269802741830436641">ಈ ವೆಬ್‌ಪುಟವು ಮರುನಿರ್ದೇಶಿಸುವಿಕೆ ಲೂಪ್ ಅನ್ನು ಹೊಂದಿದೆ</translation>
+<translation id="7353601530677266744">ಆದೇಶ ಸಾಲು</translation>
+<translation id="7419106976560586862">ಪ್ರೊಫೈಲ್ ಹಾದಿ</translation>
+<translation id="7518003948725431193">ಈ ವೆಬ್ ವಿಳಾಸಕ್ಕಾಗಿ ಯಾವುದೇ ವೆಬ್ ಪುಟವು ಕಂಡುಬರಲಿಲ್ಲ: <ph name="URL" /></translation>
+<translation id="7549584377607005141">ಈ ವೆಬ್‌ಪುಟವು ಸರಿಯಾಗಿ ಪ್ರದರ್ಶನಗೊಳ್ಳಲು ಈ ಮೊದಲು ನೀವು ನಮೂದಿಸಿದ ಡೇಟಾದ ಅಗತ್ಯವಿದೆ. ನೀವು ಈ ಡೇಟಾವನ್ನು ಮತ್ತೆ ಕಳುಹಿಸಬಹುದು, ಆದರೆ ಹಾಗೆ ಮಾಡುವುದರಿಂದ ಈ ಪುಟವು ಈ ಮೊದಲು ಪೂರೈಸಿದ ಯಾವುದೇ ಕ್ರಿಯೆಯನ್ನು ನೀವು ಪುನರಾವರ್ತಿಸುತ್ತೀರಿ.</translation>
+<translation id="759889825892636187"><ph name="HOST_NAME" /> ಗೆ ಪ್ರಸ್ತುತ ಈ ವಿನಂತಿಯನ್ನು ನಿರ್ವಹಿಸಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ.</translation>
+<translation id="7716424297397655342">ಸಂಗ್ರಹದಿಂದ ಈ ಸೈಟ್ ಲೋಡ್ ಮಾಡಲಾಗುವುದಿಲ್ಲ</translation>
+<translation id="7758069387465995638">ಸಂಪರ್ಕವನ್ನು ಫೈರ್‌ವಾಲ್ ಅಥವಾ ಆಂಟಿವೈರಸ್ ಸಾಫ್ಟ್‌ವೇರ್ ನಿರ್ಬಂಧಿಸಿರಬಹುದು.</translation>
+<translation id="778579833039460630">ಡೇಟಾವನ್ನು ಸ್ವೀಕರಿಸಿಲ್ಲ</translation>
+<translation id="7951415247503192394">(32-ಬಿಟ್)</translation>
+<translation id="8134994873729925007"><ph name="HOST_NAME" /> ಅವರ ಸರ್ವರ್‌ <ph name="BEGIN_ABBR" />DNS ವಿಳಾಸ<ph name="END_ABBR" /> ಕಂಡುಬಂದಿಲ್ಲ.</translation>
+<translation id="8142868475871995937">ನಿಮ್ಮ ಸಿಸ್ಟಂ ನಿರ್ವಾಹಕರು ವಿಧಿಸಿರುವ ಕಪ್ಪುಪಟ್ಟಿಯ URLಗಳು ಮತ್ತು ಇತರ ನೀತಿಗಳನ್ನು ವೀಕ್ಷಿಸಲು &lt;strong&gt;vivaldi://policy&lt;/strong&gt; ಗೆ ಭೇಟಿ ನೀಡಿ.</translation>
+<translation id="8149426793427495338">ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್ ನಿದ್ರಾವಸ್ಥೆಗೆ ಹೋಗಿದೆ.</translation>
+<translation id="8150722005171944719"><ph name="URL" /> ನಲ್ಲಿನ ಫೈಲ್ ಓದುವಂತಿರುವುದಿಲ್ಲ. ಇದನ್ನು ತೆಗೆದುಹಾಕಬಹುದು, ಚಲಿಸಬಹುದು, ಅಥವಾ ಫೈಲ್ ಅನುಮತಿಗಳು ಪ್ರವೇಶವನ್ನು ತಡೆಗಟ್ಟುತ್ತಿರಬಹುದು.</translation>
+<translation id="8225771182978767009">ಈ ಕಂಪ್ಯೂಟರ್ ಹೊಂದಿಸಿರುವ ವ್ಯಕ್ತಿಯು ಈ ಸೈಟ್ ನಿರ್ಬಂಧಿಸಲು ಆಯ್ಕೆಮಾಡಿದ್ದಾರೆ.</translation>
+<translation id="8289355894181816810">ಇದರ ಅರ್ಥವೇನೆಂದು ನಿಮಗೆ ಖಚಿತವಾಗದಿದ್ದರೆ ನಿಮ್ಮ ನೆಟ್‌ವರ್ಕ್ ನಿರ್ವಾಹಕರನ್ನು ಸಂಪರ್ಕಿಸಿ.</translation>
+<translation id="8332188693563227489"><ph name="HOST_NAME" /> ಗೆ ಪ್ರವೇಶವನ್ನು ನಿರಾಕರಿಸಲಾಗಿದೆ</translation>
+<translation id="8498891568109133222">ಪ್ರತಿಕ್ರಿಯಿಸಲು <ph name="HOST_NAME" /> ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಂಡಿದೆ.</translation>
+<translation id="8740359287975076522"><ph name="HOST_NAME" /> ನ &lt;abbr id="dnsDefinition"&gt;DNS ವಿಳಾಸ&lt;/abbr&gt; ಕಂಡುಬರಲಿಲ್ಲ. ಸಮಸ್ಯೆಯನ್ನು ಪತ್ತೆಹಚ್ಚಲಾಗುತ್ತಿದೆ.</translation>
+<translation id="9183425211371246419"><ph name="HOST_NAME" /> ಬೆಂಬಲಿತವಲ್ಲದ ಪ್ರೋಟೋಕಾಲ್ ಬಳಸುತ್ತಿದೆ.</translation>
+<translation id="933612690413056017">ಯಾವುದೇ ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕವಿಲ್ಲ</translation>
+<translation id="969892804517981540">ಅಧಿಕೃತವಾಗಿ ನಿರ್ಮಿಸಿ</translation>
+<translation id="988159990683914416">ಡೆವಲಪರ್ ಬಿಲ್ಡ್</translation>
+</translationbundle>

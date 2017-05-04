@@ -28,7 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// http://dev.w3.org/csswg/css-font-loading/#fontface-interface
+// https://dev.w3.org/csswg/css-font-loading/#fontface-interface
 
 enum FontFaceLoadStatus {
     "unloaded",
@@ -53,6 +53,7 @@ enum FontFaceLoadStatus {
     [RaisesException=Setter, SetterCallWith=ExecutionContext] attribute DOMString unicodeRange;
     [RaisesException=Setter, SetterCallWith=ExecutionContext] attribute DOMString variant;
     [RaisesException=Setter, SetterCallWith=ExecutionContext] attribute DOMString featureSettings;
+    [RaisesException=Setter, SetterCallWith=ExecutionContext, RuntimeEnabled=CSSFontDisplay] attribute DOMString display;
 
     readonly attribute FontFaceLoadStatus status;
 

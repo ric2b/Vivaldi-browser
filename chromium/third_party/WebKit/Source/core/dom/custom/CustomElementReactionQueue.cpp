@@ -6,7 +6,7 @@
 
 #include "core/dom/Element.h"
 #include "core/dom/custom/CustomElementReaction.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
 
@@ -19,7 +19,7 @@ DEFINE_TRACE(CustomElementReactionQueue) {
 }
 
 void CustomElementReactionQueue::add(CustomElementReaction* reaction) {
-  m_reactions.append(reaction);
+  m_reactions.push_back(reaction);
 }
 
 // There is one queue per element, so this could be invoked

@@ -35,6 +35,10 @@
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/os_crypt/os_crypt.h"
+#include "components/sync/base/model_type.h"
+#include "components/sync/model/metadata_batch.h"
+#include "components/sync/protocol/entity_metadata.pb.h"
+#include "components/sync/protocol/model_type_state.pb.h"
 #include "components/webdata/common/web_database.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
@@ -416,7 +420,8 @@ bool AutofillTable::CreateTablesIfNecessary() {
           InitProfilePhonesTable() && InitProfileTrashTable() &&
           InitMaskedCreditCardsTable() && InitUnmaskedCreditCardsTable() &&
           InitServerCardMetadataTable() && InitServerAddressesTable() &&
-          InitServerAddressMetadataTable());
+          InitServerAddressMetadataTable() && InitAutofillSyncMetadataTable() &&
+          InitModelTypeStateTable());
 }
 
 bool AutofillTable::IsSyncable() {
@@ -463,6 +468,12 @@ bool AutofillTable::MigrateToVersion(int version,
     case 67:
       *update_compatible_version = false;
       return MigrateToVersion67AddMaskedCardBillingAddress();
+    case 70:
+      *update_compatible_version = false;
+      return MigrateToVersion70AddSyncMetadata();
+    case 71:
+      *update_compatible_version = true;
+      return MigrateToVersion71AddHasConvertedAndBillingAddressIdMetadata();
   }
   return true;
 }
@@ -934,7 +945,7 @@ bool AutofillTable::GetAutofillProfiles(
 }
 
 bool AutofillTable::GetServerProfiles(
-    std::vector<std::unique_ptr<AutofillProfile>>* profiles) {
+    std::vector<std::unique_ptr<AutofillProfile>>* profiles) const {
   profiles->clear();
 
   sql::Statement s(db_->GetUniqueStatement(
@@ -1197,22 +1208,22 @@ bool AutofillTable::GetCreditCards(
 }
 
 bool AutofillTable::GetServerCreditCards(
-    std::vector<std::unique_ptr<CreditCard>>* credit_cards) {
+    std::vector<std::unique_ptr<CreditCard>>* credit_cards) const {
   credit_cards->clear();
 
   sql::Statement s(db_->GetUniqueStatement(
       "SELECT "
-      "card_number_encrypted, "  // 0
-      "last_four,"     // 1
-      "masked.id,"     // 2
-      "metadata.use_count,"     // 3
-      "metadata.use_date,"      // 4
-      "type,"          // 5
-      "status,"        // 6
-      "name_on_card,"  // 7
-      "exp_month,"     // 8
-      "exp_year,"      // 9
-      "billing_address_id "     // 10
+      "card_number_encrypted, "       // 0
+      "last_four,"                    // 1
+      "masked.id,"                    // 2
+      "metadata.use_count,"           // 3
+      "metadata.use_date,"            // 4
+      "type,"                         // 5
+      "status,"                       // 6
+      "name_on_card,"                 // 7
+      "exp_month,"                    // 8
+      "exp_year,"                     // 9
+      "metadata.billing_address_id "  // 10
       "FROM masked_credit_cards masked "
       "LEFT OUTER JOIN unmasked_credit_cards USING (id) "
       "LEFT OUTER JOIN server_card_metadata metadata USING (id)"));
@@ -1271,17 +1282,16 @@ void AutofillTable::SetServerCreditCards(
       "DELETE FROM masked_credit_cards"));
   masked_delete.Run();
 
-  sql::Statement masked_insert(db_->GetUniqueStatement(
-      "INSERT INTO masked_credit_cards("
-      "id,"            // 0
-      "type,"          // 1
-      "status,"        // 2
-      "name_on_card,"  // 3
-      "last_four,"     // 4
-      "exp_month,"     // 5
-      "exp_year,"      // 6
-      "billing_address_id) "  // 7
-      "VALUES (?,?,?,?,?,?,?,?)"));
+  sql::Statement masked_insert(
+      db_->GetUniqueStatement("INSERT INTO masked_credit_cards("
+                              "id,"            // 0
+                              "type,"          // 1
+                              "status,"        // 2
+                              "name_on_card,"  // 3
+                              "last_four,"     // 4
+                              "exp_month,"     // 5
+                              "exp_year)"      // 6
+                              "VALUES (?,?,?,?,?,?,?)"));
   for (const CreditCard& card : credit_cards) {
     DCHECK_EQ(CreditCard::MASKED_SERVER_CARD, card.record_type());
 
@@ -1294,13 +1304,12 @@ void AutofillTable::SetServerCreditCards(
     masked_insert.BindString16(5, card.GetRawInfo(CREDIT_CARD_EXP_MONTH));
     masked_insert.BindString16(6,
                                card.GetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR));
-    masked_insert.BindString(7, card.billing_address_id());
 
     masked_insert.Run();
     masked_insert.Reset(true);
 
     // Save the use count and use date of the card.
-    UpdateServerCardUsageStats(card);
+    UpdateServerCardMetadata(card);
   }
 
   // Delete all items in the unmasked table that aren't in the new set.
@@ -1341,7 +1350,7 @@ bool AutofillTable::UnmaskServerCreditCard(const CreditCard& masked,
   unmasked.set_record_type(CreditCard::FULL_SERVER_CARD);
   unmasked.SetNumber(full_number);
   unmasked.RecordAndLogUse();
-  UpdateServerCardUsageStats(unmasked);
+  UpdateServerCardMetadata(unmasked);
 
   return db_->GetLastChangeCount() > 0;
 }
@@ -1354,8 +1363,7 @@ bool AutofillTable::MaskServerCreditCard(const std::string& id) {
   return db_->GetLastChangeCount() > 0;
 }
 
-bool AutofillTable::UpdateServerCardUsageStats(
-    const CreditCard& credit_card) {
+bool AutofillTable::UpdateServerCardMetadata(const CreditCard& credit_card) {
   DCHECK_NE(CreditCard::LOCAL_CARD, credit_card.record_type());
   sql::Transaction transaction(db_);
   if (!transaction.Begin())
@@ -1366,12 +1374,14 @@ bool AutofillTable::UpdateServerCardUsageStats(
   remove.BindString(0, credit_card.server_id());
   remove.Run();
 
-  sql::Statement s(db_->GetUniqueStatement(
-      "INSERT INTO server_card_metadata(use_count, use_date, id)"
-      "VALUES (?,?,?)"));
+  sql::Statement s(
+      db_->GetUniqueStatement("INSERT INTO server_card_metadata(use_count, "
+                              "use_date, billing_address_id, id)"
+                              "VALUES (?,?,?,?)"));
   s.BindInt64(0, credit_card.use_count());
   s.BindInt64(1, credit_card.use_date().ToInternalValue());
-  s.BindString(2, credit_card.server_id());
+  s.BindString(2, credit_card.billing_address_id());
+  s.BindString(3, credit_card.server_id());
   s.Run();
 
   transaction.Commit();
@@ -1379,7 +1389,9 @@ bool AutofillTable::UpdateServerCardUsageStats(
   return db_->GetLastChangeCount() > 0;
 }
 
-bool AutofillTable::UpdateServerAddressUsageStats(
+// TODO(crbug.com/680182): Record the address conversion status when a server
+// address gets converted.
+bool AutofillTable::UpdateServerAddressMetadata(
     const AutofillProfile& profile) {
   DCHECK_EQ(AutofillProfile::SERVER_PROFILE, profile.record_type());
 
@@ -1392,30 +1404,17 @@ bool AutofillTable::UpdateServerAddressUsageStats(
   remove.BindString(0, profile.server_id());
   remove.Run();
 
-  sql::Statement s(db_->GetUniqueStatement(
-      "INSERT INTO server_address_metadata(use_count, use_date, id)"
-      "VALUES (?,?,?)"));
+  sql::Statement s(
+      db_->GetUniqueStatement("INSERT INTO server_address_metadata(use_count, "
+                              "use_date, has_converted, id)"
+                              "VALUES (?,?,?,?)"));
   s.BindInt64(0, profile.use_count());
   s.BindInt64(1, profile.use_date().ToInternalValue());
-  s.BindString(2, profile.server_id());
+  s.BindBool(2, false);
+  s.BindString(3, profile.server_id());
   s.Run();
 
   transaction.Commit();
-
-  return db_->GetLastChangeCount() > 0;
-}
-
-bool AutofillTable::UpdateServerCardBillingAddress(
-    const CreditCard& credit_card) {
-  DCHECK_NE(CreditCard::LOCAL_CARD, credit_card.record_type());
-
-  sql::Statement update(db_->GetUniqueStatement(
-      "UPDATE masked_credit_cards SET billing_address_id = ? "
-      "WHERE id = ?"));
-  update.BindString(0, credit_card.billing_address_id());
-  update.BindString(1, credit_card.server_id());
-  if (!update.Run())
-    return false;
 
   return db_->GetLastChangeCount() > 0;
 }
@@ -1680,6 +1679,122 @@ bool AutofillTable::IsAutofillGUIDInTrash(const std::string& guid) {
   return s.Step();
 }
 
+bool AutofillTable::GetAllSyncMetadata(syncer::ModelType model_type,
+                                       syncer::MetadataBatch* metadata_batch) {
+  DCHECK_EQ(model_type, syncer::AUTOFILL)
+      << "Only the AUTOFILL model type is supported";
+  syncer::EntityMetadataMap metadata_records;
+  if (GetAllSyncEntityMetadata(model_type, &metadata_records)) {
+    for (const auto& pair : metadata_records) {
+      // todo(pnoland): add batch transfer of metadata map
+      metadata_batch->AddMetadata(pair.first, pair.second);
+    }
+  } else {
+    return false;
+  }
+
+  sync_pb::ModelTypeState model_type_state;
+  if (GetModelTypeState(model_type, &model_type_state)) {
+    metadata_batch->SetModelTypeState(model_type_state);
+  } else {
+    return false;
+  }
+
+  return true;
+}
+
+bool AutofillTable::GetAllSyncEntityMetadata(
+    syncer::ModelType model_type,
+    syncer::EntityMetadataMap* metadata_records) {
+  DCHECK_EQ(model_type, syncer::AUTOFILL)
+      << "Only the AUTOFILL model type is supported";
+
+  sql::Statement s(db_->GetUniqueStatement(
+      "SELECT storage_key, value FROM autofill_sync_metadata"));
+
+  while (s.Step()) {
+    std::string storage_key = s.ColumnString(0);
+    std::string serialized_metadata = s.ColumnString(1);
+    sync_pb::EntityMetadata metadata_record;
+    if (metadata_record.ParseFromString(serialized_metadata)) {
+      metadata_records->insert(std::make_pair(storage_key, metadata_record));
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool AutofillTable::UpdateSyncMetadata(
+    syncer::ModelType model_type,
+    const std::string& storage_key,
+    const sync_pb::EntityMetadata& metadata) {
+  DCHECK_EQ(model_type, syncer::AUTOFILL)
+      << "Only the AUTOFILL model type is supported";
+
+  sql::Statement s(
+      db_->GetUniqueStatement("INSERT OR REPLACE INTO autofill_sync_metadata "
+                              "(storage_key, value) VALUES(?, ?)"));
+  s.BindString(0, storage_key);
+  s.BindString(1, metadata.SerializeAsString());
+
+  return s.Run();
+}
+
+bool AutofillTable::ClearSyncMetadata(syncer::ModelType model_type,
+                                      const std::string& storage_key) {
+  DCHECK_EQ(model_type, syncer::AUTOFILL)
+      << "Only the AUTOFILL model type is supported";
+
+  sql::Statement s(db_->GetUniqueStatement(
+      "DELETE FROM autofill_sync_metadata WHERE storage_key=?"));
+  s.BindString(0, storage_key);
+
+  return s.Run();
+}
+
+bool AutofillTable::GetModelTypeState(syncer::ModelType model_type,
+                                      sync_pb::ModelTypeState* state) {
+  DCHECK_EQ(model_type, syncer::AUTOFILL)
+      << "Only the AUTOFILL model type is supported";
+
+  sql::Statement s(db_->GetUniqueStatement(
+      "SELECT value FROM autofill_model_type_state WHERE id=1"));
+
+  if (!s.Step()) {
+    return false;
+  }
+
+  std::string serialized_state = s.ColumnString(0);
+  return state->ParseFromString(serialized_state);
+}
+
+bool AutofillTable::UpdateModelTypeState(
+    syncer::ModelType model_type,
+    const sync_pb::ModelTypeState& model_type_state) {
+  DCHECK_EQ(model_type, syncer::AUTOFILL)
+      << "Only the AUTOFILL model type is supported";
+
+  // Hardcode the id to force a collision, ensuring that there remains only a
+  // single entry.
+  sql::Statement s(db_->GetUniqueStatement(
+      "INSERT OR REPLACE INTO autofill_model_type_state (id, value) "
+      "VALUES(1,?)"));
+  s.BindString(0, model_type_state.SerializeAsString());
+
+  return s.Run();
+}
+
+bool AutofillTable::ClearModelTypeState(syncer::ModelType model_type) {
+  DCHECK_EQ(model_type, syncer::AUTOFILL)
+      << "Only the AUTOFILL model type is supported";
+
+  sql::Statement s(db_->GetUniqueStatement(
+      "DELETE FROM autofill_model_type_state WHERE id=1"));
+
+  return s.Run();
+}
+
 bool AutofillTable::InitMainTable() {
   if (!db_->DoesTableExist("autofill")) {
     if (!db_->Execute("CREATE TABLE autofill ("
@@ -1804,8 +1919,7 @@ bool AutofillTable::InitMaskedCreditCardsTable() {
                       "type VARCHAR,"
                       "last_four VARCHAR,"
                       "exp_month INTEGER DEFAULT 0,"
-                      "exp_year INTEGER DEFAULT 0, "
-                      "billing_address_id VARCHAR)")) {
+                      "exp_year INTEGER DEFAULT 0)")) {
       NOTREACHED();
       return false;
     }
@@ -1833,7 +1947,8 @@ bool AutofillTable::InitServerCardMetadataTable() {
     if (!db_->Execute("CREATE TABLE server_card_metadata ("
                       "id VARCHAR NOT NULL,"
                       "use_count INTEGER NOT NULL DEFAULT 0, "
-                      "use_date INTEGER NOT NULL DEFAULT 0)")) {
+                      "use_date INTEGER NOT NULL DEFAULT 0, "
+                      "billing_address_id VARCHAR)")) {
       NOTREACHED();
       return false;
     }
@@ -1871,7 +1986,31 @@ bool AutofillTable::InitServerAddressMetadataTable() {
     if (!db_->Execute("CREATE TABLE server_address_metadata ("
                       "id VARCHAR NOT NULL,"
                       "use_count INTEGER NOT NULL DEFAULT 0, "
-                      "use_date INTEGER NOT NULL DEFAULT 0)")) {
+                      "use_date INTEGER NOT NULL DEFAULT 0, "
+                      "has_converted BOOL NOT NULL DEFAULT FALSE)")) {
+      NOTREACHED();
+      return false;
+    }
+  }
+  return true;
+}
+
+bool AutofillTable::InitAutofillSyncMetadataTable() {
+  if (!db_->DoesTableExist("autofill_sync_metadata")) {
+    if (!db_->Execute("CREATE TABLE autofill_sync_metadata ("
+                      "storage_key VARCHAR PRIMARY KEY NOT NULL,"
+                      "value BLOB)")) {
+      NOTREACHED();
+      return false;
+    }
+  }
+  return true;
+}
+
+bool AutofillTable::InitModelTypeStateTable() {
+  if (!db_->DoesTableExist("autofill_model_type_state")) {
+    if (!db_->Execute("CREATE TABLE autofill_model_type_state (id INTEGER "
+                      "PRIMARY KEY, value BLOB)")) {
       NOTREACHED();
       return false;
     }
@@ -2313,6 +2452,79 @@ bool AutofillTable::MigrateToVersion67AddMaskedCardBillingAddress() {
   // returns an empty string for that.
   return db_->Execute(
       "ALTER TABLE masked_credit_cards ADD COLUMN billing_address_id VARCHAR");
+}
+
+bool AutofillTable::MigrateToVersion70AddSyncMetadata() {
+  if (!db_->Execute("CREATE TABLE autofill_sync_metadata ("
+                    "storage_key VARCHAR PRIMARY KEY NOT NULL,"
+                    "value BLOB)")) {
+    return false;
+  }
+  return db_->Execute(
+      "CREATE TABLE autofill_model_type_state (id INTEGER PRIMARY KEY, value "
+      "BLOB)");
+}
+
+bool AutofillTable::
+    MigrateToVersion71AddHasConvertedAndBillingAddressIdMetadata() {
+  sql::Transaction transaction(db_);
+  if (!transaction.Begin())
+    return false;
+
+  // Add the new has_converted column to the server_address_metadata table.
+  if (!db_->DoesColumnExist("server_address_metadata", "has_converted") &&
+      !db_->Execute("ALTER TABLE server_address_metadata ADD COLUMN "
+                    "has_converted BOOL NOT NULL DEFAULT FALSE")) {
+    return false;
+  }
+
+  // Add the new billing_address_id column to the server_card_metadata table.
+  if (!db_->DoesColumnExist("server_card_metadata", "billing_address_id") &&
+      !db_->Execute("ALTER TABLE server_card_metadata ADD COLUMN "
+                    "billing_address_id VARCHAR")) {
+    return false;
+  }
+
+  // Copy over the billing_address_id from the masked_server_cards to
+  // server_card_metadata.
+  if (!db_->Execute("UPDATE server_card_metadata "
+                    "SET billing_address_id = "
+                    "(SELECT billing_address_id "
+                    "FROM masked_credit_cards "
+                    "WHERE id = server_card_metadata.id)")) {
+    return false;
+  }
+
+  // Remove the billing_address_id column from the masked_credit_cards table.
+  // Create a temporary table that is a copy of masked_credit_cards but without
+  // the billing_address_id column.
+  if (db_->DoesTableExist("masked_credit_cards_temp") ||
+      !db_->Execute("CREATE TABLE masked_credit_cards_temp ("
+                    "id VARCHAR,"
+                    "status VARCHAR,"
+                    "name_on_card VARCHAR,"
+                    "type VARCHAR,"
+                    "last_four VARCHAR,"
+                    "exp_month INTEGER DEFAULT 0,"
+                    "exp_year INTEGER DEFAULT 0)")) {
+    return false;
+  }
+  // Copy over the data from the original masked_credit_cards table.
+  if (!db_->Execute("INSERT INTO masked_credit_cards_temp "
+                    "SELECT id, status, name_on_card, type, last_four, "
+                    "exp_month, exp_year "
+                    "FROM masked_credit_cards")) {
+    return false;
+  }
+  // Delete the existing table and replace it with the contents of the
+  // temporary table.
+  if (!db_->Execute("DROP TABLE masked_credit_cards") ||
+      !db_->Execute("ALTER TABLE masked_credit_cards_temp "
+                    "RENAME TO masked_credit_cards")) {
+    return false;
+  }
+
+  return transaction.Commit();
 }
 
 }  // namespace autofill

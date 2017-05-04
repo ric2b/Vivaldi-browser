@@ -59,6 +59,7 @@ void Configuration::Clear() {
   is_system_level_ = false;
   is_side_by_side_ = false;
   is_updating_multi_chrome_ = false;
+  has_invalid_switch_ = false;
   previous_version_ = NULL;
 }
 
@@ -81,6 +82,8 @@ bool Configuration::ParseCommandLine(const wchar_t* command_line) {
 #endif
     } else if (0 == ::lstrcmpi(args_[i], L"--cleanup")) {
       operation_ = CLEANUP;
+    } else if (0 == ::lstrcmpi(args_[i], L"--chrome-frame")) {
+      has_invalid_switch_ = true;
     }
   }
 

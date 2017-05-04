@@ -17,6 +17,7 @@
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "base/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "chrome/browser/task_manager/providers/task_provider.h"
 #include "chrome/browser/task_manager/providers/task_provider_observer.h"
 #include "chrome/browser/task_manager/sampling/task_group.h"
@@ -44,12 +45,15 @@ class TaskManagerImpl :
   bool IsTaskKillable(TaskId task_id) override;
   void KillTask(TaskId task_id) override;
   double GetCpuUsage(TaskId task_id) const override;
+  base::Time GetStartTime(TaskId task_id) const override;
+  base::TimeDelta GetCpuTime(TaskId task_id) const override;
   int64_t GetPhysicalMemoryUsage(TaskId task_id) const override;
   int64_t GetPrivateMemoryUsage(TaskId task_id) const override;
   int64_t GetSharedMemoryUsage(TaskId task_id) const override;
   int64_t GetSwappedMemoryUsage(TaskId task_id) const override;
   int64_t GetGpuMemoryUsage(TaskId task_id,
                             bool* has_duplicates) const override;
+  base::MemoryState GetMemoryState(TaskId task_id) const override;
   int GetIdleWakeupsPerSecond(TaskId task_id) const override;
   int GetNaClDebugStubPort(TaskId task_id) const override;
   void GetGDIHandles(TaskId task_id,

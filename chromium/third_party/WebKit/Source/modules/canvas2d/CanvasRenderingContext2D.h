@@ -197,6 +197,10 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   bool isPaintable() const final { return hasImageBuffer(); }
 
+  ColorBehavior drawImageColorBehavior() const final;
+
+  void willDrawImage(CanvasImageSource*) const final;
+
  private:
   friend class CanvasRenderingContext2DAutoRestoreSkCanvas;
 

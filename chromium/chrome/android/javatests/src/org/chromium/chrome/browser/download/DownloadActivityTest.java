@@ -7,9 +7,9 @@ package org.chromium.chrome.browser.download;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
+import android.support.test.filters.MediumTest;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.ViewHolder;
-import android.test.suitebuilder.annotation.MediumTest;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.ListView;
@@ -157,7 +157,7 @@ public class DownloadActivityTest extends BaseActivityInstrumentationTestCase<Do
         ThreadUtils.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                mAdapter.onDownloadItemUpdated(updateItem);
+                mAdapter.onDownloadItemCreated(updateItem);
             }
         });
         mAdapterObserver.onSpaceDisplayUpdatedCallback.waitForCallback(callCount);
@@ -286,8 +286,8 @@ public class DownloadActivityTest extends BaseActivityInstrumentationTestCase<Do
         ThreadUtils.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                mAdapter.onDownloadItemUpdated(item7);
-                mAdapter.onDownloadItemUpdated(item8);
+                mAdapter.onDownloadItemCreated(item7);
+                mAdapter.onDownloadItemCreated(item8);
             }
         });
 
@@ -364,8 +364,8 @@ public class DownloadActivityTest extends BaseActivityInstrumentationTestCase<Do
         ThreadUtils.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                mAdapter.onDownloadItemUpdated(item7);
-                mAdapter.onDownloadItemUpdated(item8);
+                mAdapter.onDownloadItemCreated(item7);
+                mAdapter.onDownloadItemCreated(item8);
             }
         });
 

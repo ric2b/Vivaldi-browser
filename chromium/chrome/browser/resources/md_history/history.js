@@ -38,7 +38,7 @@ function waitForAppUpgrade() {
  */
 function historyResult(info, results) {
   waitForAppUpgrade().then(function() {
-    var app = /** @type {HistoryAppElement} */($('history-app'));
+    var app = /** @type {HistoryAppElement} */ ($('history-app'));
     app.historyResult(info, results);
     document.body.classList.remove('loading');
 
@@ -68,16 +68,14 @@ function showNotification(
 /**
  * Receives the synced history data. An empty list means that either there are
  * no foreign sessions, or tab sync is disabled for this profile.
- * |isTabSyncEnabled| makes it possible to distinguish between the cases.
  *
  * @param {!Array<!ForeignSession>} sessionList Array of objects describing the
  *     sessions from other devices.
- * @param {boolean} isTabSyncEnabled Is tab sync enabled for this profile?
  */
-function setForeignSessions(sessionList, isTabSyncEnabled) {
+function setForeignSessions(sessionList) {
   waitForAppUpgrade().then(function() {
-    /** @type {HistoryAppElement} */($('history-app'))
-        .setForeignSessions(sessionList, isTabSyncEnabled);
+    /** @type {HistoryAppElement} */ ($('history-app'))
+        .setForeignSessions(sessionList);
   });
 }
 
@@ -86,8 +84,7 @@ function setForeignSessions(sessionList, isTabSyncEnabled) {
  */
 function historyDeleted() {
   waitForAppUpgrade().then(function() {
-    /** @type {HistoryAppElement} */($('history-app'))
-        .historyDeleted();
+    /** @type {HistoryAppElement} */ ($('history-app')).historyDeleted();
   });
 }
 
@@ -98,7 +95,7 @@ function historyDeleted() {
 function updateSignInState(isUserSignedIn) {
   waitForAppUpgrade().then(function() {
     if ($('history-app')) {
-      /** @type {HistoryAppElement} */($('history-app'))
+      /** @type {HistoryAppElement} */ ($('history-app'))
           .updateSignInState(isUserSignedIn);
     }
   });

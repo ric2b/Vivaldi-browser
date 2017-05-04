@@ -38,13 +38,13 @@
 #include "core/layout/LayoutListBox.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
-#include "wtf/CurrentTime.h"
+#include "wtf/Time.h"
 
 namespace blink {
 
 // Delay time in second for start autoscroll if pointer is in border edge of
 // scrollable element.
-static double autoscrollDelay = 0.2;
+static const TimeDelta kAutoscrollDelay = TimeDelta::FromSecondsD(0.2);
 
 AutoscrollController* AutoscrollController::create(Page& page) {
   return new AutoscrollController(page);
@@ -55,7 +55,6 @@ AutoscrollController::AutoscrollController(Page& page)
       m_autoscrollLayoutObject(nullptr),
       m_pressedLayoutObject(nullptr),
       m_autoscrollType(NoAutoscroll),
-      m_dragAndDropAutoscrollStartTime(0),
       m_didLatchForMiddleClickAutoscroll(false) {}
 
 DEFINE_TRACE(AutoscrollController) {
@@ -77,6 +76,8 @@ void AutoscrollController::startAutoscrollForSelection(
   // it's already active.
   if (m_autoscrollType != NoAutoscroll)
     return;
+  if (layoutObject)
+    layoutObject->frameView()->updateAllLifecyclePhasesExceptPaint();
   LayoutBox* scrollable = LayoutBox::findAutoscrollable(layoutObject);
   if (!scrollable)
     scrollable =
@@ -152,7 +153,7 @@ void AutoscrollController::updateAutoscrollLayoutObject() {
 
 void AutoscrollController::updateDragAndDrop(Node* dropTargetNode,
                                              const IntPoint& eventPosition,
-                                             double eventTime) {
+                                             TimeTicks eventTime) {
   if (!dropTargetNode || !dropTargetNode->layoutObject()) {
     stopAutoscroll();
     return;
@@ -162,6 +163,10 @@ void AutoscrollController::updateDragAndDrop(Node* dropTargetNode,
       m_autoscrollLayoutObject->frame() !=
           dropTargetNode->layoutObject()->frame())
     return;
+
+  dropTargetNode->layoutObject()
+      ->frameView()
+      ->updateAllLifecyclePhasesExceptPaint();
 
   LayoutBox* scrollable =
       LayoutBox::findAutoscrollable(dropTargetNode->layoutObject());
@@ -307,9 +312,8 @@ void AutoscrollController::animate(double) {
   IntPoint selectionPoint = eventHandler.lastKnownMousePosition() + offset;
   switch (m_autoscrollType) {
     case AutoscrollForDragAndDrop:
-      if (WTF::monotonicallyIncreasingTime() -
-              m_dragAndDropAutoscrollStartTime >
-          autoscrollDelay)
+      if ((TimeTicks::Now() - m_dragAndDropAutoscrollStartTime) >
+          kAutoscrollDelay)
         m_autoscrollLayoutObject->autoscroll(
             m_dragAndDropAutoscrollReferencePosition);
       break;

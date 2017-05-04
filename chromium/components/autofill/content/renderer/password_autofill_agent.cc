@@ -9,16 +9,17 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/i18n/case_conversion.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ptr_util.h"
-#include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
 #include "components/autofill/content/renderer/password_form_conversion_utils.h"
@@ -27,6 +28,8 @@
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
+#include "components/security_state/core/security_state.h"
+#include "content/public/common/origin_util.h"
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/navigation_state.h"
 #include "content/public/renderer/render_frame.h"
@@ -177,7 +180,8 @@ bool FindFormInputElement(
     // fields.
     const blink::WebInputElement input_element =
         control_element.toConst<blink::WebInputElement>();
-    if (input_element.isPasswordField() != is_password_field)
+    if (!input_element.isTextField() ||
+        input_element.isPasswordField() != is_password_field)
       continue;
 
     // For change password form with ambiguous or empty names keep only the
@@ -243,8 +247,6 @@ void FindFormElements(content::RenderFrame* render_frame,
   DCHECK(results);
 
   blink::WebDocument doc = render_frame->GetWebFrame()->document();
-  if (!doc.isHTMLDocument())
-    return;
 
   if (data.origin != form_util::GetCanonicalOriginForDocument(doc))
     return;
@@ -559,19 +561,6 @@ bool FillFormOnPasswordReceived(
       field_value_and_properties_map, registration_callback, logger);
 }
 
-// Takes a |map| with pointers as keys and linked_ptr as values, and returns
-// true if |key| is not NULL and  |map| contains a non-NULL entry for |key|.
-// Makes sure not to create an entry as a side effect of using the operator [].
-template <class Key, class Value>
-bool ContainsNonNullEntryForNonNullKey(
-    const std::map<Key*, linked_ptr<Value>>& map,
-    Key* key) {
-  if (!key)
-    return false;
-  auto it = map.find(key);
-  return it != map.end() && it->second.get();
-}
-
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -586,7 +575,6 @@ PasswordAutofillAgent::PasswordAutofillAgent(content::RenderFrame* render_frame)
   // PasswordAutofillAgent is guaranteed to outlive |render_frame|.
   render_frame->GetInterfaceRegistry()->AddInterface(
       base::Bind(&PasswordAutofillAgent::BindRequest, base::Unretained(this)));
-  GetPasswordManagerDriver()->PasswordAutofillAgentConstructed();
 }
 
 PasswordAutofillAgent::~PasswordAutofillAgent() {
@@ -855,9 +843,23 @@ bool PasswordAutofillAgent::ShowSuggestions(
   blink::WebInputElement username_element;
   blink::WebInputElement password_element;
   PasswordInfo* password_info;
+
   if (!FindPasswordInfoForElement(element, &username_element, &password_element,
-                                  &password_info))
+                                  &password_info)) {
+    // If we don't have a password stored, but the form is non-secure, warn
+    // the user about the non-secure form.
+    if ((element.isPasswordField() ||
+         HasAutocompleteAttributeValue(element, "username")) &&
+        security_state::IsHttpWarningInFormEnabled() &&
+        !content::IsOriginSecure(
+            url::Origin(
+                render_frame()->GetWebFrame()->top()->getSecurityOrigin())
+                .GetURL())) {
+      autofill_agent_->ShowNotSecureWarning(element);
+      return true;
+    }
     return false;
+  }
 
   // If autocomplete='off' is set on the form elements, no suggestion dialog
   // should be shown. However, return |true| to indicate that this is a known
@@ -897,6 +899,16 @@ bool PasswordAutofillAgent::ShowSuggestions(
   return ShowSuggestionPopup(*password_info, element,
                              show_all && !element.isPasswordField(),
                              element.isPasswordField());
+}
+
+void PasswordAutofillAgent::ShowNotSecureWarning(
+    const blink::WebInputElement& element) {
+  FormData form;
+  FormFieldData field;
+  form_util::FindFormAndFieldForFormControlElement(element, &form, &field);
+  GetPasswordManagerDriver()->ShowNotSecureWarning(
+      field.text_direction,
+      render_frame()->GetRenderView()->ElementBoundsInWindow(element));
 }
 
 bool PasswordAutofillAgent::OriginCanAccessPasswordManager(
@@ -947,10 +959,6 @@ void PasswordAutofillAgent::SendPasswordForms(bool only_visible) {
   }
 
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
-  // RenderFrameObserver::DidFinishLoad() can fire when Frame is
-  // detaching. crbug.com/654654
-  if (frame->isFrameDetachedForSpecialOneOffStopTheCrashingHackBug561873())
-    return;
 
   // Make sure that this security origin is allowed to use password manager.
   blink::WebSecurityOrigin origin = frame->document().getSecurityOrigin();
@@ -1195,7 +1203,7 @@ void PasswordAutofillAgent::DidStartProvisionalLoad() {
           *provisionally_saved_form_);
       provisionally_saved_form_.reset();
     } else {
-      ScopedVector<PasswordForm> possible_submitted_forms;
+      std::vector<std::unique_ptr<PasswordForm>> possible_submitted_forms;
       // Loop through the forms on the page looking for one that has been
       // filled out. If one exists, try and save the credentials.
       blink::WebVector<blink::WebFormElement> forms;
@@ -1218,7 +1226,7 @@ void PasswordAutofillAgent::DidStartProvisionalLoad() {
               *render_frame()->GetWebFrame(), &field_value_and_properties_map_,
               &form_predictions_));
 
-      for (const PasswordForm* password_form : possible_submitted_forms) {
+      for (const auto& password_form : possible_submitted_forms) {
         if (password_form && !password_form->username_value.empty() &&
             FormContainsNonDefaultPasswordValue(*password_form)) {
           password_forms_found = true;
@@ -1506,7 +1514,7 @@ const mojom::PasswordManagerDriverPtr&
 PasswordAutofillAgent::GetPasswordManagerDriver() {
   if (!password_manager_driver_) {
     render_frame()->GetRemoteInterfaces()->GetInterface(
-        mojo::GetProxy(&password_manager_driver_));
+        mojo::MakeRequest(&password_manager_driver_));
   }
 
   return password_manager_driver_;

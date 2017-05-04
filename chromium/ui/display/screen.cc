@@ -46,4 +46,15 @@ gfx::Rect Screen::DIPToScreenRectInWindow(gfx::NativeView view,
   return ScaleToEnclosingRect(dip_rect, scale);
 }
 
+bool Screen::GetDisplayWithDisplayId(int64_t display_id,
+                                     Display* display) const {
+  for (const Display& display_in_list : GetAllDisplays()) {
+    if (display_in_list.id() == display_id) {
+      *display = display_in_list;
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace display

@@ -26,6 +26,7 @@ VivaldiAPIPermissions::GetAllPermissions() const {
       {APIPermission::kSettings, "settings" },
       {APIPermission::kSavedPasswords, "savedpasswords"},
       {APIPermission::kShowMenu, "showMenu"},
+      {APIPermission::kSync, "sync" },
       {APIPermission::kTabsPrivate, "tabsPrivate"},
       {APIPermission::kThumbnails, "thumbnails"},
       {APIPermission::kZoom, "zoom" },

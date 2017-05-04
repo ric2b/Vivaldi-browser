@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/output/compositor_frame_sink_client.h"
 #include "cc/output/copy_output_request.h"
@@ -68,29 +69,28 @@ bool TestCompositorFrameSink::BindToClient(CompositorFrameSinkClient* client) {
   bool display_context_shared_with_compositor =
       display_output_surface->context_provider() == context_provider();
 
-  std::unique_ptr<SyntheticBeginFrameSource> begin_frame_source;
   std::unique_ptr<DisplayScheduler> scheduler;
   if (!synchronous_composite_) {
     if (renderer_settings_.disable_display_vsync) {
-      begin_frame_source.reset(new BackToBackBeginFrameSource(
+      begin_frame_source_.reset(new BackToBackBeginFrameSource(
           base::MakeUnique<DelayBasedTimeSource>(task_runner_.get())));
     } else {
-      begin_frame_source.reset(new DelayBasedBeginFrameSource(
+      begin_frame_source_.reset(new DelayBasedBeginFrameSource(
           base::MakeUnique<DelayBasedTimeSource>(task_runner_.get())));
-      begin_frame_source->SetAuthoritativeVSyncInterval(
+      begin_frame_source_->SetAuthoritativeVSyncInterval(
           base::TimeDelta::FromMilliseconds(1000.f /
                                             renderer_settings_.refresh_rate));
     }
     scheduler.reset(new DisplayScheduler(
-        begin_frame_source.get(), task_runner_.get(),
+        task_runner_.get(),
         display_output_surface->capabilities().max_frames_pending));
   }
 
-  display_.reset(new Display(
-      shared_bitmap_manager(), gpu_memory_buffer_manager(), renderer_settings_,
-      frame_sink_id_, std::move(begin_frame_source),
-      std::move(display_output_surface), std::move(scheduler),
-      base::MakeUnique<TextureMailboxDeleter>(task_runner_.get())));
+  display_.reset(
+      new Display(shared_bitmap_manager(), gpu_memory_buffer_manager(),
+                  renderer_settings_, frame_sink_id_, begin_frame_source_.get(),
+                  std::move(display_output_surface), std::move(scheduler),
+                  base::MakeUnique<TextureMailboxDeleter>(task_runner_.get())));
 
   // We want the Display's OutputSurface to hear about lost context, and when
   // this shares a context with it we should not be listening for lost context
@@ -111,8 +111,7 @@ bool TestCompositorFrameSink::BindToClient(CompositorFrameSinkClient* client) {
 void TestCompositorFrameSink::DetachFromClient() {
   // Some tests make BindToClient fail on purpose. ^__^
   if (bound_) {
-    if (delegated_local_frame_id_.is_valid())
-      surface_factory_->Destroy(delegated_local_frame_id_);
+    surface_factory_->EvictSurface();
     surface_manager_->UnregisterSurfaceFactoryClient(frame_sink_id_);
     surface_manager_->InvalidateFrameSinkId(frame_sink_id_);
     display_ = nullptr;
@@ -130,13 +129,11 @@ void TestCompositorFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
 
   if (!delegated_local_frame_id_.is_valid()) {
     delegated_local_frame_id_ = surface_id_allocator_->GenerateId();
-    surface_factory_->Create(delegated_local_frame_id_);
   }
   display_->SetLocalFrameId(delegated_local_frame_id_,
                             frame.metadata.device_scale_factor);
 
-  gfx::Size frame_size =
-      frame.delegated_frame_data->render_pass_list.back()->output_rect.size();
+  gfx::Size frame_size = frame.render_pass_list.back()->output_rect.size();
   display_->Resize(frame_size);
 
   bool synchronous = !display_->has_scheduler();
@@ -155,8 +152,7 @@ void TestCompositorFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
                                           std::move(frame), draw_callback);
 
   for (std::unique_ptr<CopyOutputRequest>& copy_request : copy_requests_) {
-    surface_factory_->RequestCopyOfSurface(delegated_local_frame_id_,
-                                           std::move(copy_request));
+    surface_factory_->RequestCopyOfSurface(std::move(copy_request));
   }
   copy_requests_.clear();
 
@@ -179,9 +175,7 @@ void TestCompositorFrameSink::DidDrawCallback() {
 void TestCompositorFrameSink::ForceReclaimResources() {
   if (capabilities_.can_force_reclaim_resources &&
       delegated_local_frame_id_.is_valid()) {
-    surface_factory_->SubmitCompositorFrame(delegated_local_frame_id_,
-                                            CompositorFrame(),
-                                            SurfaceFactory::DrawCallback());
+    surface_factory_->ClearSurface();
   }
 }
 

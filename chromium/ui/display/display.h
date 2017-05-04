@@ -9,6 +9,7 @@
 
 #include "base/compiler_specific.h"
 #include "ui/display/display_export.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/icc_profile.h"
 
@@ -65,9 +66,7 @@ class DISPLAY_EXPORT Display final {
     TOUCH_SUPPORT_UNAVAILABLE,
   };
 
-  enum : int64_t { kInvalidDisplayID = -1 };
-
-  // Creates a display with kInvalidDisplayID as default.
+  // Creates a display with kInvalidDisplayId as default.
   Display();
   explicit Display(int64_t id);
   Display(int64_t id, const gfx::Rect& bounds);
@@ -92,11 +91,11 @@ class DISPLAY_EXPORT Display final {
   int64_t id() const { return id_; }
   void set_id(int64_t id) { id_ = id; }
 
-  // Gets/Sets the display's bounds in display::Screen's coordinates.
+  // Gets/Sets the display's bounds in Screen's coordinates.
   const gfx::Rect& bounds() const { return bounds_; }
   void set_bounds(const gfx::Rect& bounds) { bounds_ = bounds; }
 
-  // Gets/Sets the display's work area in display::Screen's coordinates.
+  // Gets/Sets the display's work area in Screen's coordinates.
   const gfx::Rect& work_area() const { return work_area_; }
   void set_work_area(const gfx::Rect& work_area) { work_area_ = work_area; }
 
@@ -139,12 +138,15 @@ class DISPLAY_EXPORT Display final {
 
   // Returns the display's size in pixel coordinates.
   gfx::Size GetSizeInPixel() const;
+#if defined(OS_ANDROID)
+  void set_size_in_pixels(const gfx::Size& size) { size_in_pixels_ = size; }
+#endif  // defined(OS_ANDROID)
 
   // Returns a string representation of the display;
   std::string ToString() const;
 
   // True if the display contains valid display id.
-  bool is_valid() const { return id_ != kInvalidDisplayID; }
+  bool is_valid() const { return id_ != kInvalidDisplayId; }
 
   // True if the display corresponds to internal panel.
   bool IsInternal() const;
@@ -194,6 +196,9 @@ class DISPLAY_EXPORT Display final {
  private:
   int64_t id_;
   gfx::Rect bounds_;
+  // If non-empty, then should be same size as |bounds_|. Used to avoid rounding
+  // errors.
+  gfx::Size size_in_pixels_;
   gfx::Rect work_area_;
   float device_scale_factor_;
   Rotation rotation_ = ROTATE_0;
@@ -205,8 +210,7 @@ class DISPLAY_EXPORT Display final {
   bool is_monochrome_ = false;
 
 #if !defined(OS_IOS)
-  friend struct mojo::StructTraits<display::mojom::DisplayDataView,
-                                   display::Display>;
+  friend struct mojo::StructTraits<mojom::DisplayDataView, Display>;
 #endif
 };
 

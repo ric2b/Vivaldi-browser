@@ -9,6 +9,7 @@
 #include "base/format_macros.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/prerender/prerender_manager.h"
@@ -95,7 +96,7 @@ std::string GetHistogramName(Origin origin, bool is_wash,
       return ComposeHistogramName("webnext", name);
     case ORIGIN_GWS_PRERENDER:
       return ComposeHistogramName("gws", name);
-    case ORIGIN_EXTERNAL_REQUEST_FORCED_CELLULAR:
+    case ORIGIN_EXTERNAL_REQUEST_FORCED_PRERENDER:
       return ComposeHistogramName("externalrequestforced", name);
     case ORIGIN_OFFLINE:
       return ComposeHistogramName("offline", name);
@@ -113,6 +114,10 @@ bool OriginIsOmnibox(Origin origin) {
   return origin == ORIGIN_OMNIBOX;
 }
 
+const char* FirstContentfulPaintHiddenName(bool was_hidden) {
+  return was_hidden ? ".Hidden" : ".Visible";
+}
+
 }  // namespace
 
 // Helper macros for origin-based histogram reporting. All HISTOGRAM arguments
@@ -125,40 +130,40 @@ bool OriginIsOmnibox(Origin origin) {
                                              HISTOGRAM) \
   PREFIXED_HISTOGRAM_INTERNAL(origin, false, HISTOGRAM, histogram_name)
 
-#define PREFIXED_HISTOGRAM_INTERNAL(origin, wash, HISTOGRAM, histogram_name) \
-do { \
-  { \
-    /* Do not rename.  HISTOGRAM expects a local variable "name". */           \
-    std::string name = ComposeHistogramName(std::string(), histogram_name);    \
-    HISTOGRAM;                                                                 \
-  } \
-  /* Do not rename.  HISTOGRAM expects a local variable "name". */ \
-  std::string name = GetHistogramName(origin, wash, histogram_name); \
-  /* Branching because HISTOGRAM is caching the histogram into a static. */ \
-  if (wash) { \
-    HISTOGRAM; \
-  } else if (origin == ORIGIN_OMNIBOX) { \
-    HISTOGRAM; \
-  } else if (origin == ORIGIN_NONE) { \
-    HISTOGRAM; \
-  } else if (origin == ORIGIN_LINK_REL_PRERENDER_SAMEDOMAIN) { \
-    HISTOGRAM; \
-  } else if (origin == ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN) { \
-    HISTOGRAM; \
-  } else if (origin == ORIGIN_EXTERNAL_REQUEST) { \
-    HISTOGRAM; \
-  } else if (origin == ORIGIN_INSTANT) { \
-    HISTOGRAM; \
-  } else if (origin == ORIGIN_LINK_REL_NEXT) { \
-    HISTOGRAM; \
-  } else if (origin == ORIGIN_EXTERNAL_REQUEST_FORCED_CELLULAR) { \
-    HISTOGRAM; \
-  } else if (origin == ORIGIN_OFFLINE) { \
-    HISTOGRAM; \
-  } else { \
-    HISTOGRAM; \
-  } \
-} while (0)
+#define PREFIXED_HISTOGRAM_INTERNAL(origin, wash, HISTOGRAM, histogram_name)  \
+  do {                                                                        \
+    {                                                                         \
+      /* Do not rename.  HISTOGRAM expects a local variable "name". */        \
+      std::string name = ComposeHistogramName(std::string(), histogram_name); \
+      HISTOGRAM;                                                              \
+    }                                                                         \
+    /* Do not rename.  HISTOGRAM expects a local variable "name". */          \
+    std::string name = GetHistogramName(origin, wash, histogram_name);        \
+    /* Branching because HISTOGRAM is caching the histogram into a static. */ \
+    if (wash) {                                                               \
+      HISTOGRAM;                                                              \
+    } else if (origin == ORIGIN_OMNIBOX) {                                    \
+      HISTOGRAM;                                                              \
+    } else if (origin == ORIGIN_NONE) {                                       \
+      HISTOGRAM;                                                              \
+    } else if (origin == ORIGIN_LINK_REL_PRERENDER_SAMEDOMAIN) {              \
+      HISTOGRAM;                                                              \
+    } else if (origin == ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN) {             \
+      HISTOGRAM;                                                              \
+    } else if (origin == ORIGIN_EXTERNAL_REQUEST) {                           \
+      HISTOGRAM;                                                              \
+    } else if (origin == ORIGIN_INSTANT) {                                    \
+      HISTOGRAM;                                                              \
+    } else if (origin == ORIGIN_LINK_REL_NEXT) {                              \
+      HISTOGRAM;                                                              \
+    } else if (origin == ORIGIN_EXTERNAL_REQUEST_FORCED_PRERENDER) {          \
+      HISTOGRAM;                                                              \
+    } else if (origin == ORIGIN_OFFLINE) {                                    \
+      HISTOGRAM;                                                              \
+    } else {                                                                  \
+      HISTOGRAM;                                                              \
+    }                                                                         \
+  } while (0)
 
 PrerenderHistograms::PrerenderHistograms()
     : last_origin_(ORIGIN_MAX),
@@ -241,10 +246,6 @@ base::TimeTicks PrerenderHistograms::GetCurrentTimeTicks() const {
 // (all prefixed PerceivedPLT)
 // PerceivedPLT -- Perceived Pageloadtimes (PPLT) for all pages in the group.
 // ...Windowed -- PPLT for pages in the 30s after a prerender is created.
-// ...Matched -- A prerendered page that was swapped in.  In the NoUse
-// and Control group cases, while nothing ever gets swapped in, we do keep
-// track of what would be prerendered and would be swapped in -- and those
-// cases are what is classified as Match for these groups.
 // ...FirstAfterMiss -- First page to finish loading after a prerender, which
 // is different from the page that was prerendered.
 // ...FirstAfterMissNonOverlapping -- Same as FirstAfterMiss, but only
@@ -270,15 +271,10 @@ void PrerenderHistograms::RecordPerceivedPageLoadTime(
   if (within_window)
     RECORD_PLT("PerceivedPLTWindowed", perceived_page_load_time);
   if (navigation_type != NAVIGATION_TYPE_NORMAL) {
-    DCHECK(navigation_type == NAVIGATION_TYPE_WOULD_HAVE_BEEN_PRERENDERED ||
-           navigation_type == NAVIGATION_TYPE_PRERENDERED);
-    RECORD_PLT("PerceivedPLTMatchedComplete", perceived_page_load_time);
-    if (navigation_type == NAVIGATION_TYPE_PRERENDERED)
-      RECORD_PLT("PerceivedPLTMatched", perceived_page_load_time);
+    DCHECK(navigation_type == NAVIGATION_TYPE_PRERENDERED);
     seen_any_pageload_ = true;
     seen_pageload_started_after_prerender_ = true;
   } else if (within_window) {
-    RECORD_PLT("PerceivedPLTWindowNotMatched", perceived_page_load_time);
     if (!is_google_url) {
       bool recorded_any = false;
       bool recorded_non_overlapping = false;
@@ -308,6 +304,16 @@ void PrerenderHistograms::RecordPerceivedPageLoadTime(
       }
     }
   }
+}
+
+void PrerenderHistograms::RecordPerceivedFirstContentfulPaintStatus(
+    Origin origin,
+    bool successful,
+    bool was_hidden) {
+  base::UmaHistogramBoolean(
+      GetHistogramName(origin, IsOriginWash(), "PerceivedTTFCPRecorded") +
+          FirstContentfulPaintHiddenName(was_hidden),
+      successful);
 }
 
 void PrerenderHistograms::RecordPageLoadTimeNotSwappedIn(
@@ -452,24 +458,37 @@ void PrerenderHistograms::RecordPrefetchRedirectCount(
   RecordHistogramEnum(histogram_name, redirect_count, kMaxRedirectCount);
 }
 
-void PrerenderHistograms::RecordFirstContentfulPaint(
+void PrerenderHistograms::RecordPrefetchFirstContentfulPaintTime(
     Origin origin,
     bool is_no_store,
+    bool was_hidden,
     base::TimeDelta time,
     base::TimeDelta prefetch_age) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!prefetch_age.is_zero()) {
     DCHECK_NE(origin, ORIGIN_NONE);
-    RecordHistogramTime(GetHistogramName(origin, IsOriginWash(),
-                                         "Prerender.NoStatePrefetchAge"),
+    RecordHistogramTime(GetHistogramName(origin, IsOriginWash(), "PrefetchAge"),
                         base::TimeDelta::FromMilliseconds(10),
                         base::TimeDelta::FromMinutes(30), prefetch_age, 50);
   }
 
-  RecordHistogramTime(GetFirstContentfulPaintHistogramName(
-                          origin, IsOriginWash(), is_no_store, prefetch_age),
-                      base::TimeDelta::FromMilliseconds(10),
+  std::string histogram_base_name;
+  if (prefetch_age.is_zero()) {
+    histogram_base_name = "PrefetchTTFCP.Reference";
+  } else {
+    histogram_base_name = prefetch_age < base::TimeDelta::FromMinutes(
+                                             net::HttpCache::kPrefetchReuseMins)
+                              ? "PrefetchTTFCP.Warm"
+                              : "PrefetchTTFCP.Cold";
+  }
+
+  histogram_base_name += is_no_store ? ".NoStore" : ".Cacheable";
+  histogram_base_name += FirstContentfulPaintHiddenName(was_hidden);
+  std::string histogram_name =
+      GetHistogramName(origin, IsOriginWash(), histogram_base_name);
+
+  RecordHistogramTime(histogram_name, base::TimeDelta::FromMilliseconds(10),
                       base::TimeDelta::FromMinutes(2), time, 50);
 }
 
@@ -477,26 +496,6 @@ bool PrerenderHistograms::IsOriginWash() const {
   if (!WithinWindow())
     return false;
   return origin_wash_;
-}
-
-// static
-std::string PrerenderHistograms::GetFirstContentfulPaintHistogramName(
-    Origin origin,
-    bool is_wash,
-    bool is_no_store,
-    base::TimeDelta prefetch_age) {
-  std::string histogram_base_name;
-  if (prefetch_age.is_zero()) {
-    histogram_base_name = "NoStatePrefetchTTFCP.Reference";
-  } else {
-    histogram_base_name = prefetch_age < base::TimeDelta::FromMinutes(
-                                             net::HttpCache::kPrefetchReuseMins)
-                              ? "NoStatePrefetchTTFCP.Warm"
-                              : "NoStatePrefetchTTFCP.Cold";
-  }
-
-  histogram_base_name += is_no_store ? ".NoStore" : ".Cacheable";
-  return GetHistogramName(origin, is_wash, histogram_base_name);
 }
 
 }  // namespace prerender

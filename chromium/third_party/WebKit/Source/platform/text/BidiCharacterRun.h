@@ -60,6 +60,13 @@ struct BidiCharacterRun {
     }
   }
 
+  BidiCharacterRun(int start, int stop, unsigned char level)
+      : m_override(false),
+        m_level(level),
+        m_next(0),
+        m_start(start),
+        m_stop(stop) {}
+
   // BidiCharacterRun are allocated out of the rendering partition.
   PLATFORM_EXPORT void* operator new(size_t);
   PLATFORM_EXPORT void operator delete(void*);
@@ -73,7 +80,9 @@ struct BidiCharacterRun {
   bool dirOverride(bool visuallyOrdered) {
     return m_override || visuallyOrdered;
   }
-  TextDirection direction() const { return reversed(false) ? RTL : LTR; }
+  TextDirection direction() const {
+    return reversed(false) ? TextDirection::kRtl : TextDirection::kLtr;
+  }
 
   BidiCharacterRun* next() const { return m_next; }
   void setNext(BidiCharacterRun* next) { m_next = next; }

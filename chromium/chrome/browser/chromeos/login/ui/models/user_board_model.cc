@@ -4,18 +4,11 @@
 
 #include "chrome/browser/chromeos/login/ui/models/user_board_model.h"
 
-namespace {
-const char kUserBoardScreenName[] = "userBoard";
-}
-
 namespace chromeos {
 
-UserBoardModel::UserBoardModel() : BaseScreen(nullptr) {}
+UserBoardModel::UserBoardModel()
+    : BaseScreen(nullptr, OobeScreen::SCREEN_USER_SELECTION) {}
 
 UserBoardModel::~UserBoardModel() {}
-
-std::string UserBoardModel::GetName() const {
-  return kUserBoardScreenName;
-}
 
 }  // namespace chromeos

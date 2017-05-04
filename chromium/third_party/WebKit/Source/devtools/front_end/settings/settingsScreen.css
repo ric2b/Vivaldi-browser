@@ -31,31 +31,6 @@
     padding: 12px;
 }
 
-.help-window-main .help-container-wrapper::-webkit-scrollbar {
-    width: 11px;
-}
-
-.help-window-main .help-container-wrapper::-webkit-scrollbar-corner,
-.help-window-main .help-container-wrapper::-webkit-resizer {
-    display: none;
-}
-
-.help-window-main .help-container-wrapper::-webkit-scrollbar-thumb:vertical {
-    background: linear-gradient(to right, rgb(128, 128, 128), rgb(96, 96, 96) 40%, rgb(128, 128, 128));
-    border-radius: 5px;
-    min-height: 20px;
-}
-
-.help-window-main .help-container-wrapper::-webkit-scrollbar-thumb:vertical:hover,
-.help-window-main .help-container-wrapper::-webkit-scrollbar-thumb:vertical:active {
-    background: linear-gradient(to right, rgb(176, 176, 176), rgb(144, 144, 144) 40%, rgb(176, 176, 176));
-}
-
-.help-window-main .help-container-wrapper::-webkit-scrollbar-track:vertical {
-    background: linear-gradient(to right, rgb(10, 10, 10), rgb(32, 32, 32) 25%, rgb(32, 32, 32));
-    border-radius: 5px;
-}
-
 .help-container {
     width: 100%;
     -webkit-user-select: auto;
@@ -258,6 +233,7 @@ fieldset {
 #workspace-tab-content .settings-tab.help-content.help-container {
     -webkit-column-width: initial;
     overflow: hidden;
+    padding-right: 10px;
 }
 
 
@@ -271,23 +247,21 @@ fieldset {
 }
 
 p.folder-exclude-pattern {
-    margin-top: 0 !important;
+    display: flex;
+    align-items: center;
 }
 
-.folder-exclude-pattern input {
-    margin-top: 10px;
+p.folder-exclude-pattern > input {
+    flex: auto;
 }
 
 .file-system-mapping-view {
-    margin-left: 30px;
-    margin-right: 10px;
 }
 
 .settings-tab .file-system-container {
-    margin-bottom: 18px;
-    padding: 0 8px;
-    border-left: 1px solid hsl(0, 0%, 90%);
-    max-width: 800px;
+    border-top: 1px solid #aaa;
+    padding: 19px 0 10px;
+    margin: 20px 0;
 }
 
 .settings-tab .file-system-header {
@@ -332,4 +306,10 @@ p.folder-exclude-pattern {
 
 .settings-developer-mode .settings-experiment-hidden {
     display: block;
+}
+
+.settings-info-message {
+    background-color: #eee;
+    padding: 10px;
+    margin: 20px 0;
 }

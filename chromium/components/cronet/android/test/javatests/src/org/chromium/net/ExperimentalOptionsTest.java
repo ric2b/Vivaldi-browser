@@ -4,7 +4,7 @@
 
 package org.chromium.net;
 
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.json.JSONObject;
 
@@ -19,7 +19,7 @@ import java.io.FileReader;
  * Tests for experimental options.
  */
 public class ExperimentalOptionsTest extends CronetTestBase {
-    private static final String TAG = "cr.QuicTest";
+    private static final String TAG = ExperimentalOptionsTest.class.getSimpleName();
     private CronetTestFramework mTestFramework;
     private ExperimentalCronetEngine.Builder mBuilder;
 

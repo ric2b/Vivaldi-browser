@@ -8,11 +8,19 @@
 var volumeManagerUtil = {};
 
 /**
- * Time in milliseconds that we wait a response for. If no response on
+ * Time in milliseconds that we wait a response for general volume operations
+ * such as mount, unmount, and requestFileSystem. If no response on
  * mount/unmount received the request supposed failed.
  * @const {number}
  */
 volumeManagerUtil.TIMEOUT = 15 * 60 * 1000;
+
+/**
+ * Time in milliseconds that we wait a response for
+ * chrome.fileManagerPrivate.resolveIsolatedEntries.
+ * @const {number}
+ */
+volumeManagerUtil.TIMEOUT_FOR_RESOLVE_ISOLATED_ENTRIES = 1 * 60 * 1000;
 
 /**
  * @const {string}
@@ -54,6 +62,20 @@ volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
       break;
     case VolumeManagerCommon.VolumeType.DRIVE:
       localizedLabel = str('DRIVE_DIRECTORY_LABEL');
+      break;
+    case VolumeManagerCommon.VolumeType.MEDIA_VIEW:
+      switch (VolumeManagerCommon.getMediaViewRootTypeFromVolumeId(
+          volumeMetadata.volumeId)) {
+        case VolumeManagerCommon.MediaViewRootType.IMAGES:
+          localizedLabel = str('MEDIA_VIEW_IMAGES_ROOT_LABEL');
+          break;
+        case VolumeManagerCommon.MediaViewRootType.VIDEOS:
+          localizedLabel = str('MEDIA_VIEW_VIDEOS_ROOT_LABEL');
+          break;
+        case VolumeManagerCommon.MediaViewRootType.AUDIO:
+          localizedLabel = str('MEDIA_VIEW_AUDIO_ROOT_LABEL');
+          break;
+      }
       break;
     default:
       // TODO(mtomasz): Calculate volumeLabel for all types of volumes in the
@@ -102,7 +124,7 @@ volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
                       resolve(entries[0].filesystem);
                   });
             }),
-            volumeManagerUtil.TIMEOUT,
+            volumeManagerUtil.TIMEOUT_FOR_RESOLVE_ISOLATED_ENTRIES,
             volumeManagerUtil.TIMEOUT_STR_RESOLVE_ISOLATED_ENTRIES +
                 ': ' + volumeMetadata.volumeId);
        })
@@ -136,6 +158,7 @@ volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
             volumeMetadata.deviceType,
             volumeMetadata.devicePath,
             volumeMetadata.isReadOnly,
+            volumeMetadata.isReadOnlyRemovableDevice,
             volumeMetadata.profile,
             localizedLabel,
             volumeMetadata.extensionId,
@@ -164,6 +187,7 @@ volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
             volumeMetadata.deviceType,
             volumeMetadata.devicePath,
             volumeMetadata.isReadOnly,
+            volumeMetadata.isReadOnlyRemovableDevice,
             volumeMetadata.profile,
             localizedLabel,
             volumeMetadata.extensionId,

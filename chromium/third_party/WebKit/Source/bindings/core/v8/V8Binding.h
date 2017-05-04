@@ -64,8 +64,6 @@ class Frame;
 class LocalDOMWindow;
 class LocalFrame;
 class NodeFilter;
-class WorkerGlobalScope;
-class WorkerOrWorkletGlobalScope;
 class XPathNSResolver;
 
 template <typename T>
@@ -204,28 +202,20 @@ inline void v8SetReturnValue(const CallbackInfo& callbackInfo, Node* impl) {
   v8SetReturnValue(callbackInfo, wrapper);
 }
 
-// Special versions for DOMWindow, WorkerGlobalScope and EventTarget
+// Special versions for DOMWindow and EventTarget
 
 template <typename CallbackInfo>
 inline void v8SetReturnValue(const CallbackInfo& callbackInfo,
                              DOMWindow* impl) {
-  v8SetReturnValue(callbackInfo, toV8(impl, callbackInfo.Holder(),
+  v8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(),
                                       callbackInfo.GetIsolate()));
 }
 
 template <typename CallbackInfo>
 inline void v8SetReturnValue(const CallbackInfo& callbackInfo,
                              EventTarget* impl) {
-  v8SetReturnValue(callbackInfo, toV8(impl, callbackInfo.Holder(),
+  v8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(),
                                       callbackInfo.GetIsolate()));
-}
-
-template <typename CallbackInfo>
-inline void v8SetReturnValue(const CallbackInfo& callbackInfo,
-                             WorkerGlobalScope* impl) {
-  v8SetReturnValue(callbackInfo,
-                   toV8((WorkerOrWorkletGlobalScope*)impl,
-                        callbackInfo.Holder(), callbackInfo.GetIsolate()));
 }
 
 template <typename CallbackInfo, typename T>
@@ -274,28 +264,20 @@ inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo,
   v8SetReturnValueForMainWorld(callbackInfo, ScriptWrappable::fromNode(impl));
 }
 
-// Special versions for DOMWindow, WorkerGlobalScope and EventTarget
+// Special versions for DOMWindow and EventTarget
 
 template <typename CallbackInfo>
 inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo,
                                          DOMWindow* impl) {
-  v8SetReturnValue(callbackInfo, toV8(impl, callbackInfo.Holder(),
+  v8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(),
                                       callbackInfo.GetIsolate()));
 }
 
 template <typename CallbackInfo>
 inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo,
                                          EventTarget* impl) {
-  v8SetReturnValue(callbackInfo, toV8(impl, callbackInfo.Holder(),
+  v8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(),
                                       callbackInfo.GetIsolate()));
-}
-
-template <typename CallbackInfo>
-inline void v8SetReturnValueForMainWorld(const CallbackInfo& callbackInfo,
-                                         WorkerGlobalScope* impl) {
-  v8SetReturnValue(callbackInfo,
-                   toV8((WorkerOrWorkletGlobalScope*)impl,
-                        callbackInfo.Holder(), callbackInfo.GetIsolate()));
 }
 
 template <typename CallbackInfo, typename T>
@@ -336,13 +318,13 @@ inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo,
   v8SetReturnValue(callbackInfo, wrapper);
 }
 
-// Special versions for DOMWindow, WorkerGlobalScope and EventTarget
+// Special versions for DOMWindow and EventTarget
 
 template <typename CallbackInfo>
 inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo,
                                  DOMWindow* impl,
                                  const ScriptWrappable*) {
-  v8SetReturnValue(callbackInfo, toV8(impl, callbackInfo.Holder(),
+  v8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(),
                                       callbackInfo.GetIsolate()));
 }
 
@@ -350,17 +332,8 @@ template <typename CallbackInfo>
 inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo,
                                  EventTarget* impl,
                                  const ScriptWrappable*) {
-  v8SetReturnValue(callbackInfo, toV8(impl, callbackInfo.Holder(),
+  v8SetReturnValue(callbackInfo, ToV8(impl, callbackInfo.Holder(),
                                       callbackInfo.GetIsolate()));
-}
-
-template <typename CallbackInfo>
-inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo,
-                                 WorkerGlobalScope* impl,
-                                 const ScriptWrappable*) {
-  v8SetReturnValue(callbackInfo,
-                   toV8((WorkerOrWorkletGlobalScope*)impl,
-                        callbackInfo.Holder(), callbackInfo.GetIsolate()));
 }
 
 template <typename CallbackInfo, typename T, typename Wrappable>
@@ -368,6 +341,13 @@ inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo,
                                  PassRefPtr<T> impl,
                                  const Wrappable* wrappable) {
   v8SetReturnValueFast(callbackInfo, impl.get(), wrappable);
+}
+
+template <typename CallbackInfo, typename T>
+inline void v8SetReturnValueFast(const CallbackInfo& callbackInfo,
+                                 const v8::Local<T> handle,
+                                 const ScriptWrappable*) {
+  v8SetReturnValue(callbackInfo, handle);
 }
 
 // Convert v8::String to a WTF::String. If the V8 string is not already
@@ -651,9 +631,7 @@ inline double toCoreDate(v8::Isolate* isolate,
 inline v8::MaybeLocal<v8::Value> v8DateOrNaN(v8::Isolate* isolate,
                                              double value) {
   ASSERT(isolate);
-  return v8::Date::New(
-      isolate->GetCurrentContext(),
-      std::isfinite(value) ? value : std::numeric_limits<double>::quiet_NaN());
+  return v8::Date::New(isolate->GetCurrentContext(), value);
 }
 
 // FIXME: Remove the special casing for NodeFilter and XPathNSResolver.
@@ -967,7 +945,7 @@ struct NativeValueTraits<Vector<T>> {
 CORE_EXPORT v8::Isolate* toIsolate(ExecutionContext*);
 CORE_EXPORT v8::Isolate* toIsolate(LocalFrame*);
 
-DOMWindow* toDOMWindow(v8::Isolate*, v8::Local<v8::Value>);
+CORE_EXPORT DOMWindow* toDOMWindow(v8::Isolate*, v8::Local<v8::Value>);
 DOMWindow* toDOMWindow(v8::Local<v8::Context>);
 LocalDOMWindow* enteredDOMWindow(v8::Isolate*);
 CORE_EXPORT LocalDOMWindow* currentDOMWindow(v8::Isolate*);
@@ -1068,8 +1046,8 @@ VectorType toImplSequence(v8::Isolate* isolate,
     }
     if (doneBoolean->Value())
       break;
-    result.append(NativeValueTraits<ValueType>::nativeValue(isolate, element,
-                                                            exceptionState));
+    result.push_back(NativeValueTraits<ValueType>::nativeValue(isolate, element,
+                                                               exceptionState));
   }
   return result;
 }
@@ -1156,7 +1134,7 @@ typedef void (*InstallTemplateFunction)(
     v8::Local<v8::FunctionTemplate> interfaceTemplate);
 
 // Freeze a V8 object. The type of the first parameter and the return value is
-// intentionally v8::Value so that this function can wrap toV8().
+// intentionally v8::Value so that this function can wrap ToV8().
 // If the argument isn't an object, this will crash.
 CORE_EXPORT v8::Local<v8::Value> freezeV8Object(v8::Local<v8::Value>,
                                                 v8::Isolate*);

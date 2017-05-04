@@ -1028,6 +1028,18 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Accessibility.TwoFingersHeldGeneratedSpokenFeedbackCountdown">
+  <owner>dmazzoni@chromium.org</owner>
+  <description>
+    Metric recorded on Chrome OS when the user holds down two fingers on a touch
+    screen for more than the minimum number of seconds to trigger a countdown.
+    If the user continues to hold down two fingers through the countdown it will
+    toggle spoken feedback. If spoken feedback is toggled, the
+    StatusArea_SpokenFeedbackEnabled or StatusArea_SpokenFeedbackDisabled
+    actions will be recorded.
+  </description>
+</action>
+
 <action name="ActionBox.ClickButton">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -1133,6 +1145,147 @@ should be able to be added at any place in this file.
   <description>
     User chose to &quot;undo&quot; the deletion of one or more download items.
   </description>
+</action>
+
+<action name="Android.HistoryPage.ClearBrowsingData">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User clicked the clear browsing data button on the native Android history
+    page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.CopyLink">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User copied the URL for an item on the native Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.LoadMoreOnScroll">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User scrolled to the bottom of the screen causing more items to load on the
+    native Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.OpenItem">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User opened an item on the native Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.OpenSelected">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User opened one or more selected items in new tabs on the native Android
+    history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.OpenSelectedIncognito">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User opened one or more selected items in new incognito tabs on the native
+    Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.RemoveItem">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User removed an item on the native Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.RemoveSelected">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User removed one or more selected items on the native Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.Search">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User tapped the search icon on the native Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.Search.CopyLink">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User copied the URL for an item while searching on the native Android
+    history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.Search.LoadMoreOnScroll">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User scrolled to the bottom of the screen causing more items to load while
+    searching on the native Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.Search.OpenItem">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User opened an item while searching on the native Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.Search.OpenSelected">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User opened one or more selected items in new tabs while searching on the
+    native Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.Search.OpenSelectedIncognito">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User opened one or more selected items in new incognito tabs while searching
+    on the native Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.Search.RemoveItem">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User removed an item while searching on the native Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.Search.RemoveSelected">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User removed one or more selected items while searching on the native
+    Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.Search.SelectionEstablished">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User established a selection while searching on the native Android history
+    page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.SelectionEstablished">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User established a selection on the native Android history page.
+  </description>
+</action>
+
+<action name="Android.HistoryPage.Show">
+  <owner>twellington@chromium.org</owner>
+  <description>User navigated to the native Android history page.</description>
 </action>
 
 <action name="Android.InstantApps.BannerDismissed">
@@ -1407,6 +1560,15 @@ should be able to be added at any place in this file.
     This user action is logged when the user is shown some credit card
     suggestions. This should always happen after a
     Autofill_PolledCreditCardSuggestion.
+  </description>
+</action>
+
+<action name="Autofill_ShowedHttpNotSecureExplanation">
+  <owner>estark@chromium.org</owner>
+  <description>
+    This user action is logged when the user selects a &quot;Login not
+    secure&quot; or &quot;Payment not secure&quot; warning item in the autofill
+    dropdown to show more information about the warning.
   </description>
 </action>
 
@@ -2193,8 +2355,10 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="BookmarkBar_DragEnd">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>calamity@chromium.org</owner>
+  <description>
+    Logged when a bookmark drag ends in the bookmark bar
+  </description>
 </action>
 
 <action name="BookmarkBar_DragFromFolder">
@@ -2352,6 +2516,49 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="BookmarkManager_Drop">
+  <owner>calamity@chromium.org</owner>
+  <description>
+    Fired when a user drops a bookmark after a drag in the bookmark manager.
+  </description>
+  <obsolete>
+    Superseded by BookmarkManager_DropToList, BookmarkManager_DropToTree,
+    BookmarkManager_DropToListItem and BookmarkManager_DropToTreeItem.
+  </obsolete>
+</action>
+
+<action name="BookmarkManager_DropToList">
+  <owner>calamity@chromium.org</owner>
+  <description>
+    Fired when a user drops a bookmark into the bookmark list between other
+    items in the bookmark manager.
+  </description>
+</action>
+
+<action name="BookmarkManager_DropToListItem">
+  <owner>calamity@chromium.org</owner>
+  <description>
+    Fired when a user drops a bookmark directly onto a bookmark list item in the
+    bookmark manager.
+  </description>
+</action>
+
+<action name="BookmarkManager_DropToTree">
+  <owner>calamity@chromium.org</owner>
+  <description>
+    Fired when a user drops a bookmark into the bookmark tree between other
+    nodes in the bookmark manager.
+  </description>
+</action>
+
+<action name="BookmarkManager_DropToTreeItem">
+  <owner>calamity@chromium.org</owner>
+  <description>
+    Fired when a user drops a bookmark directly onto a bookmark tree item in the
+    bookmark manager.
+  </description>
+</action>
+
 <action name="BookmarkManager_Export">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -2395,6 +2602,31 @@ should be able to be added at any place in this file.
 <action name="BookmarkManager_Sort">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="BookmarkManager_StartDrag">
+  <owner>calamity@chromium.org</owner>
+  <description>
+    Fired when a user starts a drag in the bookmark manager.
+  </description>
+  <obsolete>
+    Superseded by BookmarkManager_StartDragFromList and
+    BookmarkManager_StartDragFromTree.
+  </obsolete>
+</action>
+
+<action name="BookmarkManager_StartDragFromList">
+  <owner>calamity@chromium.org</owner>
+  <description>
+    Fired when a user starts a drag to the tree in the bookmark manager.
+  </description>
+</action>
+
+<action name="BookmarkManager_StartDragFromTree">
+  <owner>calamity@chromium.org</owner>
+  <description>
+    Fired when a user starts a drag from the tree in the bookmark manager.
+  </description>
 </action>
 
 <action name="BookmarkManager_Sync">
@@ -9100,6 +9332,15 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="MobileBookmarkManagerEntryOpened">
+  <owner>ianwen@chromium.org</owner>
+  <description>
+    A bookmark was opened from the bookmark manager. Bookmarks opened directly
+    from the NTP will not be counted. Instead those will be counted in the
+    NewTabPage.ContentSuggestions.* histograms.
+  </description>
+</action>
+
 <action name="MobileBookmarkManagerOpen">
   <owner>ianwen@chromium.org</owner>
   <description>
@@ -9471,6 +9712,7 @@ should be able to be added at any place in this file.
 <action name="MobileMenuOpenTabs">
   <owner>aurimas@chromium.org</owner>
   <description>User pressed 'Recent tabs' in the app menu.</description>
+  <obsolete>This action was renamed to MobileMenuRecentTabs.</obsolete>
 </action>
 
 <action name="MobileMenuPrint">
@@ -9482,6 +9724,16 @@ should be able to be added at any place in this file.
   <owner>aurimas@chromium.org</owner>
   <description>User pressed 'Quit' in the app menu.</description>
   <obsolete>This menu item was never added to the app menu.</obsolete>
+</action>
+
+<action name="MobileMenuReadingList">
+  <owner>gambard@chromium.org</owner>
+  <description>User pressed 'Reading List' in the app menu.</description>
+</action>
+
+<action name="MobileMenuRecentTabs">
+  <owner>justincohen@chromium.org</owner>
+  <description>User pressed 'Recent tabs' in the app menu.</description>
 </action>
 
 <action name="MobileMenuReload">
@@ -9609,11 +9861,18 @@ should be able to be added at any place in this file.
   <description>
     Action indicating the user has opened a bookmark from the bookmark manager.
   </description>
+  <obsolete>
+    Deprecated as of 01/2017. Replaced with MobileBookmarkManagerEntryOpened.
+  </obsolete>
 </action>
 
 <action name="MobileNTPForeignSession">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>
+    Deprecated as of 01/2017. Replaced with
+    MobileRecentTabManagerTabFromOtherDeviceOpened.
+  </obsolete>
 </action>
 
 <action name="MobileNTPMostVisited">
@@ -9624,6 +9883,10 @@ should be able to be added at any place in this file.
 <action name="MobileNTPRecentlyClosed">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+  <obsolete>
+    Deprecated as of 01/2017. Replaced with
+    MobileRecentTabManagerRecentTabOpened.
+  </obsolete>
 </action>
 
 <action name="MobileNTPShown">
@@ -9799,6 +10062,40 @@ should be able to be added at any place in this file.
   <description>User switched on torch in the QR Scanner.</description>
 </action>
 
+<action name="MobileReadingListAdd">
+  <owner>gambard@chromium.org</owner>
+  <description>
+    User added an entry to the ReadingList from inside Chrome.
+  </description>
+</action>
+
+<action name="MobileReadingListDeleteRead">
+  <owner>gambard@chromium.org</owner>
+  <description>
+    User deleted all the read entries of the ReadingList using 'Delete All
+    Read'.
+  </description>
+</action>
+
+<action name="MobileReadingListMarkRead">
+  <owner>gambard@chromium.org</owner>
+  <description>
+    User marked one or multiple ReadingList entries as 'Read'.
+  </description>
+</action>
+
+<action name="MobileReadingListMarkUnread">
+  <owner>gambard@chromium.org</owner>
+  <description>
+    User marked one or multiple ReadingList entries as 'Unread'.
+  </description>
+</action>
+
+<action name="MobileReadingListOpen">
+  <owner>gambard@chromium.org</owner>
+  <description>User opened a ReadingList entry.</description>
+</action>
+
 <action name="MobileReceivedExternalIntent">
   <owner>mariakhomenko@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
@@ -9829,9 +10126,35 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileRecentTabManagerRecentTabOpened">
+  <owner>finkm@chromium.org</owner>
+  <description>
+    A recently closed tab was opened from the recent tabs manager. Recently
+    closed tabs opened directly from the NTP will not be counted. Instead those
+    will be counted in the NewTabPage.ContentSuggestions.* histograms.
+  </description>
+</action>
+
+<action name="MobileRecentTabManagerTabFromOtherDeviceOpened">
+  <owner>finkm@chromium.org</owner>
+  <description>
+    A tab from another device was opened from the recent tabs manager. Tabs from
+    another device opened directly from the NTP will not be counted. Instead
+    those will be counted in the NewTabPage.ContentSuggestions.* histograms.
+  </description>
+</action>
+
 <action name="MobileRendererCrashed">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="MobileSadTabFeedback">
+  <owner>jwanda@chromium.org</owner>
+  <description>
+    The user pressed the Send Feedback button on a tab that is displaying the
+    sad view.
+  </description>
 </action>
 
 <action name="MobileSettingsStorageClearAll">
@@ -11238,6 +11561,7 @@ should be able to be added at any place in this file.
   <description>
     Triggers when the default decision for using key generation is changed.
   </description>
+  <obsolete>Support for Keygen was removed.</obsolete>
 </action>
 
 <action name="Options_DefaultMIDISysExSettingChanged">
@@ -12921,6 +13245,15 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="PasswordManager_ShowedHttpNotSecureExplanation">
+  <owner>estark@chromium.org</owner>
+  <description>
+    The user selected the &quot;Login not secure&quot; or &quot;Form not
+    secure&quot; item in the password manager autofill dropdown to show more
+    information about the warning.
+  </description>
+</action>
+
 <action name="PasswordManager_SyncCredentialFilledAndLoginSuccessfull">
   <owner>vabr@chromium.org</owner>
   <owner>vasilii@chromium.org</owner>
@@ -13076,6 +13409,16 @@ should be able to be added at any place in this file.
   <owner>mmocny@chromium.org</owner>
   <description>
     The user has enabled the Physical Web feature via the settings.
+  </description>
+</action>
+
+<action name="PhysicalWeb.Prefs.FromOmnibox">
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <description>
+    The user tapped the Physical Web logo in an omnibox suggestion and navigated
+    to the Physical Web preferences page. iOS only.
   </description>
 </action>
 
@@ -15337,13 +15680,16 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TouchscreenScroll">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>tdresser@chromium.org</owner>
+  <description>
+    Logged at the beginning of touchscreen based scrolling. In M56 and earlier,
+    was logged at begin, update, and end events for touchscreen scrolling.
+  </description>
 </action>
 
 <action name="TouchscreenScrollFling">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>tdresser@chromium.org</owner>
+  <description>Logged on an ET_SCROLL_FLING_START gesture event.</description>
 </action>
 
 <action name="Touchscreen_Down">
@@ -15373,13 +15719,16 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TrackpadScroll">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>tdresser@chromium.org</owner>
+  <description>
+    Logged on trackpad scroll events. Logging was removed in M57, because it
+    caused too many events.
+  </description>
 </action>
 
 <action name="TrackpadScrollFling">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>tdresser@chromium.org</owner>
+  <description>Logged on an ET_SCROLL_FLING_START scroll event.</description>
 </action>
 
 <action name="Transpose">

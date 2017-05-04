@@ -244,42 +244,6 @@ if (enable_media_router) {
     "enable_media_router",
   ]
 }
-if (enable_plugins) {
-  grit_defines += [
-    "-D",
-    "enable_plugins",
-  ]
-}
-if (enable_themes) {
-  grit_defines += [
-    "-D",
-    "enable_themes",
-  ]
-}
-if (enable_webrtc) {
-  grit_defines += [
-    "-D",
-    "enable_webrtc",
-  ]
-}
-if (enable_task_manager) {
-  grit_defines += [
-    "-D",
-    "enable_task_manager",
-  ]
-}
-if (enable_notifications) {
-  grit_defines += [
-    "-D",
-    "enable_notifications",
-  ]
-}
-if (mac_views_browser) {
-  grit_defines += [
-    "-D",
-    "mac_views_browser",
-  ]
-}
 
 # TODO(aberent): Enable for other platforms once the build machines have
 #                Java on them (and hence can run the closure compiler).
@@ -411,6 +375,14 @@ template("grit") {
                                "extra_grit_defines",
                                "grit_additional_defines",
                              ])
+      if (defined(invoker.defines)) {
+        foreach(i, invoker.defines) {
+          grit_defines += [
+            "-D",
+            i,
+          ]
+        }
+      }
     }
     #print("A $target_name ${invoker.vivaldi_resource_path}  $resource_ids")
     source_path = rebase_path(invoker.full_target_path, root_build_dir)

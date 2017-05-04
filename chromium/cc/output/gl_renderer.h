@@ -152,17 +152,19 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
 
   void DrawDebugBorderQuad(const DrawingFrame* frame,
                            const DebugBorderDrawQuad* quad);
-  static bool IsDefaultBlendMode(SkXfermode::Mode blend_mode) {
-    return blend_mode == SkXfermode::kSrcOver_Mode;
+  static bool IsDefaultBlendMode(SkBlendMode blend_mode) {
+    return blend_mode == SkBlendMode::kSrcOver;
   }
-  bool CanApplyBlendModeUsingBlendFunc(SkXfermode::Mode blend_mode);
-  void ApplyBlendModeUsingBlendFunc(SkXfermode::Mode blend_mode);
-  void RestoreBlendFuncToDefault(SkXfermode::Mode blend_mode);
+  bool CanApplyBlendModeUsingBlendFunc(SkBlendMode blend_mode);
+  void ApplyBlendModeUsingBlendFunc(SkBlendMode blend_mode);
+  void RestoreBlendFuncToDefault(SkBlendMode blend_mode);
 
   gfx::Rect GetBackdropBoundingBoxForRenderPassQuad(
       DrawingFrame* frame,
       const RenderPassDrawQuad* quad,
       const gfx::Transform& contents_device_transform,
+      const FilterOperations* filters,
+      const FilterOperations* background_filters,
       const gfx::QuadF* clip_region,
       bool use_aa,
       gfx::Rect* unclipped_rect);
@@ -170,11 +172,15 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
       DrawingFrame* frame,
       const gfx::Rect& bounding_rect);
 
-  static bool ShouldApplyBackgroundFilters(const RenderPassDrawQuad* quad);
-  sk_sp<SkImage> ApplyBackgroundFilters(const RenderPassDrawQuad* quad,
-                                        ScopedResource* background_texture,
-                                        const gfx::RectF& rect,
-                                        const gfx::RectF& unclipped_rect);
+  static bool ShouldApplyBackgroundFilters(
+      const RenderPassDrawQuad* quad,
+      const FilterOperations* background_filters);
+  sk_sp<SkImage> ApplyBackgroundFilters(
+      const RenderPassDrawQuad* quad,
+      const FilterOperations& background_filters,
+      ScopedResource* background_texture,
+      const gfx::RectF& rect,
+      const gfx::RectF& unclipped_rect);
 
   const TileDrawQuad* CanPassBeDrawnDirectly(const RenderPass* pass) override;
 
@@ -264,6 +270,17 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
   void ScheduleRenderPassDrawQuad(const CALayerOverlay* ca_layer_overlay,
                                   DrawingFrame* external_frame);
 
+  // Setup/flush all pending overdraw feedback to framebuffer.
+  void SetupOverdrawFeedback();
+  void FlushOverdrawFeedback(const DrawingFrame* frame,
+                             const gfx::Rect& output_rect);
+  // Process overdraw feedback from query.
+  using OverdrawFeedbackCallback = base::Callback<void(unsigned, int)>;
+  void ProcessOverdrawFeedback(std::vector<int>* overdraw,
+                               size_t num_expected_results,
+                               unsigned query,
+                               int multiplier);
+
   using OverlayResourceLock =
       std::unique_ptr<ResourceProvider::ScopedReadLockGL>;
   using OverlayResourceLockList = std::vector<OverlayResourceLock>;
@@ -284,207 +301,16 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
   std::unique_ptr<DynamicGeometryBinding> clipped_geometry_;
   gfx::QuadF shared_geometry_quad_;
 
-  // This block of bindings defines all of the programs used by the compositor
-  // itself.  Add any new programs here to GLRendererShaderTest.
+  // If the requested program has not yet been initialized, this will initialize
+  // the program before returning it.
+  const Program* GetProgram(const ProgramKey& key);
 
-  // Tiled layer shaders.
-  typedef ProgramBinding<VertexShaderTile, FragmentShaderRGBATexAlpha>
-      TileProgram;
-  typedef ProgramBinding<VertexShaderTileAA, FragmentShaderRGBATexClampAlphaAA>
-      TileProgramAA;
-  typedef ProgramBinding<VertexShaderTileAA,
-                         FragmentShaderRGBATexClampSwizzleAlphaAA>
-      TileProgramSwizzleAA;
-  typedef ProgramBinding<VertexShaderTile, FragmentShaderRGBATexOpaque>
-      TileProgramOpaque;
-  typedef ProgramBinding<VertexShaderTile, FragmentShaderRGBATexSwizzleAlpha>
-      TileProgramSwizzle;
-  typedef ProgramBinding<VertexShaderTile, FragmentShaderRGBATexSwizzleOpaque>
-      TileProgramSwizzleOpaque;
+  // This will return nullptr if the requested program has not yet been
+  // initialized.
+  const Program* GetProgramIfInitialized(const ProgramKey& key) const;
 
-  // Texture shaders.
-  typedef ProgramBinding<VertexShaderPosTexTransform,
-                         FragmentShaderRGBATexVaryingAlpha> TextureProgram;
-  typedef ProgramBinding<VertexShaderPosTexTransform,
-                         FragmentShaderRGBATexPremultiplyAlpha>
-      NonPremultipliedTextureProgram;
-  typedef ProgramBinding<VertexShaderPosTexTransform,
-                         FragmentShaderTexBackgroundVaryingAlpha>
-      TextureBackgroundProgram;
-  typedef ProgramBinding<VertexShaderPosTexTransform,
-                         FragmentShaderTexBackgroundPremultiplyAlpha>
-      NonPremultipliedTextureBackgroundProgram;
-
-  // Render surface shaders.
-  typedef ProgramBinding<VertexShaderPosTexTransform,
-                         FragmentShaderRGBATexAlpha> RenderPassProgram;
-  typedef ProgramBinding<VertexShaderPosTexTransform,
-                         FragmentShaderRGBATexAlphaMask> RenderPassMaskProgram;
-  typedef ProgramBinding<VertexShaderQuadTexTransformAA,
-                         FragmentShaderRGBATexAlphaAA> RenderPassProgramAA;
-  typedef ProgramBinding<VertexShaderQuadTexTransformAA,
-                         FragmentShaderRGBATexAlphaMaskAA>
-      RenderPassMaskProgramAA;
-  typedef ProgramBinding<VertexShaderPosTexTransform,
-                         FragmentShaderRGBATexColorMatrixAlpha>
-      RenderPassColorMatrixProgram;
-  typedef ProgramBinding<VertexShaderQuadTexTransformAA,
-                         FragmentShaderRGBATexAlphaMaskColorMatrixAA>
-      RenderPassMaskColorMatrixProgramAA;
-  typedef ProgramBinding<VertexShaderQuadTexTransformAA,
-                         FragmentShaderRGBATexAlphaColorMatrixAA>
-      RenderPassColorMatrixProgramAA;
-  typedef ProgramBinding<VertexShaderPosTexTransform,
-                         FragmentShaderRGBATexAlphaMaskColorMatrix>
-      RenderPassMaskColorMatrixProgram;
-
-  // Video shaders.
-  typedef ProgramBinding<VertexShaderVideoTransform, FragmentShaderRGBATex>
-      VideoStreamTextureProgram;
-  typedef ProgramBinding<VertexShaderPosTexYUVStretchOffset,
-                         FragmentShaderYUVVideo> VideoYUVProgram;
-
-  // Special purpose / effects shaders.
-  typedef ProgramBinding<VertexShaderPos, FragmentShaderColor>
-      DebugBorderProgram;
-  typedef ProgramBinding<VertexShaderQuad, FragmentShaderColor>
-      SolidColorProgram;
-  typedef ProgramBinding<VertexShaderQuadAA, FragmentShaderColorAA>
-      SolidColorProgramAA;
-
-  const TileProgram* GetTileProgram(
-      TexCoordPrecision precision, SamplerType sampler);
-  const TileProgramOpaque* GetTileProgramOpaque(
-      TexCoordPrecision precision, SamplerType sampler);
-  const TileProgramAA* GetTileProgramAA(
-      TexCoordPrecision precision, SamplerType sampler);
-  const TileProgramSwizzle* GetTileProgramSwizzle(
-      TexCoordPrecision precision, SamplerType sampler);
-  const TileProgramSwizzleOpaque* GetTileProgramSwizzleOpaque(
-      TexCoordPrecision precision, SamplerType sampler);
-  const TileProgramSwizzleAA* GetTileProgramSwizzleAA(
-      TexCoordPrecision precision, SamplerType sampler);
-
-  const RenderPassProgram* GetRenderPassProgram(TexCoordPrecision precision,
-                                                BlendMode blend_mode);
-  const RenderPassProgramAA* GetRenderPassProgramAA(TexCoordPrecision precision,
-                                                    BlendMode blend_mode);
-  const RenderPassMaskProgram* GetRenderPassMaskProgram(
-      TexCoordPrecision precision,
-      SamplerType sampler,
-      BlendMode blend_mode,
-      bool mask_for_background);
-  const RenderPassMaskProgramAA* GetRenderPassMaskProgramAA(
-      TexCoordPrecision precision,
-      SamplerType sampler,
-      BlendMode blend_mode,
-      bool mask_for_background);
-  const RenderPassColorMatrixProgram* GetRenderPassColorMatrixProgram(
-      TexCoordPrecision precision,
-      BlendMode blend_mode);
-  const RenderPassColorMatrixProgramAA* GetRenderPassColorMatrixProgramAA(
-      TexCoordPrecision precision,
-      BlendMode blend_mode);
-  const RenderPassMaskColorMatrixProgram* GetRenderPassMaskColorMatrixProgram(
-      TexCoordPrecision precision,
-      SamplerType sampler,
-      BlendMode blend_mode,
-      bool mask_for_background);
-  const RenderPassMaskColorMatrixProgramAA*
-  GetRenderPassMaskColorMatrixProgramAA(TexCoordPrecision precision,
-                                        SamplerType sampler,
-                                        BlendMode blend_mode,
-                                        bool mask_for_background);
-
-  const TextureProgram* GetTextureProgram(TexCoordPrecision precision,
-                                          SamplerType sampler);
-  const NonPremultipliedTextureProgram* GetNonPremultipliedTextureProgram(
-      TexCoordPrecision precision,
-      SamplerType sampler);
-  const TextureBackgroundProgram* GetTextureBackgroundProgram(
-      TexCoordPrecision precision,
-      SamplerType sampler);
-  const NonPremultipliedTextureBackgroundProgram*
-  GetNonPremultipliedTextureBackgroundProgram(TexCoordPrecision precision,
-                                              SamplerType sampler);
-
-  const VideoYUVProgram* GetVideoYUVProgram(TexCoordPrecision precision,
-                                            SamplerType sampler,
-                                            bool use_alpha_texture,
-                                            bool use_nv12,
-                                            bool use_color_lut);
-  const VideoStreamTextureProgram* GetVideoStreamTextureProgram(
-      TexCoordPrecision precision);
-
-  const DebugBorderProgram* GetDebugBorderProgram();
-  const SolidColorProgram* GetSolidColorProgram();
-  const SolidColorProgramAA* GetSolidColorProgramAA();
-
-  TileProgram
-      tile_program_[LAST_TEX_COORD_PRECISION + 1][LAST_SAMPLER_TYPE + 1];
-  TileProgramOpaque
-      tile_program_opaque_[LAST_TEX_COORD_PRECISION + 1][LAST_SAMPLER_TYPE + 1];
-  TileProgramAA
-      tile_program_aa_[LAST_TEX_COORD_PRECISION + 1][LAST_SAMPLER_TYPE + 1];
-  TileProgramSwizzle tile_program_swizzle_[LAST_TEX_COORD_PRECISION +
-                                           1][LAST_SAMPLER_TYPE + 1];
-  TileProgramSwizzleOpaque
-      tile_program_swizzle_opaque_[LAST_TEX_COORD_PRECISION +
-                                   1][LAST_SAMPLER_TYPE + 1];
-  TileProgramSwizzleAA tile_program_swizzle_aa_[LAST_TEX_COORD_PRECISION +
-                                                1][LAST_SAMPLER_TYPE + 1];
-
-  TextureProgram
-      texture_program_[LAST_TEX_COORD_PRECISION + 1][LAST_SAMPLER_TYPE + 1];
-  NonPremultipliedTextureProgram
-      nonpremultiplied_texture_program_[LAST_TEX_COORD_PRECISION +
-                                        1][LAST_SAMPLER_TYPE + 1];
-  TextureBackgroundProgram
-      texture_background_program_[LAST_TEX_COORD_PRECISION +
-                                  1][LAST_SAMPLER_TYPE + 1];
-  NonPremultipliedTextureBackgroundProgram
-      nonpremultiplied_texture_background_program_[LAST_TEX_COORD_PRECISION +
-                                                   1][LAST_SAMPLER_TYPE + 1];
-
-  RenderPassProgram
-      render_pass_program_[LAST_TEX_COORD_PRECISION + 1][LAST_BLEND_MODE + 1];
-  RenderPassProgramAA render_pass_program_aa_[LAST_TEX_COORD_PRECISION +
-                                              1][LAST_BLEND_MODE + 1];
-  RenderPassMaskProgram
-      render_pass_mask_program_[LAST_TEX_COORD_PRECISION + 1]
-                               [LAST_SAMPLER_TYPE + 1]
-                               [LAST_BLEND_MODE + 1]
-                               [LAST_MASK_VALUE + 1];
-  RenderPassMaskProgramAA
-      render_pass_mask_program_aa_[LAST_TEX_COORD_PRECISION + 1]
-                                  [LAST_SAMPLER_TYPE + 1]
-                                  [LAST_BLEND_MODE + 1]
-                                  [LAST_MASK_VALUE + 1];
-  RenderPassColorMatrixProgram
-      render_pass_color_matrix_program_[LAST_TEX_COORD_PRECISION +
-                                        1][LAST_BLEND_MODE + 1];
-  RenderPassColorMatrixProgramAA
-      render_pass_color_matrix_program_aa_[LAST_TEX_COORD_PRECISION +
-                                           1][LAST_BLEND_MODE + 1];
-  RenderPassMaskColorMatrixProgram
-      render_pass_mask_color_matrix_program_[LAST_TEX_COORD_PRECISION + 1]
-                                            [LAST_SAMPLER_TYPE + 1]
-                                            [LAST_BLEND_MODE + 1]
-                                            [LAST_MASK_VALUE + 1];
-  RenderPassMaskColorMatrixProgramAA
-      render_pass_mask_color_matrix_program_aa_[LAST_TEX_COORD_PRECISION + 1]
-                                               [LAST_SAMPLER_TYPE + 1]
-                                               [LAST_BLEND_MODE + 1]
-                                               [LAST_MASK_VALUE + 1];
-
-  VideoYUVProgram video_yuv_program_[LAST_TEX_COORD_PRECISION + 1]
-                                    [LAST_SAMPLER_TYPE + 1][2][2][2];
-  VideoStreamTextureProgram
-      video_stream_texture_program_[LAST_TEX_COORD_PRECISION + 1];
-
-  DebugBorderProgram debug_border_program_;
-  SolidColorProgram solid_color_program_;
-  SolidColorProgramAA solid_color_program_aa_;
+  std::unordered_map<ProgramKey, std::unique_ptr<Program>, ProgramKeyHash>
+      program_cache_;
 
   gpu::gles2::GLES2Interface* gl_;
   gpu::ContextSupport* context_support_;
@@ -496,7 +322,6 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
   gfx::Rect scissor_rect_;
   bool is_using_bind_uniform_;
   bool is_scissor_enabled_;
-  bool scissor_rect_needs_reset_;
   bool stencil_shadow_;
   bool blend_shadow_;
   unsigned program_shadow_;
@@ -538,6 +363,12 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
 
   BoundGeometry bound_geometry_;
   ColorLUTCache color_lut_cache_;
+
+  unsigned offscreen_stencil_renderbuffer_id_ = 0;
+  gfx::Size offscreen_stencil_renderbuffer_size_;
+
+  base::WeakPtrFactory<GLRenderer> weak_ptr_factory_;
+
   DISALLOW_COPY_AND_ASSIGN(GLRenderer);
 };
 

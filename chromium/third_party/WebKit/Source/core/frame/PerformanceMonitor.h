@@ -9,17 +9,17 @@
 #include "platform/heap/Handle.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/scheduler/base/task_time_observer.h"
+#include "wtf/text/AtomicString.h"
+#include <v8.h>
 
 namespace blink {
 
 class DOMWindow;
 class Document;
-class EventListener;
 class ExecutionContext;
 class Frame;
 class LocalFrame;
 class Performance;
-class ScheduledAction;
 class SourceLocation;
 
 // Performance monitor for Web Performance APIs and logging.
@@ -28,7 +28,6 @@ class SourceLocation;
 // (in the local frame tree) in m_webPerformanceObservers.
 class CORE_EXPORT PerformanceMonitor final
     : public GarbageCollectedFinalized<PerformanceMonitor>,
-      public WebThread::TaskObserver,
       public scheduler::TaskTimeObserver {
   WTF_MAKE_NONCOPYABLE(PerformanceMonitor);
 
@@ -45,29 +44,22 @@ class CORE_EXPORT PerformanceMonitor final
 
   class CORE_EXPORT HandlerCall {
     STACK_ALLOCATED();
-
    public:
-    HandlerCall(ExecutionContext*, ScheduledAction*);
-    HandlerCall(ExecutionContext*, EventListener*);
+    HandlerCall(ExecutionContext*, bool recurring);
+    HandlerCall(ExecutionContext*, const char* name, bool recurring);
+    HandlerCall(ExecutionContext*, const AtomicString& name, bool recurring);
     ~HandlerCall();
 
    private:
-    void start();
-
-    Member<ExecutionContext> m_context;
     Member<PerformanceMonitor> m_performanceMonitor;
-    Member<ScheduledAction> m_scheduledAction;
-    Member<EventListener> m_eventListener;
-    Violation m_violation;
-    double m_startTime = 0;
   };
 
   class CORE_EXPORT Client : public GarbageCollectedMixin {
    public:
-    virtual void reportLongTask(
-        double startTime,
-        double endTime,
-        const HeapHashSet<Member<Frame>>& contextFrames){};
+    virtual void reportLongTask(double startTime,
+                                double endTime,
+                                ExecutionContext* taskContext,
+                                bool hasMultipleContexts){};
     virtual void reportLongLayout(double duration){};
     virtual void reportGenericViolation(Violation,
                                         const String& text,
@@ -79,6 +71,8 @@ class CORE_EXPORT PerformanceMonitor final
   // Instrumenting methods.
   static void willExecuteScript(ExecutionContext*);
   static void didExecuteScript(ExecutionContext*);
+  static void willCallFunction(ExecutionContext*);
+  static void didCallFunction(ExecutionContext*, v8::Local<v8::Function>);
   static void willUpdateLayout(Document*);
   static void didUpdateLayout(Document*);
   static void willRecalculateStyle(Document*);
@@ -94,6 +88,7 @@ class CORE_EXPORT PerformanceMonitor final
   // Direct API for core.
   void subscribe(Violation, double threshold, Client*);
   void unsubscribeAll(Client*);
+  void shutdown();
 
   explicit PerformanceMonitor(LocalFrame*);
   ~PerformanceMonitor();
@@ -109,8 +104,10 @@ class CORE_EXPORT PerformanceMonitor final
 
   void updateInstrumentation();
 
-  void innerWillExecuteScript(ExecutionContext*);
-  void didExecuteScript();
+  void alwaysWillExecuteScript(ExecutionContext*);
+  void alwaysDidExecuteScript();
+  void alwaysWillCallFunction(ExecutionContext*);
+  void alwaysDidCallFunction(v8::Local<v8::Function>);
   void willUpdateLayout();
   void didUpdateLayout();
   void willRecalculateStyle();
@@ -120,12 +117,9 @@ class CORE_EXPORT PerformanceMonitor final
                               double time,
                               SourceLocation*);
 
-  // WebThread::TaskObserver implementation.
-  void willProcessTask() override;
-  void didProcessTask() override;
-
   // scheduler::TaskTimeObserver implementation
-  void ReportTaskTime(scheduler::TaskQueue*,
+  void willProcessTask(scheduler::TaskQueue*, double startTime) override;
+  void didProcessTask(scheduler::TaskQueue*,
                       double startTime,
                       double endTime) override;
 
@@ -134,15 +128,23 @@ class CORE_EXPORT PerformanceMonitor final
       Frame* observerFrame);
 
   bool m_enabled = false;
-  bool m_isExecutingScript = false;
+  double m_scriptStartTime = 0;
   double m_layoutStartTime = 0;
   double m_styleStartTime = 0;
   double m_perTaskStyleAndLayoutTime = 0;
+  unsigned m_scriptDepth = 0;
+  unsigned m_layoutDepth = 0;
+  unsigned m_handlerDepth = 0;
+  Violation m_handlerType = Violation::kAfterLast;
+
+  const char* m_handlerName = nullptr;
+  AtomicString m_handlerAtomicName;
 
   double m_thresholds[kAfterLast];
 
   Member<LocalFrame> m_localRoot;
-  HeapHashSet<Member<Frame>> m_frameContexts;
+  Member<ExecutionContext> m_taskExecutionContext;
+  bool m_taskHasMultipleContexts = false;
   using ClientThresholds = HeapHashMap<Member<Client>, double>;
   HeapHashMap<Violation,
               Member<ClientThresholds>,

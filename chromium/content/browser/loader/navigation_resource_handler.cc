@@ -9,13 +9,13 @@
 #include "base/logging.h"
 #include "content/browser/loader/navigation_url_loader_impl_core.h"
 #include "content/browser/loader/netlog_observer.h"
+#include "content/browser/loader/resource_controller.h"
 #include "content/browser/loader/resource_loader.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/browser/resource_context_impl.h"
 #include "content/browser/streams/stream.h"
 #include "content/browser/streams/stream_context.h"
 #include "content/public/browser/navigation_data.h"
-#include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/stream_handle.h"
@@ -94,22 +94,13 @@ bool NavigationResourceHandler::OnResponseStarted(ResourceResponse* response,
 
   ResourceRequestInfoImpl* info = GetRequestInfo();
 
-  // If the MimeTypeResourceHandler intercepted this request and converted it
-  // into a download, it will still call OnResponseStarted and immediately
-  // cancel. Ignore the call; OnReadCompleted will happen shortly.
-  //
-  // TODO(davidben): Move the dispatch out of MimeTypeResourceHandler. Perhaps
-  // all the way to the UI thread. Downloads, user certificates, etc., should be
-  // dispatched at the navigation layer.
-  if (info->IsDownload())
-    return true;
-
   StreamContext* stream_context =
       GetStreamContextForResourceContext(info->GetContext());
   writer_.InitializeStream(stream_context->registry(),
                            request()->url().GetOrigin());
 
   NetLogObserver::PopulateResponseInfo(request(), response);
+  response->head.encoded_data_length = request()->raw_header_size();
 
   std::unique_ptr<NavigationData> cloned_data;
   if (resource_dispatcher_host_delegate_) {
@@ -129,15 +120,25 @@ bool NavigationResourceHandler::OnResponseStarted(ResourceResponse* response,
   }
 
   core_->NotifyResponseStarted(response, writer_.stream()->CreateHandle(),
-                               ssl_status, std::move(cloned_data));
+                               ssl_status, std::move(cloned_data),
+                               info->GetGlobalRequestID(), info->IsDownload(),
+                               info->is_stream());
   // Don't defer stream based requests. This includes requests initiated via
   // mime type sniffing, etc.
   // TODO(ananta)
   // Make sure that the requests go through the throttle checks. Currently this
   // does not work as the InterceptingResourceHandler is above us and hence it
   // does not expect the old handler to defer the request.
-  if (!info->is_stream())
+  // TODO(clamy): We should also make the downloads wait on the
+  // NavigationThrottle checks be performed. Similarly to streams, it doesn't
+  // work because of the InterceptingResourceHandler.
+  // TODO(clamy): This NavigationResourceHandler should be split in two, with
+  // one part that wait on the NavigationThrottle to execute located between the
+  // MIME sniffing and the ResourceThrotlle, and one part that write the
+  // response to the stream being the leaf ResourceHandler.
+  if (!info->is_stream() && !info->IsDownload())
     *defer = true;
+
   return true;
 }
 

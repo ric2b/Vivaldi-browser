@@ -47,8 +47,8 @@ Polymer({
 
     /**
      * Reflect the element's tabindex attribute to a property so that embedded
-     * elements (e.g. the settings button) can become keyboard focusable when
-     * this element has keyboard focus.
+     * elements (e.g. the show subpage button) can become keyboard focusable
+     * when this element has keyboard focus.
      */
     tabindex: {
       type: Number,
@@ -57,7 +57,7 @@ Polymer({
     },
   },
 
-  behaviors: [I18nBehavior],
+  behaviors: [CrPolicyNetworkBehavior],
 
   /** @private */
   itemChanged_: function() {
@@ -79,79 +79,102 @@ Polymer({
 
   /**
    * This gets called for network items and custom items.
+   * @return {string}
    * @private
    */
   getItemName_: function() {
     if (this.item.hasOwnProperty('customItemName')) {
       let item = /** @type {!CrNetworkList.CustomItemState} */ (this.item);
       let name = item.customItemName || '';
-      if (this.i18nExists(item.customItemName))
-        name = this.i18n(item.customItemName);
+      if (CrOncStrings.hasOwnProperty(item.customItemName))
+        name = CrOncStrings[item.customItemName];
       return name;
     }
     let network = /** @type {!CrOnc.NetworkStateProperties} */ (this.item);
     if (this.isListItem)
-      return CrOnc.getNetworkName(network, this);
-    return this.i18n('OncType' + network.Type);
+      return CrOnc.getNetworkName(network);
+    return CrOncStrings['OncType' + network.Type];
   },
 
-  /** @private */
-  isStateTextVisible_() {
-    return !!this.networkState && (!this.isListItem || this.isConnected_());
+  /**
+   * @return {boolean}
+   * @private
+   */
+  isStateTextVisible_: function() {
+    return !!this.networkState &&
+        (!this.isListItem || (this.networkState.ConnectionState !=
+                              CrOnc.ConnectionState.NOT_CONNECTED));
   },
 
-  /** @private */
-  isStateTextConnected_() {
+  /**
+   * @return {boolean}
+   * @private
+   */
+  isStateTextConnected_: function() {
     return this.isListItem && this.isConnected_();
   },
 
   /**
    * This only gets called for network items once networkState is set.
+   * @return {string}
    * @private
    */
   getNetworkStateText_: function() {
     if (!this.isStateTextVisible_())
       return '';
-    let network = this.networkState;
+    var network = this.networkState;
+    var state = network.ConnectionState;
+    var name = CrOnc.getNetworkName(network);
     if (this.isListItem) {
-      if (this.isConnected_())
-        return this.i18n('networkListItemConnected');
+      if (state == CrOnc.ConnectionState.CONNECTED)
+        return CrOncStrings.networkListItemConnected;
+      if (state == CrOnc.ConnectionState.CONNECTING)
+        return CrOncStrings.networkListItemConnecting;
       return '';
     }
-    if (network.Name && network.ConnectionState) {
-      return this.getConnectionStateText_(
-          network.ConnectionState, CrOnc.getNetworkName(network, this));
-    }
-    return this.i18n('networkDisabled');
+    if (name && state)
+      return this.getConnectionStateText_(state, name);
+    return CrOncStrings.networkDisabled;
   },
 
   /**
    * Returns the appropriate connection state text.
-   * @param {string} state The connection state.
+   * @param {CrOnc.ConnectionState} state The connection state.
    * @param {string} name The name of the network.
    * @return {string}
+   * @private
    */
   getConnectionStateText_: function(state, name) {
-    if (state == CrOnc.ConnectionState.CONNECTED)
-      return name;
-    if (state == CrOnc.ConnectionState.CONNECTING)
-      return this.i18n('networkListItemConnecting', name);
-    if (state == CrOnc.ConnectionState.NOT_CONNECTED)
-      return this.i18n('networkListItemNotConnected');
-    // TODO(stevenjb): Audit state translations and remove test.
-    if (this.i18nExists(state))
-      return this.i18n(state);
+    switch (state) {
+      case CrOnc.ConnectionState.CONNECTED:
+        return name;
+      case CrOnc.ConnectionState.CONNECTING:
+        if (name)
+          return CrOncStrings.networkListItemConnectingTo.replace('$1', name);
+        return CrOncStrings.networkListItemConnecting;
+      case CrOnc.ConnectionState.NOT_CONNECTED:
+        return CrOncStrings.networkListItemNotConnected;
+    }
+    assertNotReached();
     return state;
   },
 
-  /** @private */
-  isSettingsButtonVisible_: function() {
-    return !!this.networkState && this.showButtons;
+  /**
+   * @param {!CrOnc.NetworkStateProperties} networkState
+   * @param {boolean} showButtons
+   * @return {boolean}
+   * @private
+   */
+  isSubpageButtonVisible_: function(networkState, showButtons) {
+    return !!networkState && showButtons;
   },
 
-  /** @private */
+  /**
+   * @return {boolean}
+   * @private
+   */
   isConnected_: function() {
-    return this.networkState &&
+    return !!this.networkState &&
         this.networkState.ConnectionState == CrOnc.ConnectionState.CONNECTED;
   },
 

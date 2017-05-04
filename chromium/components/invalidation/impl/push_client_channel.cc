@@ -13,11 +13,13 @@
 #include "google/cacheinvalidation/types.pb.h"
 #include "jingle/notifier/listener/push_client.h"
 
+#include "sync/vivaldi_sync_urls.h"
+
 namespace syncer {
 
 namespace {
 
-const char kBotJid[] = "tango@bot.talk.google.com";
+const char kBotJid[] = "tango@" SYNC_SERVERNAME;
 const char kChannelName[] = "tango_raw";
 
 }  // namespace

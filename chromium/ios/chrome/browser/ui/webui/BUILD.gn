@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("webui") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "about_ui.cc",
     "about_ui.h",
@@ -11,6 +12,8 @@ source_set("webui") {
     "flags_ui.cc",
     "flags_ui.h",
     "mojo_web_ui_ios_controller.h",
+    "ntp_tiles_internals_ui.cc",
+    "ntp_tiles_internals_ui.h",
     "physical_web_ui.cc",
     "physical_web_ui.h",
     "popular_sites_internals_ui.cc",
@@ -37,7 +40,6 @@ source_set("webui") {
     "//google_apis",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
-    "//ios/chrome/browser:about_flags",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/crash_report",
     "//ios/chrome/browser/metrics",
@@ -51,4 +53,52 @@ source_set("webui") {
     "//ui/base",
     "//url",
   ]
+}
+
+source_set("webui_internal") {
+  sources = [
+    "chrome_web_ui_ios_controller_factory.h",
+    "chrome_web_ui_ios_controller_factory.mm",
+    "omaha_ui.cc",
+    "omaha_ui.h",
+    "signin_internals_ui_ios.cc",
+    "signin_internals_ui_ios.h",
+  ]
+  deps = [
+    ":webui",
+    "//base",
+    "//components/resources",
+    "//components/signin/core/browser",
+    "//ios/chrome/app/resources:ios_resources",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/omaha",
+    "//ios/chrome/browser/signin",
+    "//ios/chrome/browser/ui/webui/gcm",
+    "//ios/chrome/browser/ui/webui/net_export",
+    "//ios/chrome/browser/ui/webui/sync_internals",
+    "//ios/web",
+    "//url",
+  ]
+}
+
+source_set("eg_tests") {
+  testonly = true
+  sources = [
+    "web_ui_egtest.mm",
+  ]
+  deps = [
+    "//base",
+    "//components/strings",
+    "//components/version_info",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/ui/omnibox:omnibox_internal",
+    "//ios/chrome/test/app:test_support",
+    "//ios/chrome/test/earl_grey:test_support",
+    "//ios/testing:ios_test_support",
+    "//ios/web",
+    "//ui/base",
+    "//url",
+  ]
+  libs = [ "XCTest.framework" ]
 }

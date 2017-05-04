@@ -64,6 +64,7 @@ const char kSyncTabs[] = "sync.tabs";
 const char kSyncThemes[] = "sync.themes";
 const char kSyncTypedUrls[] = "sync.typed_urls";
 const char kSyncWifiCredentials[] = "sync.wifi_credentials";
+const char kSyncNotes[] = "sync.notes";
 
 // Boolean used by enterprise configuration management in order to lock down
 // sync.
@@ -123,6 +124,14 @@ const char kSyncPassphraseEncryptionTransitionInProgress[] =
 // sync_pb::NigoriSpecifics.
 const char kSyncNigoriStateForPassphraseTransition[] =
     "sync.nigori_state_for_passphrase_transition";
+
+// Enabled the local sync backend implemented by the LoopbackServer.
+const char kEnableLocalSyncBackend[] = "sync.enable_local_sync_backend";
+
+// Specifies the local sync backend directory. The name is chosen to mimic
+// user-data-dir etc. This flag only matters if the enable-local-sync-backend
+// flag is present.
+const char kLocalSyncBackendDir[] = "sync.local_sync_backend_dir";
 
 }  // namespace prefs
 

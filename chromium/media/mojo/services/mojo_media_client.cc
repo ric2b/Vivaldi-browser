@@ -19,7 +19,7 @@ MojoMediaClient::MojoMediaClient() {}
 
 MojoMediaClient::~MojoMediaClient() {}
 
-void MojoMediaClient::Initialize() {}
+void MojoMediaClient::Initialize(service_manager::Connector* connector) {}
 
 std::unique_ptr<AudioDecoder> MojoMediaClient::CreateAudioDecoder(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
@@ -27,7 +27,8 @@ std::unique_ptr<AudioDecoder> MojoMediaClient::CreateAudioDecoder(
 }
 
 std::unique_ptr<VideoDecoder> MojoMediaClient::CreateVideoDecoder(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    mojom::CommandBufferIdPtr command_buffer_id) {
   return nullptr;
 }
 
@@ -47,7 +48,7 @@ std::unique_ptr<RendererFactory> MojoMediaClient::CreateRendererFactory(
 }
 
 std::unique_ptr<CdmFactory> MojoMediaClient::CreateCdmFactory(
-    service_manager::mojom::InterfaceProvider* interface_provider) {
+    service_manager::mojom::InterfaceProvider* host_interfaces) {
   return nullptr;
 }
 

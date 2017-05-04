@@ -12,10 +12,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 
-class GURL;
-
 namespace content {
-class ResourceRequestInfo;
 class WebContents;
 }
 
@@ -24,8 +21,6 @@ class URLRequest;
 }
 
 namespace android_webview {
-
-class AwWebResourceResponse;
 
 class AwContentsIoThreadClientImpl : public AwContentsIoThreadClient {
  public:
@@ -60,10 +55,6 @@ class AwContentsIoThreadClientImpl : public AwContentsIoThreadClient {
   bool ShouldBlockFileUrls() const override;
   bool ShouldAcceptThirdPartyCookies() const override;
   bool ShouldBlockNetworkLoads() const override;
-  void OnReceivedError(const net::URLRequest* request) override;
-  void OnReceivedHttpError(
-      const net::URLRequest* request,
-      const net::HttpResponseHeaders* response_headers) override;
 
  private:
   bool pending_association_;

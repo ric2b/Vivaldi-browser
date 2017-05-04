@@ -6,6 +6,7 @@
 
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -104,6 +105,16 @@ void LogSyncSigninPromoUserAction(SyncSignInUserAction action) {
                             CHROME_SIGNIN_ACTION_COUNT);
 }
 
+void LogShouldBlockPasswordForSameOriginButDifferentScheme(bool should_block) {
+  UMA_HISTOGRAM_BOOLEAN(
+      "PasswordManager.ShouldBlockPasswordForSameOriginButDifferentScheme",
+      should_block);
+}
+
+void LogCountHttpMigratedPasswords(int count) {
+  UMA_HISTOGRAM_COUNTS_100("PasswordManager.HttpPasswordMigrationCount", count);
+}
+
 void LogAccountChooserUsability(AccountChooserUsabilityMetric usability) {
   UMA_HISTOGRAM_ENUMERATION("PasswordManager.AccountChooserDialogUsability",
                             usability, ACCOUNT_CHOOSER_USABILITY_COUNT);
@@ -121,6 +132,35 @@ void LogCredentialManagerGetResult(CredentialManagerGetResult result,
                                 CREDENTIAL_MANAGER_GET_COUNT);
       break;
   }
+}
+
+void LogPasswordReuse(int password_length,
+                      int saved_passwords,
+                      int number_matches,
+                      bool password_field_detected) {
+  UMA_HISTOGRAM_COUNTS_100("PasswordManager.PasswordReuse.PasswordLength",
+                           password_length);
+  UMA_HISTOGRAM_COUNTS_1000("PasswordManager.PasswordReuse.TotalPasswords",
+                            saved_passwords);
+  UMA_HISTOGRAM_COUNTS_1000("PasswordManager.PasswordReuse.NumberOfMatches",
+                            number_matches);
+  UMA_HISTOGRAM_ENUMERATION(
+      "PasswordManager.PasswordReuse.PasswordFieldDetected",
+      password_field_detected ? HAS_PASSWORD_FIELD : NO_PASSWORD_FIELD,
+      PASSWORD_REUSE_PASSWORD_FIELD_DETECTED_COUNT);
+}
+
+void LogShowedHttpNotSecureExplanation() {
+  base::RecordAction(base::UserMetricsAction(
+      "PasswordManager_ShowedHttpNotSecureExplanation"));
+}
+
+void LogShowedFormNotSecureWarningOnCurrentNavigation() {
+  // Always record 'true': this is a counter of the number of times the warning
+  // is shown, to gather metrics such as the number of times the warning is
+  // shown per million page loads.
+  UMA_HISTOGRAM_BOOLEAN(
+      "PasswordManager.ShowedFormNotSecureWarningOnCurrentNavigation", true);
 }
 
 }  // namespace metrics_util

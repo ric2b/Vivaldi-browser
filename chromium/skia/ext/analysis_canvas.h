@@ -9,8 +9,8 @@
 #include <stdint.h>
 
 #include "base/compiler_specific.h"
-#include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPicture.h"
+#include "third_party/skia/include/utils/SkNoDrawCanvas.h"
 
 namespace skia {
 
@@ -18,7 +18,8 @@ namespace skia {
 // (specified as a clip rectangle) of an SkPicture as the picture is
 // played back through it.
 // To use: play a picture into the canvas, and then check result.
-class SK_API AnalysisCanvas : public SkCanvas, public SkPicture::AbortCallback {
+class SK_API AnalysisCanvas final : public SkNoDrawCanvas,
+                                    public SkPicture::AbortCallback {
  public:
   AnalysisCanvas(int width, int height);
   ~AnalysisCanvas() override;
@@ -85,15 +86,15 @@ class SK_API AnalysisCanvas : public SkCanvas, public SkPicture::AbortCallback {
   void willRestore() override;
 
   void onClipRect(const SkRect& rect,
-                  SkRegion::Op op,
+                  SkClipOp op,
                   ClipEdgeStyle edge_style) override;
   void onClipRRect(const SkRRect& rrect,
-                   SkRegion::Op op,
+                   SkClipOp op,
                    ClipEdgeStyle edge_style) override;
   void onClipPath(const SkPath& path,
-                  SkRegion::Op op,
+                  SkClipOp op,
                   ClipEdgeStyle edge_style) override;
-  void onClipRegion(const SkRegion& deviceRgn, SkRegion::Op op) override;
+  void onClipRegion(const SkRegion& deviceRgn, SkClipOp op) override;
 
   void onDrawText(const void* text,
                   size_t byteLength,
@@ -125,7 +126,7 @@ class SK_API AnalysisCanvas : public SkCanvas, public SkPicture::AbortCallback {
   void OnComplexClip();
 
  private:
-  typedef SkCanvas INHERITED;
+  typedef SkNoDrawCanvas INHERITED;
 
   int saved_stack_size_;
   int force_not_solid_stack_level_;

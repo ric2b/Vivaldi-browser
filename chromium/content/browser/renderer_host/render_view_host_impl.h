@@ -32,19 +32,11 @@
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
 #include "third_party/WebKit/public/web/WebPopupType.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "ui/base/window_open_disposition.h"
-
-class SkBitmap;
 
 namespace content {
 
 class PageState;
-class SessionStorageNamespace;
 struct FrameReplicationState;
-
-namespace mojom {
-class CreateNewWindowParams;
-}
 
 // This implements the RenderViewHost interface that is exposed to
 // embedders of content, and adds things only visible to content.
@@ -121,7 +113,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   void NotifyMoveOrResizeStarted() override;
   void SetWebUIProperty(const std::string& name,
                         const std::string& value) override;
-  void Zoom(PageZoom zoom) override;
   void SyncRendererPrefs() override;
   WebPreferences GetWebkitPreferences() override;
   void UpdateWebkitPreferences(const WebPreferences& prefs) override;
@@ -196,13 +187,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   void set_sudden_termination_allowed(bool enabled) {
     sudden_termination_allowed_ = enabled;
   }
-
-  // Creates a new RenderView with the given route id.
-  void CreateNewWindow(int32_t route_id,
-                       int32_t main_frame_route_id,
-                       int32_t main_frame_widget_route_id,
-                       const mojom::CreateNewWindowParams& params,
-                       SessionStorageNamespace* session_storage_namespace);
 
   // Creates a new RenderWidget with the given route id.  |popup_type| indicates
   // if this widget is a popup and what kind of popup it is (select, autofill).

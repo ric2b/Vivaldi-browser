@@ -32,6 +32,7 @@
 #include "core/events/EventInit.h"
 #include "core/events/EventPath.h"
 #include "platform/heap/Handle.h"
+#include "wtf/Time.h"
 #include "wtf/text/AtomicString.h"
 
 namespace blink {
@@ -51,25 +52,6 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
     kCapturingPhase = 1,
     kAtTarget = 2,
     kBubblingPhase = 3
-  };
-
-  enum EventType {
-    kMousedown = 1,
-    kMouseup = 2,
-    kMouseover = 4,
-    kMouseout = 8,
-    kMousemove = 16,
-    kMousedrag = 32,
-    kClick = 64,
-    kDblclick = 128,
-    kKeydown = 256,
-    kKeyup = 512,
-    kKeypress = 1024,
-    kDragdrop = 2048,
-    kFocus = 4096,
-    kBlur = 8192,
-    kSelect = 16384,
-    kChange = 32768
   };
 
   enum RailsMode {
@@ -156,10 +138,16 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
   // using the platform timestamp (see |m_platformTimeStamp|).
   // For more info see http://crbug.com/160524
   double timeStamp(ScriptState*) const;
-  double platformTimeStamp() const { return m_platformTimeStamp; }
+  TimeTicks platformTimeStamp() const { return m_platformTimeStamp; }
 
   void stopPropagation() { m_propagationStopped = true; }
+  void setStopPropagation(bool stopPropagation) {
+    m_propagationStopped = stopPropagation;
+  }
   void stopImmediatePropagation() { m_immediatePropagationStopped = true; }
+  void setStopImmediatePropagation(bool stopImmediatePropagation) {
+    m_immediatePropagationStopped = stopImmediatePropagation;
+  }
 
   // IE Extensions
   EventTarget* srcElement() const {
@@ -264,11 +252,11 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
         bool canBubble,
         bool cancelable,
         ComposedMode,
-        double platformTimeStamp);
+        TimeTicks platformTimeStamp);
   Event(const AtomicString& type,
         bool canBubble,
         bool cancelable,
-        double platformTimeStamp);
+        TimeTicks platformTimeStamp);
   Event(const AtomicString& type,
         bool canBubble,
         bool cancelable,
@@ -316,7 +304,7 @@ class CORE_EXPORT Event : public GarbageCollectedFinalized<Event>,
   // The monotonic platform time in seconds, for input events it is the
   // event timestamp provided by the host OS and reported in the original
   // WebInputEvent instance.
-  double m_platformTimeStamp;
+  TimeTicks m_platformTimeStamp;
 };
 
 #define DEFINE_EVENT_TYPE_CASTS(typeName)                          \

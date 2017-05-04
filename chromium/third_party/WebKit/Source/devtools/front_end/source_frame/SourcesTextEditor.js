@@ -165,38 +165,6 @@ SourceFrame.SourcesTextEditor = class extends TextEditor.CodeMirrorTextEditor {
   }
 
   /**
-   * @param {number} lineNumber
-   * @param {boolean} disabled
-   * @param {boolean} conditional
-   */
-  addBreakpoint(lineNumber, disabled, conditional) {
-    if (lineNumber < 0 || lineNumber >= this.codeMirror().lineCount())
-      return;
-
-    var className = 'cm-breakpoint' + (conditional ? ' cm-breakpoint-conditional' : '') +
-        (disabled ? ' cm-breakpoint-disabled' : '');
-    this.codeMirror().addLineClass(lineNumber, 'wrap', className);
-  }
-
-  /**
-   * @param {number} lineNumber
-   */
-  removeBreakpoint(lineNumber) {
-    if (lineNumber < 0 || lineNumber >= this.codeMirror().lineCount())
-      return;
-
-    var wrapClasses = this.codeMirror().getLineHandle(lineNumber).wrapClass;
-    if (!wrapClasses)
-      return;
-
-    var classes = wrapClasses.split(' ');
-    for (var i = 0; i < classes.length; ++i) {
-      if (classes[i].startsWith('cm-breakpoint'))
-        this.codeMirror().removeLineClass(lineNumber, 'wrap', classes[i]);
-    }
-  }
-
-  /**
    * @param {string} type
    * @param {boolean} leftToNumbers
    */
@@ -307,7 +275,8 @@ SourceFrame.SourcesTextEditor = class extends TextEditor.CodeMirrorTextEditor {
   _contextMenu(event) {
     var contextMenu = new UI.ContextMenu(event);
     event.consume(true);  // Consume event now to prevent document from handling the async menu
-    var target = event.target.enclosingNodeOrSelfWithClass('CodeMirror-gutter-elt');
+    var wrapper = event.target.enclosingNodeOrSelfWithClass('CodeMirror-gutter-wrapper');
+    var target = wrapper ? wrapper.querySelector('.CodeMirror-linenumber') : null;
     var promise;
     if (target) {
       promise = this._delegate.populateLineGutterContextMenu(contextMenu, parseInt(target.textContent, 10) - 1);
@@ -572,7 +541,6 @@ SourceFrame.SourcesTextEditor = class extends TextEditor.CodeMirrorTextEditor {
 
     function modeConstructor(config, parserConfig) {
       function nextToken(stream) {
-        var pos = stream.pos;
         if (stream.match(/^\s+$/, true))
           return true ? 'trailing-whitespace' : null;
         do
@@ -631,7 +599,7 @@ SourceFrame.SourcesTextEditorDelegate.prototype = {
    * @param {number} lineNumber
    * @return {!Promise}
    */
-  populateLineGutterContextMenu: function(contextMenu, lineNumber) {},
+  populateLineGutterContextMenu(contextMenu, lineNumber) {},
 
   /**
    * @param {!UI.ContextMenu} contextMenu
@@ -639,7 +607,7 @@ SourceFrame.SourcesTextEditorDelegate.prototype = {
    * @param {number} columnNumber
    * @return {!Promise}
    */
-  populateTextAreaContextMenu: function(contextMenu, lineNumber, columnNumber) {},
+  populateTextAreaContextMenu(contextMenu, lineNumber, columnNumber) {},
 };
 
 /**

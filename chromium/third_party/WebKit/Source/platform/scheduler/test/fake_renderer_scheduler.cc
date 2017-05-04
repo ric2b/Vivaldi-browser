@@ -69,7 +69,8 @@ void FakeRendererScheduler::DidHandleInputEventOnCompositorThread(
     InputEventState event_state) {}
 
 void FakeRendererScheduler::DidHandleInputEventOnMainThread(
-    const blink::WebInputEvent& web_input_event) {}
+    const blink::WebInputEvent& web_input_event,
+    WebInputEventResult result) {}
 
 void FakeRendererScheduler::DidAnimateForInputOnCompositorThread() {}
 
@@ -120,6 +121,10 @@ void FakeRendererScheduler::SetTopLevelBlameContext(
     base::trace_event::BlameContext* blame_context) {}
 
 void FakeRendererScheduler::SetRAILModeObserver(RAILModeObserver* observer) {}
+
+bool FakeRendererScheduler::MainThreadSeemsUnresponsive() {
+  return false;
+}
 
 }  // namespace scheduler
 }  // namespace blink

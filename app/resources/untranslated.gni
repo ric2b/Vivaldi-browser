@@ -19,99 +19,75 @@ template("vivaldi_extract_untranslated") {
                          [
                            "source",
                            "original_source",
-                           "grit_defines",
-                           "grit_additional_defines",
+                           "vivaldi_source",
                            "deps",
-                           "stampfile",
                          ])
-  if (!defined(stampfile)) {
-    if (defined(invoker.grit_resource_ids)) {
-      grit_resource_ids = invoker.grit_resource_ids
-    } else {
-      grit_resource_ids = _default_grit_resource_ids
-    }
-  }
-  if (!defined(grit_additional_defines)) {
-    grit_additional_defines = []
-  }
   if (!defined(original_source)) {
     original_source = source
   }
+  if (defined(vivaldi_source)) {
+    file_target1= get_path_info(vivaldi_source, "name")
+    file_target2= get_path_info(original_source, "name")
+    file_target = "${file_target2}.${file_target1}"
+  } else {
+    file_target= get_path_info(original_source, "name")
+  }
 
   deps_list = []
-  _untranslated_target_prefix = "$root_build_dir/translations/$target_name"
-  _untranslated_target = _untranslated_target_prefix + ".xmb"
-  _allstrings_target = _untranslated_target_prefix + "_all.xmb"
+  _untranslated_target_prefix = "$root_build_dir/translations/$file_target"
+  idlist = "//vivaldi/vivapp/bin/gettext/ids.txt"
 
-  grd_inputs = []
-  if (!defined(stampfile)) {
-    # The stampfile is used for the merged resource files,
-    # and touched when the generated translation files are updated
-    # For normal configurations, extract the list of xtb files
-    foreach(file, exec_script(gritinfo_cmd,
-                      grit_defines + grit_additional_defines + [
-                            "--inputs",
-                            rebase_path(source, root_build_dir),
-                            "-f",
-                            rebase_path(grit_resource_ids, root_build_dir),
-                          ],
-                      "list lines")) {
-      if (get_path_info(file, "extension") == "xtb") {
-        grd_inputs += ["$root_build_dir/$file"]
+  foreach(locale, locales + vivaldi_pending_locales) {
+    name = "${target_name}_extract_$locale"
+    deps_list += [":"+name]
+    action(name) {
+      script = "//vivaldi/app/resources/extract_translations.py"
+      idlist = "//vivaldi/vivapp/bin/gettext/ids.txt"
+      inputs = [
+        idlist,
+        source,
+      ]
+      outputs = [
+        _untranslated_target_prefix+"_$locale.po"
+      ]
+      args = [
+        "--locale", locale,
+        "--vivaldi-file", file_target,
+      ]
+      if (defined(vivaldi_source)) {
+        args += [
+          "--messages",
+          rebase_path(idlist, root_build_dir),
+        ]
       }
+      args += [
+        rebase_path(source, root_build_dir),
+        rebase_path(_untranslated_target_prefix+"_$locale.po", root_build_dir),
+      ]
     }
   }
 
-  name = "list_untranslated_strings_$target_name"
-  deps_list += [ ":" + name ]
+  name = "${target_name}_extract_all"
+  deps_list += [":"+ name]
   action(name) {
-    script = _grit_cmd
-    inputs = [
-                source,
-                original_source,
-              ] + grd_inputs
-    if (defined(stampfile)) {
-      inputs += [ stampfile ]
-    }
-    outputs = []
-    foreach(
-        file,
-        exec_script(
-            _list_lang_cmd,
-            [ _untranslated_target_prefix ] + locales + vivaldi_pending_locales,
-            "list lines")) {
-      outputs += [ "$root_build_dir/$file" ]
-    }
-
+    script = "//vivaldi/app/resources/extract_translations.py"
+    inputs = [ source ]
+    outputs = [ _untranslated_target_prefix+".pot" ]
     args = [
-             "-i",
-             rebase_path(source, root_build_dir),
-             "xmb",
-             "-L",
-           ] + grit_defines + grit_additional_defines +
-           rebase_path([ _untranslated_target ], root_build_dir) + locales +
-           vivaldi_pending_locales
-  }
-
-  name = "list_all_string_$target_name"
-  deps_list += [ ":" + name ]
-  action(name) {
-    script = _grit_cmd
-    inputs = grd_inputs
-    if (defined(stampfile)) {
-      inputs += [ stampfile ]
-    }
-    outputs = [
-      _allstrings_target,
+      "--vivaldi-file", file_target,
     ]
-
-    args = [
-             "-i",
-             rebase_path(source, root_build_dir),
-             "xmb",
-           ] + grit_defines + grit_additional_defines +
-           rebase_path([ _allstrings_target ], root_build_dir)
+    if (defined(vivaldi_source)) {
+      args += [
+        "--messages",
+        rebase_path(idlist, root_build_dir),
+      ]
+    }
+    args += [
+      rebase_path(source, root_build_dir),
+      rebase_path(_untranslated_target_prefix+".pot", root_build_dir),
+    ]
   }
+
   group(target_name) {
     deps = []
     deps = deps_list

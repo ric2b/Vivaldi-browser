@@ -111,6 +111,7 @@ enum WebAXRole {
   WebAXRoleDiv,
   WebAXRoleDocument,
   WebAXRoleEmbeddedObject,
+  WebAXRoleFeed,
   WebAXRoleFigcaption,
   WebAXRoleFigure,
   WebAXRoleFooter,
@@ -186,6 +187,7 @@ enum WebAXRole {
   WebAXRoleTab,
   WebAXRoleTableHeaderContainer,
   WebAXRoleTable,
+  WebAXRoleTerm,
   WebAXRoleTextField,
   WebAXRoleTime,
   WebAXRoleTimer,
@@ -223,6 +225,18 @@ enum WebAXState {
   WebAXStateSelected,
   WebAXStateVertical,
   WebAXStateVisited,
+};
+
+enum class WebAXSupportedAction {
+  None = 0,
+  Activate,
+  Check,
+  Click,
+  Jump,
+  Open,
+  Press,
+  Select,
+  Uncheck
 };
 
 enum WebAXTextDirection {
@@ -317,7 +331,6 @@ enum WebAXDescriptionFrom {
   WebAXDescriptionFromUninitialized = -1,
   WebAXDescriptionFromAttribute = 0,
   WebAXDescriptionFromContents,
-  WebAXDescriptionFromPlaceholder,
   WebAXDescriptionFromRelatedElement,
 };
 

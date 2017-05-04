@@ -59,7 +59,7 @@ class InlineFlowBox : public InlineBox {
         m_lineBreakBidiStatusLastStrong(WTF::Unicode::LeftToRight),
         m_lineBreakBidiStatusLast(WTF::Unicode::LeftToRight),
         m_isFirstAfterPageBreak(false)
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
         ,
         m_hasBadChildList(false)
 #endif
@@ -77,7 +77,7 @@ class InlineFlowBox : public InlineBox {
     m_hasTextDescendants = m_hasTextChildren;
   }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   ~InlineFlowBox() override;
 #endif
 
@@ -356,8 +356,8 @@ class InlineFlowBox : public InlineBox {
   LayoutRect frameRectIncludingLineHeight(LayoutUnit lineTop,
                                           LayoutUnit lineBottom) const {
     if (isHorizontal())
-      return LayoutRect(m_topLeft.x(), lineTop, width(), lineBottom - lineTop);
-    return LayoutRect(lineTop, m_topLeft.y(), lineBottom - lineTop, height());
+      return LayoutRect(x(), lineTop, logicalWidth(), lineBottom - lineTop);
+    return LayoutRect(lineTop, y(), lineBottom - lineTop, logicalWidth());
   }
 
   LayoutRect logicalFrameRectIncludingLineHeight(LayoutUnit lineTop,
@@ -474,7 +474,7 @@ class InlineFlowBox : public InlineBox {
 
 // End of RootInlineBox-specific members.
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
  private:
   unsigned m_hasBadChildList : 1;
 #endif
@@ -482,12 +482,12 @@ class InlineFlowBox : public InlineBox {
 
 DEFINE_INLINE_BOX_TYPE_CASTS(InlineFlowBox);
 
-#if !ENABLE(ASSERT)
+#if !DCHECK_IS_ON()
 inline void InlineFlowBox::checkConsistency() const {}
 #endif
 
 inline void InlineFlowBox::setHasBadChildList() {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_hasBadChildList = true;
 #endif
 }

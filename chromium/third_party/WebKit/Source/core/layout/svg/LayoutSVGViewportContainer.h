@@ -27,20 +27,18 @@
 
 namespace blink {
 
-// This is used for non-root <svg> elements and <marker> elements, neither of
-// which are SVGTransformable thus we inherit from LayoutSVGContainer instead of
-// LayoutSVGTransformableContainer
+class SVGSVGElement;
+
+// This is used for non-root <svg> elements which are SVGTransformable thus we
+// inherit from LayoutSVGContainer instead of LayoutSVGTransformableContainer.
 class LayoutSVGViewportContainer final : public LayoutSVGContainer {
  public:
-  explicit LayoutSVGViewportContainer(SVGElement*);
+  explicit LayoutSVGViewportContainer(SVGSVGElement*);
   FloatRect viewport() const { return m_viewport; }
 
   bool isLayoutSizeChanged() const { return m_isLayoutSizeChanged; }
 
-  void determineIfLayoutSizeChanged() override;
   void setNeedsTransformUpdate() override;
-
-  void paint(const PaintInfo&, const LayoutPoint&) const override;
 
   const char* name() const override { return "LayoutSVGViewportContainer"; }
 
@@ -50,15 +48,17 @@ class LayoutSVGViewportContainer final : public LayoutSVGContainer {
            LayoutSVGContainer::isOfType(type);
   }
 
-  AffineTransform viewportTransform() const;
-  const AffineTransform& localToSVGParentTransform() const override {
+  void layout() override;
+
+  AffineTransform localToSVGParentTransform() const override {
     return m_localToParentTransform;
   }
 
-  void calcViewport() override;
   SVGTransformChange calculateLocalTransform() override;
 
-  bool pointIsInsideViewportClip(const FloatPoint& pointInParent) override;
+  bool nodeAtFloatPoint(HitTestResult&,
+                        const FloatPoint& pointInParent,
+                        HitTestAction) override;
 
   FloatRect m_viewport;
   mutable AffineTransform m_localToParentTransform;

@@ -45,8 +45,8 @@
 #include "core/loader/NavigationPolicy.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
+#include "platform/instrumentation/tracing/TracedValue.h"
 #include "platform/network/ResourceRequest.h"
-#include "platform/tracing/TracedValue.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "wtf/Forward.h"
 #include "wtf/HashSet.h"
@@ -165,17 +165,12 @@ class CORE_EXPORT FrameLoader final {
   void setOpener(LocalFrame*);
 
   const AtomicString& requiredCSP() const { return m_requiredCSP; }
-  void setRequiredCSP(const AtomicString& requiredCSP) {
-    m_requiredCSP = requiredCSP;
-  }
   void recordLatestRequiredCSP();
 
   void detach();
 
   void finishedParsing();
   void checkCompleted();
-
-  void receivedMainResourceRedirect(const KURL& newURL);
 
   void clearProvisionalHistoryItem();
 
@@ -189,10 +184,6 @@ class CORE_EXPORT FrameLoader final {
   FrameLoaderStateMachine* stateMachine() const { return &m_stateMachine; }
 
   void applyUserAgent(ResourceRequest&);
-
-  bool shouldInterruptLoadForXFrameOptions(const String&,
-                                           const KURL&,
-                                           unsigned long requestIdentifier);
 
   bool allAncestorsAreComplete() const;  // including this
 
@@ -223,13 +214,18 @@ class CORE_EXPORT FrameLoader final {
                                          bool isClientRedirect,
                                          HTMLFormElement*);
 
+  // PlzNavigate: Navigations handled by the client are treated as
+  // provisional navigations.
+  bool hasProvisionalNavigation() const {
+    return provisionalDocumentLoader() || m_isNavigationHandledByClient;
+  }
+
   DECLARE_TRACE();
 
   static void setReferrerForFrameRequest(FrameLoadRequest&);
 
  private:
   void checkTimerFired(TimerBase*);
-  void didAccessInitialDocumentTimerFired(TimerBase*);
 
   bool prepareRequestForThisFrame(FrameLoadRequest&);
   FrameLoadType determineFrameLoadType(const FrameLoadRequest&);

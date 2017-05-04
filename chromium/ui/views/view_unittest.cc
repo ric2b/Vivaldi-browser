@@ -11,6 +11,7 @@
 
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/rand_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -30,6 +31,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/scoped_target_handler.h"
+#include "ui/events/test/event_generator.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/transform.h"
@@ -41,6 +43,7 @@
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/focus/view_storage.h"
 #include "ui/views/test/views_test_base.h"
+#include "ui/views/view_observer.h"
 #include "ui/views/widget/native_widget.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/window/dialog_client_view.h"
@@ -2103,28 +2106,58 @@ bool TestView::AcceleratorPressed(const ui::Accelerator& accelerator) {
   return true;
 }
 
+namespace {
+
+// A Widget with a TestView in the view hierarchy. Used for accelerator tests.
+class TestViewWidget {
+ public:
+  TestViewWidget(const Widget::InitParams& create_params,
+                 ui::Accelerator* initial_accelerator,
+                 bool show_after_init = true)
+      : view_(new TestView) {
+    view_->Reset();
+
+    // Register a keyboard accelerator before the view is added to a window.
+    if (initial_accelerator) {
+      view_->AddAccelerator(*initial_accelerator);
+      EXPECT_EQ(view_->accelerator_count_map_[*initial_accelerator], 0);
+    }
+
+    // Create a window and add the view as its child.
+    Widget::InitParams params = create_params;
+    params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+    params.bounds = gfx::Rect(0, 0, 100, 100);
+    widget_.Init(params);
+    View* root = widget_.GetRootView();
+    root->AddChildView(view_);
+    if (show_after_init)
+      widget_.Show();
+
+    EXPECT_TRUE(widget_.GetFocusManager());
+  }
+
+  TestView* view() { return view_; }
+  Widget* widget() { return &widget_; }
+
+ private:
+  TestView* view_;
+  Widget widget_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestViewWidget);
+};
+
+}  // namespace
+
 // On non-ChromeOS aura there is extra logic to determine whether a view should
 // handle accelerators or not (see View::CanHandleAccelerators for details).
 // This test targets that extra logic, but should also work on other platforms.
 TEST_F(ViewTest, HandleAccelerator) {
   ui::Accelerator return_accelerator(ui::VKEY_RETURN, ui::EF_NONE);
-  TestView* view = new TestView();
-  view->Reset();
-  view->AddAccelerator(return_accelerator);
-  EXPECT_EQ(view->accelerator_count_map_[return_accelerator], 0);
-
-  // Create a window and add the view as its child.
-  std::unique_ptr<Widget> widget(new Widget);
-  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params.bounds = gfx::Rect(0, 0, 100, 100);
-  widget->Init(params);
-  View* root = widget->GetRootView();
-  root->AddChildView(view);
-  widget->Show();
-
+  TestViewWidget test_widget(CreateParams(Widget::InitParams::TYPE_POPUP),
+                             &return_accelerator);
+  TestView* view = test_widget.view();
+  Widget* widget = test_widget.widget();
   FocusManager* focus_manager = widget->GetFocusManager();
-  ASSERT_TRUE(focus_manager);
 
 #if defined(USE_AURA) && !defined(OS_CHROMEOS)
   // When a non-child view is not active, it shouldn't handle accelerators.
@@ -2181,30 +2214,63 @@ TEST_F(ViewTest, HandleAccelerator) {
 #endif
 }
 
+// TODO(themblsha): Bring this up on non-Mac platforms. It currently fails
+// because TestView::AcceleratorPressed() is not called. See
+// http://crbug.com/667757.
+#if defined(OS_MACOSX)
+// Test that BridgedContentView correctly handles Accelerator key events when
+// subject to OS event dispatch.
+TEST_F(ViewTest, ActivateAcceleratorOnMac) {
+  // Cmd+1 translates to "noop:" command by interpretKeyEvents.
+  ui::Accelerator command_accelerator(ui::VKEY_1, ui::EF_COMMAND_DOWN);
+  TestViewWidget test_widget(CreateParams(Widget::InitParams::TYPE_POPUP),
+                             &command_accelerator);
+  TestView* view = test_widget.view();
+
+  ui::test::EventGenerator event_generator(
+      test_widget.widget()->GetNativeWindow());
+  // Emulate normal event dispatch through -[NSWindow sendEvent:].
+  event_generator.set_target(ui::test::EventGenerator::Target::WINDOW);
+
+  event_generator.PressKey(command_accelerator.key_code(),
+                           command_accelerator.modifiers());
+  event_generator.ReleaseKey(command_accelerator.key_code(),
+                             command_accelerator.modifiers());
+  EXPECT_EQ(view->accelerator_count_map_[command_accelerator], 1);
+
+  // Without an _wantsKeyDownForEvent: override we'll only get a keyUp: event
+  // for this accelerator.
+  ui::Accelerator key_up_accelerator(ui::VKEY_TAB,
+                                     ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  view->AddAccelerator(key_up_accelerator);
+  event_generator.PressKey(key_up_accelerator.key_code(),
+                           key_up_accelerator.modifiers());
+  event_generator.ReleaseKey(key_up_accelerator.key_code(),
+                             key_up_accelerator.modifiers());
+  EXPECT_EQ(view->accelerator_count_map_[key_up_accelerator], 1);
+
+  // We should handle this accelerator inside keyDown: as it doesn't translate
+  // to any command by default.
+  ui::Accelerator key_down_accelerator(
+      ui::VKEY_L, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN);
+  view->AddAccelerator(key_down_accelerator);
+  event_generator.PressKey(key_down_accelerator.key_code(),
+                           key_down_accelerator.modifiers());
+  event_generator.ReleaseKey(key_down_accelerator.key_code(),
+                             key_down_accelerator.modifiers());
+  EXPECT_EQ(view->accelerator_count_map_[key_down_accelerator], 1);
+}
+#endif  // OS_MACOSX
+
 // TODO: these tests were initially commented out when getting aura to
-// run. Figure out if still valuable and either nuke or fix.
-#if 0
+// run. Figure out if still valuable and either nuke or fix. crbug.com/667757.
+#if defined(OS_MACOSX)
 TEST_F(ViewTest, ActivateAccelerator) {
-  // Register a keyboard accelerator before the view is added to a window.
   ui::Accelerator return_accelerator(ui::VKEY_RETURN, ui::EF_NONE);
-  TestView* view = new TestView();
-  view->Reset();
-  view->AddAccelerator(return_accelerator);
-  EXPECT_EQ(view->accelerator_count_map_[return_accelerator], 0);
-
-  // Create a window and add the view as its child.
-  std::unique_ptr<Widget> widget(new Widget);
-  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params.bounds = gfx::Rect(0, 0, 100, 100);
-  widget->Init(params);
-  View* root = widget->GetRootView();
-  root->AddChildView(view);
-  widget->Show();
-
-  // Get the focus manager.
-  FocusManager* focus_manager = widget->GetFocusManager();
-  ASSERT_TRUE(focus_manager);
+  TestViewWidget test_widget(CreateParams(Widget::InitParams::TYPE_POPUP),
+                             &return_accelerator);
+  TestView* view = test_widget.view();
+  FocusManager* focus_manager = test_widget.widget()->GetFocusManager();
 
   // Hit the return key and see if it takes effect.
   EXPECT_TRUE(focus_manager->ProcessAccelerator(return_accelerator));
@@ -2245,55 +2311,29 @@ TEST_F(ViewTest, ActivateAccelerator) {
   EXPECT_FALSE(focus_manager->ProcessAccelerator(escape_accelerator));
   EXPECT_EQ(view->accelerator_count_map_[return_accelerator], 2);
   EXPECT_EQ(view->accelerator_count_map_[escape_accelerator], 2);
-
-  widget->CloseNow();
 }
 
 TEST_F(ViewTest, HiddenViewWithAccelerator) {
   ui::Accelerator return_accelerator(ui::VKEY_RETURN, ui::EF_NONE);
-  TestView* view = new TestView();
-  view->Reset();
-  view->AddAccelerator(return_accelerator);
-  EXPECT_EQ(view->accelerator_count_map_[return_accelerator], 0);
-
-  std::unique_ptr<Widget> widget(new Widget);
-  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params.bounds = gfx::Rect(0, 0, 100, 100);
-  widget->Init(params);
-  View* root = widget->GetRootView();
-  root->AddChildView(view);
-  widget->Show();
-
-  FocusManager* focus_manager = widget->GetFocusManager();
-  ASSERT_TRUE(focus_manager);
+  TestViewWidget test_widget(CreateParams(Widget::InitParams::TYPE_POPUP),
+                             &return_accelerator);
+  TestView* view = test_widget.view();
+  FocusManager* focus_manager = test_widget.widget()->GetFocusManager();
 
   view->SetVisible(false);
   EXPECT_FALSE(focus_manager->ProcessAccelerator(return_accelerator));
 
   view->SetVisible(true);
   EXPECT_TRUE(focus_manager->ProcessAccelerator(return_accelerator));
-
-  widget->CloseNow();
 }
 
 TEST_F(ViewTest, ViewInHiddenWidgetWithAccelerator) {
   ui::Accelerator return_accelerator(ui::VKEY_RETURN, ui::EF_NONE);
-  TestView* view = new TestView();
-  view->Reset();
-  view->AddAccelerator(return_accelerator);
-  EXPECT_EQ(view->accelerator_count_map_[return_accelerator], 0);
-
-  std::unique_ptr<Widget> widget(new Widget);
-  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
-  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params.bounds = gfx::Rect(0, 0, 100, 100);
-  widget->Init(params);
-  View* root = widget->GetRootView();
-  root->AddChildView(view);
-
-  FocusManager* focus_manager = widget->GetFocusManager();
-  ASSERT_TRUE(focus_manager);
+  TestViewWidget test_widget(CreateParams(Widget::InitParams::TYPE_POPUP),
+                             &return_accelerator, false);
+  TestView* view = test_widget.view();
+  Widget* widget = test_widget.widget();
+  FocusManager* focus_manager = test_widget.widget()->GetFocusManager();
 
   EXPECT_FALSE(focus_manager->ProcessAccelerator(return_accelerator));
   EXPECT_EQ(0, view->accelerator_count_map_[return_accelerator]);
@@ -2305,10 +2345,12 @@ TEST_F(ViewTest, ViewInHiddenWidgetWithAccelerator) {
   widget->Hide();
   EXPECT_FALSE(focus_manager->ProcessAccelerator(return_accelerator));
   EXPECT_EQ(1, view->accelerator_count_map_[return_accelerator]);
-
-  widget->CloseNow();
 }
+#endif  // OS_MACOSX
 
+// TODO: these tests were initially commented out when getting aura to
+// run. Figure out if still valuable and either nuke or fix.
+#if 0
 ////////////////////////////////////////////////////////////////////////////////
 // Mouse-wheel message rerouting
 ////////////////////////////////////////////////////////////////////////////////
@@ -4575,6 +4617,275 @@ TEST_F(ViewTest, CrashOnAddFromFromOnNativeThemeChanged) {
       new ViewThatAddsViewInOnNativeThemeChanged;
   widget.GetRootView()->AddChildView(v);
   EXPECT_TRUE(v->on_native_theme_changed_called());
+}
+
+// A View that removes its Layer when hidden.
+class NoLayerWhenHiddenView : public View {
+ public:
+  NoLayerWhenHiddenView() {
+    SetPaintToLayer(true);
+    set_owned_by_client();
+    SetBounds(0, 0, 100, 100);
+  }
+
+  bool was_hidden() const { return was_hidden_; }
+
+  // View:
+  void VisibilityChanged(View* starting_from, bool is_visible) override {
+    if (!is_visible) {
+      was_hidden_ = true;
+      SetPaintToLayer(false);
+    }
+  }
+
+ private:
+  bool was_hidden_ = false;
+
+  DISALLOW_COPY_AND_ASSIGN(NoLayerWhenHiddenView);
+};
+
+// Test that Views can safely manipulate Layers during Widget closure.
+TEST_F(ViewTest, DestroyLayerInClose) {
+  NoLayerWhenHiddenView view;
+  Widget* widget = new Widget;
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  widget->Init(params);
+  widget->SetBounds(gfx::Rect(0, 0, 100, 100));
+  widget->GetContentsView()->AddChildView(&view);
+  widget->Show();
+
+  EXPECT_TRUE(view.layer());
+  EXPECT_TRUE(view.GetWidget());
+  EXPECT_FALSE(view.was_hidden());
+
+  widget->Close();
+  EXPECT_FALSE(view.layer());
+  // Ensure the layer went away via VisibilityChanged().
+  EXPECT_TRUE(view.was_hidden());
+
+  // Not removed from Widget until Close() completes.
+  EXPECT_TRUE(view.GetWidget());
+  base::RunLoop().RunUntilIdle();  // Let the Close() complete.
+  EXPECT_FALSE(view.GetWidget());
+}
+
+// A View that keeps the children with a special ID above other children.
+class OrderableView : public View {
+ public:
+  // ID used by the children that are stacked above other children.
+  static constexpr int VIEW_ID_RAISED = 1000;
+
+  OrderableView() : View() {}
+  ~OrderableView() override {}
+
+  View::Views GetChildrenInZOrder() override {
+    View::Views children;
+    // Iterate over regular children and later over the raised children to
+    // create a custom Z-order.
+    for (int i = 0; i < child_count(); ++i) {
+      if (child_at(i)->id() != VIEW_ID_RAISED)
+        children.push_back(child_at(i));
+    }
+    for (int i = 0; i < child_count(); ++i) {
+      if (child_at(i)->id() == VIEW_ID_RAISED)
+        children.push_back(child_at(i));
+    }
+    DCHECK_EQ(child_count(), static_cast<int>(children.size()));
+    return children;
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(OrderableView);
+};
+
+TEST_F(ViewTest, ChildViewZOrderChanged) {
+  const int kChildrenCount = 4;
+  std::unique_ptr<View> view(new OrderableView());
+  view->SetPaintToLayer(true);
+  for (int i = 0; i < kChildrenCount; ++i)
+    AddViewWithChildLayer(view.get());
+  View::Views children = view->GetChildrenInZOrder();
+  const std::vector<ui::Layer*>& layers = view->layer()->children();
+  EXPECT_EQ(kChildrenCount, static_cast<int>(layers.size()));
+  EXPECT_EQ(kChildrenCount, static_cast<int>(children.size()));
+  for (int i = 0; i < kChildrenCount; ++i) {
+    EXPECT_EQ(view->child_at(i)->layer(), layers[i]);
+    EXPECT_EQ(view->child_at(i), children[i]);
+  }
+
+  // Raise one of the children in z-order and add another child to reorder.
+  view->child_at(2)->set_id(OrderableView::VIEW_ID_RAISED);
+  AddViewWithChildLayer(view.get());
+
+  // 2nd child should be now on top, i.e. the last element in the array returned
+  // by GetChildrenInZOrder(). Its layer should also be above the others.
+  // The rest of the children and layers order should be unchanged.
+  const int expected_order[] = {0, 1, 3, 4, 2};
+  children = view->GetChildrenInZOrder();
+  EXPECT_EQ(kChildrenCount + 1, static_cast<int>(children.size()));
+  EXPECT_EQ(kChildrenCount + 1, static_cast<int>(layers.size()));
+  for (size_t i = 0; i < kChildrenCount + 1; ++i) {
+    EXPECT_EQ(view->child_at(expected_order[i]), children[i]);
+    EXPECT_EQ(view->child_at(expected_order[i])->layer(), layers[i]);
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Observer tests.
+////////////////////////////////////////////////////////////////////////////////
+
+class ViewObserverTest : public ViewTest, public ViewObserver {
+ public:
+  ViewObserverTest()
+      : child_view_added_times_(0),
+        child_view_removed_times_(0),
+        child_view_added_(nullptr),
+        child_view_removed_(nullptr),
+        child_view_removed_parent_(nullptr),
+        view_visibility_changed_(nullptr),
+        view_enabled_changed_(nullptr),
+        view_bounds_changed_(nullptr),
+        view_reordered_(nullptr) {}
+
+  ~ViewObserverTest() override {}
+
+  // ViewObserver:
+  void OnChildViewAdded(View* child) override {
+    child_view_added_times_++;
+    child_view_added_ = child;
+  }
+  void OnChildViewRemoved(View* child, View* parent) override {
+    child_view_removed_times_++;
+    child_view_removed_ = child;
+    child_view_removed_parent_ = parent;
+  }
+
+  void OnViewVisibilityChanged(View* view) override {
+    view_visibility_changed_ = view;
+  }
+
+  void OnViewEnabledChanged(View* view) override {
+    view_enabled_changed_ = view;
+  }
+
+  void OnViewBoundsChanged(View* view) override { view_bounds_changed_ = view; }
+
+  void OnChildViewReordered(View* view) override { view_reordered_ = view; }
+
+  void reset() {
+    child_view_added_times_ = 0;
+    child_view_removed_times_ = 0;
+    child_view_added_ = nullptr;
+    child_view_removed_ = nullptr;
+    child_view_removed_parent_ = nullptr;
+    view_visibility_changed_ = nullptr;
+    view_enabled_changed_ = nullptr;
+    view_bounds_changed_ = nullptr;
+    view_reordered_ = nullptr;
+  }
+
+  std::unique_ptr<View> NewView() {
+    auto view = base::MakeUnique<View>();
+    view->AddObserver(this);
+    return view;
+  }
+
+  int child_view_added_times() { return child_view_added_times_; }
+  int child_view_removed_times() { return child_view_removed_times_; }
+  const View* child_view_added() const { return child_view_added_; }
+  const View* child_view_removed() const { return child_view_removed_; }
+  const View* child_view_removed_parent() const {
+    return child_view_removed_parent_;
+  }
+  const View* view_visibility_changed() const {
+    return view_visibility_changed_;
+  }
+  const View* view_enabled_changed() const { return view_enabled_changed_; }
+  const View* view_bounds_changed() const { return view_bounds_changed_; }
+  const View* view_reordered() const { return view_reordered_; }
+
+ private:
+  int child_view_added_times_;
+  int child_view_removed_times_;
+
+  View* child_view_added_;
+  View* child_view_removed_;
+  View* child_view_removed_parent_;
+  View* view_visibility_changed_;
+  View* view_enabled_changed_;
+  View* view_bounds_changed_;
+  View* view_reordered_;
+
+  DISALLOW_COPY_AND_ASSIGN(ViewObserverTest);
+};
+
+TEST_F(ViewObserverTest, ViewParentChanged) {
+  std::unique_ptr<View> parent1 = NewView();
+  std::unique_ptr<View> parent2 = NewView();
+  std::unique_ptr<View> child_view = NewView();
+
+  parent1->AddChildView(child_view.get());
+  EXPECT_EQ(0, child_view_removed_times());
+  EXPECT_EQ(1, child_view_added_times());
+  EXPECT_EQ(child_view.get(), child_view_added());
+  EXPECT_EQ(child_view.get()->parent(), parent1.get());
+  reset();
+
+  // Removed from parent1, added to parent2
+  parent2->AddChildView(child_view.get());
+  EXPECT_EQ(1, child_view_removed_times());
+  EXPECT_EQ(1, child_view_added_times());
+  EXPECT_EQ(child_view.get(), child_view_removed());
+  EXPECT_EQ(parent1.get(), child_view_removed_parent());
+  EXPECT_EQ(child_view.get(), child_view_added());
+  EXPECT_EQ(child_view.get()->parent(), parent2.get());
+
+  reset();
+
+  parent2->RemoveChildView(child_view.get());
+  EXPECT_EQ(1, child_view_removed_times());
+  EXPECT_EQ(0, child_view_added_times());
+  EXPECT_EQ(child_view.get(), child_view_removed());
+  EXPECT_EQ(parent2.get(), child_view_removed_parent());
+}
+
+TEST_F(ViewObserverTest, ViewVisibilityChanged) {
+  std::unique_ptr<View> view = NewView();
+  view->SetVisible(false);
+  EXPECT_EQ(view.get(), view_visibility_changed());
+  EXPECT_EQ(false, view->visible());
+}
+
+TEST_F(ViewObserverTest, ViewEnabledChanged) {
+  std::unique_ptr<View> view = NewView();
+  view->SetEnabled(false);
+  EXPECT_EQ(view.get(), view_enabled_changed());
+  EXPECT_EQ(false, view->enabled());
+}
+
+TEST_F(ViewObserverTest, ViewBoundsChanged) {
+  std::unique_ptr<View> view = NewView();
+  gfx::Rect bounds(2, 2, 2, 2);
+  view->SetBoundsRect(bounds);
+  EXPECT_EQ(view.get(), view_bounds_changed());
+  EXPECT_EQ(bounds, view->bounds());
+
+  reset();
+
+  gfx::Rect new_bounds(1, 1, 1, 1);
+  view->SetBoundsRect(new_bounds);
+  EXPECT_EQ(view.get(), view_bounds_changed());
+  EXPECT_EQ(new_bounds, view->bounds());
+}
+
+TEST_F(ViewObserverTest, ChildViewReordered) {
+  std::unique_ptr<View> view = NewView();
+  std::unique_ptr<View> child_view = NewView();
+  std::unique_ptr<View> child_view2 = NewView();
+  view->AddChildView(child_view.get());
+  view->AddChildView(child_view2.get());
+  view->ReorderChildView(child_view2.get(), 0);
+  EXPECT_EQ(child_view2.get(), view_reordered());
 }
 
 }  // namespace views

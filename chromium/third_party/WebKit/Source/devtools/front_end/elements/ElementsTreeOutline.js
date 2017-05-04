@@ -31,7 +31,7 @@
 /**
  * @unrestricted
  */
-Elements.ElementsTreeOutline = class extends TreeOutline {
+Elements.ElementsTreeOutline = class extends UI.TreeOutline {
   /**
    * @param {!SDK.DOMModel} domModel
    * @param {boolean=} omitRootDOMNode
@@ -426,7 +426,7 @@ Elements.ElementsTreeOutline = class extends TreeOutline {
 
   /**
    * @param {?SDK.DOMNode} node
-   * @return {?TreeElement}
+   * @return {?UI.TreeElement}
    */
   _lookUpTreeElement(node) {
     if (!node)
@@ -498,7 +498,7 @@ Elements.ElementsTreeOutline = class extends TreeOutline {
   }
 
   /**
-   * @return {?TreeElement}
+   * @return {?UI.TreeElement}
    */
   _treeElementFromEvent(event) {
     var scrollContainer = this.element.parentElement;
@@ -531,11 +531,10 @@ Elements.ElementsTreeOutline = class extends TreeOutline {
    * @return {!Element|!AnchorBox|undefined}
    */
   _getPopoverAnchor(element, event) {
-    var anchor = element.enclosingNodeOrSelfWithClass('webkit-html-resource-link');
-    if (!anchor || !anchor.href)
-      return;
-
-    return anchor;
+    var link = element;
+    while (link && !link[Elements.ElementsTreeElement.HrefSymbol])
+      link = link.parentElementOrShadowHost();
+    return link ? link : undefined;
   }
 
   /**
@@ -577,15 +576,16 @@ Elements.ElementsTreeOutline = class extends TreeOutline {
   }
 
   /**
-   * @param {!Element} anchor
+   * @param {!Element} link
    * @param {!UI.Popover} popover
    */
-  _showPopover(anchor, popover) {
-    var listItem = anchor.enclosingNodeOrSelfWithNodeName('li');
+  _showPopover(link, popover) {
+    var listItem = link.enclosingNodeOrSelfWithNodeName('li');
     var node = /** @type {!Elements.ElementsTreeElement} */ (listItem.treeElement).node();
     this._loadDimensionsForNode(
         node, Components.DOMPresentationUtils.buildImagePreviewContents.bind(
-                  Components.DOMPresentationUtils, node.target(), anchor.href, true, showPopover));
+                  Components.DOMPresentationUtils, node.target(), link[Elements.ElementsTreeElement.HrefSymbol], true,
+                  showPopover));
 
     /**
      * @param {!Element=} contents
@@ -594,7 +594,7 @@ Elements.ElementsTreeOutline = class extends TreeOutline {
       if (!contents)
         return;
       popover.setCanShrink(false);
-      popover.showForAnchor(contents, anchor);
+      popover.showForAnchor(contents, link);
     }
   }
 
@@ -608,7 +608,7 @@ Elements.ElementsTreeOutline = class extends TreeOutline {
   }
 
   /**
-   * @param {?TreeElement} treeElement
+   * @param {?UI.TreeElement} treeElement
    */
   setHoverEffect(treeElement) {
     if (this._previousHoveredElement === treeElement)
@@ -700,7 +700,7 @@ Elements.ElementsTreeOutline = class extends TreeOutline {
   }
 
   /**
-   * @param {?TreeElement} treeElement
+   * @param {?UI.TreeElement} treeElement
    * @return {boolean}
    */
   _isValidDragSourceOrTarget(treeElement) {
@@ -726,7 +726,7 @@ Elements.ElementsTreeOutline = class extends TreeOutline {
   }
 
   /**
-   * @param {!TreeElement} treeElement
+   * @param {!UI.TreeElement} treeElement
    */
   _doMove(treeElement) {
     if (!this._treeElementBeingDragged)
@@ -785,7 +785,6 @@ Elements.ElementsTreeOutline = class extends TreeOutline {
     if (textNode && textNode.classList.contains('bogus'))
       textNode = null;
     var commentNode = event.target.enclosingNodeOrSelfWithClass('webkit-html-comment');
-    contextMenu.appendApplicableItems(event.target);
     if (textNode) {
       contextMenu.appendSeparator();
       treeElement.populateTextContextMenu(contextMenu, textNode);
@@ -1041,7 +1040,8 @@ Elements.ElementsTreeOutline = class extends TreeOutline {
    * @param {!Common.Event} event
    */
   _documentUpdated(event) {
-    var inspectedRootDocument = event.data;
+    var domModel = /** @type {!SDK.DOMModel} */ (event.data);
+    var inspectedRootDocument = domModel.existingDocument();
 
     this._reset();
 
@@ -1278,9 +1278,9 @@ Elements.ElementsTreeOutline = class extends TreeOutline {
    * @param {!Elements.ElementsTreeElement} treeElement
    */
   _createExpandAllButtonTreeElement(treeElement) {
-    var button = createTextButton('', handleLoadAllChildren.bind(this));
+    var button = UI.createTextButton('', handleLoadAllChildren.bind(this));
     button.value = '';
-    var expandAllButtonElement = new TreeElement(button);
+    var expandAllButtonElement = new UI.TreeElement(button);
     expandAllButtonElement.selectable = false;
     expandAllButtonElement.expandAllButton = true;
     expandAllButtonElement.button = button;
@@ -1633,7 +1633,7 @@ Elements.ElementsTreeOutline.Renderer = class {
 /**
  * @unrestricted
  */
-Elements.ElementsTreeOutline.ShortcutTreeElement = class extends TreeElement {
+Elements.ElementsTreeOutline.ShortcutTreeElement = class extends UI.TreeElement {
   /**
    * @param {!SDK.DOMNodeShortcut} nodeShortcut
    */

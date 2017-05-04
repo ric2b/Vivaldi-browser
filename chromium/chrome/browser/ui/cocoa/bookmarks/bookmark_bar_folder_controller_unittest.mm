@@ -12,8 +12,8 @@
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_folder_button_cell.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_folder_controller.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_unittest_helper.h"
-#include "chrome/browser/ui/cocoa/cocoa_profile_test.h"
-#import "chrome/browser/ui/cocoa/cocoa_test_helper.h"
+#include "chrome/browser/ui/cocoa/test/cocoa_profile_test.h"
+#import "chrome/browser/ui/cocoa/test/cocoa_test_helper.h"
 #import "chrome/browser/ui/cocoa/view_resizer_pong.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -1613,6 +1613,35 @@ TEST_F(BookmarkBarFolderControllerMenuTest, DropPositionIndicator) {
   pos = [folder indicatorPosForDragToPoint:NSMakePoint(10,0)];
   targetButton = [folder buttonWithTitleEqualTo:@"2f3b"];
   EXPECT_CGFLOAT_EQ([targetButton bottom].y - yBottomOffset, pos);
+}
+
+TEST_F(BookmarkBarFolderControllerMenuTest, FolderTooltips) {
+  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile());
+  const BookmarkNode* otherBookmarks = model->other_node();
+  model->AddFolder(otherBookmarks, otherBookmarks->child_count(),
+                   ASCIIToUTF16("short_name"));
+  model->AddFolder(
+      otherBookmarks, otherBookmarks->child_count(),
+      ASCIIToUTF16("reallyReallyLongBookmarkNamereallyReallyLongBookmarkNamerea"
+                   "llyReallyLongBookmarkNamereallyReallyLongBookmarkName"));
+  BookmarkButton* otherButton = [bar_ otherBookmarksButton];
+  ASSERT_TRUE(otherButton);
+
+  [[otherButton target] openBookmarkFolderFromButton:otherButton];
+  BookmarkBarFolderController* folder = [bar_ folderController];
+  EXPECT_TRUE(folder);
+
+  NSArray* buttons = [folder buttons];
+  EXPECT_EQ(2U, [buttons count]);
+
+  for (BookmarkButton* btn in buttons) {
+    if ([[btn cell] cellSize].width >
+        bookmarks::kBookmarkMenuButtonMaximumWidth) {
+      EXPECT_TRUE([btn toolTip]);
+    } else {
+      EXPECT_FALSE([btn toolTip]);
+    }
+  }
 }
 
 @interface BookmarkBarControllerNoDelete : BookmarkBarController

@@ -14,6 +14,7 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/DocumentLoader.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "modules/EventTargetModules.h"
 #include "modules/vr/NavigatorVR.h"
 #include "modules/vr/VRController.h"
 #include "modules/vr/VRDisplayCapabilities.h"
@@ -78,7 +79,8 @@ class VRDisplayFrameRequestCallback : public FrameRequestCallback {
 VRDisplay::VRDisplay(NavigatorVR* navigatorVR,
                      device::mojom::blink::VRDisplayPtr display,
                      device::mojom::blink::VRDisplayClientRequest request)
-    : m_navigatorVR(navigatorVR),
+    : ContextLifecycleObserver(navigatorVR->document()),
+      m_navigatorVR(navigatorVR),
       m_isConnected(false),
       m_isPresenting(false),
       m_isValidDeviceForPresenting(true),
@@ -93,9 +95,7 @@ VRDisplay::VRDisplay(NavigatorVR* navigatorVR,
       m_animationCallbackRequested(false),
       m_inAnimationFrame(false),
       m_display(std::move(display)),
-      m_binding(this, std::move(request)) {
-  ThreadState::current()->registerPreFinalizer(this);
-}
+      m_binding(this, std::move(request)) {}
 
 VRDisplay::~VRDisplay() {}
 
@@ -206,7 +206,7 @@ VREyeParameters* VRDisplay::getEyeParameters(const String& whichEye) {
 }
 
 int VRDisplay::requestAnimationFrame(FrameRequestCallback* callback) {
-  Document* doc = m_navigatorVR->document();
+  Document* doc = this->document();
   if (!doc)
     return 0;
 
@@ -240,7 +240,7 @@ void VRDisplay::OnFocus() {
   // frames should be tied to the presenting VR display (e.g. should be serviced
   // by GVR library callbacks on Android), and not the doc frame rate.
   if (!m_animationCallbackRequested) {
-    Document* doc = m_navigatorVR->document();
+    Document* doc = this->document();
     if (!doc)
       return;
     doc->requestAnimationFrame(new VRDisplayFrameRequestCallback(this));
@@ -280,8 +280,7 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* scriptState,
                                         const HeapVector<VRLayer>& layers) {
   ExecutionContext* executionContext = scriptState->getExecutionContext();
   UseCounter::count(executionContext, UseCounter::VRRequestPresent);
-  String errorMessage;
-  if (!executionContext->isSecureContext(errorMessage)) {
+  if (!executionContext->isSecureContext()) {
     UseCounter::count(executionContext,
                       UseCounter::VRRequestPresentInsecureOrigin);
   }
@@ -325,9 +324,9 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* scriptState,
     return promise;
   }
 
-  m_layer = layers[0];
-
-  if (!m_layer.source()) {
+  // If what we were given has an invalid source, need to exit fullscreen with
+  // previous, valid source, so delay m_layer reassignment
+  if (!layers[0].source()) {
     forceExitPresent();
     DOMException* exception =
         DOMException::create(InvalidStateError, "Invalid layer source.");
@@ -335,6 +334,7 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* scriptState,
     ReportPresentationResult(PresentationResult::InvalidLayerSource);
     return promise;
   }
+  m_layer = layers[0];
 
   CanvasRenderingContext* renderingContext =
       m_layer.source()->renderingContext();
@@ -436,7 +436,7 @@ ScriptPromise VRDisplay::exitPresent(ScriptState* scriptState) {
 }
 
 void VRDisplay::beginPresent() {
-  Document* doc = m_navigatorVR->document();
+  Document* doc = this->document();
   std::unique_ptr<UserGestureIndicator> gestureIndicator;
   if (m_capabilities->hasExternalDisplay()) {
     forceExitPresent();
@@ -483,15 +483,16 @@ void VRDisplay::beginPresent() {
     if (doc) {
       // Since the callback for requestPresent is asynchronous, we've lost our
       // UserGestureToken, and need to create a new one to enter fullscreen.
-      gestureIndicator =
-          wrapUnique(new UserGestureIndicator(DocumentUserGestureToken::create(
+      gestureIndicator = WTF::wrapUnique(
+          new UserGestureIndicator(DocumentUserGestureToken::create(
               doc, UserGestureToken::Status::PossiblyExistingGesture)));
     }
-    Fullscreen::requestFullscreen(*canvas, Fullscreen::UnprefixedRequest);
+    Fullscreen::requestFullscreen(*canvas);
 
     // Check to see if the canvas is still the current fullscreen
-    // element once every 5 seconds.
-    m_fullscreenCheckTimer.startRepeating(5.0, BLINK_FROM_HERE);
+    // element once every 2 seconds.
+    m_fullscreenCheckTimer.startRepeating(2.0, BLINK_FROM_HERE);
+    m_reenteredFullscreen = false;
   }
 
   if (doc) {
@@ -558,6 +559,7 @@ void VRDisplay::updateLayerBounds() {
     leftBounds->top = 0.0f;
     leftBounds->width = 0.5f;
     leftBounds->height = 1.0f;
+    m_layer.setLeftBounds({0.0f, 0.0f, 0.5f, 1.0f});
   }
 
   if (m_layer.rightBounds().size() == 4) {
@@ -571,6 +573,7 @@ void VRDisplay::updateLayerBounds() {
     rightBounds->top = 0.0f;
     rightBounds->width = 0.5f;
     rightBounds->height = 1.0f;
+    m_layer.setRightBounds({0.5f, 0.0f, 0.5f, 1.0f});
   }
 
   m_display->UpdateLayerBounds(std::move(leftBounds), std::move(rightBounds));
@@ -580,7 +583,7 @@ HeapVector<VRLayer> VRDisplay::getLayers() {
   HeapVector<VRLayer> layers;
 
   if (m_isPresenting) {
-    layers.append(m_layer);
+    layers.push_back(m_layer);
   }
 
   return layers;
@@ -590,7 +593,7 @@ void VRDisplay::submitFrame() {
   if (!m_display)
     return;
 
-  Document* doc = m_navigatorVR->document();
+  Document* doc = this->document();
   if (!m_isPresenting) {
     if (doc) {
       doc->addConsoleMessage(ConsoleMessage::create(
@@ -693,18 +696,38 @@ void VRDisplay::OnDeactivate(
 }
 
 void VRDisplay::onFullscreenCheck(TimerBase*) {
+  if (!m_isPresenting) {
+    m_fullscreenCheckTimer.stop();
+    return;
+  }
   // TODO: This is a temporary measure to track if fullscreen mode has been
   // exited by the UA. If so we need to end VR presentation. Soon we won't
   // depend on the Fullscreen API to fake VR presentation, so this will
   // become unnessecary. Until that point, though, this seems preferable to
   // adding a bunch of notification plumbing to Fullscreen.
   if (!Fullscreen::isCurrentFullScreenElement(*m_layer.source())) {
-    m_isPresenting = false;
-    OnPresentChange();
-    m_fullscreenCheckTimer.stop();
-    if (!m_display)
+    // TODO(mthiesse): Due to asynchronous resizing, we might get kicked out of
+    // fullscreen when changing display parameters upon entering WebVR. So one
+    // time only, we reenter fullscreen after having left it; otherwise we exit
+    // presentation.
+    if (m_reenteredFullscreen) {
+      m_isPresenting = false;
+      OnPresentChange();
+      m_fullscreenCheckTimer.stop();
+      if (m_display)
+        m_display->ExitPresent();
       return;
-    m_display->ExitPresent();
+    }
+    m_reenteredFullscreen = true;
+    auto canvas = m_layer.source();
+    Document* doc = this->document();
+    std::unique_ptr<UserGestureIndicator> gestureIndicator;
+    if (doc) {
+      gestureIndicator = WTF::wrapUnique(
+          new UserGestureIndicator(DocumentUserGestureToken::create(
+              doc, UserGestureToken::Status::PossiblyExistingGesture)));
+    }
+    Fullscreen::requestFullscreen(*canvas);
   }
 }
 
@@ -720,7 +743,28 @@ void VRDisplay::dispose() {
   m_binding.Close();
 }
 
+ExecutionContext* VRDisplay::getExecutionContext() const {
+  return ContextLifecycleObserver::getExecutionContext();
+}
+
+const AtomicString& VRDisplay::interfaceName() const {
+  return EventTargetNames::VRDisplay;
+}
+
+void VRDisplay::contextDestroyed(ExecutionContext*) {
+  forceExitPresent();
+  m_scriptedAnimationController.clear();
+}
+
+bool VRDisplay::hasPendingActivity() const {
+  // Prevent V8 from garbage collecting the wrapper object if there are
+  // event listeners attached to it.
+  return getExecutionContext() && hasEventListeners();
+}
+
 DEFINE_TRACE(VRDisplay) {
+  EventTargetWithInlineData::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
   visitor->trace(m_navigatorVR);
   visitor->trace(m_capabilities);
   visitor->trace(m_stageParameters);

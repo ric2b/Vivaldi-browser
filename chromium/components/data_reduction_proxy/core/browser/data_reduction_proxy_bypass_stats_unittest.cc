@@ -27,6 +27,8 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_server.h"
+#include "components/data_reduction_proxy/proto/client_config.pb.h"
 #include "components/prefs/testing_pref_service.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
@@ -252,20 +254,26 @@ class DataReductionProxyBypassStatsEndToEndTest : public testing::Test {
   }
 
   void SetUp() override {
-    // Only use the primary data reduction proxy in order to make it easier to
-    // test bypassed bytes due to proxy fallbacks. This way, a test just needs
-    // to cause one proxy fallback in order for the data reduction proxy to be
-    // fully bypassed.
-    drp_test_context_ =
-        DataReductionProxyTestContext::Builder()
-            .WithParamsFlags(DataReductionProxyParams::kAllowed)
-            .WithURLRequestContext(&context_)
-            .WithMockClientSocketFactory(&mock_socket_factory_)
-            .Build();
+    drp_test_context_ = DataReductionProxyTestContext::Builder()
+                            .WithParamsFlags(0)
+                            .WithURLRequestContext(&context_)
+                            .WithMockClientSocketFactory(&mock_socket_factory_)
+                            .Build();
     drp_test_context_->AttachToURLRequestContext(&context_storage_);
     context_.set_client_socket_factory(&mock_socket_factory_);
     proxy_delegate_ = drp_test_context_->io_data()->CreateProxyDelegate();
     context_.set_proxy_delegate(proxy_delegate_.get());
+
+    // Only use the primary data reduction proxy in order to make it easier to
+    // test bypassed bytes due to proxy fallbacks. This way, a test just needs
+    // to cause one proxy fallback in order for the data reduction proxy to be
+    // fully bypassed.
+    std::vector<DataReductionProxyServer> data_reduction_proxy_servers;
+    data_reduction_proxy_servers.push_back(DataReductionProxyServer(
+        net::ProxyServer::FromURI(config()->test_params()->DefaultOrigin(),
+                                  net::ProxyServer::SCHEME_HTTP),
+        ProxyServer::CORE));
+    config()->test_params()->SetProxiesForHttp(data_reduction_proxy_servers);
   }
 
   // Create and execute a fake request using the data reduction proxy stack.
@@ -284,7 +292,12 @@ class DataReductionProxyBypassStatsEndToEndTest : public testing::Test {
                                                         finish_code);
     if (url.SchemeIsCryptographic() ||
         (!config()->test_params()->proxies_for_http().empty() &&
-         config()->test_params()->proxies_for_http().front().is_https())) {
+         config()
+             ->test_params()
+             ->proxies_for_http()
+             .front()
+             .proxy_server()
+             .is_https())) {
       mock_socket_factory_.AddSSLSocketDataProvider(&ssl_socket_data_provider);
     }
 
@@ -697,7 +710,8 @@ TEST_F(DataReductionProxyBypassStatsEndToEndTest,
 
 TEST_F(DataReductionProxyBypassStatsEndToEndTest, BypassedBytesNetErrorOther) {
   // Make the data reduction proxy host fail to resolve.
-  net::ProxyServer origin = config()->test_params()->proxies_for_http().front();
+  net::ProxyServer origin =
+      config()->test_params()->proxies_for_http().front().proxy_server();
   std::unique_ptr<net::MockHostResolver> host_resolver(
       new net::MockHostResolver());
   host_resolver->rules()->AddSimulatedFailure(origin.host_port_pair().host());
@@ -966,9 +980,10 @@ TEST_F(DataReductionProxyBypassStatsEndToEndTest, HttpProxyScheme) {
 TEST_F(DataReductionProxyBypassStatsEndToEndTest, HttpsProxyScheme) {
   net::ProxyServer origin =
       net::ProxyServer::FromURI("test.com:443", net::ProxyServer::SCHEME_HTTPS);
-  std::vector<net::ProxyServer> proxies_for_http;
-  proxies_for_http.push_back(origin);
-  config()->test_params()->SetProxiesForHttp(proxies_for_http);
+  std::vector<DataReductionProxyServer> data_reduction_proxy_servers;
+  data_reduction_proxy_servers.push_back(
+      DataReductionProxyServer(origin, ProxyServer::UNSPECIFIED_TYPE));
+  config()->test_params()->SetProxiesForHttp(data_reduction_proxy_servers);
 
   InitializeContext();
 

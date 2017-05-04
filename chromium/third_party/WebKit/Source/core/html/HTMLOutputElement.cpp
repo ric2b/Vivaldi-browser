@@ -30,23 +30,21 @@
 
 #include "core/html/HTMLOutputElement.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 
 namespace blink {
 
-inline HTMLOutputElement::HTMLOutputElement(Document& document,
-                                            HTMLFormElement* form)
-    : HTMLFormControlElement(HTMLNames::outputTag, document, form),
+inline HTMLOutputElement::HTMLOutputElement(Document& document)
+    : HTMLFormControlElement(HTMLNames::outputTag, document),
       m_isDefaultValueMode(true),
       m_defaultValue(""),
       m_tokens(DOMTokenList::create(this)) {}
 
 HTMLOutputElement::~HTMLOutputElement() {}
 
-HTMLOutputElement* HTMLOutputElement::create(Document& document,
-                                             HTMLFormElement* form) {
-  return new HTMLOutputElement(document, form);
+HTMLOutputElement* HTMLOutputElement::create(Document& document) {
+  return new HTMLOutputElement(document);
 }
 
 const AtomicString& HTMLOutputElement::formControlType() const {
@@ -66,13 +64,12 @@ bool HTMLOutputElement::supportsFocus() const {
   return HTMLElement::supportsFocus();
 }
 
-void HTMLOutputElement::parseAttribute(const QualifiedName& name,
-                                       const AtomicString& oldValue,
-                                       const AtomicString& value) {
-  if (name == HTMLNames::forAttr)
-    setFor(value);
+void HTMLOutputElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  if (params.name == HTMLNames::forAttr)
+    setFor(params.newValue);
   else
-    HTMLFormControlElement::parseAttribute(name, oldValue, value);
+    HTMLFormControlElement::parseAttribute(params);
 }
 
 DOMTokenList* HTMLOutputElement::htmlFor() const {

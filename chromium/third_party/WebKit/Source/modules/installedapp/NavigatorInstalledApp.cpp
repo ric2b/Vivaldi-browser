@@ -22,8 +22,8 @@
 
 namespace blink {
 
-NavigatorInstalledApp::NavigatorInstalledApp(LocalFrame* frame)
-    : DOMWindowProperty(frame) {}
+NavigatorInstalledApp::NavigatorInstalledApp(Navigator& navigator)
+    : Supplement<Navigator>(navigator) {}
 
 NavigatorInstalledApp* NavigatorInstalledApp::from(Document& document) {
   if (!document.frame() || !document.frame()->domWindow())
@@ -36,7 +36,7 @@ NavigatorInstalledApp& NavigatorInstalledApp::from(Navigator& navigator) {
   NavigatorInstalledApp* supplement = static_cast<NavigatorInstalledApp*>(
       Supplement<Navigator>::from(navigator, supplementName()));
   if (!supplement) {
-    supplement = new NavigatorInstalledApp(navigator.frame());
+    supplement = new NavigatorInstalledApp(navigator);
     provideTo(navigator, supplementName(), supplement);
   }
   return *supplement;
@@ -60,7 +60,7 @@ class RelatedAppArray {
       const WebVector<WebRelatedApplication>& webInfo) {
     HeapVector<Member<RelatedApplication>> applications;
     for (const auto& webApplication : webInfo)
-      applications.append(RelatedApplication::create(
+      applications.push_back(RelatedApplication::create(
           webApplication.platform, webApplication.url, webApplication.id));
     return applications;
   }
@@ -71,28 +71,27 @@ ScriptPromise NavigatorInstalledApp::getInstalledRelatedApps(
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   ScriptPromise promise = resolver->promise();
 
-  // Don't crash when called and unattached to document.
-  Document* document = frame() ? frame()->document() : 0;
-
-  if (!document || !controller()) {
+  InstalledAppController* appController = controller();
+  if (!appController) {  // If the associated frame is detached
     DOMException* exception = DOMException::create(
         InvalidStateError, "The object is no longer associated to a document.");
     resolver->reject(exception);
     return promise;
   }
 
-  controller()->getInstalledApps(
+  appController->getInstalledApps(
       WebSecurityOrigin(
           scriptState->getExecutionContext()->getSecurityOrigin()),
-      wrapUnique(new CallbackPromiseAdapter<RelatedAppArray, void>(resolver)));
+      WTF::wrapUnique(
+          new CallbackPromiseAdapter<RelatedAppArray, void>(resolver)));
   return promise;
 }
 
 InstalledAppController* NavigatorInstalledApp::controller() {
-  if (!frame())
+  if (!supplementable()->frame())
     return nullptr;
 
-  return InstalledAppController::from(*frame());
+  return InstalledAppController::from(*supplementable()->frame());
 }
 
 const char* NavigatorInstalledApp::supplementName() {
@@ -101,7 +100,6 @@ const char* NavigatorInstalledApp::supplementName() {
 
 DEFINE_TRACE(NavigatorInstalledApp) {
   Supplement<Navigator>::trace(visitor);
-  DOMWindowProperty::trace(visitor);
 }
 
 }  // namespace blink

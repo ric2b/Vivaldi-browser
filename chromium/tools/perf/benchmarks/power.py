@@ -34,9 +34,14 @@ class PowerTypical10Mobile(perf_benchmark.PerfBenchmark):
     options.full_performance_mode = False
 
   @classmethod
-  def ShouldDisable(cls, possible_browser):  # http://crbug.com/597656
-    return (possible_browser.browser_type == 'reference' and
-            possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')
+  def ShouldDisable(cls, possible_browser):
+    # http://crbug.com/597656
+    if (possible_browser.browser_type == 'reference' and
+        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'):
+      return True
+
+    # crbug.com/671631
+    return possible_browser.platform.GetDeviceTypeName() == 'Nexus 9'
 
   @classmethod
   def Name(cls):
@@ -97,10 +102,18 @@ class PowerGpuRasterizationTypical10Mobile(perf_benchmark.PerfBenchmark):
 
   @classmethod
   def ShouldDisable(cls, possible_browser):
-     # http://crbug.com/563968, http://crbug.com/593973
-    return (cls.IsSvelte(possible_browser) or
-      (possible_browser.browser_type ==  'reference' and
-       possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'))
+    # http://crbug.com/563968
+    if cls.IsSvelte(possible_browser):
+      return True
+
+
+    # http://crbug.com/593973
+    if (possible_browser.browser_type ==  'reference' and
+        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'):
+      return True
+
+    # http://crbug.com/671631
+    return possible_browser.platform.GetDeviceTypeName() == 'Nexus 9'
 
 
 @benchmark.Enabled('mac')

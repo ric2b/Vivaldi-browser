@@ -185,19 +185,22 @@ class CSSCalcPrimitiveValue final : public CSSCalcExpressionNode {
       float multiplier) const override {
     switch (m_category) {
       case CalcLength:
-        value.pixels +=
-            m_value->computeLength<float>(conversionData) * multiplier;
+        value.pixels = clampTo<float>(
+            value.pixels +
+            m_value->computeLength<double>(conversionData) * multiplier);
         break;
       case CalcPercent:
         ASSERT(m_value->isPercentage());
-        value.percent += m_value->getDoubleValue() * multiplier;
+        value.percent = clampTo<float>(value.percent +
+                                       m_value->getDoubleValue() * multiplier);
         break;
       case CalcNumber:
         // TODO(alancutter): Stop treating numbers like pixels unconditionally
         // in calcs to be able to accomodate border-image-width
         // https://drafts.csswg.org/css-backgrounds-3/#the-border-image-width
-        value.pixels +=
-            m_value->getDoubleValue() * conversionData.zoom() * multiplier;
+        value.pixels = clampTo<float>(value.pixels +
+                                      m_value->getDoubleValue() *
+                                          conversionData.zoom() * multiplier);
         break;
       default:
         ASSERT_NOT_REACHED();
@@ -251,6 +254,20 @@ class CSSCalcPrimitiveValue final : public CSSCalcExpressionNode {
   Type getType() const override { return CssCalcPrimitiveValue; }
   CSSPrimitiveValue::UnitType typeWithCalcResolved() const override {
     return m_value->typeWithCalcResolved();
+  }
+  const CSSCalcExpressionNode* leftExpressionNode() const {
+    NOTREACHED();
+    return nullptr;
+  }
+
+  const CSSCalcExpressionNode* rightExpressionNode() const {
+    NOTREACHED();
+    return nullptr;
+  }
+
+  CalcOperator operatorType() const {
+    NOTREACHED();
+    return CalcAdd;
   }
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
@@ -396,14 +413,14 @@ class CSSCalcBinaryOperation final : public CSSCalcExpressionNode {
                 CSSPrimitiveValue::canonicalUnitTypeForCategory(
                     leftUnitCategory);
             if (canonicalType != CSSPrimitiveValue::UnitType::Unknown) {
-              double leftValue =
+              double leftValue = clampTo<double>(
                   leftSide->doubleValue() *
                   CSSPrimitiveValue::conversionToCanonicalUnitsScaleFactor(
-                      leftType);
-              double rightValue =
+                      leftType));
+              double rightValue = clampTo<double>(
                   rightSide->doubleValue() *
                   CSSPrimitiveValue::conversionToCanonicalUnitsScaleFactor(
-                      rightType);
+                      rightType));
               return CSSCalcPrimitiveValue::create(
                   evaluateOperator(leftValue, rightValue, op), canonicalType,
                   isInteger);
@@ -551,6 +568,13 @@ class CSSCalcBinaryOperation final : public CSSCalcExpressionNode {
   }
 
   Type getType() const override { return CssCalcBinaryOperation; }
+  const CSSCalcExpressionNode* leftExpressionNode() const { return m_leftSide; }
+
+  const CSSCalcExpressionNode* rightExpressionNode() const {
+    return m_rightSide;
+  }
+
+  CalcOperator operatorType() const { return m_operator; }
 
   CSSPrimitiveValue::UnitType typeWithCalcResolved() const override {
     switch (m_category) {
@@ -623,14 +647,14 @@ class CSSCalcBinaryOperation final : public CSSCalcExpressionNode {
                                  CalcOperator op) {
     switch (op) {
       case CalcAdd:
-        return leftValue + rightValue;
+        return clampTo<double>(leftValue + rightValue);
       case CalcSubtract:
-        return leftValue - rightValue;
+        return clampTo<double>(leftValue - rightValue);
       case CalcMultiply:
-        return leftValue * rightValue;
+        return clampTo<double>(leftValue * rightValue);
       case CalcDivide:
         if (rightValue)
-          return leftValue / rightValue;
+          return clampTo<double>(leftValue / rightValue);
         return std::numeric_limits<double>::quiet_NaN();
     }
     return 0;

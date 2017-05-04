@@ -5,7 +5,6 @@
 #include "base/memory/ptr_util.h"
 #include "cc/debug/lap_timer.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/output/delegated_frame_data.h"
 #include "cc/quads/surface_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/surfaces/surface_aggregator.h"
@@ -22,7 +21,6 @@
 namespace cc {
 namespace {
 
-static constexpr FrameSinkId kArbitraryFrameSinkId(1, 1);
 static const base::UnguessableToken kArbitraryToken =
     base::UnguessableToken::Create();
 
@@ -34,8 +32,7 @@ class EmptySurfaceFactoryClient : public SurfaceFactoryClient {
 
 class SurfaceAggregatorPerfTest : public testing::Test {
  public:
-  SurfaceAggregatorPerfTest()
-      : factory_(kArbitraryFrameSinkId, &manager_, &empty_client_) {
+  SurfaceAggregatorPerfTest() {
     context_provider_ = TestContextProvider::Create();
     context_provider_->BindToCurrentThread();
     shared_bitmap_manager_.reset(new TestSharedBitmapManager);
@@ -50,20 +47,23 @@ class SurfaceAggregatorPerfTest : public testing::Test {
                bool optimize_damage,
                bool full_damage,
                const std::string& name) {
+    std::vector<std::unique_ptr<SurfaceFactory>> child_factories(num_surfaces);
+    for (int i = 0; i < num_surfaces; i++)
+      child_factories[i].reset(
+          new SurfaceFactory(FrameSinkId(1, i + 1), &manager_, &empty_client_));
     aggregator_.reset(new SurfaceAggregator(&manager_, resource_provider_.get(),
                                             optimize_damage));
-    for (int i = 1; i <= num_surfaces; i++) {
-      LocalFrameId local_frame_id(i, kArbitraryToken);
-      factory_.Create(local_frame_id);
+    for (int i = 0; i < num_surfaces; i++) {
+      LocalFrameId local_frame_id(i + 1, kArbitraryToken);
       std::unique_ptr<RenderPass> pass(RenderPass::Create());
-      std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
+      CompositorFrame frame;
 
       SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
       for (int j = 0; j < num_textures; j++) {
         TransferableResource resource;
         resource.id = j;
         resource.is_software = true;
-        frame_data->resource_list.push_back(resource);
+        frame.resource_list.push_back(resource);
 
         TextureDrawQuad* quad =
             pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
@@ -87,33 +87,32 @@ class SurfaceAggregatorPerfTest : public testing::Test {
       }
       sqs = pass->CreateAndAppendSharedQuadState();
       sqs->opacity = opacity;
-      if (i > 1) {
+      if (i >= 1) {
         SurfaceDrawQuad* surface_quad =
             pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
-        surface_quad->SetNew(sqs, gfx::Rect(0, 0, 1, 1), gfx::Rect(0, 0, 1, 1),
-                             SurfaceId(kArbitraryFrameSinkId,
-                                       LocalFrameId(i - 1, kArbitraryToken)));
+        surface_quad->SetNew(
+            sqs, gfx::Rect(0, 0, 1, 1), gfx::Rect(0, 0, 1, 1),
+            SurfaceId(FrameSinkId(1, i), LocalFrameId(i, kArbitraryToken)));
       }
 
-      frame_data->render_pass_list.push_back(std::move(pass));
-      CompositorFrame frame;
-      frame.delegated_frame_data = std::move(frame_data);
-      factory_.SubmitCompositorFrame(local_frame_id, std::move(frame),
-                                     SurfaceFactory::DrawCallback());
+      frame.render_pass_list.push_back(std::move(pass));
+      child_factories[i]->SubmitCompositorFrame(
+          local_frame_id, std::move(frame), SurfaceFactory::DrawCallback());
     }
 
-    factory_.Create(LocalFrameId(num_surfaces + 1, kArbitraryToken));
+    SurfaceFactory root_factory(FrameSinkId(1, num_surfaces + 1), &manager_,
+                                &empty_client_);
     timer_.Reset();
     do {
       std::unique_ptr<RenderPass> pass(RenderPass::Create());
-      std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
+      CompositorFrame frame;
 
       SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
       SurfaceDrawQuad* surface_quad =
           pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
       surface_quad->SetNew(
           sqs, gfx::Rect(0, 0, 100, 100), gfx::Rect(0, 0, 100, 100),
-          SurfaceId(kArbitraryFrameSinkId,
+          SurfaceId(FrameSinkId(1, num_surfaces),
                     LocalFrameId(num_surfaces, kArbitraryToken)));
 
       if (full_damage)
@@ -121,31 +120,28 @@ class SurfaceAggregatorPerfTest : public testing::Test {
       else
         pass->damage_rect = gfx::Rect(0, 0, 1, 1);
 
-      frame_data->render_pass_list.push_back(std::move(pass));
-      CompositorFrame frame;
-      frame.delegated_frame_data = std::move(frame_data);
-      factory_.SubmitCompositorFrame(
+      frame.render_pass_list.push_back(std::move(pass));
+
+      root_factory.SubmitCompositorFrame(
           LocalFrameId(num_surfaces + 1, kArbitraryToken), std::move(frame),
           SurfaceFactory::DrawCallback());
 
       CompositorFrame aggregated = aggregator_->Aggregate(
-          SurfaceId(kArbitraryFrameSinkId,
+          SurfaceId(FrameSinkId(1, num_surfaces + 1),
                     LocalFrameId(num_surfaces + 1, kArbitraryToken)));
       timer_.NextLap();
     } while (!timer_.HasTimeLimitExpired());
 
     perf_test::PrintResult("aggregator_speed", "", name, timer_.LapsPerSecond(),
                            "runs/s", true);
-
-    factory_.Destroy(LocalFrameId(num_surfaces + 1, kArbitraryToken));
-    for (int i = 1; i <= num_surfaces; i++)
-      factory_.Destroy(LocalFrameId(i, kArbitraryToken));
+    for (int i = 0; i < num_surfaces; i++)
+      child_factories[i]->EvictSurface();
+    root_factory.EvictSurface();
   }
 
  protected:
   SurfaceManager manager_;
   EmptySurfaceFactoryClient empty_client_;
-  SurfaceFactory factory_;
   scoped_refptr<TestContextProvider> context_provider_;
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
   std::unique_ptr<ResourceProvider> resource_provider_;

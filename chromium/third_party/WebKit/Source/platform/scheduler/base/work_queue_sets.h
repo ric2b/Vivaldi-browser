@@ -43,7 +43,7 @@ class BLINK_PLATFORM_EXPORT WorkQueueSets {
   void ChangeSetIndex(WorkQueue* queue, size_t set_index);
 
   // O(log num queues)
-  void OnPushQueue(WorkQueue* work_queue);
+  void OnTaskPushedToEmptyQueue(WorkQueue* work_queue);
 
   // If empty it's O(1) amortized, otherwise it's O(log num queues)
   // Assumes |work_queue| contains the lowest enqueue order in the set.
@@ -54,6 +54,12 @@ class BLINK_PLATFORM_EXPORT WorkQueueSets {
 
   // O(1)
   bool GetOldestQueueInSet(size_t set_index, WorkQueue** out_work_queue) const;
+
+  // O(1)
+  bool GetOldestQueueAndEnqueueOrderInSet(
+      size_t set_index,
+      WorkQueue** out_work_queue,
+      EnqueueOrder* out_enqueue_order) const;
 
   // O(1)
   bool IsSetEmpty(size_t set_index) const;
@@ -83,7 +89,7 @@ class BLINK_PLATFORM_EXPORT WorkQueueSets {
   // For each set |work_queue_heaps_| has a queue of WorkQueue ordered by the
   // oldest task in each WorkQueue.
   std::vector<IntrusiveHeap<OldestTaskEnqueueOrder>> work_queue_heaps_;
-  const char* name_;
+  const char* const name_;
 
   DISALLOW_COPY_AND_ASSIGN(WorkQueueSets);
 };

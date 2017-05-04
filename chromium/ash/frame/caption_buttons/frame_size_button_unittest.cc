@@ -8,6 +8,7 @@
 #include "ash/common/frame/caption_buttons/frame_caption_button.h"
 #include "ash/common/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/common/wm/window_state.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_state_aura.h"
@@ -18,7 +19,6 @@
 #include "ui/display/screen.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/events/test/event_generator.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -65,8 +65,7 @@ class TestWidgetDelegate : public views::WidgetDelegateView {
           GetAshLayoutSize(AshLayoutSize::NON_BROWSER_CAPTION_BUTTON));
       for (int icon = 0; icon < CAPTION_BUTTON_ICON_COUNT; ++icon) {
         caption_button_container_->SetButtonImage(
-            static_cast<CaptionButtonIcon>(icon),
-            gfx::VectorIconId::WINDOW_CONTROL_CLOSE);
+            static_cast<CaptionButtonIcon>(icon), kWindowControlCloseIcon);
       }
 
       AddChildView(caption_button_container_);
@@ -332,9 +331,9 @@ TEST_F(FrameSizeButtonTest, ResetButtonsAfterClick) {
   EXPECT_EQ(CAPTION_BUTTON_ICON_LEFT_SNAPPED, minimize_button()->icon());
   EXPECT_EQ(CAPTION_BUTTON_ICON_RIGHT_SNAPPED, close_button()->icon());
 
-  const gfx::Rect& kWorkAreaBoundsInScreen =
+  const gfx::Rect work_area_bounds_in_screen =
       display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
-  generator.MoveMouseTo(kWorkAreaBoundsInScreen.bottom_left());
+  generator.MoveMouseTo(work_area_bounds_in_screen.bottom_left());
 
   // None of the buttons should be pressed because we are really far away from
   // any of the caption buttons. The minimize and close button icons should
@@ -383,9 +382,9 @@ TEST_F(FrameSizeButtonTest, SizeButtonPressedWhenSnapButtonHovered) {
   // Moving the mouse far away from the caption buttons and then moving it over
   // the close button (snap right button) should hover the close button and
   // keep the size button pressed.
-  const gfx::Rect& kWorkAreaBoundsInScreen =
+  const gfx::Rect work_area_bounds_in_screen =
       display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
-  generator.MoveMouseTo(kWorkAreaBoundsInScreen.bottom_left());
+  generator.MoveMouseTo(work_area_bounds_in_screen.bottom_left());
   EXPECT_TRUE(AllButtonsInNormalState());
   generator.MoveMouseTo(CenterPointInScreen(close_button()));
   EXPECT_EQ(views::Button::STATE_NORMAL, minimize_button()->state());

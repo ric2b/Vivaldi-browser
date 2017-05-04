@@ -16,6 +16,8 @@
 
 namespace device {
 
+class VRServiceImpl;
+
 class VRDisplayImpl : public mojom::VRDisplay {
  public:
   VRDisplayImpl(device::VRDevice* device, VRServiceImpl* service);
@@ -24,6 +26,7 @@ class VRDisplayImpl : public mojom::VRDisplay {
   mojom::VRDisplayClient* client() { return client_.get(); }
 
  private:
+  friend class VRDisplayImplTest;
   friend class VRServiceImpl;
 
   void GetPose(const GetPoseCallback& callback) override;

@@ -58,6 +58,10 @@ Polymer({
         function(data) {
           this.browserProfiles_ = data;
           this.selected_ = this.browserProfiles_[0];
+
+          // Show the dialog only after the browser profiles data is populated
+          // to avoid UI flicker.
+          this.$.dialog.showModal();
         }.bind(this));
 
     this.addWebUIListener(
@@ -68,12 +72,10 @@ Polymer({
           if (this.hasImportStatus_(settings.ImportDataStatus.FAILED))
             this.closeDialog_();
         }.bind(this));
-
-    this.$.dialog.showModal();
   },
 
   /** @private */
-  prefsChanged_() {
+  prefsChanged_: function() {
     this.noImportDataTypeSelected_ =
         !(this.getPref('import_history').value && this.selected_.history) &&
         !(this.getPref('import_bookmarks').value && this.selected_.favorites) &&

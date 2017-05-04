@@ -26,7 +26,6 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ApplicationLifetime;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.firstrun.FirstRunGlueImpl;
 import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
@@ -54,7 +53,7 @@ public class FeatureUtilities {
     private static boolean sIsHerbFlavorCached;
 
     /** Used to track if cached command line flags should be refreshed. */
-    private static CommandLine.ResetListener sResetListener = null;
+    private static CommandLine.ResetListener sResetListener;
 
     /**
      * Determines whether or not the {@link RecognizerIntent#ACTION_WEB_SEARCH} {@link Intent}
@@ -188,7 +187,6 @@ public class FeatureUtilities {
      */
     public static void cacheNativeFlags() {
         cacheHerbFlavor();
-        DownloadUtils.cacheIsDownloadHomeEnabled();
         InstantAppsHandler.getInstance().cacheInstantAppsEnabled();
         ChromeWebApkHost.cacheEnabledStateForNextLaunch();
         cacheChromeHomeEnabled();

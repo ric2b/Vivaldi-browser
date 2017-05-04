@@ -52,6 +52,7 @@ extern const char kSyncTabs[];
 extern const char kSyncThemes[];
 extern const char kSyncTypedUrls[];
 extern const char kSyncWifiCredentials[];
+extern const char kSyncNotes[];
 
 extern const char kSyncManaged[];
 extern const char kSyncSuppressStart[];
@@ -78,6 +79,9 @@ extern const char kSyncLastRunVersion[];
 
 extern const char kSyncPassphraseEncryptionTransitionInProgress[];
 extern const char kSyncNigoriStateForPassphraseTransition[];
+
+extern const char kEnableLocalSyncBackend[];
+extern const char kLocalSyncBackendDir[];
 
 }  // namespace prefs
 

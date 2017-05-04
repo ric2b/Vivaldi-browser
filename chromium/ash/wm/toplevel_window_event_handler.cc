@@ -4,14 +4,17 @@
 
 #include "ash/wm/toplevel_window_event_handler.h"
 
-#include "ash/aura/wm_window_aura.h"
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm_window.h"
 #include "ash/shell.h"
+#include "ash/wm/window_state_aura.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/aura/window_tracker.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/hit_test.h"
@@ -32,14 +35,13 @@ void ToplevelWindowEventHandler::OnKeyEvent(ui::KeyEvent* event) {
 
 void ToplevelWindowEventHandler::OnMouseEvent(ui::MouseEvent* event) {
   aura::Window* target = static_cast<aura::Window*>(event->target());
-  wm_toplevel_window_event_handler_.OnMouseEvent(event,
-                                                 WmWindowAura::Get(target));
+  wm_toplevel_window_event_handler_.OnMouseEvent(event, WmWindow::Get(target));
 }
 
 void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
   aura::Window* target = static_cast<aura::Window*>(event->target());
   wm_toplevel_window_event_handler_.OnGestureEvent(event,
-                                                   WmWindowAura::Get(target));
+                                                   WmWindow::Get(target));
 }
 
 aura::client::WindowMoveResult ToplevelWindowEventHandler::RunMoveLoop(
@@ -75,7 +77,7 @@ aura::client::WindowMoveResult ToplevelWindowEventHandler::RunMoveLoop(
   wm::WmToplevelWindowEventHandler::DragResult result =
       wm::WmToplevelWindowEventHandler::DragResult::SUCCESS;
   if (!wm_toplevel_window_event_handler_.AttemptToStartDrag(
-          WmWindowAura::Get(source), drag_location, HTCAPTION, move_source,
+          WmWindow::Get(source), drag_location, HTCAPTION, move_source,
           base::Bind(&ToplevelWindowEventHandler::OnDragCompleted,
                      weak_factory_.GetWeakPtr(), &result, &run_loop))) {
     return aura::client::MOVE_CANCELED;
@@ -87,10 +89,21 @@ aura::client::WindowMoveResult ToplevelWindowEventHandler::RunMoveLoop(
   base::MessageLoop* loop = base::MessageLoop::current();
   base::MessageLoop::ScopedNestableTaskAllower allow_nested(loop);
 
+  // Disable window position auto management while dragging and restore it
+  // aftrewards.
+  wm::WindowState* window_state = wm::GetWindowState(source);
+  const bool window_position_managed = window_state->window_position_managed();
+  window_state->set_window_position_managed(false);
+  aura::WindowTracker tracker({source});
+
   run_loop.Run();
 
   if (!weak_ptr)
     return aura::client::MOVE_CANCELED;
+
+  // Make sure the window hasn't been deleted.
+  if (tracker.Contains(source))
+    window_state->set_window_position_managed(window_position_managed);
 
   in_move_loop_ = false;
   return result == wm::WmToplevelWindowEventHandler::DragResult::SUCCESS

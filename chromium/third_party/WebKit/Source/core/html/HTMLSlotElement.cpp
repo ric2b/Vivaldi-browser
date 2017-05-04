@@ -91,7 +91,7 @@ HTMLSlotElement::getDistributedNodesForBinding() {
     if (isHTMLSlotElement(child)) {
       child = NodeTraversal::next(*child, this);
     } else {
-      distributedNodes.append(child);
+      distributedNodes.push_back(child);
       child = NodeTraversal::nextSkippingChildren(*child, this);
     }
   }
@@ -106,7 +106,7 @@ const HeapVector<Member<Node>>& HTMLSlotElement::getDistributedNodes() {
 
 void HTMLSlotElement::appendAssignedNode(Node& hostChild) {
   DCHECK(hostChild.isSlotable());
-  m_assignedNodes.append(&hostChild);
+  m_assignedNodes.push_back(&hostChild);
 }
 
 void HTMLSlotElement::resolveDistributedNodes() {
@@ -124,7 +124,7 @@ void HTMLSlotElement::resolveDistributedNodes() {
 
 void HTMLSlotElement::appendDistributedNode(Node& node) {
   size_t size = m_distributedNodes.size();
-  m_distributedNodes.append(&node);
+  m_distributedNodes.push_back(&node);
   m_distributedIndices.set(&node, size);
 }
 
@@ -149,7 +149,6 @@ void HTMLSlotElement::saveAndClearDistribution() {
 }
 
 void HTMLSlotElement::dispatchSlotChangeEvent() {
-  m_slotchangeEventEnqueued = false;
   Event* event = Event::createBubble(EventTypeNames::slotchange);
   event->setTarget(this);
   dispatchScopedEvent(event);
@@ -199,18 +198,17 @@ void HTMLSlotElement::detachLayoutTree(const AttachContext& context) {
   HTMLElement::detachLayoutTree(context);
 }
 
-void HTMLSlotElement::attributeChanged(const QualifiedName& name,
-                                       const AtomicString& oldValue,
-                                       const AtomicString& newValue,
-                                       AttributeModificationReason reason) {
-  if (name == nameAttr) {
+void HTMLSlotElement::attributeChanged(
+    const AttributeModificationParams& params) {
+  if (params.name == nameAttr) {
     if (ShadowRoot* root = containingShadowRoot()) {
-      if (root->isV1() && oldValue != newValue)
-        root->ensureSlotAssignment().slotRenamed(normalizeSlotName(oldValue),
-                                                 *this);
+      if (root->isV1() && params.oldValue != params.newValue) {
+        root->slotAssignment().slotRenamed(normalizeSlotName(params.oldValue),
+                                           *this);
+      }
     }
   }
-  HTMLElement::attributeChanged(name, oldValue, newValue, reason);
+  HTMLElement::attributeChanged(params);
 }
 
 static bool wasInShadowTreeBeforeInserted(HTMLSlotElement& slot,
@@ -233,7 +231,7 @@ Node::InsertionNotificationRequest HTMLSlotElement::insertedInto(
     // - 6.4:  Run assign slotables for a tree with node's tree and a set
     // containing each inclusive descendant of node that is a slot.
     if (root->isV1() && !wasInShadowTreeBeforeInserted(*this, *insertionPoint))
-      root->ensureSlotAssignment().slotAdded(*this);
+      root->didAddSlot(*this);
   }
 
   // We could have been distributed into in a detached subtree, make sure to
@@ -273,7 +271,7 @@ void HTMLSlotElement::removedFrom(ContainerNode* insertionPoint) {
 
   if (root && root->isV1() && root == insertionPoint->treeScope().rootNode()) {
     // This slot was in a shadow tree and got disconnected from the shadow root.
-    root->ensureSlotAssignment().slotRemoved(*this);
+    root->slotAssignment().slotRemoved(*this);
   }
 
   HTMLElement::removedFrom(insertionPoint);
@@ -332,8 +330,7 @@ void HTMLSlotElement::didSlotChange(SlotChangeType slotChangeType) {
 void HTMLSlotElement::enqueueSlotChangeEvent() {
   if (m_slotchangeEventEnqueued)
     return;
-  Microtask::enqueueMicrotask(WTF::bind(
-      &HTMLSlotElement::dispatchSlotChangeEvent, wrapPersistent(this)));
+  MutationObserver::enqueueSlotChange(*this);
   m_slotchangeEventEnqueued = true;
 }
 
@@ -341,7 +338,7 @@ bool HTMLSlotElement::hasAssignedNodesSlow() const {
   ShadowRoot* root = containingShadowRoot();
   DCHECK(root);
   DCHECK(root->isV1());
-  SlotAssignment& assignment = root->ensureSlotAssignment();
+  SlotAssignment& assignment = root->slotAssignment();
   if (assignment.findSlotByName(name()) != this)
     return false;
   return assignment.findHostChildBySlotName(name());
@@ -351,7 +348,7 @@ bool HTMLSlotElement::findHostChildWithSameSlotName() const {
   ShadowRoot* root = containingShadowRoot();
   DCHECK(root);
   DCHECK(root->isV1());
-  SlotAssignment& assignment = root->ensureSlotAssignment();
+  SlotAssignment& assignment = root->slotAssignment();
   return assignment.findHostChildBySlotName(name());
 }
 

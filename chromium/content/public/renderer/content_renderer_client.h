@@ -12,9 +12,10 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/callback_forward.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "build/build_config.h"
 #include "content/public/common/content_client.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
@@ -28,7 +29,7 @@ class SkBitmap;
 
 namespace base {
 class FilePath;
-class SingleThreadTaskRunner;
+class SchedulerWorkerPoolParams;
 }
 
 namespace blink {
@@ -55,18 +56,12 @@ struct WebPluginParams;
 struct WebURLError;
 }
 
-namespace cc {
-class ImageSerializationProcessor;
-class RemoteCompositorBridge;
-}
-
 namespace gfx {
 class ICCProfile;
 }
 
 namespace media {
 class KeySystemProperties;
-class RendererFactory;
 }
 
 namespace service_manager {
@@ -76,7 +71,6 @@ class InterfaceRegistry;
 namespace content {
 class BrowserPluginDelegate;
 class MediaStreamRendererFactory;
-class RemoteProtoChannel;
 class RenderFrame;
 class RenderView;
 
@@ -213,7 +207,7 @@ class CONTENT_EXPORT ContentRendererClient {
   // ignored by WebKit. This method is used by CEF and android_webview.
   virtual bool HandleNavigation(RenderFrame* render_frame,
                                 bool is_content_initiated,
-                                int opener_id,
+                                bool render_view_was_created_by_renderer,
                                 blink::WebFrame* frame,
                                 const blink::WebURLRequest& request,
                                 blink::WebNavigationType type,
@@ -238,7 +232,7 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Notifies the embedder that the given frame is requesting the resource at
   // |url|.  If the function returns true, the url is changed to |new_url|.
-  virtual bool WillSendRequest(blink::WebFrame* frame,
+  virtual bool WillSendRequest(blink::WebLocalFrame* frame,
                                ui::PageTransition transition_type,
                                const blink::WebURL& url,
                                GURL* new_url);
@@ -267,17 +261,6 @@ class CONTENT_EXPORT ContentRendererClient {
   // Allows an embedder to provide a MediaStreamRendererFactory.
   virtual std::unique_ptr<MediaStreamRendererFactory>
   CreateMediaStreamRendererFactory();
-
-  // Allows an embedder to provide a cc::ImageSerializationProcessor.
-  virtual cc::ImageSerializationProcessor* GetImageSerializationProcessor();
-
-  // Allows an embedder to create the cc::RemoteCompositorBridge when using
-  // remote compositing.
-  // The |remote_proto_channel| outlives the RemoteCompositorBridge.
-  virtual std::unique_ptr<cc::RemoteCompositorBridge>
-  CreateRemoteCompositorBridge(
-      RemoteProtoChannel* remote_proto_channel,
-      scoped_refptr<base::SingleThreadTaskRunner> compositor_main_task_runner);
 
   // Allows an embedder to provide a default image decode color space.
   virtual std::unique_ptr<gfx::ICCProfile> GetImageDecodeColorProfile();
@@ -372,6 +355,13 @@ class CONTENT_EXPORT ContentRendererClient {
   // Overwrites the given URL to use an HTML5 embed if possible.
   // An empty URL is returned if the URL is not overriden.
   virtual GURL OverrideFlashEmbedWithHTML(const GURL& url);
+
+  // Provides parameters for initializing the global task scheduler. If
+  // |params_vector| is left empty, default parameters are used.
+  virtual void GetTaskSchedulerInitializationParams(
+      std::vector<base::SchedulerWorkerPoolParams>* params_vector,
+      base::TaskScheduler::WorkerPoolIndexForTraitsCallback*
+          index_to_traits_callback) {}
 };
 
 }  // namespace content

@@ -8,7 +8,8 @@
 
 namespace data_use_measurement {
 
-DataUseRecorder::DataUseRecorder() {}
+DataUseRecorder::DataUseRecorder()
+    : main_url_request_(nullptr), is_visible_(false) {}
 
 DataUseRecorder::~DataUseRecorder() {}
 
@@ -16,13 +17,19 @@ bool DataUseRecorder::IsDataUseComplete() {
   return pending_url_requests_.empty() && pending_data_sources_.empty();
 }
 
-void DataUseRecorder::OnBeforeUrlRequest(net::URLRequest* request) {
+void DataUseRecorder::AddPendingURLRequest(net::URLRequest* request) {
   pending_url_requests_.insert(request);
 }
 
 void DataUseRecorder::OnUrlRequestDestroyed(net::URLRequest* request) {
   pending_url_requests_.erase(request);
 }
+
+void DataUseRecorder::RemoveAllPendingURLRequests() {
+  pending_url_requests_.clear();
+}
+
+void DataUseRecorder::OnBeforeUrlRequest(net::URLRequest* request) {}
 
 void DataUseRecorder::OnNetworkBytesReceived(net::URLRequest* request,
                                              int64_t bytes_received) {
@@ -46,8 +53,12 @@ void DataUseRecorder::RemovePendingDataSource(void* source) {
   pending_data_sources_.erase(source);
 }
 
-bool DataUseRecorder::HasPendingURLRequest(const net::URLRequest* request) {
+bool DataUseRecorder::HasPendingURLRequest(net::URLRequest* request) {
   return pending_url_requests_.find(request) != pending_url_requests_.end();
+}
+
+void DataUseRecorder::MergeFrom(DataUseRecorder* other) {
+  data_use_.MergeFrom(other->data_use());
 }
 
 }  // namespace data_use_measurement

@@ -47,8 +47,6 @@ class ThreeDAPIInfoBarDelegate : public ConfirmInfoBarDelegate {
   base::string16 GetButtonLabel(InfoBarButton button) const override;
   bool Accept() override;
   bool Cancel() override;
-  base::string16 GetLinkText() const override;
-  GURL GetLinkURL() const override;
 
   GURL url_;
   content::ThreeDAPIType requester_;
@@ -148,18 +146,9 @@ bool ThreeDAPIInfoBarDelegate::Cancel() {
                             DISMISSAL_MAX);
   content::GpuDataManager::GetInstance()->UnblockDomainFrom3DAPIs(url_);
   InfoBarService::WebContentsFromInfoBar(infobar())->GetController().Reload(
-      true);
+      content::ReloadType::NORMAL, true);
   return true;
 }
-
-base::string16 ThreeDAPIInfoBarDelegate::GetLinkText() const {
-  return l10n_util::GetStringUTF16(IDS_LEARN_MORE);
-}
-
-GURL ThreeDAPIInfoBarDelegate::GetLinkURL() const {
-  return GURL("https://support.google.com/chrome/?p=ib_webgl");
-}
-
 
 // ThreeDAPIObserver ----------------------------------------------------------
 

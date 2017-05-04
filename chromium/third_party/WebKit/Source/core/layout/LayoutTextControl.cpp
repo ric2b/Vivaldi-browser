@@ -77,7 +77,7 @@ void LayoutTextControl::adjustInnerEditorStyle(
   // so we need to inherit the direction and unicode-bidi style from the
   // element.
   textBlockStyle.setDirection(style()->direction());
-  textBlockStyle.setUnicodeBidi(style()->unicodeBidi());
+  textBlockStyle.setUnicodeBidi(style()->getUnicodeBidi());
 
   updateUserModifyProperty(*textControlElement(), textBlockStyle);
 }
@@ -127,8 +127,8 @@ void LayoutTextControl::computeLogicalHeight(
 
     // We are able to have a horizontal scrollbar if the overflow style is
     // scroll, or if its auto and there's no word wrap.
-    if (style()->overflowInlineDirection() == OverflowScroll ||
-        (style()->overflowInlineDirection() == OverflowAuto &&
+    if (style()->overflowInlineDirection() == EOverflow::Scroll ||
+        (style()->overflowInlineDirection() == EOverflow::Auto &&
          innerEditor->layoutObject()->style()->overflowWrap() ==
              NormalOverflowWrap))
       logicalHeight += scrollbarThickness();
@@ -315,7 +315,7 @@ void LayoutTextControl::computePreferredLogicalWidths() {
 void LayoutTextControl::addOutlineRects(Vector<LayoutRect>& rects,
                                         const LayoutPoint& additionalOffset,
                                         IncludeBlockVisualOverflowOrNot) const {
-  rects.append(LayoutRect(additionalOffset, size()));
+  rects.push_back(LayoutRect(additionalOffset, size()));
 }
 
 LayoutObject* LayoutTextControl::layoutSpecialExcludedChild(

@@ -276,6 +276,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_DisabledMenuItemForegroundColor,
     kColorId_SelectedMenuItemForegroundColor,
     kColorId_FocusedMenuItemBackgroundColor,
+    kColorId_MenuItemSubtitleColor,
     kColorId_MenuSeparatorColor,
     kColorId_MenuBackgroundColor,
     kColorId_MenuBorderColor,
@@ -292,6 +293,8 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kColorId_LinkDisabled,
     kColorId_LinkEnabled,
     kColorId_LinkPressed,
+    // Separator
+    kColorId_SeparatorColor,
     // Textfield
     kColorId_TextfieldDefaultColor,
     kColorId_TextfieldDefaultBackground,

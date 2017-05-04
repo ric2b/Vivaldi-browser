@@ -18,14 +18,8 @@ const char NetworkModel::kContextKeyContinueButtonEnabled[] =
     "continue-button-enabled";
 
 NetworkModel::NetworkModel(BaseScreenDelegate* base_screen_delegate)
-    : BaseScreen(base_screen_delegate) {
-}
+    : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_OOBE_NETWORK) {}
 
-NetworkModel::~NetworkModel() {
-}
-
-std::string NetworkModel::GetName() const {
-  return WizardController::kNetworkScreenName;
-}
+NetworkModel::~NetworkModel() {}
 
 }  // namespace chromeos

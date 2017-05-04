@@ -14,6 +14,7 @@
 #include "public/platform/scheduler/renderer/render_widget_scheduling_state.h"
 #include "public/platform/WebCommon.h"
 #include "public/platform/WebInputEvent.h"
+#include "public/platform/WebInputEventResult.h"
 #include "public/platform/WebScheduler.h"
 #include "v8/include/v8.h"
 
@@ -28,7 +29,6 @@ struct BeginFrameArgs;
 }
 
 namespace blink {
-class WebLocalFrame;
 class WebThread;
 }
 
@@ -111,7 +111,8 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
   // Tells the scheduler that the system processed an input event. Must be
   // called from the main thread.
   virtual void DidHandleInputEventOnMainThread(
-      const WebInputEvent& web_input_event) = 0;
+      const WebInputEvent& web_input_event,
+      WebInputEventResult result) = 0;
 
   // Tells the scheduler that the system is displaying an input animation (e.g.
   // a fling). Called by the compositor (impl) thread.
@@ -185,6 +186,11 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
   // [1]
   // https://developers.google.com/web/tools/chrome-devtools/profile/evaluate-performance/rail
   virtual void SetRAILModeObserver(RAILModeObserver* observer) = 0;
+
+  // Returns whether or not the main thread appears unresponsive, based on the
+  // length and frequency of recent main thread tasks. To be called from the
+  // compositor thread.
+  virtual bool MainThreadSeemsUnresponsive() = 0;
 
  protected:
   RendererScheduler();

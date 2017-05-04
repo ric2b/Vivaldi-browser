@@ -14,30 +14,23 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/ntp_snippets/category.h"
-#include "components/ntp_snippets/category_factory.h"
 #include "components/ntp_snippets/category_status.h"
 #include "components/ntp_snippets/content_suggestion.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
-#include "components/offline_pages/offline_page_model.h"
+#include "components/offline_pages/core/offline_page_model.h"
 
 class PrefRegistrySimple;
 class PrefService;
 
-namespace gfx {
-class Image;
-}  // namespace gfx
-
 namespace ntp_snippets {
 
-// Provides recent tabs content suggestions from the offline pages model
-// obtaining the data through OfflinePageProxy.
+// Provides recent tabs content suggestions from the offline pages model.
 class RecentTabSuggestionsProvider
     : public ContentSuggestionsProvider,
       public offline_pages::OfflinePageModel::Observer {
  public:
   RecentTabSuggestionsProvider(
       ContentSuggestionsProvider::Observer* observer,
-      CategoryFactory* category_factory,
       offline_pages::OfflinePageModel* offline_page_model,
       PrefService* pref_service);
   ~RecentTabSuggestionsProvider() override;
@@ -72,7 +65,9 @@ class RecentTabSuggestionsProvider
 
   // OfflinePageModel::Observer implementation.
   void OfflinePageModelLoaded(offline_pages::OfflinePageModel* model) override;
-  void OfflinePageModelChanged(offline_pages::OfflinePageModel* model) override;
+  void OfflinePageAdded(
+      offline_pages::OfflinePageModel* model,
+      const offline_pages::OfflinePageItem& added_page) override;
   void OfflinePageDeleted(int64_t offline_id,
                           const offline_pages::ClientId& client_id) override;
 
@@ -91,15 +86,16 @@ class RecentTabSuggestionsProvider
   ContentSuggestion ConvertOfflinePage(
       const offline_pages::OfflinePageItem& offline_page) const;
 
-  // Gets the |kMaxSuggestionsCount| most recently visited OfflinePageItems from
-  // the list, orders them by last visit date and converts them to
-  // ContentSuggestions for the |provided_category_|.
-  std::vector<ContentSuggestion> GetMostRecentlyVisited(
+  // Removes duplicates for the same URL leaving only the most recently created
+  // items, returns at most |GetMaxSuggestionsCount()| ContentSuggestions
+  // corresponding to the remaining items, sorted by creation time (newer
+  // first).
+  std::vector<ContentSuggestion> GetMostRecentlyCreatedWithoutDuplicates(
       std::vector<const offline_pages::OfflinePageItem*> offline_page_items)
       const;
 
   // Fires the |OnSuggestionInvalidated| event for the suggestion corresponding
-  // to the given |offline_id| and clears it from the dismissed IDs list, if
+  // to the given |offline_id| and deletes it from the dismissed IDs list, if
   // necessary.
   void InvalidateSuggestion(int64_t offline_id);
 

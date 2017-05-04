@@ -5,7 +5,7 @@
 from gpu_tests import test_expectations
 
 ANGLE_CONDITIONS = ['d3d9', 'd3d11', 'opengl', 'no_angle']
-
+CMD_DECODER_CONDITIONS = ['passthrough', 'no_passthrough']
 GPU_CONDITIONS = ['amd', 'arm', 'broadcom', 'hisilicon', 'intel', 'imagination',
                   'nvidia', 'qualcomm', 'vivante']
 
@@ -15,6 +15,7 @@ class GpuExpectation(test_expectations.Expectation):
     self.gpu_conditions = []
     self.device_id_conditions = []
     self.angle_conditions = []
+    self.cmd_decoder_conditions = []
     self.max_num_retries = max_num_retries
     assert self.max_num_retries == 0 or expectation == 'flaky'
     super(GpuExpectation, self).__init__(
@@ -67,14 +68,17 @@ class GpuExpectation(test_expectations.Expectation):
         self.gpu_conditions.append(cl)
       elif cl in ANGLE_CONDITIONS:
         self.angle_conditions.append(cl)
+      elif cl in CMD_DECODER_CONDITIONS:
+        self.cmd_decoder_conditions.append(cl)
       else:
         # Delegate to superclass.
         super(GpuExpectation, self).ParseCondition(condition)
 
 
 class GpuTestExpectations(test_expectations.TestExpectations):
-  def __init__(self, url_prefixes=None):
-    super(GpuTestExpectations, self).__init__(url_prefixes=url_prefixes)
+  def __init__(self, url_prefixes=None, is_asan=False):
+    super(GpuTestExpectations, self).__init__(
+      url_prefixes=url_prefixes, is_asan=is_asan)
 
   def CreateExpectation(self, expectation, pattern, conditions=None,
                         bug=None):
@@ -85,15 +89,16 @@ class GpuTestExpectations(test_expectations.TestExpectations):
       'flaky', pattern, conditions=conditions, bug=bug,
       max_num_retries=max_num_retries))
 
-  def GetFlakyRetriesForPage(self, browser, page):
-    e = self._GetExpectationObjectForPage(browser, page)
+  def GetFlakyRetriesForTest(self, browser, test_url, test_name):
+    e = self._GetExpectationObjectForTest(browser, test_url, test_name)
     if e:
       return e.max_num_retries
     return 0
 
-  def ExpectationAppliesToPage(self, expectation, browser, page):
-    if not super(GpuTestExpectations, self).ExpectationAppliesToPage(
-        expectation, browser, page):
+  def _ExpectationAppliesToTest(
+      self, expectation, browser, test_url, test_name):
+    if not super(GpuTestExpectations, self)._ExpectationAppliesToTest(
+        expectation, browser, test_url, test_name):
       return False
 
     # We'll only get here if the OS and browser type matched the expectation.
@@ -112,8 +117,12 @@ class GpuTestExpectations(test_expectations.TestExpectations):
       angle_matches = (
         (not expectation.angle_conditions) or
         angle_renderer in expectation.angle_conditions)
+      cmd_decoder = self._GetCommandDecoder(gpu_info)
+      cmd_decoder_matches = (
+        (not expectation.cmd_decoder_conditions) or
+        cmd_decoder in expectation.cmd_decoder_conditions)
 
-    return gpu_matches and angle_matches
+    return gpu_matches and angle_matches and cmd_decoder_matches
 
   def _GetGpuVendorString(self, gpu_info):
     if gpu_info:
@@ -149,3 +158,9 @@ class GpuTestExpectations(test_expectations.TestExpectations):
         elif 'OpenGL' in gl_renderer:
           return 'opengl'
     return 'no_angle'
+
+  def _GetCommandDecoder(self, gpu_info):
+    if gpu_info and gpu_info.aux_attributes and \
+        gpu_info.aux_attributes.get('passthrough_cmd_decoder', False):
+      return 'passthrough'
+    return 'no_passthrough'

@@ -138,7 +138,7 @@ class Display : public PlatformDisplayDelegate,
 
   // mojom::WindowTreeHost:
   void SetSize(const gfx::Size& size) override;
-  void SetTitle(const mojo::String& title) override;
+  void SetTitle(const std::string& title) override;
 
   // Updates the size of display root ServerWindow and WM root ServerWindow(s).
   void OnViewportMetricsChanged(const display::ViewportMetrics& metrics);
@@ -164,7 +164,9 @@ class Display : public PlatformDisplayDelegate,
   void CreateRootWindow(const gfx::Size& size);
 
   // PlatformDisplayDelegate:
+  display::Display GetDisplay() override;
   ServerWindow* GetRootWindow() override;
+  ServerWindow* GetActiveRootWindow() override;
   void OnAcceleratedWidgetAvailable() override;
   bool IsInHighContrastMode() override;
   void OnEvent(const ui::Event& event) override;

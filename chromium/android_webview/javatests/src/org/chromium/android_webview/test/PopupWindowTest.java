@@ -4,7 +4,7 @@
 
 package org.chromium.android_webview.test;
 
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.test.util.CommonResources;
@@ -144,8 +144,7 @@ public class PopupWindowTest extends AwTestBase {
     }
 
     // Copied from imeTest.java.
-    private void assertWaitForSelectActionBarStatus(boolean show, final ContentViewCore cvc)
-            throws InterruptedException {
+    private void assertWaitForSelectActionBarStatus(boolean show, final ContentViewCore cvc) {
         CriteriaHelper.pollUiThread(Criteria.equals(show, new Callable<Boolean>() {
             @Override
             public Boolean call() {

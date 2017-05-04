@@ -59,12 +59,6 @@ bool IsValidInput(const base::StringPiece& scheme,
   if (!is_standard)
     return false;
 
-  // These schemes do not follow the generic URL syntax, so we treat them as
-  // invalid (scheme, host, port) tuples (even though such URLs' _Origin_ might
-  // have a (scheme, host, port) tuple, they themselves do not).
-  if (scheme == kFileSystemScheme || scheme == kBlobScheme)
-    return false;
-
   switch (scheme_type) {
     case SCHEME_WITH_PORT:
       // A URL with |scheme| is required to have the host and port (may be
@@ -116,24 +110,24 @@ bool IsValidInput(const base::StringPiece& scheme,
 SchemeHostPort::SchemeHostPort() : port_(0) {
 }
 
-SchemeHostPort::SchemeHostPort(base::StringPiece scheme,
-                               base::StringPiece host,
+SchemeHostPort::SchemeHostPort(std::string scheme,
+                               std::string host,
                                uint16_t port,
                                ConstructPolicy policy)
     : port_(0) {
   if (!IsValidInput(scheme, host, port, policy))
     return;
 
-  scheme.CopyToString(&scheme_);
-  host.CopyToString(&host_);
+  scheme_ = std::move(scheme);
+  host_ = std::move(host);
   port_ = port;
 }
 
 SchemeHostPort::SchemeHostPort(base::StringPiece scheme,
                                base::StringPiece host,
                                uint16_t port)
-    : SchemeHostPort(scheme,
-                     host,
+    : SchemeHostPort(scheme.as_string(),
+                     host.as_string(),
                      port,
                      ConstructPolicy::CHECK_CANONICALIZATION) {}
 
@@ -201,6 +195,9 @@ std::string SchemeHostPort::SerializeInternal(url::Parsed* parsed) const {
   std::string result;
   if (IsInvalid())
     return result;
+
+  // Reserve enough space for the "normal" case of scheme://host/.
+  result.reserve(scheme_.size() + host_.size() + 4);
 
   if (!scheme_.empty()) {
     parsed->scheme = Component(0, scheme_.length());

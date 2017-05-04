@@ -15,74 +15,113 @@
 #      'target_name': 'background_base',
 #      'includes': ['../../../compile_js2.gypi'],
 #    },
-#    {
-#      'target_name': 'device_handler',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'device_handler_unittest',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'drive_sync_handler',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'duplicate_finder',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'duplicate_finder_unittest',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'file_operation_handler',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'file_operation_handler_unittest',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'file_operation_manager',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'file_operation_manager_unittest',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'file_operation_util',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'import_history',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'import_history_unittest',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
+    {
+      'target_name': 'device_handler',
+      'dependencies': [
+        '../../common/js/compiled_resources2.gyp:async_util',
+        '../../common/js/compiled_resources2.gyp:importer_common',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+        '<(DEPTH)/ui/webui/resources/js/cr/compiled_resources2.gyp:event_target',
+        '<(EXTERNS_GYP):chrome_extensions',
+        '<(EXTERNS_GYP):file_manager_private',
+        'volume_manager_factory',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'drive_sync_handler',
+      'dependencies': [
+        '../../../externs/compiled_resources2.gyp:connection',
+        'progress_center',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'duplicate_finder',
+      'dependencies': [
+        '../../../externs/compiled_resources2.gyp:volume_manager',
+        '../../common/js/compiled_resources2.gyp:importer_common',
+        '../../common/js/compiled_resources2.gyp:lru_cache',
+        '../../common/js/compiled_resources2.gyp:metrics',
+        '<(DEPTH)/third_party/analytics/compiled_resources2.gyp:externs',
+        '<(EXTERNS_GYP):file_manager_private',
+        'import_history',
+        'volume_manager_factory',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'entry_location_impl',
+      'dependencies': [
+        '../../../externs/compiled_resources2.gyp:entry_location',
+        '../../common/js/compiled_resources2.gyp:volume_manager_common',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'file_operation_handler',
+      'dependencies': [
+        '../../common/js/compiled_resources2.gyp:progress_center_common',
+        'file_operation_manager',
+        'progress_center',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'file_operation_manager',
+      'dependencies': [
+        '../../../externs/compiled_resources2.gyp:volume_manager',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+        'file_operation_util',
+        'volume_manager_factory',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'file_operation_util',
+      'dependencies': [
+        '../../../externs/compiled_resources2.gyp:file_operation_progress_event',
+        '../../common/js/compiled_resources2.gyp:async_util',
+        '../../common/js/compiled_resources2.gyp:util',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'import_history',
+      'dependencies': [
+        '../../common/js/compiled_resources2.gyp:importer_common',
+        '../../common/js/compiled_resources2.gyp:metrics',
+        '../../common/js/compiled_resources2.gyp:metrics_events',
+        '../../common/js/compiled_resources2.gyp:util',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
 #    {
 #      'target_name': 'launcher_search',
 #      'includes': ['../../../compile_js2.gypi'],
 #    },
-#    {
-#      'target_name': 'media_import_handler',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'media_import_handler_unittest',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'media_scanner',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'media_scanner_unittest',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
+    {
+      'target_name': 'media_import_handler',
+      'dependencies': [
+        '../../common/js/compiled_resources2.gyp:importer_common',
+        '../../common/js/compiled_resources2.gyp:metrics',
+        'import_history',
+        'media_scanner',
+        'progress_center',
+        'task_queue',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'media_scanner',
+      'dependencies': [
+        '../../../externs/compiled_resources2.gyp:platform',
+        '../../common/js/compiled_resources2.gyp:importer_common',
+        '<(EXTERNS_GYP):file_manager_private',
+        'file_operation_util',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
 #    {
 #      'target_name': 'mock_background',
 #      'includes': ['../../../compile_js2.gypi'],
@@ -103,18 +142,25 @@
 #      'target_name': 'mock_volume_manager',
 #      'includes': ['../../../compile_js2.gypi'],
 #    },
-#    {
-#      'target_name': 'progress_center',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'task_queue',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'task_queue_unittest',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
+    {
+      'target_name': 'progress_center',
+      'dependencies': [
+        '../../../externs/compiled_resources2.gyp:progress_center_panel',
+        '../../common/js/compiled_resources2.gyp:async_util',
+        '../../common/js/compiled_resources2.gyp:progress_center_common',
+        '../../common/js/compiled_resources2.gyp:util',
+        '<(EXTERNS_GYP):chrome_extensions',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'task_queue',
+      'dependencies': [
+        '../../common/js/compiled_resources2.gyp:importer_common',
+        'duplicate_finder',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
 #    {
 #      'target_name': 'test_duplicate_finder',
 #      'includes': ['../../../compile_js2.gypi'],
@@ -131,13 +177,57 @@
 #      'target_name': 'test_util_base',
 #      'includes': ['../../../compile_js2.gypi'],
 #    },
-#    {
-#      'target_name': 'volume_manager',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
-#    {
-#      'target_name': 'volume_manager_unittest',
-#      'includes': ['../../../compile_js2.gypi'],
-#    },
+    {
+      'target_name': 'volume_info_impl',
+      'dependencies': [
+        '../../../externs/compiled_resources2.gyp:platform',
+        '../../../externs/compiled_resources2.gyp:volume_info',
+        '../../common/js/compiled_resources2.gyp:volume_manager_common',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'volume_info_list_impl',
+      'dependencies': [
+        '../../../externs/compiled_resources2.gyp:volume_info',
+        '../../../externs/compiled_resources2.gyp:volume_info_list',
+        '../../common/js/compiled_resources2.gyp:util',
+        './compiled_resources2.gyp:volume_info_impl',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+        '<(DEPTH)/ui/webui/resources/js/cr/compiled_resources2.gyp:ui',
+        '<(DEPTH)/ui/webui/resources/js/cr/ui/compiled_resources2.gyp:array_data_model',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'volume_manager_impl',
+      'dependencies': [
+        '../../../externs/compiled_resources2.gyp:volume_manager',
+        '../../common/js/compiled_resources2.gyp:async_util',
+        'entry_location_impl',
+        'volume_info_list_impl',
+        'volume_manager_util',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'volume_manager_factory',
+      'dependencies': [
+        '../../../externs/compiled_resources2.gyp:volume_manager',
+        'volume_manager_impl',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'volume_manager_util',
+      'dependencies': [
+        '../../common/js/compiled_resources2.gyp:metrics',
+        '../../common/js/compiled_resources2.gyp:metrics_events',
+        '../../common/js/compiled_resources2.gyp:util',
+        '../../common/js/compiled_resources2.gyp:volume_manager_common',
+        'volume_info_impl',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
   ],
 }

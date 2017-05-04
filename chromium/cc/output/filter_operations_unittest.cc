@@ -39,6 +39,14 @@ TEST(FilterOperationsTest, MapRectBlur) {
             ops.MapRect(gfx::Rect(0, -10, 10, 10), SkMatrix::MakeScale(1, -1)));
 }
 
+TEST(FilterOperationsTest, MapRectBlurOverflow) {
+  // Passes if float-cast-overflow does not occur in ubsan builds.
+  // The blur spread exceeds INT_MAX.
+  FilterOperations ops;
+  ops.Append(FilterOperation::CreateBlurFilter(2e9f));
+  ops.MapRect(gfx::Rect(0, 0, 10, 10), SkMatrix::I());
+}
+
 TEST(FilterOperationsTest, MapRectReverseBlur) {
   FilterOperations ops;
   ops.Append(FilterOperation::CreateBlurFilter(20));
@@ -954,6 +962,17 @@ TEST(FilterOperationsTest, BlendRaggedSequences) {
   EXPECT_EQ(to, blended);
   blended = to.Blend(from, 1.5);
   EXPECT_EQ(to, blended);
+}
+
+TEST(FilterOperationsTest, ToString) {
+  FilterOperations filters;
+  EXPECT_EQ(std::string("{\"FilterOperations\":[]}"), filters.ToString());
+
+  filters.Append(FilterOperation::CreateSaturateFilter(3.f));
+  filters.Append(FilterOperation::CreateBlurFilter(2.f));
+  EXPECT_EQ(std::string("{\"FilterOperations\":[{\"amount\":3.0,\"type\":2},"
+                        "{\"amount\":2.0,\"type\":8}]}"),
+            filters.ToString());
 }
 
 }  // namespace

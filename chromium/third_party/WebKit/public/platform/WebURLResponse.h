@@ -98,7 +98,7 @@ class WebURLResponse {
                        const WebString& issuer,
                        double validFrom,
                        double validTo,
-                       WebVector<WebString>& certificate,
+                       const WebVector<WebString>& certificate,
                        const SignedCertificateTimestampList& sctList)
         : protocol(protocol),
           keyExchange(keyExchange),
@@ -234,7 +234,8 @@ class WebURLResponse {
   BLINK_PLATFORM_EXPORT bool wasAlternateProtocolAvailable() const;
   BLINK_PLATFORM_EXPORT void setWasAlternateProtocolAvailable(bool);
 
-  // Flag whether this request was loaded via a ServiceWorker.
+  // Flag whether this request was loaded via a ServiceWorker. See
+  // ServiceWorkerResponseInfo::was_fetched_via_service_worker() for details.
   BLINK_PLATFORM_EXPORT bool wasFetchedViaServiceWorker() const;
   BLINK_PLATFORM_EXPORT void setWasFetchedViaServiceWorker(bool);
 
@@ -243,20 +244,27 @@ class WebURLResponse {
   BLINK_PLATFORM_EXPORT void setWasFetchedViaForeignFetch(bool);
 
   // Flag whether the fallback request with skip service worker flag was
-  // required.
+  // required. See ServiceWorkerResponseInfo::was_fallback_required() for
+  // details.
   BLINK_PLATFORM_EXPORT bool wasFallbackRequiredByServiceWorker() const;
   BLINK_PLATFORM_EXPORT void setWasFallbackRequiredByServiceWorker(bool);
 
-  // The type of the response which was fetched by the ServiceWorker.
+  // The type of the response which was served by the ServiceWorker.
   BLINK_PLATFORM_EXPORT WebServiceWorkerResponseType
   serviceWorkerResponseType() const;
   BLINK_PLATFORM_EXPORT void setServiceWorkerResponseType(
       WebServiceWorkerResponseType);
 
-  // The original URL of the response which was fetched by the ServiceWorker.
-  // This may be empty if the response was created inside the ServiceWorker.
+  // The URL list of the Response object the ServiceWorker passed to
+  // respondWith(). See ServiceWorkerResponseInfo::url_list_via_service_worker()
+  // for details.
+  BLINK_PLATFORM_EXPORT void setURLListViaServiceWorker(
+      const WebVector<WebURL>&);
+
+  // Returns the last URL of the URL list of the Response object the
+  // ServiceWorker passed to respondWith() if it did. Otherwise returns an empty
+  // URL.
   BLINK_PLATFORM_EXPORT WebURL originalURLViaServiceWorker() const;
-  BLINK_PLATFORM_EXPORT void setOriginalURLViaServiceWorker(const WebURL&);
 
   // The boundary of the response. Set only when this is a multipart response.
   BLINK_PLATFORM_EXPORT void setMultipartBoundary(const char* bytes,
@@ -268,10 +276,16 @@ class WebURLResponse {
   BLINK_PLATFORM_EXPORT void setCacheStorageCacheName(const WebString&);
 
   // The headers that should be exposed according to CORS. Only guaranteed
-  // to be set if the response was fetched by a ServiceWorker.
+  // to be set if the response was served by a ServiceWorker.
   BLINK_PLATFORM_EXPORT WebVector<WebString> corsExposedHeaderNames() const;
   BLINK_PLATFORM_EXPORT void setCorsExposedHeaderNames(
       const WebVector<WebString>&);
+
+  // Whether service worker navigation preload occurred.
+  // See ServiceWorkerResponseInfo::did_navigation_preload() for
+  // details.
+  BLINK_PLATFORM_EXPORT bool didServiceWorkerNavigationPreload() const;
+  BLINK_PLATFORM_EXPORT void setDidServiceWorkerNavigationPreload(bool);
 
   // This indicates the location of a downloaded response if the
   // WebURLRequest had the downloadToFile flag set to true. This file path
@@ -289,7 +303,7 @@ class WebURLResponse {
 
   // Original size of the response before decompression.
   BLINK_PLATFORM_EXPORT long long encodedDataLengthForTesting() const;
-  BLINK_PLATFORM_EXPORT void addToEncodedDataLength(long long);
+  BLINK_PLATFORM_EXPORT void setEncodedDataLength(long long);
 
   // Original size of the response body before decompression.
   BLINK_PLATFORM_EXPORT long long encodedBodyLengthForTesting() const;

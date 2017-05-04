@@ -6,7 +6,11 @@
 
 import datetime
 import logging
+
 from webkitpy.layout_tests.servers import server_base
+
+
+_log = logging.getLogger(__name__)
 
 
 class WPTServe(server_base.ServerBase):
@@ -32,7 +36,7 @@ class WPTServe(server_base.ServerBase):
         path_to_wpt_support = self._port_obj.path_from_webkit_base('Tools', 'Scripts', 'webkitpy', 'thirdparty', 'wpt')
         path_to_wpt_root = fs.join(path_to_wpt_support, 'wpt')
         path_to_wpt_config = fs.join(path_to_wpt_support, 'wpt.config.json')
-        path_to_wpt_tests = fs.abspath(fs.join(self._port_obj.layout_tests_dir(), 'imported', 'wpt'))
+        path_to_wpt_tests = fs.abspath(fs.join(self._port_obj.layout_tests_dir(), 'external', 'wpt'))
         path_to_ws_handlers = fs.join(path_to_wpt_tests, 'websockets', 'handlers')
         serve_script = fs.join(path_to_wpt_root, 'serve')
         start_cmd = [self._port_obj.host.executable,
@@ -49,7 +53,6 @@ class WPTServe(server_base.ServerBase):
         self._cwd = path_to_wpt_root
         self._env = port_obj.host.environ.copy()
         self._env.update({'PYTHONPATH': path_to_thirdparty})
-        self._keep_process_reference = True
         self._start_cmd = start_cmd
 
         expiration_date = datetime.date(2025, 1, 4)
@@ -60,18 +63,32 @@ class WPTServe(server_base.ServerBase):
                 % (expiration_date.strftime('%b %d %Y'), path_to_wpt_support))
 
     def _stop_running_server(self):
-        while self._pid and self._executive.check_running_pid(self._pid):
-            # TODO(burnik): Figure out a cleaner way of stopping wptserve.
-            if self._platform.is_win():
-                self._executive.kill_process(self._pid)
-            else:
-                self._executive.interrupt(self._pid)
-
-            # According to Popen.wait(), this can deadlock when using stdout=PIPE and/or stderr=PIPE.
-            # We're using DEVNULL for both so that should not occur.
-            if self._process is not None:
-                self._process.wait()
-
-        # Clean up the pid file.
+        self._wait_for_action(self._check_and_kill_wptserve)
         if self._filesystem.exists(self._pid_file):
             self._filesystem.remove(self._pid_file)
+
+    def _check_and_kill_wptserve(self):
+        """Tries to kill wptserve.
+
+        Returns True if it appears to be not running. Or, if it appears to be
+        running, tries to kill the process and returns False.
+        """
+        if not (self._pid and self._executive.check_running_pid(self._pid)):
+            _log.debug('pid %d is not running', self._pid)
+            return True
+
+        _log.debug('pid %d is running, killing it', self._pid)
+
+        # Executive.kill_process appears to not to effectively kill the
+        # wptserve processes on Linux (and presumably other platforms).
+        if self._platform.is_win():
+            self._executive.kill_process(self._pid)
+        else:
+            self._executive.interrupt(self._pid)
+
+        # According to Popen.wait(), this can deadlock when using stdout=PIPE or
+        # stderr=PIPE. We're using DEVNULL for both so that should not occur.
+        if self._process is not None:
+            self._process.wait()
+
+        return False

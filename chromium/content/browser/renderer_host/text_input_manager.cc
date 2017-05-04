@@ -15,7 +15,7 @@ namespace content {
 
 namespace {
 
-bool AreDifferentTextInputStates(const content::TextInputState& old_state,
+bool ShouldUpdateTextInputState(const content::TextInputState& old_state,
                                  const content::TextInputState& new_state) {
 #if defined(USE_AURA)
   return old_state.type != new_state.type || old_state.mode != new_state.mode ||
@@ -24,8 +24,11 @@ bool AreDifferentTextInputStates(const content::TextInputState& old_state,
 #elif defined(OS_MACOSX)
   return old_state.type != new_state.type ||
          old_state.can_compose_inline != new_state.can_compose_inline;
+#elif defined(OS_ANDROID)
+  // On Android, TextInputState update is sent only if there is some change in
+  // the state. So the new state is always different.
+  return true;
 #else
-  // TODO(ekaramad): Implement the logic for other platforms (crbug.com/578168).
   NOTREACHED();
   return true;
 #endif
@@ -100,13 +103,17 @@ void TextInputManager::UpdateTextInputState(
     // already synthesized the loss of TextInputState for the |view| before (see
     // below). So we can forget about this method ever being called (no observer
     // calls necessary).
+    // NOTE: Android requires state to be returned even when the current state
+    // is/becomes NONE. Otherwise IME may become irresponsive.
+#if !defined(OS_ANDROID)
     return;
+#endif
   }
 
   // Since |view| is registered, we already have a previous value for its
   // TextInputState.
-  bool changed = AreDifferentTextInputStates(text_input_state_map_[view],
-                                             text_input_state);
+  bool changed = ShouldUpdateTextInputState(text_input_state_map_[view],
+                                            text_input_state);
 
   text_input_state_map_[view] = text_input_state;
 
@@ -325,15 +332,16 @@ TextInputManager::TextSelection::~TextSelection() {}
 
 bool TextInputManager::TextSelection::GetSelectedText(
     base::string16* selected_text) const {
-  if (text.empty() || range.is_empty())
-    return false;
+  if (text.empty() || range.is_empty()) {
+    selected_text->clear();
+    return true;
+  }
 
   size_t pos = range.GetMin() - offset;
   size_t n = range.length();
   if (pos + n > text.length()) {
     LOG(WARNING) << "The text can not fully cover range (selection's end point "
                     "exceeds text length).";
-    return false;
   }
 
   if (pos >= text.length()) {

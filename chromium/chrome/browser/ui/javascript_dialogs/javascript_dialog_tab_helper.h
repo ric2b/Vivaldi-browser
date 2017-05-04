@@ -16,8 +16,6 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
-class JavaScriptDialogViews;
-
 // A class, attached to WebContentses in browser windows, that is the
 // JavaScriptDialogManager for them and handles displaying their dialogs.
 //
@@ -81,8 +79,7 @@ class JavaScriptDialogTabHelper
                       bool success,
                       const base::string16& user_input);
 
-  void CloseDialog(bool suppress_callback,
-                   bool success,
+  void CloseDialog(bool success,
                    const base::string16& user_input,
                    DismissalCause cause);
 

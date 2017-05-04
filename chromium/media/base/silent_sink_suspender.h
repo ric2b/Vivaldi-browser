@@ -47,9 +47,10 @@ class MEDIA_EXPORT SilentSinkSuspender
   ~SilentSinkSuspender() override;
 
   // AudioRendererSink::RenderCallback implementation.
-  int Render(AudioBus* dest,
-             uint32_t frames_delayed,
-             uint32_t frames_skipped) override;
+  int Render(base::TimeDelta delay,
+             base::TimeTicks delay_timestamp,
+             int prior_frames_skipped,
+             AudioBus* dest) override;
   void OnRenderError() override;
 
   bool is_using_fake_sink_for_testing() const { return is_using_fake_sink_; }
@@ -101,6 +102,14 @@ class MEDIA_EXPORT SilentSinkSuspender
   // after a period of silence or first non-silent audio respective. We do this
   // on Android to save battery consumption.
   base::CancelableCallback<void(bool)> sink_transition_callback_;
+
+  // Audio output delay at the moment when transition to |fake_sink_| starts.
+  base::TimeDelta latest_output_delay_;
+  // Audio output delay timestamp at the moment when transition to |fake_sink_|
+  // starts.
+  base::TimeTicks latest_output_delay_timestamp_;
+  // Time when transition to |fake_sink_| starts.
+  base::TimeTicks fake_sink_transition_time_;
 
   DISALLOW_COPY_AND_ASSIGN(SilentSinkSuspender);
 };

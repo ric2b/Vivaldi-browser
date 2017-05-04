@@ -14,177 +14,16 @@ namespace net {
 
 namespace {
 
-HashValue GetTestHashValue(uint8_t label, HashValueTag tag) {
-  HashValue hash_value(tag);
-  memset(hash_value.data(), label, hash_value.size());
-  return hash_value;
-}
-
-HashValueVector GetFakeHashValues() {
-  HashValueVector public_key_hashes;
-
-  // Fake "root" hash
-  public_key_hashes.push_back(GetTestHashValue(0x00, HASH_VALUE_SHA256));
-  public_key_hashes.push_back(GetTestHashValue(0x01, HASH_VALUE_SHA1));
-  // Fake "intermediate" hash
-  public_key_hashes.push_back(GetTestHashValue(0x02, HASH_VALUE_SHA256));
-  public_key_hashes.push_back(GetTestHashValue(0x03, HASH_VALUE_SHA1));
-  // Fake "leaf" hash
-  public_key_hashes.push_back(GetTestHashValue(0x04, HASH_VALUE_SHA256));
-  public_key_hashes.push_back(GetTestHashValue(0x05, HASH_VALUE_SHA1));
-
-  return public_key_hashes;
-}
-
-// The SHA-256 hash of the leaf cert "ok_cert.pem"; obtainable either
-// via X509Certificate::CalculateFingerprint256 or
-// openssl x509 -inform pem -in ok_cert.pem -outform der | openssl
-//   dgst -sha256 -c
-const uint8_t kWhitelistCerts[][crypto::kSHA256Length] = {
-    /* clang-format off */
-  { 0xf4, 0x42, 0xdd, 0x66, 0xfa, 0x10, 0x70, 0x65,
-    0xd1, 0x7e, 0xd9, 0xbb, 0x7c, 0xa9, 0x3c, 0x79,
-    0x63, 0xbe, 0x01, 0xa7, 0x54, 0x18, 0xab, 0x2f,
-    0xc3, 0x9a, 0x14, 0x53, 0xc3, 0x83, 0xa0, 0x5a },
-    /* clang-format on */
-};
-
-TEST(CertVerifyProcWhitelistTest, AcceptsWhitelistedEEByRoot) {
-  scoped_refptr<X509Certificate> cert =
-      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
-  ASSERT_TRUE(cert);
-
-  // clang-format off
-  const PublicKeyWhitelist kWhitelist[] = {
-      { { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        kWhitelistCerts, arraysize(kWhitelistCerts)
-      },
-  };
-  // clang-format on
-
-  SetCertificateWhitelistForTesting(kWhitelist, arraysize(kWhitelist));
-
-  HashValueVector public_key_hashes = GetFakeHashValues();
-
-  // Should return false, indicating this cert is acceptable because of
-  // it being whitelisted.
-  EXPECT_FALSE(IsNonWhitelistedCertificate(*cert, public_key_hashes));
-
-  SetCertificateWhitelistForTesting(nullptr, 0);
-}
-
-TEST(CertVerifyProcWhitelistTest, AcceptsWhitelistedEEByIntermediate) {
-  scoped_refptr<X509Certificate> cert =
-      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
-  ASSERT_TRUE(cert);
-
-  // clang-format off
-  const PublicKeyWhitelist kWhitelist[] = {
-      { { 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
-          0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
-          0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
-          0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02 },
-        kWhitelistCerts, arraysize(kWhitelistCerts)
-      },
-  };
-  // clang-format on
-
-  SetCertificateWhitelistForTesting(kWhitelist, arraysize(kWhitelist));
-
-  HashValueVector public_key_hashes = GetFakeHashValues();
-
-  // Should return false, indicating this cert is acceptable because of
-  // it being whitelisted.
-  EXPECT_FALSE(IsNonWhitelistedCertificate(*cert, public_key_hashes));
-
-  SetCertificateWhitelistForTesting(nullptr, 0);
-}
-
-TEST(CertVerifyProcWhitelistTest, RejectsNonWhitelistedEE) {
-  scoped_refptr<X509Certificate> cert =
-      ImportCertFromFile(GetTestCertsDirectory(), "expired_cert.pem");
-  ASSERT_TRUE(cert);
-
-  // clang-format off
-  const PublicKeyWhitelist kWhitelist[] = {
-      { { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        kWhitelistCerts, arraysize(kWhitelistCerts)
-      },
-  };
-  // clang-format on
-
-  SetCertificateWhitelistForTesting(kWhitelist, arraysize(kWhitelist));
-
-  HashValueVector public_key_hashes = GetFakeHashValues();
-
-  // Should return true, indicating this certificate chains to a constrained
-  // root and is not whitelisted.
-  EXPECT_TRUE(IsNonWhitelistedCertificate(*cert, public_key_hashes));
-
-  SetCertificateWhitelistForTesting(nullptr, 0);
-}
-
-TEST(CertVerifyProcWhitelistTest, RejectsNonWhitelistedEEByIntermediate) {
-  scoped_refptr<X509Certificate> cert =
-      ImportCertFromFile(GetTestCertsDirectory(), "expired_cert.pem");
-  ASSERT_TRUE(cert);
-
-  // clang-format off
-  const PublicKeyWhitelist kWhitelist[] = {
-      { { 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
-          0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
-          0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02,
-          0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02 },
-        kWhitelistCerts, arraysize(kWhitelistCerts)
-      },
-  };
-  // clang-format on
-
-  SetCertificateWhitelistForTesting(kWhitelist, arraysize(kWhitelist));
-
-  HashValueVector public_key_hashes = GetFakeHashValues();
-
-  // Should return true, indicating this certificate chains to a constrained
-  // root and is not whitelisted.
-  EXPECT_TRUE(IsNonWhitelistedCertificate(*cert, public_key_hashes));
-
-  SetCertificateWhitelistForTesting(nullptr, 0);
-}
-
-TEST(CertVerifyProcWhitelistTest, AcceptsUnconstrainedLeaf) {
-  scoped_refptr<X509Certificate> cert =
-      ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
-  ASSERT_TRUE(cert);
-
-  // clang-format off
-  const PublicKeyWhitelist kWhitelist[] = {
-      { { 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
-          0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
-          0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10,
-          0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10 },
-        kWhitelistCerts, arraysize(kWhitelistCerts)
-      },
-  };
-  // clang-format on
-
-  SetCertificateWhitelistForTesting(kWhitelist, arraysize(kWhitelist));
-
-  HashValueVector public_key_hashes = GetFakeHashValues();
-
-  // Should return false, because the chain (as indicated by
-  // public_key_hashes) is not constrained.
-  EXPECT_FALSE(IsNonWhitelistedCertificate(*cert, public_key_hashes));
-
-  SetCertificateWhitelistForTesting(nullptr, 0);
-}
+namespace test1 {
+#include "net/cert/cert_verify_proc_whitelist_unittest1-inc.cc"
+}  // namespace test
 
 TEST(CertVerifyProcWhitelistTest, HandlesWosignCerts) {
+  // The domain must be in the whitelist from
+  // //net/data/ssl/wosign/wosign_domains.gperf
+  const char kWhitelistedDomain[] = "005.tv";
+  const char kNonWhitelistedDomain[] = "006.tv";
+
   scoped_refptr<X509Certificate> cert =
       ImportCertFromFile(GetTestCertsDirectory(), "wosign_before_oct_21.pem");
   ASSERT_TRUE(cert);
@@ -195,12 +34,68 @@ TEST(CertVerifyProcWhitelistTest, HandlesWosignCerts) {
        0x95, 0xa5, 0x99, 0x68, 0xce, 0xf2, 0x34, 0x77, 0x37, 0x79, 0xdf,
        0x51, 0x81, 0xcf, 0x10, 0xfa, 0x64, 0x75, 0x34, 0xbb, 0x65}});
 
-  EXPECT_FALSE(IsNonWhitelistedCertificate(*cert, public_key_hashes));
+  // Domains on the whitelist are allowed, as long as their certificates were
+  // pre-existing before Oct 21, 2016.
+  EXPECT_FALSE(IsNonWhitelistedCertificate(*cert, public_key_hashes,
+                                           kWhitelistedDomain));
+  // Domains not on the whitelist are not allowed, regardless of the validity
+  // period of the certificate.
+  EXPECT_TRUE(IsNonWhitelistedCertificate(*cert, public_key_hashes,
+                                          kNonWhitelistedDomain));
 
   cert = ImportCertFromFile(GetTestCertsDirectory(), "wosign_after_oct_21.pem");
   ASSERT_TRUE(cert);
 
-  EXPECT_TRUE(IsNonWhitelistedCertificate(*cert, public_key_hashes));
+  // No new certificates (after Oct 21, 2016) are all allowed, regardless
+  // of the domain.
+  EXPECT_TRUE(IsNonWhitelistedCertificate(*cert, public_key_hashes,
+                                          kWhitelistedDomain));
+  EXPECT_TRUE(IsNonWhitelistedCertificate(*cert, public_key_hashes,
+                                          kNonWhitelistedDomain));
+
+  // Certificates that aren't issued by WoSign are allowed, regardless of
+  // domain.
+  public_key_hashes[0].data()[0] = 0x14;
+  EXPECT_FALSE(IsNonWhitelistedCertificate(*cert, public_key_hashes,
+                                           kWhitelistedDomain));
+  EXPECT_FALSE(IsNonWhitelistedCertificate(*cert, public_key_hashes,
+                                           kNonWhitelistedDomain));
+}
+
+TEST(CertVerifyProcWhitelistTest, IsWhitelistedHost) {
+  const unsigned char* graph = test1::kDafsa;
+  size_t graph_size = arraysize(test1::kDafsa);
+
+  // Test malformed inputs.
+  EXPECT_FALSE(IsWhitelistedHost(graph, graph_size, ""));
+  EXPECT_FALSE(IsWhitelistedHost(graph, graph_size, "."));
+  EXPECT_FALSE(IsWhitelistedHost(graph, graph_size, ".."));
+
+  // Make sure that TLDs aren't accepted just because a subdomain is.
+  EXPECT_FALSE(IsWhitelistedHost(graph, graph_size, "com"));
+
+  // Test various forms of domain names that GURL will accept for entries in
+  // the graph.
+  EXPECT_TRUE(IsWhitelistedHost(graph, graph_size, "example.com"));
+  EXPECT_TRUE(IsWhitelistedHost(graph, graph_size, "subdomain.example.com"));
+  EXPECT_TRUE(IsWhitelistedHost(graph, graph_size, ".subdomain.example.com"));
+  EXPECT_TRUE(IsWhitelistedHost(graph, graph_size, "example.com."));
+  EXPECT_TRUE(IsWhitelistedHost(graph, graph_size, ".example.com."));
+  EXPECT_TRUE(IsWhitelistedHost(graph, graph_size, "www.example.bar.jp"));
+
+  // Test various prefix/suffices of entries in the graph, but that aren't
+  // themselves domain matches.
+  EXPECT_FALSE(IsWhitelistedHost(graph, graph_size, "anotherexample.com"));
+  EXPECT_FALSE(IsWhitelistedHost(graph, graph_size, "bar.jp"));
+  EXPECT_FALSE(IsWhitelistedHost(graph, graph_size, "example.bar.jp.junk"));
+  EXPECT_FALSE(IsWhitelistedHost(graph, graph_size, "foo.example.bar.jp.junk"));
+
+  // Test various forms of domain names that GURL will accept for entries not
+  // in the graph.
+  EXPECT_FALSE(IsWhitelistedHost(graph, graph_size, "domain.com"));
+  EXPECT_FALSE(IsWhitelistedHost(graph, graph_size, "example..com"));
+  EXPECT_FALSE(IsWhitelistedHost(graph, graph_size, "www.co.uk"));
+  EXPECT_FALSE(IsWhitelistedHost(graph, graph_size, "www..co.uk"));
 }
 
 }  // namespace

@@ -138,15 +138,31 @@ base::FilePath FindDotFile(const base::FilePath& current_dir) {
   return FindDotFile(up_one_dir);
 }
 
+void ForwardItemDefinedToBuilderInMainThread(
+    Builder* builder_call_on_main_thread_only,
+    std::unique_ptr<Item> item) {
+  builder_call_on_main_thread_only->ItemDefined(std::move(item));
+
+  // Pair to the Increment in ItemDefinedCallback.
+  g_scheduler->DecrementWorkCount();
+}
+
 // Called on any thread. Post the item to the builder on the main thread.
 void ItemDefinedCallback(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     Builder* builder_call_on_main_thread_only,
     std::unique_ptr<Item> item) {
   DCHECK(item);
+
+  // Increment the work count for the duration of defining the item with the
+  // builder. Otherwise finishing this callback will race finishing loading
+  // files. If there is no other pending work at any point in the middle of
+  // this call completing on the main thread, the 'Complete' function will
+  // be signaled and we'll stop running with an incomplete build.
+  g_scheduler->IncrementWorkCount();
   task_runner->PostTask(
       FROM_HERE,
-      base::Bind(&Builder::ItemDefined,
+      base::Bind(&ForwardItemDefinedToBuilderInMainThread,
                  base::Unretained(builder_call_on_main_thread_only),
                  base::Passed(&item)));
 }
@@ -323,11 +339,11 @@ SourceFile Setup::GetBuildArgFile() const {
 }
 
 void Setup::RunPreMessageLoop() {
-  // Load the root build file.
-  loader_->Load(root_build_file_, LocationRange(), Label());
-
   // Will be decremented with the loader is drained.
   g_scheduler->IncrementWorkCount();
+
+  // Load the root build file.
+  loader_->Load(root_build_file_, LocationRange(), Label());
 }
 
 bool Setup::RunPostMessageLoop() {
@@ -694,41 +710,10 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline) {
   Err err;
 
   // <Vivaldi>
-  const Value* path_map =
-      dotfile_scope_.GetValue("path_map", true);
-  if (path_map) {
-    if (!path_map->VerifyTypeIs(Value::LIST, &err)) {
-      err.PrintToStdout();
-      return false;
-    }
-    for (auto &&it: path_map->list_value()) {
-      if (!it.VerifyTypeIs(Value::LIST, &err)) {
-        err.PrintToStdout();
-        return false;
-      }
-      if (it.list_value().size() <2){
-        Err(Location(), "Failed to set path map values").PrintToStdout();
-        return false;
-      }
-
-      const Value &prefix = it.list_value()[0];
-      const Value &actual = it.list_value()[1];
-      if (!prefix.VerifyTypeIs(Value::STRING, &err) ||
-          !actual.VerifyTypeIs(Value::STRING, &err)) {
-        err.PrintToStdout();
-        return false;
-      }
-      if(!build_settings_.RegisterPathMap(prefix.string_value(),
-                    actual.string_value())){
-        Err(Location(), "Failed to set path map values").PrintToStdout();
-        return false;
-      }
-    }
-    // May need to update the source path of the main gn file
-    root_build_file_ = SourceFile(
-            build_settings_.RemapActualToSourcePath(root_build_file_.value()),
-            root_build_file_.value());
-  }
+  // May need to update the source path of the main gn file
+  root_build_file_ = SourceFile(
+          build_settings_.RemapActualToSourcePath(root_build_file_.value()),
+          root_build_file_.value());
   // <Vivaldi>
 
   SourceDir current_dir(build_settings_.RemapActualToSourcePath("//"));

@@ -38,21 +38,21 @@ cr.define('cr.ui', function() {
     set dataModel(dataModel) {
       if (this.list_.dataModel != dataModel) {
         if (this.list_.dataModel) {
-          this.list_.dataModel.removeEventListener('sorted',
-                                                   this.boundHandleSorted_);
-          this.list_.dataModel.removeEventListener('change',
-                                                   this.boundHandleChangeList_);
-          this.list_.dataModel.removeEventListener('splice',
-                                                   this.boundHandleChangeList_);
+          this.list_.dataModel.removeEventListener(
+              'sorted', this.boundHandleSorted_);
+          this.list_.dataModel.removeEventListener(
+              'change', this.boundHandleChangeList_);
+          this.list_.dataModel.removeEventListener(
+              'splice', this.boundHandleChangeList_);
         }
         this.list_.dataModel = dataModel;
         if (this.list_.dataModel) {
-          this.list_.dataModel.addEventListener('sorted',
-                                                this.boundHandleSorted_);
-          this.list_.dataModel.addEventListener('change',
-                                                this.boundHandleChangeList_);
-          this.list_.dataModel.addEventListener('splice',
-                                                this.boundHandleChangeList_);
+          this.list_.dataModel.addEventListener(
+              'sorted', this.boundHandleSorted_);
+          this.list_.dataModel.addEventListener(
+              'change', this.boundHandleChangeList_);
+          this.list_.dataModel.addEventListener(
+              'splice', this.boundHandleChangeList_);
         }
         this.header_.redraw();
       }
@@ -342,10 +342,10 @@ cr.define('cr.ui', function() {
       dm.prepareSort(columnId, function() {
         // Select at most MAXIMUM_ROWS_TO_MEASURE items around visible area.
         var items = list.getItemsInViewPort(list.scrollTop, listHeight);
-        var firstIndex = Math.floor(Math.max(0,
-            (items.last + items.first - MAXIMUM_ROWS_TO_MEASURE) / 2));
-        var lastIndex = Math.min(dm.length,
-                                 firstIndex + MAXIMUM_ROWS_TO_MEASURE);
+        var firstIndex = Math.floor(Math.max(
+            0, (items.last + items.first - MAXIMUM_ROWS_TO_MEASURE) / 2));
+        var lastIndex =
+            Math.min(dm.length, firstIndex + MAXIMUM_ROWS_TO_MEASURE);
         for (var i = firstIndex; i < lastIndex; i++) {
           var item = dm.item(i);
           var div = doc.createElement('div');
@@ -373,7 +373,5 @@ cr.define('cr.ui', function() {
    */
   cr.defineProperty(Table, 'hasElementFocus', cr.PropertyKind.BOOL_ATTR);
 
-  return {
-    Table: Table
-  };
+  return {Table: Table};
 });

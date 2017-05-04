@@ -62,10 +62,8 @@ class NetworkScreen : public NetworkModel,
   static NetworkScreen* Get(ScreenManager* manager);
 
   // NetworkModel implementation:
-  void PrepareToShow() override;
   void Show() override;
   void Hide() override;
-  void Initialize(::login::ScreenContext* context) override;
   void OnViewDestroyed(NetworkView* view) override;
   void OnUserAction(const std::string& action_id) override;
   void OnContextKeyUpdated(const ::login::ScreenContext::KeyType& key) override;

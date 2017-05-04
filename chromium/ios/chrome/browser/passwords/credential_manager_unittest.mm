@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/mac/bind_objc_block.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -30,6 +29,10 @@
 #include "third_party/ocmock/OCMock/OCMock.h"
 #include "third_party/ocmock/gtest_support.h"
 #include "url/gurl.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 using testing::Return;
 
@@ -55,9 +58,13 @@ typedef void (^ResolvePromiseBlock)(NSInteger request_id,
 
 namespace {
 
+const char kTestURL[] = "https://foo.com/login";
+
 // Returns a test credential.
 autofill::PasswordForm GetTestPasswordForm1(bool zero_click_allowed) {
   autofill::PasswordForm form;
+  form.origin = GURL(kTestURL);
+  form.signon_realm = form.origin.spec();
   form.username_value = base::ASCIIToUTF16("foo");
   form.password_value = base::ASCIIToUTF16("bar");
   form.skip_zero_click = !zero_click_allowed;
@@ -78,6 +85,8 @@ web::Credential GetTestWebCredential1(bool zero_click_allowed) {
 // Returns a different test credential.
 autofill::PasswordForm GetTestPasswordForm2(bool zero_click_allowed) {
   autofill::PasswordForm form;
+  form.origin = GURL(kTestURL);
+  form.signon_realm = form.origin.spec();
   form.username_value = base::ASCIIToUTF16("baz");
   form.password_value = base::ASCIIToUTF16("bah");
   form.skip_zero_click = !zero_click_allowed;
@@ -99,9 +108,9 @@ typedef BOOL (^StringPredicate)(NSString*);
 // Returns a block that takes a string argument and returns whether it is equal
 // to |string|.
 StringPredicate EqualsString(const char* string) {
-  return [[^BOOL(NSString* other) {
+  return [^BOOL(NSString* other) {
     return [base::SysUTF8ToNSString(string) isEqualToString:other];
-  } copy] autorelease];
+  } copy];
 }
 
 // A stub PasswordManagerClient for testing.
@@ -185,11 +194,12 @@ class CredentialManagerTest : public web::WebTestWithWebState {
     web::WebTestWithWebState::SetUp();
     id originalMock =
         [OCMockObject niceMockForClass:[JSCredentialManager class]];
-    mock_js_credential_manager_.reset([[MockJSCredentialManager alloc]
-        initWithRepresentedObject:originalMock]);
-    credential_manager_.reset(new CredentialManager(
-        web_state(), &stub_client_, &stub_driver_,
-        static_cast<id>(mock_js_credential_manager_.get())));
+    mock_js_credential_manager_ = [[MockJSCredentialManager alloc]
+        initWithRepresentedObject:originalMock];
+    credential_manager_.reset(
+        new CredentialManager(web_state(), &stub_client_, &stub_driver_,
+                              static_cast<id>(mock_js_credential_manager_)));
+    LoadHtml(@"", GURL(kTestURL));
   }
 
   // Sets up an expectation that the promise identified by |request_id| will be
@@ -208,7 +218,13 @@ class CredentialManagerTest : public web::WebTestWithWebState {
         callBlockExpectation:^(NSInteger block_request_id,
                                const web::Credential& block_credential) {
           EXPECT_EQ(request_id, block_request_id);
-          EXPECT_TRUE(CredentialsEqual(strong_credential, block_credential));
+          EXPECT_EQ(strong_credential.type, block_credential.type);
+          EXPECT_EQ(strong_credential.id, block_credential.id);
+          EXPECT_EQ(strong_credential.name, block_credential.name);
+          EXPECT_EQ(strong_credential.avatar_url, block_credential.avatar_url);
+          EXPECT_EQ(strong_credential.password, block_credential.password);
+          EXPECT_EQ(strong_credential.federation_origin.Serialize(),
+                    block_credential.federation_origin.Serialize());
           *verified = true;
         }];
   }
@@ -250,7 +266,7 @@ class CredentialManagerTest : public web::WebTestWithWebState {
   password_manager::StubPasswordManagerDriver stub_driver_;
 
   // Mock for JSCredentialManager.
-  base::scoped_nsobject<MockJSCredentialManager> mock_js_credential_manager_;
+  MockJSCredentialManager* mock_js_credential_manager_;
 
   // CredentialManager for testing.
   std::unique_ptr<CredentialManager> credential_manager_;
@@ -271,8 +287,7 @@ TEST_F(CredentialManagerTest, RequestRejectedWhenPasswordStoreUnavailable) {
   ExpectPromiseRejected(request_id,
                         kCredentialsPasswordStoreUnavailableErrorType,
                         kCredentialsPasswordStoreUnavailableErrorMessage);
-  credential_manager_->CredentialsRequested(request_id,
-                                            GURL("http://foo.com/login"), false,
+  credential_manager_->CredentialsRequested(request_id, GURL(kTestURL), false,
                                             std::vector<std::string>(), true);
 
   // Pump the message loop and verify.
@@ -291,18 +306,18 @@ TEST_F(CredentialManagerTest, RequestRejectedWhenExistingRequestIsPending) {
   const int first_request_id = 0;
   bool first_verified = false;
   ExpectPromiseResolved(&first_verified, first_request_id, web::Credential());
-  credential_manager_->CredentialsRequested(first_request_id,
-                                            GURL("http://foo.com/login"), false,
-                                            std::vector<std::string>(), true);
+  credential_manager_->CredentialsRequested(first_request_id, GURL(kTestURL),
+                                            false, std::vector<std::string>(),
+                                            true);
 
   // Making a second request and then pumping the message loop should reject the
   // request with an error.
   const int second_request_id = 0;
   ExpectPromiseRejected(second_request_id, kCredentialsPendingRequestErrorType,
                         kCredentialsPendingRequestErrorMessage);
-  credential_manager_->CredentialsRequested(second_request_id,
-                                            GURL("http://foo.com/login"), false,
-                                            std::vector<std::string>(), true);
+  credential_manager_->CredentialsRequested(second_request_id, GURL(kTestURL),
+                                            false, std::vector<std::string>(),
+                                            true);
 
   // Pump the message loop and verify.
   WaitForBackgroundTasks();
@@ -328,8 +343,7 @@ TEST_F(CredentialManagerTest,
   bool verified = false;
   ExpectPromiseResolved(&verified, request_id, web::Credential());
   credential_manager_->CredentialsRequested(
-      request_id, GURL("http://foo.com/login"), zero_click,
-      std::vector<std::string>(), true);
+      request_id, GURL(kTestURL), zero_click, std::vector<std::string>(), true);
 
   // Pump the message loop and verify.
   WaitForBackgroundTasks();
@@ -355,8 +369,7 @@ TEST_F(CredentialManagerTest,
   bool verified = false;
   ExpectPromiseResolved(&verified, request_id, web::Credential());
   credential_manager_->CredentialsRequested(
-      request_id, GURL("http://foo.com/login"), zero_click,
-      std::vector<std::string>(), true);
+      request_id, GURL(kTestURL), zero_click, std::vector<std::string>(), true);
 
   // Pump the message loop and verify.
   WaitForBackgroundTasks();
@@ -390,8 +403,7 @@ TEST_F(CredentialManagerTest, ZeroClickRequestResolved) {
   ExpectPromiseResolved(&verified, request_id,
                         GetTestWebCredential1(zero_click));
   credential_manager_->CredentialsRequested(
-      request_id, GURL("http://foo.com/login"), zero_click,
-      std::vector<std::string>(), true);
+      request_id, GURL(kTestURL), zero_click, std::vector<std::string>(), true);
 
   // Pump the message loop and verify.
   WaitForBackgroundTasks();
@@ -421,8 +433,7 @@ TEST_F(CredentialManagerTest, DISABLED_RequestResolved) {
   ExpectPromiseResolved(&verified, request_id,
                         GetTestWebCredential2(zero_click));
   credential_manager_->CredentialsRequested(
-      request_id, GURL("http://foo.com/login"), zero_click,
-      std::vector<std::string>(), true);
+      request_id, GURL(kTestURL), zero_click, std::vector<std::string>(), true);
 
   // Pump the message loop and verify.
   WaitForBackgroundTasks();
@@ -450,9 +461,9 @@ TEST_F(CredentialManagerTest, DISABLED_ConsecutiveRequestsResolve) {
   bool first_verified = false;
   ExpectPromiseResolved(&first_verified, first_request_id,
                         GetTestWebCredential1(zero_click));
-  credential_manager_->CredentialsRequested(
-      first_request_id, GURL("http://foo.com/login"), zero_click,
-      std::vector<std::string>(), true);
+  credential_manager_->CredentialsRequested(first_request_id, GURL(kTestURL),
+                                            zero_click,
+                                            std::vector<std::string>(), true);
 
   // Pump the message loop and verify.
   WaitForBackgroundTasks();
@@ -465,9 +476,9 @@ TEST_F(CredentialManagerTest, DISABLED_ConsecutiveRequestsResolve) {
   bool second_verified = false;
   ExpectPromiseResolved(&second_verified, second_request_id,
                         GetTestWebCredential1(zero_click));
-  credential_manager_->CredentialsRequested(
-      second_request_id, GURL("http://foo.com/login"), zero_click,
-      std::vector<std::string>(), true);
+  credential_manager_->CredentialsRequested(second_request_id, GURL(kTestURL),
+                                            zero_click,
+                                            std::vector<std::string>(), true);
 
   // Pump the message loop and verify.
   WaitForBackgroundTasks();
@@ -490,7 +501,7 @@ TEST_F(CredentialManagerTest,
   const int request_id = 0;
   ExpectPromiseResolved(request_id);
   const bool zero_click = true;
-  credential_manager_->SignedIn(request_id, GURL("http://foo.com/login"),
+  credential_manager_->SignedIn(request_id, GURL(kTestURL),
                                 GetTestWebCredential1(zero_click));
 
   // Pump the message loop and verify.
@@ -518,7 +529,7 @@ TEST_F(CredentialManagerTest,
   const int request_id = 0;
   ExpectPromiseResolved(request_id);
   const bool zero_click = false;
-  credential_manager_->SignedIn(request_id, GURL("http://foo.com/login"),
+  credential_manager_->SignedIn(request_id, GURL(kTestURL),
                                 GetTestWebCredential1(zero_click));
 
   // Pump the message loop and verify that no form was saved.
@@ -549,7 +560,7 @@ TEST_F(CredentialManagerTest,
   // Notify the browser that the user signed in.
   const int request_id = 0;
   ExpectPromiseResolved(request_id);
-  credential_manager_->SignedIn(request_id, GURL("http://foo.com/login"),
+  credential_manager_->SignedIn(request_id, GURL(kTestURL),
                                 GetTestWebCredential1(zero_click));
 
   // Pump the message loop and verify that no form was saved.

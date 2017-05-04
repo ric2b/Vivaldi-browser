@@ -17,6 +17,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/mock_callback.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/base/decrypt_config.h"
@@ -542,15 +543,22 @@ TEST_F(FFmpegDemuxerTest, Seeking_PreferredStreamSelection) {
   // prefer the video stream for seeking.
   EXPECT_EQ(video, preferred_seeking_stream(video_start_time));
 
-  // A disabled stream should not be preferred for seeking.
+  // A disabled stream should be preferred only when there's no other viable
+  // option among enabled streams.
   audio->set_enabled(false, base::TimeDelta());
-  EXPECT_EQ(video, preferred_seeking_stream(base::TimeDelta()));
-  EXPECT_EQ(video, preferred_seeking_stream(audio_start_time));
   EXPECT_EQ(video, preferred_seeking_stream(video_start_time));
+  // Audio stream is preferred, even though it is disabled, since video stream
+  // start time is higher than the seek target == audio_start_time in this case.
+  EXPECT_EQ(audio, preferred_seeking_stream(audio_start_time));
 
   audio->set_enabled(true, base::TimeDelta());
   video->set_enabled(false, base::TimeDelta());
-  EXPECT_EQ(audio, preferred_seeking_stream(base::TimeDelta()));
+  EXPECT_EQ(audio, preferred_seeking_stream(audio_start_time));
+  EXPECT_EQ(audio, preferred_seeking_stream(video_start_time));
+
+  // When both audio and video streams are disabled and there's no enabled
+  // streams, then audio is preferred since it has lower start time.
+  audio->set_enabled(false, base::TimeDelta());
   EXPECT_EQ(audio, preferred_seeking_stream(audio_start_time));
   EXPECT_EQ(audio, preferred_seeking_stream(video_start_time));
 }
@@ -961,17 +969,6 @@ TEST_F(FFmpegDemuxerTest, SeekText) {
   base::RunLoop().Run();
 }
 
-class MockReadCB {
- public:
-  MockReadCB() {}
-  ~MockReadCB() {}
-
-  MOCK_METHOD2(Run, void(DemuxerStream::Status status,
-                         const scoped_refptr<DecoderBuffer>& buffer));
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockReadCB);
-};
-
 TEST_F(FFmpegDemuxerTest, Stop) {
   // Tests that calling Read() on a stopped demuxer stream immediately deletes
   // the callback.
@@ -985,11 +982,11 @@ TEST_F(FFmpegDemuxerTest, Stop) {
   demuxer_->Stop();
 
   // Reads after being stopped are all EOS buffers.
-  StrictMock<MockReadCB> callback;
+  StrictMock<base::MockCallback<DemuxerStream::ReadCB>> callback;
   EXPECT_CALL(callback, Run(DemuxerStream::kOk, IsEndOfStreamBuffer()));
 
   // Attempt the read...
-  audio->Read(base::Bind(&MockReadCB::Run, base::Unretained(&callback)));
+  audio->Read(callback.Get());
   base::RunLoop().RunUntilIdle();
 
   // Don't let the test call Stop() again.
@@ -1412,6 +1409,110 @@ TEST_F(FFmpegDemuxerTest, Read_Webm_Media_Track_Info) {
   EXPECT_EQ(audio_track.kind(), "main");
   EXPECT_EQ(audio_track.label(), "");
   EXPECT_EQ(audio_track.language(), "");
+}
+
+// UTCDateToTime_* tests here assume FFmpegDemuxer's ExtractTimelineOffset
+// helper uses base::Time::FromUTCString() for conversion.
+TEST_F(FFmpegDemuxerTest, UTCDateToTime_Valid) {
+  base::Time result;
+  EXPECT_TRUE(
+      base::Time::FromUTCString("2012-11-10T12:34:56.987654Z", &result));
+
+  base::Time::Exploded exploded;
+  result.UTCExplode(&exploded);
+  EXPECT_TRUE(exploded.HasValidValues());
+  EXPECT_EQ(2012, exploded.year);
+  EXPECT_EQ(11, exploded.month);
+  EXPECT_EQ(6, exploded.day_of_week);
+  EXPECT_EQ(10, exploded.day_of_month);
+  EXPECT_EQ(12, exploded.hour);
+  EXPECT_EQ(34, exploded.minute);
+  EXPECT_EQ(56, exploded.second);
+  EXPECT_EQ(987, exploded.millisecond);
+
+  // base::Time exploding operations round fractional milliseconds down, so
+  // verify fractional milliseconds using a base::TimeDelta.
+  base::Time without_fractional_ms;
+  EXPECT_TRUE(base::Time::FromUTCExploded(exploded, &without_fractional_ms));
+  base::TimeDelta delta = result - without_fractional_ms;
+  EXPECT_EQ(654, delta.InMicroseconds());
+}
+
+TEST_F(FFmpegDemuxerTest, UTCDateToTime_Invalid) {
+  const char* invalid_date_strings[] = {
+      "",
+      "12:34:56",
+      "-- ::",
+      "2012-11- 12:34:56",
+      "2012--10 12:34:56",
+      "-11-10 12:34:56",
+      "2012-11 12:34:56",
+      "ABCD-11-10 12:34:56",
+      "2012-EF-10 12:34:56",
+      "2012-11-GH 12:34:56",
+      "2012-11-1012:34:56",
+  };
+
+  for (size_t i = 0; i < arraysize(invalid_date_strings); ++i) {
+    const char* date_string = invalid_date_strings[i];
+    base::Time result;
+    EXPECT_FALSE(base::Time::FromUTCString(date_string, &result))
+        << "date_string '" << date_string << "'";
+  }
+}
+
+TEST_F(FFmpegDemuxerTest, Read_Flac) {
+  CreateDemuxer("sfx.flac");
+  InitializeDemuxer();
+
+  // Video stream should not be present.
+  EXPECT_EQ(nullptr, demuxer_->GetStream(DemuxerStream::VIDEO));
+
+  // Audio stream should be present.
+  DemuxerStream* stream = demuxer_->GetStream(DemuxerStream::AUDIO);
+  ASSERT_TRUE(stream);
+  EXPECT_EQ(DemuxerStream::AUDIO, stream->type());
+
+  const AudioDecoderConfig& audio_config = stream->audio_decoder_config();
+  EXPECT_EQ(kCodecFLAC, audio_config.codec());
+  EXPECT_EQ(32, audio_config.bits_per_channel());
+  EXPECT_EQ(CHANNEL_LAYOUT_MONO, audio_config.channel_layout());
+  EXPECT_EQ(44100, audio_config.samples_per_second());
+  EXPECT_EQ(kSampleFormatS32, audio_config.sample_format());
+}
+
+// Verify that FFmpeg demuxer falls back to choosing disabled streams for
+// seeking if there's no suitable enabled stream found.
+TEST_F(FFmpegDemuxerTest, Seek_FallbackToDisabledVideoStream) {
+  // Input has only video stream, no audio.
+  CreateDemuxer("bear-320x240-video-only.webm");
+  InitializeDemuxer();
+  EXPECT_EQ(nullptr, demuxer_->GetStream(DemuxerStream::AUDIO));
+  DemuxerStream* vstream = demuxer_->GetStream(DemuxerStream::VIDEO);
+  EXPECT_NE(nullptr, vstream);
+  EXPECT_EQ(vstream, preferred_seeking_stream(base::TimeDelta()));
+
+  // Now pretend that video stream got disabled, e.g. due to current tab going
+  // into background.
+  vstream->set_enabled(false, base::TimeDelta());
+  // Since there's no other enabled streams, the preferred seeking stream should
+  // still be the video stream.
+  EXPECT_EQ(vstream, preferred_seeking_stream(base::TimeDelta()));
+}
+
+TEST_F(FFmpegDemuxerTest, Seek_FallbackToDisabledAudioStream) {
+  CreateDemuxer("bear-320x240-audio-only.webm");
+  InitializeDemuxer();
+  DemuxerStream* astream = demuxer_->GetStream(DemuxerStream::AUDIO);
+  EXPECT_NE(nullptr, astream);
+  EXPECT_EQ(nullptr, demuxer_->GetStream(DemuxerStream::VIDEO));
+  EXPECT_EQ(astream, preferred_seeking_stream(base::TimeDelta()));
+
+  // Now pretend that audio stream got disabled.
+  astream->set_enabled(false, base::TimeDelta());
+  // Since there's no other enabled streams, the preferred seeking stream should
+  // still be the audio stream.
+  EXPECT_EQ(astream, preferred_seeking_stream(base::TimeDelta()));
 }
 
 }  // namespace media

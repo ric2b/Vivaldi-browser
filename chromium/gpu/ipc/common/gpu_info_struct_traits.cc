@@ -197,6 +197,8 @@ bool StructTraits<gpu::mojom::VideoDecodeAcceleratorCapabilitiesDataView,
                   gpu::VideoDecodeAcceleratorCapabilities>::
     Read(gpu::mojom::VideoDecodeAcceleratorCapabilitiesDataView data,
          gpu::VideoDecodeAcceleratorCapabilities* out) {
+  if (!data.ReadSupportedProfiles(&out->supported_profiles))
+    return false;
   out->flags = data.flags();
   return true;
 }
@@ -224,6 +226,7 @@ bool StructTraits<gpu::mojom::GpuInfoDataView, gpu::GPUInfo>::Read(
   out->direct_rendering = data.direct_rendering();
   out->sandboxed = data.sandboxed();
   out->in_process_gpu = data.in_process_gpu();
+  out->passthrough_cmd_decoder = data.passthrough_cmd_decoder();
   out->process_crash_count = data.process_crash_count();
   out->jpeg_decode_accelerator_supported =
       data.jpeg_decode_accelerator_supported();

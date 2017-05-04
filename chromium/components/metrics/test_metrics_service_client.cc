@@ -52,9 +52,6 @@ std::string TestMetricsServiceClient::GetVersionString() {
   return version_string_;
 }
 
-void TestMetricsServiceClient::OnLogUploadComplete() {
-}
-
 void TestMetricsServiceClient::InitializeSystemProfileMetrics(
     const base::Closure& done_callback) {
   done_callback.Run();
@@ -66,6 +63,8 @@ void TestMetricsServiceClient::CollectFinalMetricsForLog(
 }
 
 std::unique_ptr<MetricsLogUploader> TestMetricsServiceClient::CreateUploader(
+    const std::string& server_url,
+    const std::string& mime_type,
     const base::Callback<void(int)>& on_upload_complete) {
   return std::unique_ptr<MetricsLogUploader>();
 }

@@ -19,13 +19,22 @@
       },
       "requires": {
         "content_browser": [ "renderer" ],
-        "ui": [ "ui:gpu_client" ]
+        "device": [
+          "device:power_monitor",
+          "device:time_zone_monitor"
+        ],
+        "ui": [
+          "discardable_memory",
+          "gpu_client"
+        ]
       }
     },
     "navigation:frame": {
       "provides": {
         "browser": [
           "blink::mojom::AppBannerController",
+          "blink::mojom::EngagementClient",
+          "blink::mojom::InstallationService",
           "content::mojom::ImageDownloader",
           "mojom::MediaDevicesListener"
         ]

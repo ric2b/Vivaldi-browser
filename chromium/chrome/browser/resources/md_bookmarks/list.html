@@ -1,0 +1,81 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_action_menu/cr_action_menu.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
+<link rel="import" href="chrome://bookmarks/item.html">
+<link rel="import" href="chrome://bookmarks/shared_style.html">
+
+<dom-module id="bookmarks-list">
+  <template>
+    <style include="shared-style cr-shared-style">
+      :host {
+        padding: 20px 32px;
+      }
+
+      #bookmarksCard {
+        @apply(--shadow-elevation-2dp);
+        background-color: #fff;
+        margin: 0 auto;
+        max-width: var(--card-max-width);
+        min-width: var(--card-min-width);
+        padding: 8px 0;
+      }
+
+      .centered-message {
+        align-items: center;
+        color: #6e6e6e;
+        display: flex;
+        font-size: 14px;
+        font-weight: 500;
+        height: 100%;
+        justify-content: center;
+      }
+    </style>
+    <dialog is="cr-action-menu" id="dropdown">
+      <button class="dropdown-item" on-tap="onEditTap_">
+        $i18n{menuEdit}
+      </button>
+      <button class="dropdown-item" on-tap="onCopyURLTap_">
+        $i18n{menuCopyURL}
+      </button>
+      <button class="dropdown-item" on-tap="onDeleteTap_">
+         $i18n{menuDelete}
+      </button>
+    </dialog>
+    <dialog is="cr-dialog" id="editBookmark">
+      <div class="title">$i18n{editBookmarkTitle}</div>
+      <div class="body">
+        <paper-input always-float-label id="name"
+            label="$i18n{editDialogNameInput}"
+            value="{{menuItem_.title}}">
+        </paper-input>
+        <paper-input always-float-label id="url"
+            label="$i18n{editDialogUrlInput}"
+            value="{{menuItem_.url}}">
+        </paper-input>
+      </div>
+      <div class="button-container">
+        <paper-button class="cancel-button" on-tap="onCancelEditTap_">
+          $i18n{cancelEdit}
+        </paper-button>
+        <paper-button class="action-button" on-tap="onSaveEditTap_">
+          $i18n{saveEdit}
+        </paper-button>
+      </div>
+    </dialog>
+    <div id="bookmarksCard" hidden$="[[isListEmpty_(displayedList.length)]]">
+      <template is="dom-repeat" items="[[displayedList]]" as="item">
+        <bookmarks-item item="[[item]]"></bookmarks-item>
+      </template>
+    </div>
+    <div class="centered-message"
+        hidden$="[[!isListEmpty_(displayedList.length)]]">
+      $i18n{emptyList}
+    </div>
+  </template>
+  <script src="chrome://bookmarks/list.js"></script>
+</dom-module>

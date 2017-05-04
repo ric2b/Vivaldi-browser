@@ -41,7 +41,7 @@ class PreloadRecordingCSSPreloaderResourceClient final
 
   void fetchPreloads(PreloadRequestStream& preloads) override {
     for (const auto& it : preloads)
-      m_preloadUrls.append(it->resourceURL());
+      m_preloadUrls.push_back(it->resourceURL());
     CSSPreloaderResourceClient::fetchPreloads(preloads);
   }
 
@@ -71,9 +71,10 @@ TEST_F(CSSPreloadScannerTest, ScanFromResourceClient) {
   const char* data = "@import url('http://127.0.0.1/preload.css');";
   resource->appendData(data, strlen(data));
 
+  EXPECT_EQ(Resource::PreloadNotReferenced, resource->getPreloadResult());
   EXPECT_EQ(1u, resourceClient->m_preloadUrls.size());
   EXPECT_EQ("http://127.0.0.1/preload.css",
-            resourceClient->m_preloadUrls.first());
+            resourceClient->m_preloadUrls.front());
 }
 
 // Regression test for crbug.com/608310 where the client is destroyed but was

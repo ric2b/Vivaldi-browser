@@ -15,7 +15,6 @@
 #import "chrome/browser/ui/cocoa/tabs/tab_window_controller.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #import "chrome/browser/ui/cocoa/view_id_util.h"
-#include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMFadeTruncatingTextFieldCell.h"
@@ -26,6 +25,7 @@
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/scoped_ns_graphics_context_save_gstate_mac.h"
+#include "ui/strings/grit/ui_strings.h"
 
 namespace {
 
@@ -46,6 +46,10 @@ const NSTimeInterval kAlertHideDuration = 0.4;
 // The default time interval in seconds between glow updates (when
 // increasing/decreasing).
 const NSTimeInterval kGlowUpdateInterval = 0.025;
+
+// The intensity of the white overlay when hovering the mouse over a tab.
+const CGFloat kMouseHoverWhiteValue = 1.0;
+const CGFloat kMouseHoverWhiteValueIncongito = 0.3;
 
 // This is used to judge whether the mouse has moved during rapid closure; if it
 // has moved less than the threshold, we want to close the tab.
@@ -479,10 +483,9 @@ CGFloat LineWidthFromContext(CGContextRef context) {
     // Draw a mouse hover gradient for the default themes.
     if (hoverAlpha > 0) {
       if (themeProvider && !hasCustomTheme) {
-        CGFloat whiteValue = 1;
-        // In Incognito mode, give the glow a darker value.
+        CGFloat whiteValue = kMouseHoverWhiteValue;
         if (themeProvider && themeProvider->InIncognitoMode()) {
-          whiteValue = 0.5;
+          whiteValue = kMouseHoverWhiteValueIncongito;
         }
         base::scoped_nsobject<NSGradient> glow([NSGradient alloc]);
         [glow initWithStartingColor:[NSColor colorWithCalibratedWhite:whiteValue
@@ -610,6 +613,7 @@ CGFloat LineWidthFromContext(CGContextRef context) {
     return;
   [titleView_ setTextColor:titleColor];
   [self setNeedsDisplayInRect:[titleView_ frame]];
+  [self updateAppearance];
 }
 
 - (BOOL)titleHidden {
@@ -643,11 +647,11 @@ CGFloat LineWidthFromContext(CGContextRef context) {
 }
 
 - (void)accessibilityOptionsDidChange:(id)ignored {
-  [self updateLabelFont];
+  [self updateAppearance];
   [self setNeedsDisplay:YES];
 }
 
-- (void)updateLabelFont {
+- (void)updateAppearance {
   CGFloat fontSize = [titleViewCell_ font].pointSize;
   const ui::ThemeProvider* provider = [[self window] themeProvider];
   if (provider && provider->ShouldIncreaseContrast() && state_ == NSOnState) {
@@ -655,15 +659,16 @@ CGFloat LineWidthFromContext(CGContextRef context) {
   } else {
     [titleViewCell_ setFont:[NSFont systemFontOfSize:fontSize]];
   }
+
+  [closeButton_ setIconColor:[self iconColor]];
 }
 
 - (void)setState:(NSCellStateValue)state {
   if (state_ == state)
     return;
   state_ = state;
-  [self updateLabelFont];
+  [self updateAppearance];
   [self setNeedsDisplay:YES];
-  [closeButton_ setNeedsDisplay:YES];
 }
 
 - (void)setClosing:(BOOL)closing {
@@ -756,7 +761,7 @@ CGFloat LineWidthFromContext(CGContextRef context) {
   if ([attribute isEqual:NSAccessibilityRoleAttribute])
     return NSAccessibilityRadioButtonRole;
   if ([attribute isEqual:NSAccessibilityRoleDescriptionAttribute])
-    return l10n_util::GetNSStringWithFixup(IDS_ACCNAME_TAB);
+    return l10n_util::GetNSStringWithFixup(IDS_ACCNAME_TAB_ROLE_DESCRIPTION);
   if ([attribute isEqual:NSAccessibilityTitleAttribute])
     return [controller_ title];
   if ([attribute isEqual:NSAccessibilityValueAttribute])

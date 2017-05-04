@@ -7,6 +7,7 @@
 
 #include "wtf/Allocator.h"
 #include "wtf/Forward.h"
+#include "wtf/Vector.h"
 
 #include <unicode/ubidi.h>
 
@@ -40,6 +41,12 @@ class NGBidiParagraph {
   // Returns the end offset of a logical run that starts from the |start|
   // offset.
   unsigned GetLogicalRun(unsigned start, UBiDiLevel*) const;
+
+  // Create a list of indicies in the visual order.
+  // A wrapper for ICU |ubidi_reorderVisual()|.
+  static void IndiciesInVisualOrder(
+      const Vector<UBiDiLevel, 32>& levels,
+      Vector<int32_t, 32>* indicies_in_visual_order_out);
 
  private:
   UBiDi* ubidi_ = nullptr;

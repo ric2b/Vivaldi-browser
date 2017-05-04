@@ -83,9 +83,8 @@ class CORE_EXPORT SpellChecker final : public GarbageCollected<SpellChecker> {
   void updateMarkersForWordsAffectedByEditing(
       bool onlyHandleWordsContainingSelection);
   void cancelCheck();
-  void requestTextChecking(const Element&);
 
-  // Exposed for testing only
+  // Exposed for testing and idle time spell checker
   SpellCheckRequester& spellCheckRequester() const {
     return *m_spellCheckRequester;
   }
@@ -125,6 +124,9 @@ class CORE_EXPORT SpellChecker final : public GarbageCollected<SpellChecker> {
                               const VisibleSelection& newAdjacentWords);
 
   Member<LocalFrame> m_frame;
+
+  // TODO(xiaochengh): Move it to IdleSpellCheckCallback after idle time spell
+  // checking reaches status=stable.
   const Member<SpellCheckRequester> m_spellCheckRequester;
 };
 

@@ -49,6 +49,7 @@ class ReadNode : public BaseNode {
   // have server-tagged items.  All other server-tagged items are type root
   // nodes, which should be looked up with InitTypeRoot().
   InitByLookupResult InitByTagLookupForBookmarks(const std::string& tag);
+  InitByLookupResult InitByTagLookupForNotes(const std::string& tag);
 
   // Returns transaction version of the last transaction where this node has
   // been modified.

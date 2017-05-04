@@ -4,30 +4,32 @@
 
 #include <cinttypes>
 
-#include "base/memory/ptr_util.h"
+#include "base/format_macros.h"
 #include "base/strings/stringprintf.h"
+#include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/test_tools/simulator/switch.h"
 
 using base::StringPrintf;
+using std::string;
 
 namespace net {
 namespace simulator {
 
 Switch::Switch(Simulator* simulator,
-               std::string name,
+               string name,
                SwitchPortNumber port_count,
                QuicByteCount queue_capacity) {
   for (size_t port_number = 1; port_number <= port_count; port_number++) {
-    ports_.emplace_back(
-        simulator, StringPrintf("%s (port %zu)", name.c_str(), port_number),
-        this, port_number, queue_capacity);
+    ports_.emplace_back(simulator, StringPrintf("%s (port %" PRIuS ")",
+                                                name.c_str(), port_number),
+                        this, port_number, queue_capacity);
   }
 }
 
 Switch::~Switch() {}
 
 Switch::Port::Port(Simulator* simulator,
-                   std::string name,
+                   string name,
                    Switch* parent,
                    SwitchPortNumber port_number,
                    QuicByteCount queue_capacity)
@@ -79,7 +81,7 @@ void Switch::DispatchPacket(SwitchPortNumber port_number,
     if (!egress_port.connected()) {
       continue;
     }
-    egress_port.EnqueuePacket(base::MakeUnique<Packet>(*packet));
+    egress_port.EnqueuePacket(QuicMakeUnique<Packet>(*packet));
   }
 }
 

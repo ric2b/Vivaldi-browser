@@ -11,6 +11,7 @@
 #include "base/memory/scoped_vector.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/password_manager/core/browser/form_saver.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
@@ -156,13 +157,14 @@ void CredentialManager::CredentialsRequested(
   std::vector<GURL> federation_urls;
   for (const auto& federation : federations)
     federation_urls.push_back(GURL(federation));
-  std::vector<std::string> realms;
   pending_request_.reset(
       new password_manager::CredentialManagerPendingRequestTask(
           this, base::Bind(&CredentialManager::SendCredentialByID,
                            base::Unretained(this), request_id),
-          zero_click_only, page_url, true, federation_urls, realms));
-  store->GetAutofillableLogins(pending_request_.get());
+          zero_click_only, true, federation_urls));
+  password_manager::PasswordStore::FormDigest form = {
+      autofill::PasswordForm::SCHEME_HTML, page_url.spec(), page_url};
+  store->GetLogins(form, pending_request_.get());
 }
 
 void CredentialManager::SignedIn(int request_id,
@@ -205,7 +207,7 @@ void CredentialManager::SignedIn(int request_id,
       new password_manager::CredentialManagerPasswordFormManager(
           client_, driver_->AsWeakPtr(),
           *password_manager::CreateObservedPasswordFormFromOrigin(page_url),
-          std::move(form), this));
+          std::move(form), this, nullptr, nullptr));
 }
 
 void CredentialManager::SignedOut(int request_id, const GURL& source_url) {
@@ -228,20 +230,14 @@ void CredentialManager::SignedOut(int request_id, const GURL& source_url) {
   // information to the PasswordStore via an asynchronous task.
   password_manager::PasswordStore* store = GetPasswordStore();
   if (store) {
-    // Bundle the origins that are sent to the PasswordStore if the task hasn't
-    // yet resolved. This task lives across page-loads to enable this bundling.
-    if (pending_require_user_mediation_) {
-      pending_require_user_mediation_->AddOrigin(page_url);
-    } else {
+    if (!pending_require_user_mediation_) {
       pending_require_user_mediation_.reset(
           new password_manager::
-              CredentialManagerPendingRequireUserMediationTask(
-                  this, page_url, std::vector<std::string>()));
-
-      // This will result in a callback to
-      // CredentialManagerPendingSignedOutTask::OnGetPasswordStoreResults().
-      store->GetAutofillableLogins(pending_require_user_mediation_.get());
+              CredentialManagerPendingRequireUserMediationTask(this));
     }
+    password_manager::PasswordStore::FormDigest form = {
+        autofill::PasswordForm::SCHEME_HTML, source_url.spec(), source_url};
+    pending_require_user_mediation_->AddOrigin(form);
   }
 
   // Acknowledge the page's signOut notification without waiting for the
@@ -308,15 +304,6 @@ void CredentialManager::SendPasswordForm(
 
 password_manager::PasswordManagerClient* CredentialManager::client() const {
   return client_;
-}
-
-password_manager::PasswordStore::FormDigest
-CredentialManager::GetSynthesizedFormForOrigin() const {
-  password_manager::PasswordStore::FormDigest form = {
-      autofill::PasswordForm::SCHEME_HTML, std::string(),
-      web_state()->GetLastCommittedURL().GetOrigin()};
-  form.signon_realm = form.origin.spec();
-  return form;
 }
 
 void CredentialManager::OnProvisionalSaveComplete() {

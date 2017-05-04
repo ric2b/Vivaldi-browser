@@ -30,11 +30,11 @@
 #include "core/dom/Document.h"
 #include "core/dom/Node.h"
 #include "core/dom/StyleEngine.h"
-#include "core/fetch/CSSStyleSheetResource.h"
 #include "core/frame/UseCounter.h"
 #include "core/inspector/InspectorTraceEvents.h"
+#include "core/loader/resource/CSSStyleSheetResource.h"
 #include "platform/Histogram.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
 
 namespace blink {
@@ -59,7 +59,7 @@ unsigned StyleSheetContents::estimatedSizeInBytes() const {
 
 StyleSheetContents::StyleSheetContents(StyleRuleImport* ownerRule,
                                        const String& originalURL,
-                                       const CSSParserContext& context)
+                                       const CSSParserContext* context)
     : m_ownerRule(ownerRule),
       m_originalURL(originalURL),
       m_defaultNamespace(starAtom),
@@ -162,9 +162,9 @@ void StyleSheetContents::parserAppendRule(StyleRuleBase* rule) {
     StyleRuleImport* importRule = toStyleRuleImport(rule);
     if (importRule->mediaQueries())
       setHasMediaQueries();
-    m_importRules.append(importRule);
-    m_importRules.last()->setParentStyleSheet(this);
-    m_importRules.last()->requestStyleSheet();
+    m_importRules.push_back(importRule);
+    m_importRules.back()->setParentStyleSheet(this);
+    m_importRules.back()->requestStyleSheet();
     return;
   }
 
@@ -174,11 +174,11 @@ void StyleSheetContents::parserAppendRule(StyleRuleBase* rule) {
     ASSERT(m_childRules.isEmpty());
     StyleRuleNamespace& namespaceRule = toStyleRuleNamespace(*rule);
     parserAddNamespace(namespaceRule.prefix(), namespaceRule.uri());
-    m_namespaceRules.append(&namespaceRule);
+    m_namespaceRules.push_back(&namespaceRule);
     return;
   }
 
-  m_childRules.append(rule);
+  m_childRules.push_back(rule);
 }
 
 void StyleSheetContents::setHasMediaQueries() {
@@ -328,7 +328,7 @@ void StyleSheetContents::parseAuthorStyleSheet(
     const SecurityOrigin* securityOrigin) {
   TRACE_EVENT1("blink,devtools.timeline", "ParseAuthorStyleSheet", "data",
                InspectorParseAuthorStyleSheetEvent::data(cachedStyleSheet));
-  double startTimeMS = monotonicallyIncreasingTimeMS();
+  double startTime = monotonicallyIncreasingTime();
 
   bool isSameOriginRequest =
       securityOrigin && securityOrigin->canRequest(baseURL());
@@ -346,7 +346,7 @@ void StyleSheetContents::parseAuthorStyleSheet(
   }
 
   CSSStyleSheetResource::MIMETypeCheck mimeTypeCheck =
-      isQuirksModeBehavior(m_parserContext.mode()) && isSameOriginRequest
+      isQuirksModeBehavior(m_parserContext->mode()) && isSameOriginRequest
           ? CSSStyleSheetResource::MIMETypeCheck::Lax
           : CSSStyleSheetResource::MIMETypeCheck::Strict;
   String sheetText = cachedStyleSheet->sheetText(mimeTypeCheck);
@@ -358,18 +358,18 @@ void StyleSheetContents::parseAuthorStyleSheet(
     m_sourceMapURL = response.httpHeaderField(HTTPNames::X_SourceMap);
   }
 
-  CSSParserContext context(parserContext(), UseCounter::getFrom(this));
+  const CSSParserContext* context =
+      CSSParserContext::createWithStyleSheetContents(parserContext(), this);
   CSSParser::parseSheet(context, this, sheetText,
                         RuntimeEnabledFeatures::lazyParseCSSEnabled());
 
   DEFINE_STATIC_LOCAL(CustomCountHistogram, parseHistogram,
                       ("Style.AuthorStyleSheet.ParseTime", 0, 10000000, 50));
-  double parseDurationMS = (monotonicallyIncreasingTimeMS() - startTimeMS);
-  parseHistogram.count(parseDurationMS * 1000);
+  double parseDurationSeconds = (monotonicallyIncreasingTime() - startTime);
+  parseHistogram.count(parseDurationSeconds * 1000 * 1000);
   if (Document* document = singleOwnerDocument()) {
-    // CSSTiming expects time in seconds.
-    CSSTiming::from(*document).recordAuthorStyleSheetParseTime(parseDurationMS /
-                                                               1000);
+    CSSTiming::from(*document).recordAuthorStyleSheetParseTime(
+        parseDurationSeconds);
   }
 }
 
@@ -380,7 +380,8 @@ void StyleSheetContents::parseString(const String& sheetText) {
 void StyleSheetContents::parseStringAtPosition(
     const String& sheetText,
     const TextPosition& startPosition) {
-  CSSParserContext context(parserContext(), UseCounter::getFrom(this));
+  const CSSParserContext* context =
+      CSSParserContext::createWithStyleSheetContents(parserContext(), this);
   CSSParser::parseSheet(context, this, sheetText);
 }
 
@@ -491,6 +492,10 @@ Document* StyleSheetContents::singleOwnerDocument() const {
   return root->clientSingleOwnerDocument();
 }
 
+Document* StyleSheetContents::anyOwnerDocument() const {
+  return rootStyleSheet()->clientAnyOwnerDocument();
+}
+
 static bool childRulesHaveFailedOrCanceledSubresources(
     const HeapVector<Member<StyleRuleBase>>& rules) {
   for (unsigned i = 0; i < rules.size(); ++i) {
@@ -531,13 +536,16 @@ bool StyleSheetContents::hasFailedOrCanceledSubresources() const {
   return childRulesHaveFailedOrCanceledSubresources(m_childRules);
 }
 
-Document* StyleSheetContents::clientSingleOwnerDocument() const {
-  if (!m_hasSingleOwnerDocument || clientSize() <= 0)
+Document* StyleSheetContents::clientAnyOwnerDocument() const {
+  if (clientSize() <= 0)
     return nullptr;
-
   if (m_loadingClients.size())
     return (*m_loadingClients.begin())->ownerDocument();
   return (*m_completedClients.begin())->ownerDocument();
+}
+
+Document* StyleSheetContents::clientSingleOwnerDocument() const {
+  return m_hasSingleOwnerDocument ? clientAnyOwnerDocument() : nullptr;
 }
 
 StyleSheetContents* StyleSheetContents::parentStyleSheet() const {
@@ -611,10 +619,14 @@ RuleSet& StyleSheetContents::ensureRuleSet(const MediaQueryEvaluator& medium,
   return *m_ruleSet.get();
 }
 
-static void clearResolvers(HeapHashSet<WeakMember<CSSStyleSheet>>& clients) {
+static void setNeedsActiveStyleUpdateForClients(
+    HeapHashSet<WeakMember<CSSStyleSheet>>& clients) {
   for (const auto& sheet : clients) {
-    if (Document* document = sheet->ownerDocument())
-      document->styleEngine().clearResolver();
+    Document* document = sheet->ownerDocument();
+    Node* node = sheet->ownerNode();
+    if (!document || !node || !node->isConnected())
+      continue;
+    document->styleEngine().setNeedsActiveStyleUpdate(node->treeScope());
   }
 }
 
@@ -622,18 +634,12 @@ void StyleSheetContents::clearRuleSet() {
   if (StyleSheetContents* parentSheet = parentStyleSheet())
     parentSheet->clearRuleSet();
 
-  // Don't want to clear the StyleResolver if the RuleSet hasn't been created
-  // since we only clear the StyleResolver so that it's members are properly
-  // updated in ScopedStyleResolver::addRulesFromSheet.
   if (!m_ruleSet)
     return;
 
-  // Clearing the ruleSet means we need to recreate the styleResolver data
-  // structures. See the StyleResolver calls in
-  // ScopedStyleResolver::addRulesFromSheet.
-  clearResolvers(m_loadingClients);
-  clearResolvers(m_completedClients);
   m_ruleSet.clear();
+  setNeedsActiveStyleUpdateForClients(m_loadingClients);
+  setNeedsActiveStyleUpdateForClients(m_completedClients);
 }
 
 static void removeFontFaceRules(HeapHashSet<WeakMember<CSSStyleSheet>>& clients,
@@ -659,7 +665,7 @@ static void findFontFaceRulesFromRules(
     StyleRuleBase* rule = rules[i].get();
 
     if (rule->isFontFaceRule()) {
-      fontFaceRules.append(toStyleRuleFontFace(rule));
+      fontFaceRules.push_back(toStyleRuleFontFace(rule));
     } else if (rule->isMediaRule()) {
       StyleRuleMedia* mediaRule = toStyleRuleMedia(rule);
       // We cannot know whether the media rule matches or not, but
@@ -689,6 +695,7 @@ DEFINE_TRACE(StyleSheetContents) {
   visitor->trace(m_completedClients);
   visitor->trace(m_ruleSet);
   visitor->trace(m_referencedFromResource);
+  visitor->trace(m_parserContext);
 }
 
 }  // namespace blink

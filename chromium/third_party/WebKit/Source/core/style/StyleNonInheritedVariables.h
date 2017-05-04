@@ -16,11 +16,11 @@ namespace blink {
 class StyleNonInheritedVariables {
  public:
   static std::unique_ptr<StyleNonInheritedVariables> create() {
-    return wrapUnique(new StyleNonInheritedVariables);
+    return WTF::wrapUnique(new StyleNonInheritedVariables);
   }
 
   std::unique_ptr<StyleNonInheritedVariables> copy() {
-    return wrapUnique(new StyleNonInheritedVariables(*this));
+    return WTF::wrapUnique(new StyleNonInheritedVariables(*this));
   }
 
   bool operator==(const StyleNonInheritedVariables& other) const;
@@ -36,7 +36,7 @@ class StyleNonInheritedVariables {
   void removeVariable(const AtomicString&);
 
   void setRegisteredVariable(const AtomicString&, const CSSValue*);
-  CSSValue* registeredVariable(const AtomicString& name) const {
+  const CSSValue* registeredVariable(const AtomicString& name) const {
     return m_registeredData.get(name);
   }
 

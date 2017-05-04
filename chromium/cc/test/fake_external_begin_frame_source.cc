@@ -41,8 +41,16 @@ void FakeExternalBeginFrameSource::AddObserver(BeginFrameObserver* obs) {
   bool observers_was_empty = observers_.empty();
   observers_.insert(obs);
   obs->OnBeginFrameSourcePausedChanged(paused_);
-  if (observers_was_empty && tick_automatically_)
+  if (observers_was_empty && tick_automatically_) {
     PostTestOnBeginFrame();
+  } else if (current_args_.IsValid()) {
+    const BeginFrameArgs& last_args = obs->LastUsedBeginFrameArgs();
+    if (!last_args.IsValid() ||
+        last_args.frame_time < current_args_.frame_time) {
+      current_args_.type = BeginFrameArgs::MISSED;
+      obs->OnBeginFrame(current_args_);
+    }
+  }
   if (client_)
     client_->OnAddObserver(obs);
 }
@@ -65,9 +73,12 @@ bool FakeExternalBeginFrameSource::IsThrottled() const {
 void FakeExternalBeginFrameSource::TestOnBeginFrame(
     const BeginFrameArgs& args) {
   DCHECK(CalledOnValidThread());
+  current_args_ = args;
+  current_args_.source_id = source_id();
+  current_args_.sequence_number = next_begin_frame_number_++;
   std::set<BeginFrameObserver*> observers(observers_);
   for (auto* obs : observers)
-    obs->OnBeginFrame(args);
+    obs->OnBeginFrame(current_args_);
   if (tick_automatically_)
     PostTestOnBeginFrame();
 }
@@ -77,10 +88,12 @@ void FakeExternalBeginFrameSource::PostTestOnBeginFrame() {
       base::Bind(&FakeExternalBeginFrameSource::TestOnBeginFrame,
                  weak_ptr_factory_.GetWeakPtr()));
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE,
-      base::Bind(begin_frame_task_.callback(),
-                 CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE)),
+      FROM_HERE, base::Bind(begin_frame_task_.callback(),
+                            CreateBeginFrameArgsForTesting(
+                                BEGINFRAME_FROM_HERE, source_id(),
+                                next_begin_frame_number_)),
       base::TimeDelta::FromMilliseconds(milliseconds_per_frame_));
+  next_begin_frame_number_++;
 }
 
 }  // namespace cc

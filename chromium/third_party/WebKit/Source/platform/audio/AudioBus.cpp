@@ -61,9 +61,9 @@ AudioBus::AudioBus(unsigned numberOfChannels, size_t length, bool allocate)
 
   for (unsigned i = 0; i < numberOfChannels; ++i) {
     std::unique_ptr<AudioChannel> channel =
-        allocate ? wrapUnique(new AudioChannel(length))
-                 : wrapUnique(new AudioChannel(0, length));
-    m_channels.append(std::move(channel));
+        allocate ? WTF::wrapUnique(new AudioChannel(length))
+                 : WTF::wrapUnique(new AudioChannel(0, length));
+    m_channels.push_back(std::move(channel));
   }
 
   m_layout = LayoutCanonical;  // for now this is the only layout we define
@@ -163,7 +163,7 @@ AudioChannel* AudioBus::channelByType(unsigned channelType) {
       }
   }
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return nullptr;
 }
 
@@ -467,7 +467,7 @@ void AudioBus::copyWithGainFrom(const AudioBus& sourceBus,
                                 float* lastMixGain,
                                 float targetGain) {
   if (!topologyMatches(sourceBus)) {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     zero();
     return;
   }
@@ -524,7 +524,7 @@ void AudioBus::copyWithGainFrom(const AudioBus& sourceBus,
   if (framesToDezipper) {
     if (!m_dezipperGainValues.get() ||
         m_dezipperGainValues->size() < framesToDezipper)
-      m_dezipperGainValues = makeUnique<AudioFloatArray>(framesToDezipper);
+      m_dezipperGainValues = WTF::makeUnique<AudioFloatArray>(framesToDezipper);
 
     float* gainValues = m_dezipperGainValues->data();
     for (unsigned i = 0; i < framesToDezipper; ++i) {
@@ -583,12 +583,12 @@ void AudioBus::copyWithSampleAccurateGainValuesFrom(
   // Make sure we're processing from the same type of bus.
   // We *are* able to process from mono -> stereo
   if (sourceBus.numberOfChannels() != 1 && !topologyMatches(sourceBus)) {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return;
   }
 
   if (!gainValues || numberOfGainValues > sourceBus.length()) {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return;
   }
 
@@ -702,7 +702,7 @@ PassRefPtr<AudioBus> AudioBus::createByMixingToMono(const AudioBus* sourceBus) {
     }
   }
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return nullptr;
 }
 

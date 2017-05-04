@@ -215,8 +215,8 @@ TEST_F(CanvasRenderingContext2DAPITest, LineDashStateSave) {
   createContext(NonOpaque);
 
   Vector<double> simpleDash;
-  simpleDash.append(4);
-  simpleDash.append(2);
+  simpleDash.push_back(4);
+  simpleDash.push_back(2);
 
   context2d()->setLineDash(simpleDash);
   EXPECT_EQ(simpleDash, context2d()->getLineDash());
@@ -274,7 +274,7 @@ TEST_F(CanvasRenderingContext2DAPITest, CreateImageData) {
 
 TEST_F(CanvasRenderingContext2DAPITest, CreateImageDataTooBig) {
   createContext(NonOpaque);
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   ImageData* tooBigImageData =
       context2d()->createImageData(1000000, 1000000, exceptionState);
   EXPECT_EQ(nullptr, tooBigImageData);
@@ -284,7 +284,7 @@ TEST_F(CanvasRenderingContext2DAPITest, CreateImageDataTooBig) {
 
 TEST_F(CanvasRenderingContext2DAPITest, GetImageDataTooBig) {
   createContext(NonOpaque);
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   ImageData* imageData =
       context2d()->getImageData(0, 0, 1000000, 1000000, exceptionState);
   EXPECT_EQ(nullptr, imageData);

@@ -81,7 +81,7 @@ FetchResponseData* FetchResponseData::createBasicFilteredResponse() const {
   // name is `Set-Cookie` or `Set-Cookie2`."
   FetchResponseData* response =
       new FetchResponseData(BasicType, m_status, m_statusMessage);
-  response->m_url = m_url;
+  response->setURLList(m_urlList);
   for (size_t i = 0; i < m_headerList->size(); ++i) {
     const FetchHeaderList::Header* header = m_headerList->list()[i].get();
     if (FetchUtils::isForbiddenResponseHeaderName(header->first))
@@ -117,7 +117,7 @@ FetchResponseData* FetchResponseData::createCORSFilteredResponse(
   // list."
   FetchResponseData* response =
       new FetchResponseData(CORSType, m_status, m_statusMessage);
-  response->m_url = m_url;
+  response->setURLList(m_urlList);
   for (size_t i = 0; i < m_headerList->size(); ++i) {
     const FetchHeaderList::Header* header = m_headerList->list()[i].get();
     const String& name = header->first;
@@ -159,9 +159,17 @@ FetchResponseData* FetchResponseData::createOpaqueRedirectFilteredResponse()
   // https://fetch.spec.whatwg.org/#concept-filtered-response-opaque-redirect
   FetchResponseData* response =
       new FetchResponseData(OpaqueRedirectType, 0, "");
-  response->m_url = m_url;
+  response->setURLList(m_urlList);
   response->m_internalResponse = const_cast<FetchResponseData*>(this);
   return response;
+}
+
+const KURL* FetchResponseData::url() const {
+  // "A response has an associated url. It is a pointer to the last response URL
+  // in response’s url list and null if response’s url list is the empty list."
+  if (m_urlList.isEmpty())
+    return nullptr;
+  return &m_urlList.back();
 }
 
 String FetchResponseData::mimeType() const {
@@ -182,14 +190,25 @@ String FetchResponseData::internalMIMEType() const {
   return m_mimeType;
 }
 
+void FetchResponseData::setURLList(const Vector<KURL>& urlList) {
+  m_urlList = urlList;
+}
+
+const Vector<KURL>& FetchResponseData::internalURLList() const {
+  if (m_internalResponse) {
+    return m_internalResponse->m_urlList;
+  }
+  return m_urlList;
+}
+
 FetchResponseData* FetchResponseData::clone(ScriptState* scriptState) {
   FetchResponseData* newResponse = create();
   newResponse->m_type = m_type;
   if (m_terminationReason) {
-    newResponse->m_terminationReason = wrapUnique(new TerminationReason);
+    newResponse->m_terminationReason = WTF::wrapUnique(new TerminationReason);
     *newResponse->m_terminationReason = *m_terminationReason;
   }
-  newResponse->m_url = m_url;
+  newResponse->setURLList(m_urlList);
   newResponse->m_status = m_status;
   newResponse->m_statusMessage = m_statusMessage;
   newResponse->m_headerList = m_headerList->clone();
@@ -243,8 +262,7 @@ void FetchResponseData::populateWebServiceWorkerResponse(
         headerSetToWebVector(m_corsExposedHeaderNames));
     return;
   }
-
-  response.setURL(url());
+  response.setURLList(m_urlList);
   response.setStatus(status());
   response.setStatusText(statusMessage());
   response.setResponseType(fetchTypeToWebType(m_type));

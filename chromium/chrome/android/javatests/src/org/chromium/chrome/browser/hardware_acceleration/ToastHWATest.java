@@ -8,18 +8,19 @@ import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_E
 
 import android.content.Context;
 import android.os.Build;
-import android.test.suitebuilder.annotation.MediumTest;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 import android.view.View;
 
 import org.chromium.base.BaseSwitches;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.download.DownloadTestBase;
+import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.util.browser.contextmenu.ContextMenuUtils;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -44,12 +45,27 @@ public class ToastHWATest extends DownloadTestBase {
     @Override
     protected void setUp() throws Exception {
         super.setUp();
+
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                FirstRunStatus.setFirstRunFlowComplete(true);
+            }
+        });
+
         deleteFilesInDownloadDirectory(TEST_FILES);
         mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
     }
 
     @Override
     protected void tearDown() throws Exception {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                FirstRunStatus.setFirstRunFlowComplete(false);
+            }
+        });
+
         mTestServer.stopAndDestroyServer();
         deleteFilesInDownloadDirectory(TEST_FILES);
         super.tearDown();
@@ -66,8 +82,12 @@ public class ToastHWATest extends DownloadTestBase {
         Utils.assertNoRenderThread();
     }
 
-    @MediumTest
-    @CommandLineFlags.Add(BaseSwitches.ENABLE_LOW_END_DEVICE_MODE)
+    /*
+     * @MediumTest
+     * @CommandLineFlags.Add(BaseSwitches.ENABLE_LOW_END_DEVICE_MODE)
+     * BUG=crbug.com/668217
+    */
+    @DisabledTest
     public void testDownloadingToast() throws Exception {
         loadUrl(mTestServer.getURL(URL_PATH));
         assertWaitForPageScaleFactorMatch(0.5f);

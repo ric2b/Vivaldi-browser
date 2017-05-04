@@ -2,20 +2,37 @@
 {{license()}}
 
 #include "core/ComputedStyleBase.h"
+#include "wtf/SizeAssertions.h"
 
 namespace blink {
 
+struct SameSizeAsComputedStyleBase {
+  unsigned m_bitfields[{{expected_total_field_bytes}}];
+};
+// If this fails, the packing algorithm in make_computed_style_base.py has
+// failed to produce the optimal packed size. To fix, update the algorithm to
+// ensure that the buckets are placed so that each takes up at most 1 word.
+ASSERT_SIZE(ComputedStyleBase, SameSizeAsComputedStyleBase);
+
 void ComputedStyleBase::inheritFrom(const ComputedStyleBase& inheritParent,
                                     IsAtShadowBoundary isAtShadowBoundary) {
-  {% for field in fields if field.property['inherited'] %}
+  {% for field in fields if field.is_enum and field.is_inherited %}
   {{field.name}} = inheritParent.{{field.name}};
   {% endfor %}
 }
 
 void ComputedStyleBase::copyNonInheritedFromCached(
     const ComputedStyleBase& other) {
-  {% for field in fields if not field.property['inherited'] %}
+  {% for field in fields if (field.is_enum and not field.is_inherited) or field.is_inherited_flag %}
   {{field.name}} = other.{{field.name}};
+  {% endfor %}
+}
+
+void ComputedStyleBase::propagateIndependentInheritedProperties(
+    const ComputedStyleBase& parentStyle) {
+  {% for field in fields if field.is_enum and field.is_independent %}
+  if ({{field.is_inherited_method_name}}())
+    {{field.setter_method_name}}(parentStyle.{{field.getter_method_name}}());
   {% endfor %}
 }
 

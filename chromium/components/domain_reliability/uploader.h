@@ -15,7 +15,6 @@
 #include "url/gurl.h"
 
 namespace net {
-class URLFetcher;
 class URLRequest;
 class URLRequestContextGetter;
 }  // namespace net
@@ -56,12 +55,20 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityUploader {
       const scoped_refptr<net::URLRequestContextGetter>&
           url_request_context_getter);
 
+  // Returns true if the request originated from domain reliability uploader.
+  static bool OriginatedFromDomainReliability(const net::URLRequest& request);
+
   // Uploads |report_json| to |upload_url| and calls |callback| when the upload
   // has either completed or failed.
   virtual void UploadReport(const std::string& report_json,
                             int max_beacon_depth,
                             const GURL& upload_url,
                             const UploadCallback& callback) = 0;
+
+  // Shuts down the uploader prior to destruction. Currently, terminates pending
+  // uploads and prevents the uploader from starting new ones to avoid hairy
+  // lifetime issues at destruction.
+  virtual void Shutdown();
 
   virtual void set_discard_uploads(bool discard_uploads) = 0;
 

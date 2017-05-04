@@ -32,6 +32,7 @@
 #include "ui/base/dragdrop/cocoa_dnd_util.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
+#include "ui/gfx/mac/coordinate_conversion.h"
 
 #include "content/public/browser/web_drag_dest_delegate.h"
 #include "app/vivaldi_apptools.h"
@@ -166,11 +167,7 @@ void WebContentsViewMac::GetContainerBounds(gfx::Rect* out) const {
     bounds = [window convertRectToScreen:bounds];
   }
 
-  // Flip y to account for screen flip.
-  NSScreen* screen = [[NSScreen screens] firstObject];
-  bounds.origin.y = [screen frame].size.height - bounds.origin.y
-      - bounds.size.height;
-  *out = gfx::Rect(NSRectToCGRect(bounds));
+  *out = gfx::ScreenRectFromNSRect(bounds);
 }
 
 void WebContentsViewMac::StartDragging(

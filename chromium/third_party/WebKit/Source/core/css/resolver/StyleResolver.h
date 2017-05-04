@@ -27,14 +27,11 @@
 #include "core/animation/PropertyHandle.h"
 #include "core/css/ElementRuleCollector.h"
 #include "core/css/PseudoStyleRequest.h"
-#include "core/css/RuleFeature.h"
-#include "core/css/RuleSet.h"
 #include "core/css/SelectorChecker.h"
 #include "core/css/SelectorFilter.h"
 #include "core/css/resolver/CSSPropertyPriority.h"
 #include "core/css/resolver/MatchedPropertiesCache.h"
 #include "core/css/resolver/StyleBuilder.h"
-#include "core/style/CachedUAStyle.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Deque.h"
 #include "wtf/HashMap.h"
@@ -47,15 +44,13 @@ namespace blink {
 
 class AnimatableValue;
 class CSSRuleList;
-class CSSStyleSheet;
 class CSSValue;
 class Document;
 class Element;
 class Interpolation;
 class MatchResult;
-class MediaQueryEvaluator;
+class RuleSet;
 class StylePropertySet;
-class StyleRule;
 class StyleRuleUsageTracker;
 
 enum StyleSharingBehavior {
@@ -107,18 +102,6 @@ class CORE_EXPORT StyleResolver final
 
   static PassRefPtr<ComputedStyle> styleForDocument(Document&);
 
-  // FIXME: It could be better to call appendAuthorStyleSheets() directly after
-  // we factor StyleResolver further.
-  // https://bugs.webkit.org/show_bug.cgi?id=108890
-  void appendAuthorStyleSheets(const HeapVector<Member<CSSStyleSheet>>&);
-  void lazyAppendAuthorStyleSheets(unsigned firstNew,
-                                   const HeapVector<Member<CSSStyleSheet>>&);
-  void removePendingAuthorStyleSheets(const HeapVector<Member<CSSStyleSheet>>&);
-  void appendPendingAuthorStyleSheets();
-  bool hasPendingAuthorStyleSheets() const {
-    return m_pendingStyleSheets.size() > 0;
-  }
-
   // TODO(esprehn): StyleResolver should probably not contain tree walking
   // state, instead we should pass a context object during recalcStyle.
   SelectorFilter& selectorFilter() { return m_selectorFilter; }
@@ -148,18 +131,11 @@ class CORE_EXPORT StyleResolver final
 
   void computeFont(ComputedStyle*, const StylePropertySet&);
 
-  void addViewportDependentMediaQueries(const MediaQueryResultList&);
-  bool hasViewportDependentMediaQueries() const {
-    return !m_viewportDependentMediaQueryResults.isEmpty();
-  }
-  bool mediaQueryAffectedByViewportChange() const;
-  void addDeviceDependentMediaQueries(const MediaQueryResultList&);
-  bool mediaQueryAffectedByDeviceChange() const;
-
   // FIXME: Rename to reflect the purpose, like didChangeFontSize or something.
   void invalidateMatchedPropertiesCache();
 
-  void notifyResizeForViewportUnits();
+  void setResizedForViewportUnits();
+  void clearResizedForViewportUnits();
 
   // Exposed for ComputedStyle::isStyleAvilable().
   static ComputedStyle* styleNotYetAvailable() {
@@ -176,9 +152,10 @@ class CORE_EXPORT StyleResolver final
 
   PseudoElement* createPseudoElementIfNeeded(Element& parent, PseudoId);
 
-  DECLARE_TRACE();
-
   void setRuleUsageTracker(StyleRuleUsageTracker*);
+  void updateMediaType();
+
+  DECLARE_TRACE();
 
  private:
   explicit StyleResolver(Document&);
@@ -192,8 +169,6 @@ class CORE_EXPORT StyleResolver final
 
   void loadPendingResources(StyleResolverState&);
   void adjustComputedStyle(StyleResolverState&, Element*);
-
-  void appendCSSStyleSheet(CSSStyleSheet&);
 
   void collectPseudoRulesForElement(const Element&,
                                     ElementRuleCollector&,
@@ -210,10 +185,33 @@ class CORE_EXPORT StyleResolver final
   void collectTreeBoundaryCrossingRulesV0CascadeOrder(const Element&,
                                                       ElementRuleCollector&);
 
-  void applyMatchedProperties(StyleResolverState&, const MatchResult&);
-  bool applyAnimatedProperties(StyleResolverState&,
-                               const Element* animatingElement);
-  void applyCallbackSelectors(StyleResolverState&);
+  struct CacheSuccess {
+    STACK_ALLOCATED();
+    bool isInheritedCacheHit;
+    bool isNonInheritedCacheHit;
+    unsigned cacheHash;
+    Member<const CachedMatchedProperties> cachedMatchedProperties;
+
+    CacheSuccess(bool isInheritedCacheHit,
+                 bool isNonInheritedCacheHit,
+                 unsigned cacheHash,
+                 const CachedMatchedProperties* cachedMatchedProperties)
+        : isInheritedCacheHit(isInheritedCacheHit),
+          isNonInheritedCacheHit(isNonInheritedCacheHit),
+          cacheHash(cacheHash),
+          cachedMatchedProperties(cachedMatchedProperties) {}
+
+    bool isFullCacheHit() const {
+      return isInheritedCacheHit && isNonInheritedCacheHit;
+    }
+    bool shouldApplyInheritedOnly() const {
+      return isNonInheritedCacheHit && !isInheritedCacheHit;
+    }
+    void setFailed() {
+      isInheritedCacheHit = false;
+      isNonInheritedCacheHit = false;
+    }
+  };
 
   // These flags indicate whether an apply pass for a given CSSPropertyPriority
   // and isImportant is required.
@@ -238,6 +236,30 @@ class CORE_EXPORT StyleResolver final
     CheckNeedsApplyPass = false,
     UpdateNeedsApplyPass = true,
   };
+
+  void applyMatchedPropertiesAndCustomPropertyAnimations(
+      StyleResolverState&,
+      const MatchResult&,
+      const Element* animatingElement);
+  CacheSuccess applyMatchedCache(StyleResolverState&, const MatchResult&);
+  void applyCustomProperties(StyleResolverState&,
+                             const MatchResult&,
+                             bool applyAnimations,
+                             const CacheSuccess&,
+                             NeedsApplyPass&);
+  void applyMatchedAnimationProperties(StyleResolverState&,
+                                       const MatchResult&,
+                                       const CacheSuccess&,
+                                       NeedsApplyPass&);
+  void applyMatchedStandardProperties(StyleResolverState&,
+                                      const MatchResult&,
+                                      const CacheSuccess&,
+                                      NeedsApplyPass&);
+  void calculateAnimationUpdate(StyleResolverState&,
+                                const Element* animatingElement);
+  bool applyAnimatedStandardProperties(StyleResolverState&, const Element*);
+
+  void applyCallbackSelectors(StyleResolverState&);
 
   template <CSSPropertyPriority priority, ShouldUpdateNeedsApplyPass>
   void applyMatchedProperties(StyleResolverState&,
@@ -276,26 +298,22 @@ class CORE_EXPORT StyleResolver final
 
   PseudoElement* createPseudoElement(Element* parent, PseudoId);
 
-  Document& document() { return *m_document; }
+  Document& document() const { return *m_document; }
+
+  bool wasViewportResized() const { return m_wasViewportResized; }
 
   static ComputedStyle* s_styleNotYetAvailable;
 
   MatchedPropertiesCache m_matchedPropertiesCache;
-
-  Member<MediaQueryEvaluator> m_medium;
-  MediaQueryResultList m_viewportDependentMediaQueryResults;
-  MediaQueryResultList m_deviceDependentMediaQueryResults;
-
   Member<Document> m_document;
   SelectorFilter m_selectorFilter;
 
-  HeapListHashSet<Member<CSSStyleSheet>, 16> m_pendingStyleSheets;
-
   Member<StyleRuleUsageTracker> m_tracker;
 
-  bool m_printMediaType;
+  bool m_printMediaType = false;
+  bool m_wasViewportResized = false;
 
-  unsigned m_styleSharingDepth;
+  unsigned m_styleSharingDepth = 0;
   HeapVector<Member<StyleSharingList>, styleSharingMaxDepth>
       m_styleSharingLists;
 };

@@ -59,7 +59,7 @@ bool EventHandlerRegistry::eventTypeToClass(
     // the pointer events never block scrolling and the compositor
     // only needs to know about the touch listeners.
     *result = TouchStartOrMoveEventPassive;
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   } else if (eventType == EventTypeNames::load ||
              eventType == EventTypeNames::mousemove ||
              eventType == EventTypeNames::touchstart) {
@@ -187,21 +187,6 @@ void EventHandlerRegistry::didMoveOutOfFrameHost(EventTarget& target) {
   didRemoveAllEventHandlers(target);
 }
 
-void EventHandlerRegistry::didMoveBetweenFrameHosts(EventTarget& target,
-                                                    FrameHost* oldFrameHost,
-                                                    FrameHost* newFrameHost) {
-  ASSERT(newFrameHost != oldFrameHost);
-  for (size_t i = 0; i < EventHandlerClassCount; ++i) {
-    EventHandlerClass handlerClass = static_cast<EventHandlerClass>(i);
-    const EventTargetSet* targets =
-        &oldFrameHost->eventHandlerRegistry().m_targets[handlerClass];
-    for (unsigned count = targets->count(&target); count > 0; --count)
-      newFrameHost->eventHandlerRegistry().didAddEventHandler(target,
-                                                              handlerClass);
-    oldFrameHost->eventHandlerRegistry().didRemoveAllEventHandlers(target);
-  }
-}
-
 void EventHandlerRegistry::didRemoveAllEventHandlers(EventTarget& target) {
   for (size_t i = 0; i < EventHandlerClassCount; ++i) {
     EventHandlerClass handlerClass = static_cast<EventHandlerClass>(i);
@@ -239,7 +224,7 @@ void EventHandlerRegistry::notifyHasHandlersChanged(
               hasEventHandlers(TouchEndOrCancelEventBlocking),
               hasEventHandlers(TouchEndOrCancelEventPassive)));
       break;
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     case EventsForTesting:
       break;
 #endif
@@ -272,9 +257,9 @@ void EventHandlerRegistry::clearWeakMembers(Visitor* visitor) {
       Node* node = eventTarget.key->toNode();
       LocalDOMWindow* window = eventTarget.key->toLocalDOMWindow();
       if (node && !ThreadHeap::isHeapObjectAlive(node)) {
-        deadTargets.append(node);
+        deadTargets.push_back(node);
       } else if (window && !ThreadHeap::isHeapObjectAlive(window)) {
-        deadTargets.append(window);
+        deadTargets.push_back(window);
       }
     }
   }
@@ -295,7 +280,7 @@ void EventHandlerRegistry::documentDetached(Document& document) {
         for (Document* doc = &node->document(); doc;
              doc = doc->localOwner() ? &doc->localOwner()->document() : 0) {
           if (doc == &document) {
-            targetsToRemove.append(eventTarget.key);
+            targetsToRemove.push_back(eventTarget.key);
             break;
           }
         }
@@ -312,7 +297,7 @@ void EventHandlerRegistry::documentDetached(Document& document) {
 }
 
 void EventHandlerRegistry::checkConsistency() const {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   for (size_t i = 0; i < EventHandlerClassCount; ++i) {
     EventHandlerClass handlerClass = static_cast<EventHandlerClass>(i);
     const EventTargetSet* targets = &m_targets[handlerClass];
@@ -331,7 +316,7 @@ void EventHandlerRegistry::checkConsistency() const {
       }
     }
   }
-#endif  // ENABLE(ASSERT)
+#endif  // DCHECK_IS_ON()
 }
 
 }  // namespace blink

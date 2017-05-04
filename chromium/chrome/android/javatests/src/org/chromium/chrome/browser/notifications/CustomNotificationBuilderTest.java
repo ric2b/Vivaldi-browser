@@ -15,7 +15,7 @@ import android.graphics.Color;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 import android.util.DisplayMetrics;
 import android.view.View;
 import android.widget.Button;
@@ -93,6 +93,10 @@ public class CustomNotificationBuilderTest extends NativeLibraryTestBase {
         assertEquals("title", NotificationTestUtil.getExtraTitle(notification));
         assertEquals("body", NotificationTestUtil.getExtraText(notification));
         assertEquals("origin", NotificationTestUtil.getExtraSubText(notification));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+            assertEquals(
+                    NotificationConstants.GROUP_WEB_PREFIX + "origin", notification.getGroup());
+        }
 
         assertEquals("ticker", notification.tickerText.toString());
         assertEquals(Notification.DEFAULT_ALL, notification.defaults);

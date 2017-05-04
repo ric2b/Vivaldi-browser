@@ -6,11 +6,11 @@ import json
 import optparse
 
 from webkitpy.common.net.buildbot import Build
+from webkitpy.common.net.git_cl import GitCL
+from webkitpy.common.net.layout_test_results import LayoutTestResults
 from webkitpy.common.net.rietveld import Rietveld
 from webkitpy.common.net.web_mock import MockWeb
-from webkitpy.common.net.git_cl import GitCL
-from webkitpy.common.system.executive_mock import MockExecutive2
-from webkitpy.common.system.logtesting import LoggingTestCase
+from webkitpy.common.system.log_testing import LoggingTestCase
 from webkitpy.layout_tests.builder_list import BuilderList
 from webkitpy.tool.commands.rebaseline_cl import RebaselineCL
 from webkitpy.tool.commands.rebaseline_unittest import BaseTestCase
@@ -52,18 +52,75 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
                 "is_try_builder": True,
             },
             "MOCK Try Linux": {
-                "port_name": "test-mac-mac10.10",
-                "specifiers": ["Mac10.10", "Release"],
+                "port_name": "test-linux-trusty",
+                "specifiers": ["Trusty", "Release"],
                 "is_try_builder": True,
             },
         })
         self.command.rietveld = Rietveld(web)
 
+        layout_test_results = LayoutTestResults({
+            'tests': {
+                'fast': {
+                    'dom': {
+                        'prototype-inheritance.html': {
+                            'expected': 'PASS',
+                            'actual': 'TEXT',
+                            'is_unexpected': True,
+                        },
+                        'prototype-banana.html': {
+                            'expected': 'FAIL',
+                            'actual': 'PASS',
+                            'is_unexpected': True,
+                        },
+                        'prototype-taco.html': {
+                            'expected': 'PASS',
+                            'actual': 'PASS TEXT',
+                            'is_unexpected': True,
+                        },
+                        'prototype-chocolate.html': {
+                            'expected': 'FAIL',
+                            'actual': 'IMAGE+TEXT'
+                        },
+                        'prototype-crashy.html': {
+                            'expected': 'PASS',
+                            'actual': 'CRASH',
+                            'is_unexpected': True,
+                        },
+                        'prototype-newtest.html': {
+                            'expected': 'PASS',
+                            'actual': 'MISSING',
+                            'is_unexpected': True,
+                            'is_missing_text': True,
+                        },
+                        'prototype-slowtest.html': {
+                            'expected': 'SLOW',
+                            'actual': 'TEXT',
+                            'is_unexpected': True,
+                        },
+                    }
+                },
+                'svg': {
+                    'dynamic-updates': {
+                        'SVGFEDropShadowElement-dom-stdDeviation-attr.html': {
+                            'expected': 'PASS',
+                            'actual': 'IMAGE',
+                            'has_stderr': True,
+                            'is_unexpected': True,
+                        }
+                    }
+                }
+            }
+        })
+        for build in [Build('MOCK Try Win', 5000), Build('MOCK Try Mac', 4000)]:
+            self.tool.buildbot.set_results(build, layout_test_results)
+
         self.tool.buildbot.set_retry_sumary_json(Build('MOCK Try Win', 5000), json.dumps({
             'failures': [
-                'fast/dom/prototype-newtest.html',
-                'fast/dom/prototype-taco.html',
                 'fast/dom/prototype-inheritance.html',
+                'fast/dom/prototype-newtest.html',
+                'fast/dom/prototype-slowtest.html',
+                'fast/dom/prototype-taco.html',
                 'svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html',
             ],
             'ignored': [],
@@ -103,6 +160,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         self.assertLog([
             'INFO: Rebaselining fast/dom/prototype-inheritance.html\n',
             'INFO: Rebaselining fast/dom/prototype-newtest.html\n',
+            'INFO: Rebaselining fast/dom/prototype-slowtest.html\n',
             'INFO: Rebaselining fast/dom/prototype-taco.html\n',
             'INFO: Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n',
         ])
@@ -121,6 +179,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
         self.assertLog([
             'INFO: Rebaselining fast/dom/prototype-inheritance.html\n',
             'INFO: Rebaselining fast/dom/prototype-newtest.html\n',
+            'INFO: Rebaselining fast/dom/prototype-slowtest.html\n',
             'INFO: Rebaselining fast/dom/prototype-taco.html\n',
             'INFO: Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n',
         ])
@@ -165,6 +224,7 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             'WARNING: No retry summary available for build Build(builder_name=u\'MOCK Try Win\', build_number=5000).\n',
             'INFO: Rebaselining fast/dom/prototype-inheritance.html\n',
             'INFO: Rebaselining fast/dom/prototype-newtest.html\n',
+            'INFO: Rebaselining fast/dom/prototype-slowtest.html\n',
             'INFO: Rebaselining fast/dom/prototype-taco.html\n',
             'INFO: Rebaselining svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html\n',
         ])
@@ -237,4 +297,23 @@ class RebaselineCLTest(BaseTestCase, LoggingTestCase):
             'INFO:   MOCK Try Linux\n',
             'INFO: Triggering try jobs for:\n',
             'INFO:   MOCK Try Win\n',
+        ])
+
+    def test_bails_when_one_build_is_missing_results(self):
+        self.tool.buildbot.set_results(Build("MOCK Try Win", 5000), None)
+        self.command.execute(self.command_options(issue=11112222), [], self.tool)
+        self.assertLog([
+            'ERROR: Failed to fetch results from '
+            '"https://storage.googleapis.com/chromium-layout-test-archives/MOCK_Try_Win/5000/layout-test-results".\n'
+            'Try starting a new job for MOCK Try Win by running :\n'
+            '  git cl try -b MOCK Try Win\n'
+        ])
+
+    def test_bails_when_there_are_unstaged_baselines(self):
+        scm = self.tool.scm()
+        scm.unstaged_changes = lambda: {'third_party/WebKit/LayoutTests/my-test-expected.txt': '?'}
+        self.command.execute(self.command_options(issue=11112222), [], self.tool)
+        self.assertLog([
+            'ERROR: Aborting: there are unstaged baselines:\n',
+            'ERROR:   /mock-checkout/third_party/WebKit/LayoutTests/my-test-expected.txt\n',
         ])

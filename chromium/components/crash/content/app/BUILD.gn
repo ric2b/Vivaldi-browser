@@ -66,13 +66,22 @@ if (is_win) {
     sources = [
       "crash_switches.cc",
       "crash_switches.h",
+      "fallback_crash_handler_launcher_win.cc",
+      "fallback_crash_handler_launcher_win.h",
+      "fallback_crash_handler_win.cc",
+      "fallback_crash_handler_win.h",
+      "fallback_crash_handling_win.cc",
+      "fallback_crash_handling_win.h",
       "run_as_crashpad_handler_win.cc",
       "run_as_crashpad_handler_win.h",
     ]
 
     deps = [
       "//base",
+      "//chrome/install_static:install_static_util",
+      "//third_party/crashpad/crashpad/client",
       "//third_party/crashpad/crashpad/handler:handler_lib",
+      "//third_party/crashpad/crashpad/minidump",
     ]
   }
 }
@@ -213,15 +222,26 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "crash_keys_win_unittest.cc",
+    "fallback_crash_handler_launcher_win_unittest.cc",
+    "fallback_crash_handler_win_unittest.cc",
+    "fallback_crash_handling_win_unittest.cc",
   ]
   deps = [
     ":lib",
     "//base",
+    "//base/test:test_support",
     "//testing/gmock",
     "//testing/gtest",
   ]
 
   if (is_win) {
-    deps += [ "//breakpad:client" ]
+    deps += [
+      ":run_as_crashpad_handler",
+      "//breakpad:client",
+      "//third_party/crashpad/crashpad/client:client",
+      "//third_party/crashpad/crashpad/compat",
+      "//third_party/crashpad/crashpad/snapshot:snapshot",
+      "//third_party/crashpad/crashpad/util",
+    ]
   }
 }

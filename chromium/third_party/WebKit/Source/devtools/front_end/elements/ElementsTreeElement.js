@@ -31,7 +31,7 @@
 /**
  * @unrestricted
  */
-Elements.ElementsTreeElement = class extends TreeElement {
+Elements.ElementsTreeElement = class extends UI.TreeElement {
   /**
    * @param {!SDK.DOMNode} node
    * @param {boolean=} elementCloseTag
@@ -278,7 +278,7 @@ Elements.ElementsTreeElement = class extends TreeElement {
    * @override
    */
   expandRecursively() {
-    this._node.getSubtree(-1, TreeElement.prototype.expandRecursively.bind(this, Number.MAX_VALUE));
+    this._node.getSubtree(-1, UI.TreeElement.prototype.expandRecursively.bind(this, Number.MAX_VALUE));
   }
 
   /**
@@ -478,7 +478,6 @@ Elements.ElementsTreeElement = class extends TreeElement {
 
   populateNodeContextMenu(contextMenu) {
     // Add free-form node-related actions.
-    var openTagElement = this._node[this.treeOutline.treeElementSymbol()] || this;
     var isEditable = this.hasEditableNode();
     if (isEditable && !this._editing)
       contextMenu.appendItem(Common.UIString('Edit as HTML'), this._editAsHTML.bind(this));
@@ -532,7 +531,7 @@ Elements.ElementsTreeElement = class extends TreeElement {
     if (this.treeOutline.selectedDOMNode() !== this._node)
       return;
 
-    var listItem = this._listItemNode;
+    var listItem = this.listItemElement;
 
     if (this._canAddAttributes) {
       var attribute = listItem.getElementsByClassName('webkit-html-attribute')[0];
@@ -749,8 +748,8 @@ Elements.ElementsTreeElement = class extends TreeElement {
       child = child.nextSibling;
     }
     // Hide children item.
-    if (this._childrenListNode)
-      this._childrenListNode.style.display = 'none';
+    if (this.childrenListElement)
+      this.childrenListElement.style.display = 'none';
     // Append editor.
     this.listItemElement.appendChild(this._htmlEditElement);
     this.listItemElement.classList.add('editing-as-html');
@@ -779,8 +778,8 @@ Elements.ElementsTreeElement = class extends TreeElement {
       this.listItemElement.removeChild(this._htmlEditElement);
       delete this._htmlEditElement;
       // Unhide children item.
-      if (this._childrenListNode)
-        this._childrenListNode.style.removeProperty('display');
+      if (this.childrenListElement)
+        this.childrenListElement.style.removeProperty('display');
       // Unhide header items.
       var child = this.listItemElement.firstChild;
       while (child) {
@@ -961,7 +960,7 @@ Elements.ElementsTreeElement = class extends TreeElement {
     // For an expanded element, it will be the last element with class "close"
     // in the child element list.
     if (this.expanded) {
-      var closers = this._childrenListNode.querySelectorAll('.close');
+      var closers = this.childrenListElement.querySelectorAll('.close');
       return closers[closers.length - 1];
     }
 
@@ -1211,10 +1210,11 @@ Elements.ElementsTreeElement = class extends TreeElement {
       value = value.replace(closingPunctuationRegex, '$&\u200B');
       if (value.startsWith('data:'))
         value = value.trimMiddle(60);
-      var anchor = node.nodeName().toLowerCase() === 'a' ? UI.createExternalLink(rewrittenHref, value) :
-                                                           Components.Linkifier.linkifyURLAsNode(rewrittenHref, value);
-      anchor.preventFollow = true;
-      return anchor;
+      var link = node.nodeName().toLowerCase() === 'a' ?
+          UI.createExternalLink(rewrittenHref, value, '', true) :
+          Components.Linkifier.linkifyURL(rewrittenHref, value, '', undefined, undefined, true);
+      link[Elements.ElementsTreeElement.HrefSymbol] = rewrittenHref;
+      return link;
     }
 
     if (node && (name === 'src' || name === 'href')) {
@@ -1556,6 +1556,8 @@ Elements.ElementsTreeElement = class extends TreeElement {
     promise.then(() => UI.actionRegistry.action('elements.edit-as-html').execute());
   }
 };
+
+Elements.ElementsTreeElement.HrefSymbol = Symbol('ElementsTreeElement.Href');
 
 Elements.ElementsTreeElement.InitialChildrenLimit = 500;
 

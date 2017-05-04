@@ -36,6 +36,7 @@ class ServiceWorkerContextCore;
 class ServiceWorkerDispatcherHost;
 class ServiceWorkerRequestHandler;
 class ServiceWorkerVersion;
+class WebContents;
 
 // This class is the browser-process representation of a service worker
 // provider. There are two general types of providers: 1) those for a client
@@ -56,15 +57,19 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   using GetRegistrationForReadyCallback =
       base::Callback<void(ServiceWorkerRegistration* reigstration)>;
 
+  using WebContentsGetter = base::Callback<WebContents*(void)>;
+
   // PlzNavigate
   // Used to pre-create a ServiceWorkerProviderHost for a navigation. The
   // ServiceWorkerNetworkProvider will later be created in the renderer, should
   // the navigation succeed. |is_parent_frame_is_secure| should be true for main
   // frames. Otherwise it is true iff all ancestor frames of this frame have a
-  // secure origin.
+  // secure origin. |web_contents_getter| indicates the tab where the navigation
+  // is occurring.
   static std::unique_ptr<ServiceWorkerProviderHost> PreCreateNavigationHost(
       base::WeakPtr<ServiceWorkerContextCore> context,
-      bool are_ancestors_secure);
+      bool are_ancestors_secure,
+      const WebContentsGetter& web_contents_getter);
 
   enum class FrameSecurityLevel { UNINITIALIZED, INSECURE, SECURE };
 
@@ -89,6 +94,9 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   int provider_id() const { return provider_id_; }
   int frame_id() const;
   int route_id() const { return route_id_; }
+  const WebContentsGetter& web_contents_getter() const {
+    return web_contents_getter_;
+  }
 
   bool is_parent_frame_secure() const {
     return parent_frame_security_level_ == FrameSecurityLevel::SECURE;
@@ -114,29 +122,53 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
     return running_hosted_version_.get() != NULL;
   }
 
+  // Returns this provider's controller. The controller is typically the same as
+  // active_version() but can differ in the following cases:
+  // (1) The client was created before the registration existed or had an active
+  // version (in spec language, it is not "using" the registration).
+  // (2) The client had a controller but NotifyControllerLost() was called due
+  // to an exceptional circumstance (here also it is not "using" the
+  // registration).
+  // (3) During algorithms such as the update, skipWaiting(), and claim() steps,
+  // the active_version and controlling_version may temporarily differ. For
+  // example, to perform skipWaiting(), the registration's active version is
+  // updated first and then the provider host's controlling version is updated
+  // to match it.
   ServiceWorkerVersion* controlling_version() const {
+    // Only clients can have controllers.
+    DCHECK(!controlling_version_ || IsProviderForClient());
     return controlling_version_.get();
   }
+
   ServiceWorkerVersion* active_version() const {
     return associated_registration_.get() ?
         associated_registration_->active_version() : NULL;
   }
+
   ServiceWorkerVersion* waiting_version() const {
     return associated_registration_.get() ?
         associated_registration_->waiting_version() : NULL;
   }
+
   ServiceWorkerVersion* installing_version() const {
     return associated_registration_.get() ?
         associated_registration_->installing_version() : NULL;
   }
 
+  // Returns the associated registration. The provider host listens to this
+  // registration to resolve the .ready promise and set its controller.
   ServiceWorkerRegistration* associated_registration() const {
+    // Only clients can have an associated registration.
+    DCHECK(!associated_registration_ || IsProviderForClient());
     return associated_registration_.get();
   }
 
   // The running version, if any, that this provider is providing resource
   // loads for.
   ServiceWorkerVersion* running_hosted_version() const {
+    // Only providers for controllers can host a running version.
+    DCHECK(!running_hosted_version_ ||
+           provider_type_ == SERVICE_WORKER_PROVIDER_FOR_CONTROLLER);
     return running_hosted_version_.get();
   }
 
@@ -174,7 +206,8 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
       base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
-      scoped_refptr<ResourceRequestBodyImpl> body);
+      scoped_refptr<ResourceRequestBodyImpl> body,
+      bool skip_service_worker);
 
   // Used to get a ServiceWorkerObjectInfo to send to the renderer. Finds an
   // existing ServiceWorkerHandle, and increments its reference count, or else
@@ -262,9 +295,11 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
   void NotifyControllerLost();
 
  private:
+  friend class ForeignFetchRequestHandlerTest;
   friend class LinkHeaderServiceWorkerTest;
-  friend class ServiceWorkerProviderHostTestP;
+  friend class ServiceWorkerProviderHostTest;
   friend class ServiceWorkerWriteToCacheJobTest;
+  friend class ServiceWorkerContextRequestHandlerTest;
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerWriteToCacheJobTest, Update_SameScript);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerWriteToCacheJobTest,
                            Update_SameSizeScript);
@@ -274,19 +309,11 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
                            Update_ElongatedScript);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerWriteToCacheJobTest,
                            Update_EmptyScript);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerDispatcherHostTestP,
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerDispatcherHostTest,
                            DispatchExtendableMessageEvent);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerDispatcherHostTestP,
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerDispatcherHostTest,
                            DispatchExtendableMessageEvent_Fail);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerContextRequestHandlerTestP,
-                           UpdateBefore24Hours);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerContextRequestHandlerTestP,
-                           UpdateAfter24Hours);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerContextRequestHandlerTestP,
-                           UpdateForceBypassCache);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerContextRequestHandlerTestP,
-                           ServiceWorkerDataRequestAnnotation);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerProviderHostTestP, ContextSecurity);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerProviderHostTest, ContextSecurity);
 
   struct OneShotGetReadyCallback {
     GetRegistrationForReadyCallback callback;
@@ -349,6 +376,11 @@ class CONTENT_EXPORT ServiceWorkerProviderHost
 
   // Unique within the renderer process.
   int provider_id_;
+
+  // PlzNavigate
+  // Only set when this object is pre-created for a navigation. It indicates the
+  // tab where the navigation occurs.
+  WebContentsGetter web_contents_getter_;
 
   ServiceWorkerProviderType provider_type_;
   FrameSecurityLevel parent_frame_security_level_;

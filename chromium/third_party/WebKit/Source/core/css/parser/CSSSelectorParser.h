@@ -12,6 +12,7 @@
 
 namespace blink {
 
+class CSSParserContext;
 class CSSSelectorList;
 class StyleSheetContents;
 
@@ -22,13 +23,13 @@ class CORE_EXPORT CSSSelectorParser {
 
  public:
   static CSSSelectorList parseSelector(CSSParserTokenRange,
-                                       const CSSParserContext&,
+                                       const CSSParserContext*,
                                        StyleSheetContents*);
 
   static bool consumeANPlusB(CSSParserTokenRange&, std::pair<int, int>&);
 
  private:
-  CSSSelectorParser(const CSSParserContext&, StyleSheetContents*);
+  CSSSelectorParser(const CSSParserContext*, StyleSheetContents*);
 
   // These will all consume trailing comments if successful
 
@@ -68,8 +69,9 @@ class CORE_EXPORT CSSSelectorParser {
   static std::unique_ptr<CSSParserSelector>
   splitCompoundAtImplicitShadowCrossingCombinator(
       std::unique_ptr<CSSParserSelector> compoundSelector);
+  void recordUsageAndDeprecations(const CSSSelectorList&);
 
-  const CSSParserContext& m_context;
+  Member<const CSSParserContext> m_context;
   Member<StyleSheetContents> m_styleSheet;  // FIXME: Should be const
 
   bool m_failedParsing = false;

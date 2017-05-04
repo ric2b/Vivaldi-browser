@@ -25,16 +25,17 @@
 
 #include "platform/graphics/ContentLayerDelegate.h"
 
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/PaintController.h"
-#include "platform/tracing/TraceEvent.h"
-#include "platform/tracing/TracedValue.h"
+#include "platform/image-decoders/ImageDecoder.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TracedValue.h"
 #include "public/platform/WebDisplayItemList.h"
 #include "public/platform/WebRect.h"
 #include "third_party/skia/include/core/SkPicture.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace blink {
@@ -80,14 +81,18 @@ void ContentLayerDelegate::paintContents(
 
   // Anything other than PaintDefaultBehavior is for testing. In non-testing
   // scenarios, it is an error to call GraphicsLayer::paint. Actual painting
-  // occurs in FrameView::synchronizedPaint; this method merely copies the
-  // painted output to the WebDisplayItemList.
+  // occurs in FrameView::paintTree(); this method merely copies the painted
+  // output to the WebDisplayItemList.
   if (paintingControl != PaintDefaultBehavior)
     m_graphicsLayer->paint(nullptr, disabledMode);
 
   paintController.paintArtifact().appendToWebDisplayItemList(
       webDisplayItemList);
 
+  if (m_graphicsLayer->colorBehavior().isTransformToTargetColorSpace()) {
+    webDisplayItemList->setImpliedColorSpace(gfx::ColorSpace::FromSkColorSpace(
+        m_graphicsLayer->colorBehavior().targetColorSpace()));
+  }
   paintController.setDisplayItemConstructionIsDisabled(false);
   paintController.setSubsequenceCachingIsDisabled(false);
 }

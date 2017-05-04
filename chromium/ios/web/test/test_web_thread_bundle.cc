@@ -4,8 +4,11 @@
 
 #include "ios/web/public/test/test_web_thread_bundle.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_async_task_scheduler.h"
+#include "base/test/scoped_task_scheduler.h"
 #include "ios/web/public/test/test_web_thread.h"
 #include "ios/web/web_thread_impl.h"
 
@@ -48,6 +51,9 @@ TestWebThreadBundle::~TestWebThreadBundle() {
   base::RunLoop().RunUntilIdle();
   ui_thread_.reset();
   base::RunLoop().RunUntilIdle();
+
+  scoped_async_task_scheduler_.reset();
+  scoped_task_scheduler_.reset();
 }
 
 void TestWebThreadBundle::Init(int options) {
@@ -58,6 +64,14 @@ void TestWebThreadBundle::Init(int options) {
   }
 
   ui_thread_.reset(new TestWebThread(WebThread::UI, message_loop_.get()));
+
+  if (options & REAL_TASK_SCHEDULER) {
+    scoped_async_task_scheduler_ =
+        base::MakeUnique<base::test::ScopedAsyncTaskScheduler>();
+  } else {
+    scoped_task_scheduler_ =
+        base::MakeUnique<base::test::ScopedTaskScheduler>(message_loop_.get());
+  }
 
   if (options & TestWebThreadBundle::REAL_DB_THREAD) {
     db_thread_.reset(new TestWebThread(WebThread::DB));
@@ -73,22 +87,10 @@ void TestWebThreadBundle::Init(int options) {
     file_thread_.reset(new TestWebThread(WebThread::FILE, message_loop_.get()));
   }
 
-  if (options & TestWebThreadBundle::REAL_FILE_USER_BLOCKING_THREAD) {
-    file_user_blocking_thread_.reset(
-        new TestWebThread(WebThread::FILE_USER_BLOCKING));
-    file_user_blocking_thread_->Start();
-  } else {
-    file_user_blocking_thread_.reset(
-        new TestWebThread(WebThread::FILE_USER_BLOCKING, message_loop_.get()));
-  }
+  file_user_blocking_thread_.reset(
+      new TestWebThread(WebThread::FILE_USER_BLOCKING, message_loop_.get()));
 
-  if (options & TestWebThreadBundle::REAL_CACHE_THREAD) {
-    cache_thread_.reset(new TestWebThread(WebThread::CACHE));
-    cache_thread_->Start();
-  } else {
-    cache_thread_.reset(
-        new TestWebThread(WebThread::CACHE, message_loop_.get()));
-  }
+  cache_thread_.reset(new TestWebThread(WebThread::CACHE, message_loop_.get()));
 
   if (options & TestWebThreadBundle::REAL_IO_THREAD) {
     io_thread_.reset(new TestWebThread(WebThread::IO));

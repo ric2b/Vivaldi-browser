@@ -20,7 +20,8 @@ DataUseNetworkDelegate::DataUseNetworkDelegate(
     : net::LayeredNetworkDelegate(std::move(nested_network_delegate)),
       ascriber_(ascriber),
       data_use_measurement_(std::move(url_request_classifier),
-                            metrics_data_use_forwarder) {
+                            metrics_data_use_forwarder,
+                            ascriber_) {
   DCHECK(ascriber);
 }
 
@@ -37,8 +38,16 @@ void DataUseNetworkDelegate::OnBeforeURLRequestInternal(
 void DataUseNetworkDelegate::OnBeforeRedirectInternal(
     net::URLRequest* request,
     const GURL& new_location) {
-  ascriber_->OnBeforeRedirect(request, new_location);
   data_use_measurement_.OnBeforeRedirect(*request, new_location);
+}
+
+void DataUseNetworkDelegate::OnHeadersReceivedInternal(
+    net::URLRequest* request,
+    const net::CompletionCallback& callback,
+    const net::HttpResponseHeaders* original_response_headers,
+    scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
+    GURL* allowed_unsafe_redirect_url) {
+  data_use_measurement_.OnHeadersReceived(request, original_response_headers);
 }
 
 void DataUseNetworkDelegate::OnNetworkBytesReceivedInternal(
@@ -55,14 +64,14 @@ void DataUseNetworkDelegate::OnNetworkBytesSentInternal(
   data_use_measurement_.OnNetworkBytesSent(*request, bytes_sent);
 }
 
-void DataUseNetworkDelegate::OnURLRequestDestroyedInternal(
-    net::URLRequest* request) {
-  ascriber_->OnUrlRequestDestroyed(request);
-}
-
 void DataUseNetworkDelegate::OnCompletedInternal(net::URLRequest* request,
                                                  bool started) {
   data_use_measurement_.OnCompleted(*request, started);
+}
+
+void DataUseNetworkDelegate::OnURLRequestDestroyedInternal(
+    net::URLRequest* request) {
+  ascriber_->OnUrlRequestDestroyed(request);
 }
 
 }  // namespace data_use_measurement

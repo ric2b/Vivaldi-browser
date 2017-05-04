@@ -216,6 +216,7 @@ class CORE_EXPORT LayoutMultiColumnFlowThread : public LayoutFlowThread,
   virtual bool needsNewWidth() const;
 
   bool isPageLogicalHeightKnown() const final;
+  bool mayHaveNonUniformPageLogicalHeight() const final;
 
   LayoutSize flowThreadTranslationAtOffset(LayoutUnit,
                                            PageBoundaryRule,
@@ -290,6 +291,7 @@ class CORE_EXPORT LayoutMultiColumnFlowThread : public LayoutFlowThread,
   void layout() override;
 
  private:
+  void calculateColumnHeightAvailable();
   void calculateColumnCountAndWidth(LayoutUnit& width, unsigned& count) const;
   void createAndInsertMultiColumnSet(LayoutBox* insertBefore = nullptr);
   void createAndInsertSpannerPlaceholder(

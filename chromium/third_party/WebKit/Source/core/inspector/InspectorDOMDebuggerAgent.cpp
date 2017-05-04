@@ -215,7 +215,7 @@ void InspectorDOMDebuggerAgent::eventListenersInfoForTarget(
       if (handler.IsEmpty())
         continue;
       bool useCapture = listeners->at(k).capture();
-      eventInformation.append(V8EventListenerInfo(
+      eventInformation.push_back(V8EventListenerInfo(
           type, useCapture, listeners->at(k).passive(), listeners->at(k).once(),
           handler,
           createRemoveFunction(context, value, handler, type, useCapture)));
@@ -370,13 +370,13 @@ void InspectorDOMDebuggerAgent::didRemoveDOMNode(Node* node) {
     m_domBreakpoints.remove(node);
     HeapVector<Member<Node>> stack(1, InspectorDOMAgent::innerFirstChild(node));
     do {
-      Node* node = stack.last();
+      Node* node = stack.back();
       stack.pop_back();
       if (!node)
         continue;
       m_domBreakpoints.remove(node);
-      stack.append(InspectorDOMAgent::innerFirstChild(node));
-      stack.append(InspectorDOMAgent::innerNextSibling(node));
+      stack.push_back(InspectorDOMAgent::innerFirstChild(node));
+      stack.push_back(InspectorDOMAgent::innerNextSibling(node));
     } while (!stack.isEmpty());
   }
 }
@@ -607,7 +607,7 @@ void InspectorDOMDebuggerAgent::breakProgramOnDOMEvent(Node* target,
   ASSERT(breakpointOwnerNodeId);
   description->setInteger("nodeId", breakpointOwnerNodeId);
   description->setString("type", domTypeName(breakpointType));
-  String json = description->toJSONString();
+  String json = description->serialize();
   m_v8Session->breakProgram(
       toV8InspectorStringView(
           v8_inspector::protocol::Debugger::API::Paused::ReasonEnum::DOM),
@@ -647,7 +647,7 @@ void InspectorDOMDebuggerAgent::pauseOnNativeEventIfNeeded(
     bool synchronous) {
   if (!eventData)
     return;
-  String json = eventData->toJSONString();
+  String json = eventData->serialize();
   if (synchronous)
     m_v8Session->breakProgram(
         toV8InspectorStringView(v8_inspector::protocol::Debugger::API::Paused::
@@ -767,7 +767,7 @@ void InspectorDOMDebuggerAgent::willSendXMLHttpOrFetchNetworkRequest(
       protocol::DictionaryValue::create();
   eventData->setString("breakpointURL", breakpointURL);
   eventData->setString("url", url);
-  String json = eventData->toJSONString();
+  String json = eventData->serialize();
   m_v8Session->breakProgram(
       toV8InspectorStringView(
           v8_inspector::protocol::Debugger::API::Paused::ReasonEnum::XHR),

@@ -137,22 +137,12 @@ class CORE_EXPORT TextControlElement : public HTMLFormControlElementWithState {
 
   String directionForFormData() const;
 
-  // These functions don't cause synchronous layout and SpellChecker uses
-  // them to improve performance.
-  // Passed |Position| must point inside of a text form control.
-  static Position startOfWord(const Position&);
-  static Position endOfWord(const Position&);
-  static Position startOfSentence(const Position&);
-  static Position endOfSentence(const Position&);
-
  protected:
-  TextControlElement(const QualifiedName&, Document&, HTMLFormElement*);
+  TextControlElement(const QualifiedName&, Document&);
   bool isPlaceholderEmpty() const;
   virtual void updatePlaceholderText() = 0;
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
 
   void restoreCachedSelection();
 
@@ -222,7 +212,7 @@ inline bool isTextControlElement(const Element& element) {
 DEFINE_HTMLELEMENT_TYPE_CASTS_WITH_FUNCTION(TextControlElement);
 
 TextControlElement* enclosingTextControl(const Position&);
-TextControlElement* enclosingTextControl(Node*);
+TextControlElement* enclosingTextControl(const Node*);
 
 }  // namespace blink
 

@@ -1,0 +1,7 @@
+include_rules = [
+  "+net",
+  "+ui/base",
+  "+ios/chrome",
+  "+ios/shared",
+  "+ios/web",
+]

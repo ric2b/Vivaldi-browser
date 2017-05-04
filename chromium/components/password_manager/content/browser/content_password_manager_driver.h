@@ -23,7 +23,6 @@
 #include "third_party/WebKit/public/platform/modules/sensitive_input_visibility/sensitive_input_visibility_service.mojom.h"
 
 namespace autofill {
-class AutofillManager;
 struct PasswordForm;
 }
 
@@ -31,11 +30,6 @@ namespace content {
 struct FrameNavigateParams;
 struct LoadCommittedDetails;
 class RenderFrameHost;
-class WebContents;
-}
-
-namespace IPC {
-class Message;
 }
 
 namespace password_manager {
@@ -110,7 +104,8 @@ class ContentPasswordManagerDriver
                                const base::string16& typed_username,
                                int options,
                                const gfx::RectF& bounds) override;
-  void PasswordAutofillAgentConstructed() override;
+  void ShowNotSecureWarning(base::i18n::TextDirection text_direction,
+                            const gfx::RectF& bounds) override;
   void RecordSavePasswordProgress(const std::string& log) override;
   void SaveGenerationFieldDetectedByClassifier(
       const autofill::PasswordForm& password_form,

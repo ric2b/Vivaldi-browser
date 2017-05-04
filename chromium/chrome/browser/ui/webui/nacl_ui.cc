@@ -17,6 +17,7 @@
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/string16.h"
@@ -335,7 +336,7 @@ void CheckVersion(const base::FilePath& pnacl_path, std::string* version) {
   JSONFileValueDeserializer deserializer(pnacl_json_path);
   std::string error;
   std::unique_ptr<base::Value> root = deserializer.Deserialize(NULL, &error);
-  if (!root || !root->IsType(base::Value::TYPE_DICTIONARY))
+  if (!root || !root->IsType(base::Value::Type::DICTIONARY))
     return;
 
   // Now try to get the field. This may leave version empty if the
@@ -388,7 +389,7 @@ void NaClDomHandler::MaybeRespondToPage() {
 NaClUI::NaClUI(content::WebUI* web_ui) : WebUIController(web_ui) {
   content::RecordAction(UserMetricsAction("ViewAboutNaCl"));
 
-  web_ui->AddMessageHandler(new NaClDomHandler());
+  web_ui->AddMessageHandler(base::MakeUnique<NaClDomHandler>());
 
   // Set up the about:nacl source.
   Profile* profile = Profile::FromWebUI(web_ui);

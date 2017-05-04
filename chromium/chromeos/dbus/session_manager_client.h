@@ -16,6 +16,7 @@
 #include "chromeos/dbus/dbus_client.h"
 #include "chromeos/dbus/dbus_client_implementation_type.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
+#include "third_party/cros_system_api/dbus/login_manager/dbus-constants.h"
 
 namespace cryptohome {
 class Identification;
@@ -150,6 +151,15 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
   // completion of the retrieve attempt, we will call the provided callback.
   virtual void RetrieveDevicePolicy(const RetrievePolicyCallback& callback) = 0;
 
+  // Same as RetrieveDevicePolicy() but blocks until a reply is received, and
+  // returns the policy synchronously. Returns an empty string if the method
+  // call fails.
+  // This may only be called in situations where blocking the UI thread is
+  // considered acceptable (e.g. restarting the browser after a crash or after
+  // a flag change).
+  // TODO: Get rid of blocking calls (crbug.com/160522).
+  virtual std::string BlockingRetrieveDevicePolicy() = 0;
+
   // Fetches the user policy blob stored by the session manager for the given
   // |cryptohome_id|. Upon completion of the retrieve attempt, we will call the
   // provided callback.
@@ -163,6 +173,7 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
   // This may only be called in situations where blocking the UI thread is
   // considered acceptable (e.g. restarting the browser after a crash or after
   // a flag change).
+  // TODO: Get rid of blocking calls (crbug.com/160522).
   virtual std::string BlockingRetrievePolicyForUser(
       const cryptohome::Identification& cryptohome_id) = 0;
 
@@ -171,6 +182,16 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
   virtual void RetrieveDeviceLocalAccountPolicy(
       const std::string& account_id,
       const RetrievePolicyCallback& callback) = 0;
+
+  // Same as RetrieveDeviceLocalAccountPolicy() but blocks until a reply is
+  // received, and returns the policy synchronously.
+  // Returns an empty string if the method call fails.
+  // This may only be called in situations where blocking the UI thread is
+  // considered acceptable (e.g. restarting the browser after a crash or after
+  // a flag change).
+  // TODO: Get rid of blocking calls (crbug.com/160522).
+  virtual std::string BlockingRetrieveDeviceLocalAccountPolicy(
+      const std::string& account_id) = 0;
 
   // Used for StoreDevicePolicy, StorePolicyForUser and
   // StoreDeviceLocalAccountPolicy. Takes a boolean indicating whether the
@@ -211,7 +232,8 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
   // for the device to retrieve after a device factory reset.
   //
   // The state keys are returned asynchronously via |callback|. The callback
-  // will be invoked with an empty state key vector in case of errors.
+  // is invoked with an empty state key vector in case of errors. If the time
+  // sync fails or there's no network, the callback is never invoked.
   virtual void GetServerBackedStateKeys(const StateKeysCallback& callback) = 0;
 
   // Used for several ARC methods.  Takes a boolean indicating whether the
@@ -252,12 +274,24 @@ class CHROMEOS_EXPORT SessionManagerClient : public DBusClient {
   // reached).
   virtual void StopArcInstance(const ArcCallback& callback) = 0;
 
+  // Deprecated. Use SetArcCpuRestriction() instead.
+  // TODO(yusukes): Remove the interface.
   // Prioritizes the ARC instance by removing cgroups restrictions that
   // session_manager applies to the instance by default. Upon completion,
   // invokes |callback| with the result; true on success, false on failure.
-  // Calling this multiple times is okay. Such calls except the first one
-  // will be ignored.
+  // All calls after the first one will have no effect.
   virtual void PrioritizeArcInstance(const ArcCallback& callback) = 0;
+
+  // Adjusts the amount of CPU the ARC instance is allowed to use. When
+  // |restriction_state| is CONTAINER_CPU_RESTRICTION_FOREGROUND the limit is
+  // adjusted so ARC can use all the system's CPU if needed. When it is
+  // CONTAINER_CPU_RESTRICTION_BACKGROUND, ARC can only use tightly restricted
+  // CPU resources. The ARC instance is started in a state that is more
+  // restricted than CONTAINER_CPU_RESTRICTION_BACKGROUND. When ARC is not
+  // supported, the function asynchronously runs the |callback| with false.
+  virtual void SetArcCpuRestriction(
+      login_manager::ContainerCpuRestrictionState restriction_state,
+      const ArcCallback& callback) = 0;
 
   // Emits the "arc-booted" upstart signal.
   virtual void EmitArcBooted() = 0;

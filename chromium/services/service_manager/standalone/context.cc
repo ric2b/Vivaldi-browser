@@ -18,6 +18,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/process/process_info.h"
 #include "base/run_loop.h"
@@ -38,8 +39,7 @@
 #include "services/service_manager/connect_params.h"
 #include "services/service_manager/connect_util.h"
 #include "services/service_manager/runner/common/switches.h"
-#include "services/service_manager/runner/host/in_process_native_runner.h"
-#include "services/service_manager/runner/host/out_of_process_native_runner.h"
+#include "services/service_manager/runner/host/service_process_launcher.h"
 #include "services/service_manager/standalone/tracer.h"
 #include "services/service_manager/switches.h"
 #include "services/tracing/public/cpp/provider.h"
@@ -48,7 +48,7 @@
 #include "services/tracing/public/interfaces/tracing.mojom.h"
 
 #if defined(OS_MACOSX)
-#include "services/service_manager/runner/host/mach_broker.h"
+#include "services/service_manager/public/cpp/standalone_service/mach_broker.h"
 #endif
 
 namespace service_manager {
@@ -74,7 +74,24 @@ class Setup {
   DISALLOW_COPY_AND_ASSIGN(Setup);
 };
 
-const size_t kMaxBlockingPoolThreads = 3;
+class ServiceProcessLauncherFactoryImpl : public ServiceProcessLauncherFactory {
+ public:
+  ServiceProcessLauncherFactoryImpl(base::TaskRunner* launch_process_runner,
+                                    ServiceProcessLauncher::Delegate* delegate)
+      : launch_process_runner_(launch_process_runner),
+        delegate_(delegate) {
+  }
+
+ private:
+   std::unique_ptr<ServiceProcessLauncher> Create(
+      const base::FilePath& service_path) override {
+    return base::MakeUnique<ServiceProcessLauncher>(
+        launch_process_runner_, delegate_, service_path);
+  }
+
+  base::TaskRunner* launch_process_runner_;
+  ServiceProcessLauncher::Delegate* delegate_;
+};
 
 std::unique_ptr<base::Thread> CreateIOThread(const char* name) {
   std::unique_ptr<base::Thread> thread(new base::Thread(name));
@@ -128,40 +145,33 @@ void Context::Init(std::unique_ptr<InitParams> init_params) {
     EnsureEmbedderIsInitialized();
 
   service_manager_runner_ = base::ThreadTaskRunnerHandle::Get();
-  blocking_pool_ =
-      new base::SequencedWorkerPool(kMaxBlockingPoolThreads, "blocking_pool",
-                                    base::TaskPriority::USER_VISIBLE);
+  blocking_pool_ = new base::SequencedWorkerPool(
+      kThreadPoolMaxThreads, "blocking_pool", base::TaskPriority::USER_VISIBLE);
 
   init_edk_ = !init_params || init_params->init_edk;
   if (init_edk_) {
-    mojo::edk::InitIPCSupport(this, io_thread_->task_runner().get());
+    mojo::edk::InitIPCSupport(io_thread_->task_runner().get());
 #if defined(OS_MACOSX)
     mojo::edk::SetMachPortProvider(MachBroker::GetInstance()->port_provider());
 #endif
   }
 
-  std::unique_ptr<NativeRunnerFactory> runner_factory;
-  if (command_line.HasSwitch(switches::kSingleProcess)) {
-#if defined(COMPONENT_BUILD)
-    LOG(ERROR) << "Running Mojo in single process component build, which isn't "
-               << "supported because statics in apps interact. Use static build"
-               << " or don't pass --single-process.";
-#endif
-    runner_factory.reset(
-        new InProcessNativeRunnerFactory(blocking_pool_.get()));
+  std::unique_ptr<ServiceProcessLauncherFactory>
+      service_process_launcher_factory =
+      base::MakeUnique<ServiceProcessLauncherFactoryImpl>(
+          blocking_pool_.get(),
+          init_params ? init_params->service_process_launcher_delegate
+                      : nullptr);
+  if (init_params && init_params->static_catalog) {
+    catalog_.reset(
+        new catalog::Catalog(std::move(init_params->static_catalog)));
   } else {
-    NativeRunnerDelegate* native_runner_delegate = init_params ?
-        init_params->native_runner_delegate : nullptr;
-    runner_factory.reset(new OutOfProcessNativeRunnerFactory(
-        blocking_pool_.get(), native_runner_delegate));
+    catalog_.reset(
+        new catalog::Catalog(blocking_pool_.get(), nullptr));
   }
-  std::unique_ptr<catalog::Store> store;
-  if (init_params)
-    store = std::move(init_params->catalog_store);
-  catalog_.reset(
-      new catalog::Catalog(blocking_pool_.get(), std::move(store), nullptr));
-  service_manager_.reset(new ServiceManager(std::move(runner_factory),
-                                            catalog_->TakeService()));
+  service_manager_.reset(
+      new ServiceManager(std::move(service_process_launcher_factory),
+                         catalog_->TakeService()));
 
   if (command_line.HasSwitch(::switches::kServiceOverrides)) {
     base::FilePath overrides_file(GetPathFromCommandLineSwitch(
@@ -192,22 +202,22 @@ void Context::Init(std::unique_ptr<InitParams> init_params) {
     Identity source_identity = CreateServiceManagerIdentity();
     Identity tracing_identity(tracing::mojom::kServiceName, mojom::kRootUserID);
     tracing::mojom::FactoryPtr factory;
-    ConnectToInterface(service_manager(), source_identity, tracing_identity,
-                       &factory);
+    BindInterface(service_manager(), source_identity, tracing_identity,
+                  &factory);
     provider_.InitializeWithFactory(&factory);
 
     if (command_line.HasSwitch(tracing::kTraceStartup)) {
       tracing::mojom::CollectorPtr coordinator;
-      ConnectToInterface(service_manager(), source_identity, tracing_identity,
-                         &coordinator);
+      BindInterface(service_manager(), source_identity, tracing_identity,
+                    &coordinator);
       tracer_.StartCollectingFromTracingService(std::move(coordinator));
     }
 
     // Record the service manager startup metrics used for performance testing.
     if (enable_stats_collection_bindings) {
       tracing::mojom::StartupPerformanceDataCollectorPtr collector;
-      ConnectToInterface(service_manager(), source_identity, tracing_identity,
-                         &collector);
+      BindInterface(service_manager(), source_identity, tracing_identity,
+                    &collector);
 #if defined(OS_MACOSX) || defined(OS_WIN) || defined(OS_LINUX)
       // CurrentProcessInfo::CreationTime is only defined on some platforms.
       const base::Time creation_time = base::CurrentProcessInfo::CreationTime();
@@ -234,9 +244,11 @@ void Context::Shutdown() {
     return;
 
   TRACE_EVENT0("service_manager", "Context::Shutdown");
-  // Post a task in case OnShutdownComplete is called synchronously.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(mojo::edk::ShutdownIPCSupport));
+  mojo::edk::ShutdownIPCSupport(
+      base::Bind(IgnoreResult(&base::TaskRunner::PostTask),
+                 base::ThreadTaskRunnerHandle::Get(), FROM_HERE,
+                 base::Bind(&Context::OnShutdownComplete,
+                            base::Unretained(this))));
   // We'll quit when we get OnShutdownComplete().
   base::RunLoop().Run();
 }
@@ -261,7 +273,7 @@ void Context::Run(const std::string& name) {
   std::unique_ptr<ConnectParams> params(new ConnectParams);
   params->set_source(CreateServiceManagerIdentity());
   params->set_target(Identity(name, mojom::kRootUserID));
-  params->set_remote_interfaces(mojo::GetProxy(&remote_interfaces));
+  params->set_remote_interfaces(mojo::MakeRequest(&remote_interfaces));
   service_manager_->Connect(std::move(params));
 }
 

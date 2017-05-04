@@ -60,7 +60,7 @@
 #include "net/base/url_util.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_policy_status.h"
-#include "net/cert/ct_verifier.h"
+#include "net/cert/do_nothing_ct_verifier.h"
 #include "net/cert/ev_root_ca_metadata.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/cert/signed_certificate_timestamp_and_status.h"
@@ -388,7 +388,17 @@ class BlockingNetworkDelegate : public TestNetworkDelegate {
     USER_CALLBACK,  // User takes care of doing a callback.  |retval_| and
                     // |auth_retval_| are ignored. In every blocking stage the
                     // message loop is quit.
+    USER_NOTIFY,    // User is notified by a provided callback of the
+                    // blocking, and synchronously returns instructions
+                    // for handling it.
   };
+
+  using NotificationCallback =
+      base::Callback<Error(const CompletionCallback&, const URLRequest*)>;
+
+  using NotificationAuthCallback =
+      base::Callback<NetworkDelegate::AuthRequiredResponse(const AuthCallback&,
+                                                           const URLRequest*)>;
 
   // Creates a delegate which does not block at all.
   explicit BlockingNetworkDelegate(BlockMode block_mode);
@@ -424,6 +434,17 @@ class BlockingNetworkDelegate : public TestNetworkDelegate {
 
   void set_block_on(int block_on) {
     block_on_ = block_on;
+  }
+
+  // Only valid if |block_mode_| == USER_NOTIFY
+  void set_notification_callback(
+      const NotificationCallback& notification_callback) {
+    notification_callback_ = notification_callback;
+  }
+
+  void set_notification_auth_callback(
+      const NotificationAuthCallback& notification_auth_callback) {
+    notification_auth_callback_ = notification_auth_callback;
   }
 
   // Allows the user to check in which state did we block.
@@ -464,7 +485,9 @@ class BlockingNetworkDelegate : public TestNetworkDelegate {
 
   // Checks whether we should block in |stage|. If yes, returns an error code
   // and optionally sets up callback based on |block_mode_|. If no, returns OK.
-  int MaybeBlockStage(Stage stage, const CompletionCallback& callback);
+  int MaybeBlockStage(Stage stage,
+                      const URLRequest* request,
+                      const CompletionCallback& callback);
 
   // Configuration parameters, can be adjusted by public methods:
   const BlockMode block_mode_;
@@ -490,6 +513,10 @@ class BlockingNetworkDelegate : public TestNetworkDelegate {
   // Callback objects stored during blocking stages.
   CompletionCallback callback_;
   AuthCallback auth_callback_;
+
+  // Callback to request user instructions for blocking.
+  NotificationCallback notification_callback_;
+  NotificationAuthCallback notification_auth_callback_;
 
   base::WeakPtrFactory<BlockingNetworkDelegate> weak_factory_;
 
@@ -550,7 +577,7 @@ int BlockingNetworkDelegate::OnBeforeURLRequest(
   if (!redirect_url_.is_empty())
     *new_url = redirect_url_;
 
-  return MaybeBlockStage(ON_BEFORE_URL_REQUEST, callback);
+  return MaybeBlockStage(ON_BEFORE_URL_REQUEST, request, callback);
 }
 
 int BlockingNetworkDelegate::OnBeforeStartTransaction(
@@ -559,7 +586,7 @@ int BlockingNetworkDelegate::OnBeforeStartTransaction(
     HttpRequestHeaders* headers) {
   TestNetworkDelegate::OnBeforeStartTransaction(request, callback, headers);
 
-  return MaybeBlockStage(ON_BEFORE_SEND_HEADERS, callback);
+  return MaybeBlockStage(ON_BEFORE_SEND_HEADERS, request, callback);
 }
 
 int BlockingNetworkDelegate::OnHeadersReceived(
@@ -574,7 +601,7 @@ int BlockingNetworkDelegate::OnHeadersReceived(
                                          override_response_headers,
                                          allowed_unsafe_redirect_url);
 
-  return MaybeBlockStage(ON_HEADERS_RECEIVED, callback);
+  return MaybeBlockStage(ON_HEADERS_RECEIVED, request, callback);
 }
 
 NetworkDelegate::AuthRequiredResponse BlockingNetworkDelegate::OnAuthRequired(
@@ -612,6 +639,11 @@ NetworkDelegate::AuthRequiredResponse BlockingNetworkDelegate::OnAuthRequired(
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
       return AUTH_REQUIRED_RESPONSE_IO_PENDING;
+
+    case USER_NOTIFY:
+      // If the callback returns ERR_IO_PENDING, the user has accepted
+      // responsibility for running the callback in the future.
+      return notification_auth_callback_.Run(callback, request);
   }
   NOTREACHED();
   return AUTH_REQUIRED_RESPONSE_NO_ACTION;  // Dummy value.
@@ -626,6 +658,7 @@ void BlockingNetworkDelegate::Reset() {
 
 int BlockingNetworkDelegate::MaybeBlockStage(
     BlockingNetworkDelegate::Stage stage,
+    const URLRequest* request,
     const CompletionCallback& callback) {
   // Check that the user has provided callback for the previous blocked stage.
   EXPECT_EQ(NOT_BLOCKED, stage_blocked_for_callback_);
@@ -651,6 +684,11 @@ int BlockingNetworkDelegate::MaybeBlockStage(
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
       return ERR_IO_PENDING;
+
+    case USER_NOTIFY:
+      // If the callback returns ERR_IO_PENDING, the user has accepted
+      // responsibility for running the callback in the future.
+      return notification_callback_.Run(callback, request);
   }
   NOTREACHED();
   return 0;
@@ -2714,6 +2752,23 @@ TEST_F(URLRequestTest, SameSiteCookies) {
         test_server.GetURL(kHost, "/echoheader?Cookie"), DEFAULT_PRIORITY, &d));
     req->set_first_party_for_cookies(test_server.GetURL(kHost, "/"));
     req->set_initiator(url::Origin(test_server.GetURL(kHost, "/")));
+    req->Start();
+    base::RunLoop().Run();
+
+    EXPECT_NE(std::string::npos,
+              d.data_received().find("StrictSameSiteCookie=1"));
+    EXPECT_NE(std::string::npos, d.data_received().find("LaxSameSiteCookie=1"));
+    EXPECT_EQ(0, network_delegate.blocked_get_cookies_count());
+    EXPECT_EQ(0, network_delegate.blocked_set_cookie_count());
+  }
+
+  // Verify that both cookies are sent when the request has no initiator (can
+  // happen for main frame browser-initiated navigations).
+  {
+    TestDelegate d;
+    std::unique_ptr<URLRequest> req(default_context_.CreateRequest(
+        test_server.GetURL(kHost, "/echoheader?Cookie"), DEFAULT_PRIORITY, &d));
+    req->set_first_party_for_cookies(test_server.GetURL(kHost, "/"));
     req->Start();
     base::RunLoop().Run();
 
@@ -4806,7 +4861,7 @@ class AsyncDelegateLogger : public base::RefCounted<AsyncDelegateLogger> {
     std::string delegate_info;
     EXPECT_EQ(NetLogEventType::DELEGATE_INFO, entries[log_position].type);
     EXPECT_EQ(NetLogEventPhase::BEGIN, entries[log_position].phase);
-    EXPECT_TRUE(entries[log_position].GetStringValue("delegate_info",
+    EXPECT_TRUE(entries[log_position].GetStringValue("delegate_blocked_by",
                                                      &delegate_info));
     EXPECT_EQ(kFirstDelegateInfo, delegate_info);
 
@@ -4817,7 +4872,7 @@ class AsyncDelegateLogger : public base::RefCounted<AsyncDelegateLogger> {
     ++log_position;
     EXPECT_EQ(NetLogEventType::DELEGATE_INFO, entries[log_position].type);
     EXPECT_EQ(NetLogEventPhase::BEGIN, entries[log_position].phase);
-    EXPECT_TRUE(entries[log_position].GetStringValue("delegate_info",
+    EXPECT_TRUE(entries[log_position].GetStringValue("delegate_blocked_by",
                                                      &delegate_info));
     EXPECT_EQ(kSecondDelegateInfo, delegate_info);
 
@@ -5391,8 +5446,8 @@ TEST_F(URLRequestTestHTTP, URLRequestDelegateOnRedirectCancelled) {
   for (size_t test_case = 0; test_case < arraysize(kCancelStages);
        ++test_case) {
     AsyncLoggingUrlRequestDelegate request_delegate(kCancelStages[test_case]);
-    TestURLRequestContext context(true);
     TestNetLog net_log;
+    TestURLRequestContext context(true);
     context.set_network_delegate(NULL);
     context.set_net_log(&net_log);
     context.Init();
@@ -5511,7 +5566,7 @@ TEST_F(URLRequestTestHTTP, RedirectWithHeaderRemovalTest) {
   EXPECT_EQ("None", d.data_received());
 }
 
-TEST_F(URLRequestTestHTTP, CancelTest) {
+TEST_F(URLRequestTestHTTP, CancelAfterStart) {
   TestDelegate d;
   {
     std::unique_ptr<URLRequest> r(default_context_.CreateRequest(
@@ -5532,7 +5587,7 @@ TEST_F(URLRequestTestHTTP, CancelTest) {
   }
 }
 
-TEST_F(URLRequestTestHTTP, CancelTest2) {
+TEST_F(URLRequestTestHTTP, CancelInResponseStarted) {
   ASSERT_TRUE(http_test_server()->Start());
 
   TestDelegate d;
@@ -5554,11 +5609,34 @@ TEST_F(URLRequestTestHTTP, CancelTest2) {
   }
 }
 
-TEST_F(URLRequestTestHTTP, CancelTest3) {
+TEST_F(URLRequestTestHTTP, CancelOnDataReceived) {
   ASSERT_TRUE(http_test_server()->Start());
 
   TestDelegate d;
   {
+    std::unique_ptr<URLRequest> r(default_context_.CreateRequest(
+        http_test_server()->GetURL("/defaultresponse"), DEFAULT_PRIORITY, &d));
+
+    d.set_cancel_in_received_data(true);
+
+    r->Start();
+    EXPECT_TRUE(r->is_pending());
+
+    base::RunLoop().Run();
+
+    EXPECT_EQ(1, d.response_started_count());
+    EXPECT_NE(0, d.received_bytes_count());
+    EXPECT_FALSE(d.received_data_before_response());
+    EXPECT_EQ(ERR_ABORTED, d.request_status());
+  }
+}
+
+TEST_F(URLRequestTestHTTP, CancelDuringEofRead) {
+  ASSERT_TRUE(http_test_server()->Start());
+
+  TestDelegate d;
+  {
+    // This returns an empty response (With headers).
     std::unique_ptr<URLRequest> r(default_context_.CreateRequest(
         http_test_server()->GetURL("/"), DEFAULT_PRIORITY, &d));
 
@@ -5570,16 +5648,13 @@ TEST_F(URLRequestTestHTTP, CancelTest3) {
     base::RunLoop().Run();
 
     EXPECT_EQ(1, d.response_started_count());
-    // There is no guarantee about how much data was received
-    // before the cancel was issued.  It could have been 0 bytes,
-    // or it could have been all the bytes.
-    // EXPECT_EQ(0, d.bytes_received());
+    EXPECT_EQ(0, d.received_bytes_count());
     EXPECT_FALSE(d.received_data_before_response());
     EXPECT_EQ(ERR_ABORTED, d.request_status());
   }
 }
 
-TEST_F(URLRequestTestHTTP, CancelTest4) {
+TEST_F(URLRequestTestHTTP, CancelByDestroyingAfterStart) {
   ASSERT_TRUE(http_test_server()->Start());
 
   TestDelegate d;
@@ -5605,7 +5680,7 @@ TEST_F(URLRequestTestHTTP, CancelTest4) {
   EXPECT_EQ(0, d.bytes_received());
 }
 
-TEST_F(URLRequestTestHTTP, CancelTest5) {
+TEST_F(URLRequestTestHTTP, CancelWhileReadingFromCache) {
   ASSERT_TRUE(http_test_server()->Start());
 
   // populate cache
@@ -6046,7 +6121,7 @@ TEST_F(URLRequestTestHTTP, ProcessPKPAndSendReport) {
   std::unique_ptr<base::Value> value(
       base::JSONReader::Read(mock_report_sender.latest_report()));
   ASSERT_TRUE(value);
-  ASSERT_TRUE(value->IsType(base::Value::TYPE_DICTIONARY));
+  ASSERT_TRUE(value->IsType(base::Value::Type::DICTIONARY));
   base::DictionaryValue* report_dict;
   ASSERT_TRUE(value->GetAsDictionary(&report_dict));
   std::string report_hostname;
@@ -6111,7 +6186,7 @@ TEST_F(URLRequestTestHTTP, ProcessPKPReportOnly) {
   std::unique_ptr<base::Value> value(
       base::JSONReader::Read(mock_report_sender.latest_report()));
   ASSERT_TRUE(value);
-  ASSERT_TRUE(value->IsType(base::Value::TYPE_DICTIONARY));
+  ASSERT_TRUE(value->IsType(base::Value::Type::DICTIONARY));
   base::DictionaryValue* report_dict;
   ASSERT_TRUE(value->GetAsDictionary(&report_dict));
   std::string report_hostname;
@@ -6369,23 +6444,6 @@ class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
   uint32_t num_failures_;
 };
 
-// A CTVerifier that returns net::OK for every certificate.
-class MockCTVerifier : public CTVerifier {
- public:
-  MockCTVerifier() {}
-  ~MockCTVerifier() override {}
-
-  int Verify(X509Certificate* cert,
-             const std::string& stapled_ocsp_response,
-             const std::string& sct_list_from_tls_extension,
-             SignedCertificateTimestampAndStatusList* output_scts,
-             const NetLogWithSource& net_log) override {
-    return net::OK;
-  }
-
-  void SetObserver(Observer* observer) override {}
-};
-
 // A CTPolicyEnforcer that returns a default CertPolicyCompliance value
 // for every certificate.
 class MockCTPolicyEnforcer : public CTPolicyEnforcer {
@@ -6433,9 +6491,9 @@ TEST_F(URLRequestTestHTTP, ExpectCTHeader) {
   verify_result.is_issued_by_known_root = true;
   cert_verifier.AddResultForCert(cert.get(), verify_result, OK);
 
-  // Set up a MockCTVerifier and MockCTPolicyEnforcer to trigger an Expect CT
-  // violation.
-  MockCTVerifier ct_verifier;
+  // Set up a DoNothingCTVerifier and MockCTPolicyEnforcer to trigger an Expect
+  // CT violation.
+  DoNothingCTVerifier ct_verifier;
   MockCTPolicyEnforcer ct_policy_enforcer;
   ct_policy_enforcer.set_default_result(
       ct::CertPolicyCompliance::CERT_POLICY_NOT_ENOUGH_SCTS);
@@ -7807,7 +7865,7 @@ TEST_F(URLRequestTestHTTP, NetworkAccessedClearOnLoadOnlyFromCache) {
   EXPECT_FALSE(req->response_info().network_accessed);
 }
 
-// Test that a single job with a throttled priority completes
+// Test that a single job with a THROTTLED priority completes
 // correctly in the absence of contention.
 TEST_F(URLRequestTestHTTP, ThrottledPriority) {
   ASSERT_TRUE(http_test_server()->Start());
@@ -7820,6 +7878,281 @@ TEST_F(URLRequestTestHTTP, ThrottledPriority) {
   base::RunLoop().Run();
 
   EXPECT_TRUE(req->status().is_success());
+}
+
+// A class to hold state for responding to USER_NOTIFY callbacks from
+// BlockingNetworkDelegate.  It also accepts a RunLoop that will be
+// signaled via QuitWhenIdle() when any request is blocked.
+//
+class NotificationCallbackHandler {
+ public:
+  // Default constructed object doesn't block anything.
+  NotificationCallbackHandler() : run_loop_(nullptr) {}
+
+  void AddURLRequestToBlockList(const URLRequest* request) {
+    requests_to_block_.insert(request);
+  }
+
+  Error ShouldBlockRequest(const CompletionCallback& callback,
+                           const URLRequest* request) {
+    if (requests_to_block_.find(request) == requests_to_block_.end()) {
+      return OK;
+    }
+
+    DCHECK(blocked_callbacks_.find(request) == blocked_callbacks_.end());
+    blocked_callbacks_[request] = callback;
+    if (run_loop_ && blocked_callbacks_.size() == requests_to_block_.size())
+      run_loop_->QuitWhenIdle();
+    return ERR_IO_PENDING;
+  }
+
+  // Erases object's memory of blocked callbacks as a side effect.
+  void GetBlockedCallbacks(
+      std::map<const URLRequest*, CompletionCallback>* blocked_callbacks) {
+    blocked_callbacks_.swap(*blocked_callbacks);
+  }
+
+  // Set a RunLoop that, if non-null, will be signaled if any request
+  // is blocked.  It is the callers responsibility to make sure the
+  // passed object lives past the destruction of this class or
+  // next call to SetRunLoop().
+  void SetRunLoop(base::RunLoop* run_loop) { run_loop_ = run_loop; }
+
+ private:
+  std::set<const URLRequest*> requests_to_block_;
+  std::map<const URLRequest*, CompletionCallback> blocked_callbacks_;
+
+  base::RunLoop* run_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(NotificationCallbackHandler);
+};
+
+TEST_F(URLRequestTestHTTP, MultiThrottledPriority) {
+  ASSERT_TRUE(http_test_server()->Start());
+
+  base::RunLoop run_until_request_blocked;
+
+  NotificationCallbackHandler notification_handler;
+  notification_handler.SetRunLoop(&run_until_request_blocked);
+  BlockingNetworkDelegate network_delegate(
+      BlockingNetworkDelegate::USER_NOTIFY);
+  network_delegate.set_block_on(BlockingNetworkDelegate::ON_HEADERS_RECEIVED);
+  network_delegate.set_notification_callback(
+      base::Bind(&NotificationCallbackHandler::ShouldBlockRequest,
+                 // Both objects are owned by this function, and
+                 // |*network_delegate| will be destroyed first, so
+                 // it's safe to pass it an unretained pointer.
+                 base::Unretained(&notification_handler)));
+
+  TestURLRequestContext context(true);
+  context.set_network_delegate(&network_delegate);
+  context.Init();
+
+  // Use different test URLs to make sure all three requests turn into
+  // HttpNetworkTransacations.  Use different URLRequest::Delegates so that
+  // the requests may be waited on separately.
+  TestDelegate d1;
+  std::unique_ptr<URLRequest> req1(context.CreateRequest(
+      http_test_server()->GetURL("/echoall/l"), THROTTLED, &d1));
+  notification_handler.AddURLRequestToBlockList(req1.get());
+
+  TestDelegate d2;
+  std::unique_ptr<URLRequest> req2(context.CreateRequest(
+      http_test_server()->GetURL("/echoall/2"), THROTTLED, &d2));
+  notification_handler.AddURLRequestToBlockList(req2.get());
+
+  TestDelegate d3;
+  std::unique_ptr<URLRequest> req3(context.CreateRequest(
+      http_test_server()->GetURL("/echoall/3"), THROTTLED, &d3));
+  req1->Start();
+  req2->Start();
+  req3->Start();
+  run_until_request_blocked.Run();
+  notification_handler.SetRunLoop(nullptr);
+
+  // The first two requests should be blocked based on the notification
+  // callback, and their status should have blocked the third request
+  // through throttling.
+  EXPECT_TRUE(req1->status().is_io_pending());
+  EXPECT_TRUE(req2->status().is_io_pending());
+  EXPECT_TRUE(req3->status().is_io_pending());
+
+  std::map<const URLRequest*, CompletionCallback> blocked_callbacks;
+  notification_handler.GetBlockedCallbacks(&blocked_callbacks);
+  ASSERT_EQ(2u, blocked_callbacks.size());
+  ASSERT_TRUE(blocked_callbacks.find(req1.get()) != blocked_callbacks.end());
+  ASSERT_TRUE(blocked_callbacks.find(req2.get()) != blocked_callbacks.end());
+
+  // Unblocking one of the requests blocked on the notification callback
+  // should let it complete, which should then let the third request
+  // complete.  Unblock the second request, then wait for the third
+  // request to complete.
+  // TODO(rdsmith): Find something to wait on other than the third
+  // requests completion; if there's a bug in throttling, that will
+  // result in this test hanging rather than failing quickly.
+  d1.set_quit_on_complete(false);
+  d2.set_quit_on_complete(false);
+  d3.set_quit_on_complete(true);
+  blocked_callbacks[req2.get()].Run(OK);
+  base::RunLoop().Run();
+
+  notification_handler.GetBlockedCallbacks(&blocked_callbacks);
+  EXPECT_EQ(0u, blocked_callbacks.size());
+  EXPECT_TRUE(req1->status().is_io_pending());
+  // req3 is only unblocked after req2 completes, so req2's
+  // success is guaranteed at this point in the function.
+  EXPECT_EQ(URLRequestStatus::SUCCESS, req2->status().status());
+  EXPECT_EQ(URLRequestStatus::SUCCESS, req3->status().status());
+}
+
+// Confirm that failing a request unblocks following requests.
+TEST_F(URLRequestTestHTTP, ThrottledFailure) {
+  ASSERT_TRUE(http_test_server()->Start());
+
+  base::RunLoop run_until_request_blocked;
+
+  NotificationCallbackHandler notification_handler;
+  notification_handler.SetRunLoop(&run_until_request_blocked);
+  BlockingNetworkDelegate network_delegate(
+      BlockingNetworkDelegate::USER_NOTIFY);
+  network_delegate.set_block_on(BlockingNetworkDelegate::ON_HEADERS_RECEIVED);
+  network_delegate.set_notification_callback(
+      base::Bind(&NotificationCallbackHandler::ShouldBlockRequest,
+                 // Both objects are owned by this function, and
+                 // |*network_delegate| will be destroyed first, so
+                 // it's safe to pass it an unretained pointer.
+                 base::Unretained(&notification_handler)));
+
+  TestURLRequestContext context(true);
+  context.set_network_delegate(&network_delegate);
+  context.Init();
+
+  // Use different test URLs to make sure all three requests turn into
+  // HttpNetworkTransacations.  Use different URLRequest::Delegates so that
+  // the requests may be waited on separately.
+  TestDelegate d1;
+  std::unique_ptr<URLRequest> req1(context.CreateRequest(
+      http_test_server()->GetURL("/echoall/l"), THROTTLED, &d1));
+  notification_handler.AddURLRequestToBlockList(req1.get());
+
+  TestDelegate d2;
+  std::unique_ptr<URLRequest> req2(context.CreateRequest(
+      http_test_server()->GetURL("/echoall/2"), THROTTLED, &d2));
+  notification_handler.AddURLRequestToBlockList(req2.get());
+
+  TestDelegate d3;
+  std::unique_ptr<URLRequest> req3(context.CreateRequest(
+      http_test_server()->GetURL("/echoall/3"), THROTTLED, &d3));
+  req1->Start();
+  req2->Start();
+  req3->Start();
+  run_until_request_blocked.Run();
+  notification_handler.SetRunLoop(nullptr);
+
+  // The first two requests should be blocked based on the notification
+  // callback, and their status should have blocked the third request
+  // through throttling.
+  EXPECT_TRUE(req1->status().is_io_pending());
+  EXPECT_TRUE(req2->status().is_io_pending());
+  EXPECT_TRUE(req3->status().is_io_pending());
+
+  std::map<const URLRequest*, CompletionCallback> blocked_callbacks;
+  notification_handler.GetBlockedCallbacks(&blocked_callbacks);
+  ASSERT_EQ(2u, blocked_callbacks.size());
+  ASSERT_TRUE(blocked_callbacks.find(req1.get()) != blocked_callbacks.end());
+  ASSERT_TRUE(blocked_callbacks.find(req2.get()) != blocked_callbacks.end());
+
+  // Confirm canceling one of the outstanding requests allows the
+  // blocked request to complete.
+
+  // TODO(rdsmith): Find something to wait on other than the third
+  // requests completion; if there's a bug in throttling, that will
+  // result in this test hanging rather than failing quickly.
+  d1.set_quit_on_complete(false);
+  d2.set_quit_on_complete(false);
+  d3.set_quit_on_complete(true);
+  req2->Cancel();
+  base::RunLoop().Run();
+
+  notification_handler.GetBlockedCallbacks(&blocked_callbacks);
+  EXPECT_EQ(0u, blocked_callbacks.size());
+  EXPECT_TRUE(req1->status().is_io_pending());
+  EXPECT_EQ(URLRequestStatus::CANCELED, req2->status().status());
+  EXPECT_EQ(URLRequestStatus::SUCCESS, req3->status().status());
+}
+
+TEST_F(URLRequestTestHTTP, ThrottledRepriUnblock) {
+  ASSERT_TRUE(http_test_server()->Start());
+
+  base::RunLoop run_until_request_blocked;
+
+  NotificationCallbackHandler notification_handler;
+  notification_handler.SetRunLoop(&run_until_request_blocked);
+  BlockingNetworkDelegate network_delegate(
+      BlockingNetworkDelegate::USER_NOTIFY);
+  network_delegate.set_block_on(BlockingNetworkDelegate::ON_HEADERS_RECEIVED);
+  network_delegate.set_notification_callback(
+      base::Bind(&NotificationCallbackHandler::ShouldBlockRequest,
+                 // Both objects are owned by this function, and
+                 // |*network_delegate| will be destroyed first, so
+                 // it's safe to pass it an unretained pointer.
+                 base::Unretained(&notification_handler)));
+
+  TestURLRequestContext context(true);
+  context.set_network_delegate(&network_delegate);
+  context.Init();
+
+  // Use different test URLs to make sure all three requests turn into
+  // HttpNetworkTransacations.  Use different URLRequest::Delegates so that
+  // the requests may be waited on separately.
+  TestDelegate d1;
+  std::unique_ptr<URLRequest> req1(context.CreateRequest(
+      http_test_server()->GetURL("/echoall/l"), THROTTLED, &d1));
+  notification_handler.AddURLRequestToBlockList(req1.get());
+
+  TestDelegate d2;
+  std::unique_ptr<URLRequest> req2(context.CreateRequest(
+      http_test_server()->GetURL("/echoall/2"), THROTTLED, &d2));
+  notification_handler.AddURLRequestToBlockList(req2.get());
+
+  TestDelegate d3;
+  std::unique_ptr<URLRequest> req3(context.CreateRequest(
+      http_test_server()->GetURL("/echoall/3"), THROTTLED, &d3));
+  req1->Start();
+  req2->Start();
+  req3->Start();
+  run_until_request_blocked.Run();
+  notification_handler.SetRunLoop(nullptr);
+
+  // The first two requests should be blocked based on the notification
+  // callback, and their status should have blocked the third request
+  // through throttling.
+  EXPECT_TRUE(req1->status().is_io_pending());
+  EXPECT_TRUE(req2->status().is_io_pending());
+  EXPECT_TRUE(req3->status().is_io_pending());
+
+  std::map<const URLRequest*, CompletionCallback> blocked_callbacks;
+  notification_handler.GetBlockedCallbacks(&blocked_callbacks);
+  ASSERT_EQ(2u, blocked_callbacks.size());
+  ASSERT_TRUE(blocked_callbacks.find(req1.get()) != blocked_callbacks.end());
+  ASSERT_TRUE(blocked_callbacks.find(req2.get()) != blocked_callbacks.end());
+
+  // Confirm raising the priority of the third request allows it to complete.
+
+  // TODO(rdsmith): Find something to wait on other than the third
+  // requests completion; if there's a bug in throttling, that will
+  // result in this test hanging rather than failing quickly.
+  d1.set_quit_on_complete(false);
+  d2.set_quit_on_complete(false);
+  d3.set_quit_on_complete(true);
+  req3->SetPriority(IDLE);
+  base::RunLoop().Run();
+
+  notification_handler.GetBlockedCallbacks(&blocked_callbacks);
+  EXPECT_EQ(0u, blocked_callbacks.size());
+  EXPECT_TRUE(req1->status().is_io_pending());
+  EXPECT_TRUE(req2->status().is_io_pending());
+  EXPECT_EQ(URLRequestStatus::SUCCESS, req3->status().status());
 }
 
 TEST_F(URLRequestTestHTTP, RawBodyBytesNoContentEncoding) {
@@ -8927,18 +9260,17 @@ TEST_F(HTTPSSessionTest, DontResumeSessionsForInvalidCertificates) {
 // This the fingerprint of the "Testing CA" certificate used by the testserver.
 // See net/data/ssl/certificates/ocsp-test-root.pem.
 static const SHA1HashValue kOCSPTestCertFingerprint = {{
-    0xa7, 0xea, 0x4b, 0x0d, 0x13, 0xc1, 0x63, 0xbf, 0xb8, 0x4e,
-    0x9a, 0xaf, 0x33, 0x05, 0xb0, 0x8f, 0x9c, 0xbe, 0x23, 0xe9,
+    0x80, 0x37, 0xe7, 0xee, 0x12, 0x19, 0xeb, 0x10, 0x79, 0x36,
+    0x00, 0x48, 0x57, 0x5a, 0xa6, 0x1e, 0x2b, 0x24, 0x1a, 0xd7,
 }};
 
 // This is the SHA256, SPKI hash of the "Testing CA" certificate used by the
 // testserver.
-static const SHA256HashValue kOCSPTestCertSPKI = { {
-  0xee, 0xe6, 0x51, 0x2d, 0x4c, 0xfa, 0xf7, 0x3e,
-  0x6c, 0xd8, 0xca, 0x67, 0xed, 0xb5, 0x5d, 0x49,
-  0x76, 0xe1, 0x52, 0xa7, 0x6e, 0x0e, 0xa0, 0x74,
-  0x09, 0x75, 0xe6, 0x23, 0x24, 0xbd, 0x1b, 0x28,
-} };
+static const SHA256HashValue kOCSPTestCertSPKI = {{
+    0x05, 0xa8, 0xf6, 0xfd, 0x8e, 0x10, 0xfe, 0x92, 0x2f, 0x22, 0x75,
+    0x46, 0x40, 0xf4, 0xc4, 0x57, 0x06, 0x0d, 0x95, 0xfd, 0x60, 0x31,
+    0x3b, 0xf3, 0xfc, 0x12, 0x47, 0xe7, 0x66, 0x1a, 0x82, 0xa3,
+}};
 
 // This is the policy OID contained in the certificates that testserver
 // generates.
@@ -9287,6 +9619,65 @@ TEST_F(HTTPSOCSPTest, ExpectStapleReportSentOnMissing) {
             mock_report_sender.latest_report_uri());
 }
 
+// Tests that Expect-Staple reports are not sent for connections on which there
+// is a certificate error.
+TEST_F(HTTPSOCSPTest, ExpectStapleReportNotSentOnMissingWithCertError) {
+  EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_test_server.SetSSLConfig(
+      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
+  https_test_server.ServeFilesFromSourceDirectory(
+      base::FilePath(kTestFilePath));
+  ASSERT_TRUE(https_test_server.Start());
+
+  // Set up a MockCertVerifier to report an error for the certificate
+  // and indicate that there was no stapled OCSP response.
+  scoped_refptr<X509Certificate> cert = https_test_server.GetCertificate();
+  ASSERT_TRUE(cert);
+  MockCertVerifier cert_verifier;
+  CertVerifyResult verify_result;
+  verify_result.cert_status = CERT_STATUS_DATE_INVALID;
+  verify_result.verified_cert = cert;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.ocsp_result.response_status = OCSPVerifyResult::MISSING;
+  cert_verifier.AddResultForCert(cert.get(), verify_result,
+                                 ERR_CERT_DATE_INVALID);
+
+  // Set up a mock report sender so that the test can check that an
+  // Expect-Staple report is not sent.
+  TransportSecurityState transport_security_state;
+  MockCertificateReportSender mock_report_sender;
+  transport_security_state.SetReportSender(&mock_report_sender);
+
+  TestNetworkDelegate network_delegate;
+  TestURLRequestContext context(true);
+
+  // Force |kExpectStapleStaticHostname| to resolve to |https_test_server|.
+  MockHostResolver host_resolver;
+  context.set_host_resolver(&host_resolver);
+
+  context.set_transport_security_state(&transport_security_state);
+  context.set_network_delegate(&network_delegate);
+  context.set_cert_verifier(&cert_verifier);
+  context.Init();
+
+  // Make a connection to |kExpectStapleStaticHostname|. Because the
+  // |verify_result| used with the |cert_verifier| will indicate a certificate
+  // error, an Expect-Staple report should not be sent.
+  TestDelegate d;
+  GURL url = https_test_server.GetURL("/");
+  GURL::Replacements replace_host;
+  replace_host.SetHostStr(kExpectStapleStaticHostname);
+  url = url.ReplaceComponents(replace_host);
+  std::unique_ptr<URLRequest> violating_request(
+      context.CreateRequest(url, DEFAULT_PRIORITY, &d));
+  violating_request->Start();
+  base::RunLoop().Run();
+
+  // Confirm a report was not sent.
+  EXPECT_TRUE(mock_report_sender.latest_report().empty());
+  EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
+}
+
 TEST_F(HTTPSOCSPTest, ExpectStapleReportNotSentOnValid) {
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(
@@ -9324,6 +9715,65 @@ TEST_F(HTTPSOCSPTest, ExpectStapleReportNotSentOnValid) {
   context.Init();
 
   // This request should not not trigger an Expect-Staple violation.
+  TestDelegate d;
+  GURL url = https_test_server.GetURL("/");
+  GURL::Replacements replace_host;
+  replace_host.SetHostStr(kExpectStapleStaticHostname);
+  url = url.ReplaceComponents(replace_host);
+  std::unique_ptr<URLRequest> ok_request(
+      context.CreateRequest(url, DEFAULT_PRIORITY, &d));
+  ok_request->Start();
+  base::RunLoop().Run();
+
+  // Check that no report was sent.
+  EXPECT_TRUE(mock_report_sender.latest_report().empty());
+  EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
+}
+
+// Tests that an Expect-Staple report is not sent when OCSP details are not
+// checked on the connection.
+TEST_F(HTTPSOCSPTest, ExpectStapleReportNotSentOnNotChecked) {
+  EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_test_server.SetSSLConfig(
+      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
+  https_test_server.ServeFilesFromSourceDirectory(
+      base::FilePath(kTestFilePath));
+  ASSERT_TRUE(https_test_server.Start());
+
+  // Set up a MockCertVerifier to accept the certificate that the server sends,
+  // and set |ocsp_result| to indicate that OCSP stapling details were not
+  // checked on the connection.
+  scoped_refptr<X509Certificate> cert = https_test_server.GetCertificate();
+  ASSERT_TRUE(cert);
+  MockCertVerifier cert_verifier;
+  CertVerifyResult verify_result;
+  verify_result.verified_cert = cert;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.ocsp_result.response_status = OCSPVerifyResult::NOT_CHECKED;
+  cert_verifier.AddResultForCert(cert.get(), verify_result, OK);
+
+  // Set up a mock report sender so that the test can check that an
+  // Expect-Staple report is not sent.
+  TransportSecurityState transport_security_state;
+  MockCertificateReportSender mock_report_sender;
+  transport_security_state.SetReportSender(&mock_report_sender);
+
+  TestNetworkDelegate network_delegate;
+  TestURLRequestContext context(true);
+
+  // Force |kExpectStapleStaticHostname| to resolve to |https_test_server|.
+  MockHostResolver host_resolver;
+  context.set_host_resolver(&host_resolver);
+
+  context.set_transport_security_state(&transport_security_state);
+  context.set_network_delegate(&network_delegate);
+  context.set_cert_verifier(&cert_verifier);
+  context.Init();
+
+  // Make a connection to |kExpectStapleStaticHostname|. Because the
+  // |verify_result| used with the |cert_verifier| will indicate that OCSP
+  // stapling details were not checked on the connection, an Expect-Staple
+  // report should not be sent.
   TestDelegate d;
   GURL url = https_test_server.GetURL("/");
   GURL::Replacements replace_host;
@@ -9599,6 +10049,59 @@ TEST_P(HTTPSOCSPVerifyTest, VerifyResult) {
 INSTANTIATE_TEST_CASE_P(OCSPVerify,
                         HTTPSOCSPVerifyTest,
                         testing::ValuesIn(kOCSPVerifyData));
+
+static bool SystemSupportsAIA() {
+#if defined(OS_ANDROID)
+  return false;
+#else
+  return true;
+#endif
+}
+
+class HTTPSAIATest : public HTTPSOCSPTest {
+ public:
+  void SetupContext() override {
+    context_.set_ssl_config_service(new TestSSLConfigService(
+        false /* check for EV */, false /* online revocation checking */,
+        false /* require rev. checking for local anchors */,
+        false /* token binding enabled */));
+  }
+};
+
+TEST_F(HTTPSAIATest, AIAFetching) {
+  SpawnedTestServer::SSLOptions ssl_options(
+      SpawnedTestServer::SSLOptions::CERT_AUTO_AIA_INTERMEDIATE);
+  SpawnedTestServer test_server(
+      SpawnedTestServer::TYPE_HTTPS, ssl_options,
+      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  ASSERT_TRUE(test_server.Start());
+
+  TestDelegate d;
+  d.set_allow_certificate_errors(true);
+  std::unique_ptr<URLRequest> r(context_.CreateRequest(
+      test_server.GetURL("/defaultresponse"), DEFAULT_PRIORITY, &d));
+
+  r->Start();
+  EXPECT_TRUE(r->is_pending());
+
+  base::RunLoop().Run();
+
+  EXPECT_EQ(1, d.response_started_count());
+
+  CertStatus cert_status = r->ssl_info().cert_status;
+  if (SystemSupportsAIA()) {
+    EXPECT_EQ(OK, d.request_status());
+    EXPECT_EQ(0u, cert_status & CERT_STATUS_ALL_ERRORS);
+    ASSERT_TRUE(r->ssl_info().cert);
+    EXPECT_EQ(2u, r->ssl_info().cert->GetIntermediateCertificates().size());
+  } else {
+    EXPECT_EQ(CERT_STATUS_AUTHORITY_INVALID,
+              cert_status & CERT_STATUS_ALL_ERRORS);
+  }
+  ASSERT_TRUE(r->ssl_info().unverified_cert);
+  EXPECT_EQ(
+      0u, r->ssl_info().unverified_cert->GetIntermediateCertificates().size());
+}
 
 class HTTPSHardFailTest : public HTTPSOCSPTest {
  protected:

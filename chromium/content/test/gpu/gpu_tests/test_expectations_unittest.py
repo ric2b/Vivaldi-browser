@@ -3,11 +3,7 @@
 # found in the LICENSE file.
 import unittest
 
-from gpu_tests import gpu_integration_test
 from gpu_tests import test_expectations
-
-from telemetry.page import page as page_module
-from telemetry.story import story_set
 
 class StubPlatform(object):
   def __init__(self, os_name, os_version_name=None):
@@ -48,6 +44,10 @@ class SampleExpectationSubclass(test_expectations.Expectation):
 
 
 class SampleTestExpectations(test_expectations.TestExpectations):
+  def __init__(self, url_prefixes=None, is_asan=False):
+    super(SampleTestExpectations, self).__init__(
+      url_prefixes=url_prefixes, is_asan=is_asan)
+
   def CreateExpectation(self, expectation, url_pattern, conditions=None,
                         bug=None):
     return SampleExpectationSubclass(expectation, url_pattern,
@@ -74,10 +74,17 @@ class SampleTestExpectations(test_expectations.TestExpectations):
     # Explicitly matched paths have precedence over wildcards.
     self.Fail('conformance/glsl/*')
     self.Skip('conformance/glsl/page15.html')
+    # Test ASAN expectations.
+    self.Fail('page16.html', ['mac', 'asan'])
+    self.Fail('page17.html', ['mac', 'no_asan'])
+    # Explicitly specified ASAN expectations should not collide.
+    self.Skip('page18.html', ['mac', 'asan'])
+    self.Fail('page18.html', ['mac', 'no_asan'])
 
-  def ExpectationAppliesToPage(self, expectation, browser, page):
-    if not super(SampleTestExpectations,
-        self).ExpectationAppliesToPage(expectation, browser, page):
+  def _ExpectationAppliesToTest(
+      self, expectation, browser, test_url, test_name):
+    if not super(SampleTestExpectations, self)._ExpectationAppliesToTest(
+        expectation, browser, test_url, test_name):
       return False
     # These tests can probably be expressed more tersely, but that
     # would reduce readability.
@@ -96,165 +103,168 @@ class FailingAbsoluteTestExpectations(test_expectations.TestExpectations):
     self.Fail('http://test.com/page5.html', bug=123)
 
 class TestExpectationsTest(unittest.TestCase):
-  def setUp(self):
+  def setUpHelper(self, is_asan=False):
     self.expectations = SampleTestExpectations(url_prefixes=[
       'third_party/webgl/src/sdk/tests/',
-      'content/test/data/gpu'])
+      'content/test/data/gpu'], is_asan=is_asan)
 
-  def assertExpectationEquals(self, expected, page, platform=StubPlatform(''),
+  def setUp(self):
+    self.setUpHelper()
+
+  def assertExpectationEquals(self, expected, url, platform=StubPlatform(''),
                               browser_type=None):
+    self.assertExpectationEqualsForName(
+      expected, url, '', platform=platform, browser_type=browser_type)
+
+  def assertExpectationEqualsForName(
+      self, expected, url, name, platform=StubPlatform(''), browser_type=None):
     self.expectations.ClearExpectationsCacheForTesting()
-    result = self.expectations.GetExpectationForPage(
-      StubBrowser(platform, browser_type=browser_type), page)
+    result = self.expectations.GetExpectationForTest(
+      StubBrowser(platform, browser_type=browser_type), url, name)
     self.assertEquals(expected, result)
 
-  # Pages with no expectations should always return 'pass'
+  # Tests with no expectations should always return 'pass'
   def testNoExpectations(self):
-    ps = story_set.StorySet()
-    page = page_module.Page('http://test.com/page0.html', ps)
-    self.assertExpectationEquals('pass', page, StubPlatform('win'))
+    url = 'http://test.com/page0.html'
+    self.assertExpectationEquals('pass', url, StubPlatform('win'))
 
-  # Pages with expectations for an OS should only return them when running on
+  # Tests with expectations for an OS should only return them when running on
   # that OS
   def testOSExpectations(self):
-    ps = story_set.StorySet()
-    page = page_module.Page('http://test.com/page1.html', ps)
-    self.assertExpectationEquals('fail', page, StubPlatform('win'))
-    self.assertExpectationEquals('fail', page, StubPlatform('mac'))
-    self.assertExpectationEquals('pass', page, StubPlatform('linux'))
+    url = 'http://test.com/page1.html'
+    self.assertExpectationEquals('fail', url, StubPlatform('win'))
+    self.assertExpectationEquals('fail', url, StubPlatform('mac'))
+    self.assertExpectationEquals('pass', url, StubPlatform('linux'))
 
-  # Pages with expectations for an OS version should only return them when
+  # Tests with expectations for an OS version should only return them when
   # running on that OS version
   def testOSVersionExpectations(self):
-    ps = story_set.StorySet()
-    page = page_module.Page('http://test.com/page2.html', ps)
-    self.assertExpectationEquals('fail', page, StubPlatform('win', 'vista'))
-    self.assertExpectationEquals('pass', page, StubPlatform('win', 'win7'))
+    url = 'http://test.com/page2.html'
+    self.assertExpectationEquals('fail', url, StubPlatform('win', 'vista'))
+    self.assertExpectationEquals('pass', url, StubPlatform('win', 'win7'))
 
-  # Pages with non-conditional expectations should always return that
+  # Tests with non-conditional expectations should always return that
   # expectation regardless of OS or OS version
   def testConditionlessExpectations(self):
-    ps = story_set.StorySet()
-    page = page_module.Page('http://test.com/page3.html', ps)
-    self.assertExpectationEquals('fail', page, StubPlatform('win'))
-    self.assertExpectationEquals('fail', page, StubPlatform('mac', 'lion'))
-    self.assertExpectationEquals('fail', page, StubPlatform('linux'))
+    url = 'http://test.com/page3.html'
+    self.assertExpectationEquals('fail', url, StubPlatform('win'))
+    self.assertExpectationEquals('fail', url, StubPlatform('mac', 'lion'))
+    self.assertExpectationEquals('fail', url, StubPlatform('linux'))
 
   # Expectations with wildcard characters should return for matching patterns
   def testWildcardExpectations(self):
-    ps = story_set.StorySet()
-    page = page_module.Page('http://test.com/page4.html', ps)
-    page_js = page_module.Page('http://test.com/page4.html', ps)
-    self.assertExpectationEquals('fail', page, StubPlatform('win'))
-    self.assertExpectationEquals('fail', page_js, StubPlatform('win'))
+    url = 'http://test.com/page4.html'
+    url_js = 'http://test.com/page4.js'
+    self.assertExpectationEquals('fail', url, StubPlatform('win'))
+    self.assertExpectationEquals('fail', url_js, StubPlatform('win'))
 
   # Absolute URLs in expectations are no longer allowed.
   def testAbsoluteExpectationsAreForbidden(self):
     with self.assertRaises(ValueError):
       FailingAbsoluteTestExpectations()
 
-  # Expectations can be set against page names as well as urls
-  def testPageNameExpectations(self):
-    ps = story_set.StorySet()
-    page = page_module.Page('http://test.com/page6.html', ps,
-                            name='Pages.page_6')
-    self.assertExpectationEquals('fail', page)
+  # Expectations can be set against test names as well as urls
+  def testTestNameExpectations(self):
+    self.assertExpectationEqualsForName(
+      'fail', 'http://test.com/page6.html', 'Pages.page_6')
 
   # Verify version-specific Mac expectations.
   def testMacVersionExpectations(self):
-    ps = story_set.StorySet()
-    page = page_module.Page('http://test.com/page7.html', ps)
-    self.assertExpectationEquals('fail', page,
+    url = 'http://test.com/page7.html'
+    self.assertExpectationEquals('fail', url,
                                  StubPlatform('mac', 'mountainlion'))
-    self.assertExpectationEquals('pass', page,
+    self.assertExpectationEquals('pass', url,
                                  StubPlatform('mac', 'mavericks'))
-    self.assertExpectationEquals('pass', page,
+    self.assertExpectationEquals('pass', url,
                                  StubPlatform('mac', 'yosemite'))
-    ps = story_set.StorySet()
-    page = page_module.Page('http://test.com/page8.html', ps)
-    self.assertExpectationEquals('pass', page,
+    url = 'http://test.com/page8.html'
+    self.assertExpectationEquals('pass', url,
                                  StubPlatform('mac', 'mountainlion'))
-    self.assertExpectationEquals('fail', page,
+    self.assertExpectationEquals('fail', url,
                                  StubPlatform('mac', 'mavericks'))
-    self.assertExpectationEquals('pass', page,
+    self.assertExpectationEquals('pass', url,
                                  StubPlatform('mac', 'yosemite'))
-    ps = story_set.StorySet()
-    page = page_module.Page('http://test.com/page9.html', ps)
-    self.assertExpectationEquals('pass', page,
+    url = 'http://test.com/page9.html'
+    self.assertExpectationEquals('pass', url,
                                  StubPlatform('mac', 'mountainlion'))
-    self.assertExpectationEquals('pass', page,
+    self.assertExpectationEquals('pass', url,
                                  StubPlatform('mac', 'mavericks'))
-    self.assertExpectationEquals('fail', page,
+    self.assertExpectationEquals('fail', url,
                                  StubPlatform('mac', 'yosemite'))
 
   # Test browser type conditions.
   def testBrowserTypeConditions(self):
-    ps = story_set.StorySet()
-    page = page_module.Page('http://test.com/page10.html', ps)
-    self.assertExpectationEquals('pass', page, StubPlatform('android'),
+    url = 'http://test.com/page10.html'
+    self.assertExpectationEquals('pass', url, StubPlatform('android'),
                                  browser_type='android-content-shell')
-    self.assertExpectationEquals('fail', page, StubPlatform('android'),
+    self.assertExpectationEquals('fail', url, StubPlatform('android'),
                                  browser_type='android-webview-shell')
 
-  # Pages with user-defined conditions.
+  # Tests with user-defined conditions.
   def testUserDefinedConditions(self):
-    ps = story_set.StorySet()
-    page = page_module.Page('http://test.com/page11.html', ps)
-    self.assertExpectationEquals('fail', page, StubPlatform('win'))
-    page = page_module.Page('http://test.com/page12.html', ps)
-    self.assertExpectationEquals('pass', page, StubPlatform('win'))
+    url = 'http://test.com/page11.html'
+    self.assertExpectationEquals('fail', url, StubPlatform('win'))
+    url = 'http://test.com/page12.html'
+    self.assertExpectationEquals('pass', url, StubPlatform('win'))
 
   # The file:// scheme is treated specially by Telemetry; it's
   # translated into an HTTP request against localhost. Expectations
   # against it must continue to work.
   def testFileScheme(self):
-    ps = story_set.StorySet()
-    page = page_module.Page('file://conformance/attribs/page13.html', ps)
-    self.assertExpectationEquals('fail', page)
+    url = 'file://conformance/attribs/page13.html'
+    self.assertExpectationEquals('fail', url)
 
   # Telemetry uses backslashes in its file:// URLs on Windows.
   def testFileSchemeOnWindows(self):
-    ps = story_set.StorySet()
-    page = page_module.Page('file://conformance\\attribs\\page14.html', ps)
-    self.assertExpectationEquals('pass', page)
-    self.assertExpectationEquals('fail', page, StubPlatform('win'))
+    url = 'file://conformance\\attribs\\page14.html'
+    self.assertExpectationEquals('pass', url)
+    self.assertExpectationEquals('fail', url, StubPlatform('win'))
 
   def testExplicitPathsHavePrecedenceOverWildcards(self):
-    ps = story_set.StorySet()
-    page = page_module.Page('http://test.com/conformance/glsl/page00.html', ps)
-    self.assertExpectationEquals('fail', page)
-    page = page_module.Page('http://test.com/conformance/glsl/page15.html', ps)
-    self.assertExpectationEquals('skip', page)
+    url = 'http://test.com/conformance/glsl/page00.html'
+    self.assertExpectationEquals('fail', url)
+    url = 'http://test.com/conformance/glsl/page15.html'
+    self.assertExpectationEquals('skip', url)
 
   def testQueryArgsAreStrippedFromFileURLs(self):
-    ps = story_set.StorySet()
-    page = page_module.Page(
-      'file://conformance/glsl/page15.html?webglVersion=2', ps)
-    self.assertExpectationEquals('skip', page)
+    url = 'file://conformance/glsl/page15.html?webglVersion=2'
+    self.assertExpectationEquals('skip', url)
 
   def testURLPrefixesAreStripped(self):
-    # This test uses the "_EmulatedPage" class from the GPU integration tests
-    # because it's in that context where support for URL prefixes was added.
-    self.assertExpectationEquals(
+    self.assertExpectationEqualsForName(
       'skip',
-      gpu_integration_test._EmulatedPage(
-        'third_party/webgl/src/sdk/tests/conformance/glsl/page15.html',
-        'Page15'))
-    self.assertExpectationEquals(
+      'third_party/webgl/src/sdk/tests/conformance/glsl/page15.html',
+      'Page15')
+    self.assertExpectationEqualsForName(
       'fail',
-      gpu_integration_test._EmulatedPage(
-        'third_party/webgl/src/sdk/tests/conformance/glsl/foo.html',
-        'Foo'))
+      'third_party/webgl/src/sdk/tests/conformance/glsl/foo.html',
+      'Foo')
     # Test exact and wildcard matches on Windows.
-    self.assertExpectationEquals(
+    self.assertExpectationEqualsForName(
       'skip',
-      gpu_integration_test._EmulatedPage(
-        'third_party\\webgl\\src\\sdk\\tests\\conformance\\glsl\\page15.html',
-        'Page15'),
+      'third_party\\webgl\\src\\sdk\\tests\\conformance\\glsl\\page15.html',
+      'Page15',
       StubPlatform('win'))
-    self.assertExpectationEquals(
+    self.assertExpectationEqualsForName(
       'fail',
-      gpu_integration_test._EmulatedPage(
-        'third_party\\webgl\\src\\sdk\\tests\\conformance\\glsl\\foo.html',
-        'Foo'),
+      'third_party\\webgl\\src\\sdk\\tests\\conformance\\glsl\\foo.html',
+      'Foo',
       StubPlatform('win'))
+
+  def testCaseInsensitivity(self):
+    url = 'http://test.com/page1.html'
+    self.assertExpectationEquals('fail', url, StubPlatform('Win'))
+    url = 'http://test.com/page2.html'
+    self.assertExpectationEquals('fail', url, StubPlatform('Win', 'Vista'))
+    url = 'http://test.com/page10.html'
+    self.assertExpectationEquals('fail', url, StubPlatform('android'),
+                                 browser_type='Android-Webview-Shell')
+
+  def testASANExpectations(self):
+    url16 = 'page16.html'
+    url18 = 'page18.html'
+    self.assertExpectationEquals('pass', url16, StubPlatform('mac'))
+    self.assertExpectationEquals('fail', url18, StubPlatform('mac'))
+    self.setUpHelper(is_asan=True)
+    self.assertExpectationEquals('fail', url16, StubPlatform('mac'))
+    self.assertExpectationEquals('skip', url18, StubPlatform('mac'))

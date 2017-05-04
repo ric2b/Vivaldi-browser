@@ -25,7 +25,8 @@ var I18nBehavior = {
    * @private
    */
   i18nRaw_: function(id, var_args) {
-    return arguments.length == 1 ? loadTimeData.getString(id) :
+    return arguments.length == 1 ?
+        loadTimeData.getString(id) :
         loadTimeData.getStringF.apply(loadTimeData, arguments);
   },
 

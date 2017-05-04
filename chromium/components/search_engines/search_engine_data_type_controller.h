@@ -10,16 +10,15 @@
 
 #include "base/macros.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/sync/driver/ui_data_type_controller.h"
-
-class Profile;
+#include "components/sync/driver/async_directory_type_controller.h"
 
 namespace browser_sync {
 
 // Controller for the SEARCH_ENGINES sync data type. This class tells sync
 // how to load the model for this data type, and the superclasses manage
 // controlling the rest of the state of the datatype with regards to sync.
-class SearchEngineDataTypeController : public syncer::UIDataTypeController {
+class SearchEngineDataTypeController
+    : public syncer::AsyncDirectoryTypeController {
  public:
   // |dump_stack| is called when an unrecoverable error occurs.
   SearchEngineDataTypeController(const base::Closure& dump_stack,
@@ -30,7 +29,7 @@ class SearchEngineDataTypeController : public syncer::UIDataTypeController {
   TemplateURLService::Subscription* GetSubscriptionForTesting();
 
  private:
-  // FrontendDataTypeController:
+  // AsyncDirectoryTypeController:
   bool StartModels() override;
   void StopModels() override;
 

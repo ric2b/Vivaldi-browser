@@ -20,9 +20,9 @@
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/safe_browsing/csd.pb.h"
-#include "chrome/common/safe_browsing/safebrowsing_messages.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/safe_browsing/common/safebrowsing_messages.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/test_database_manager.h"
 #include "content/public/browser/navigation_entry.h"
@@ -143,7 +143,8 @@ class MockSafeBrowsingUIManager : public SafeBrowsingUIManager {
 
   // Helper function which calls OnBlockingPageComplete for this client
   // object.
-  void InvokeOnBlockingPageComplete(const UrlCheckCallback& callback) {
+  void InvokeOnBlockingPageComplete(
+    const security_interstitials::UnsafeResource::UrlCheckCallback& callback) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     // Note: this will delete the client object in the case of the CsdClient
     // implementation.
@@ -204,7 +205,7 @@ class MockBrowserFeatureExtractor : public BrowserFeatureExtractor {
 
 class ClientSideDetectionHostTest : public ChromeRenderViewHostTestHarness {
  public:
-  typedef SafeBrowsingUIManager::UnsafeResource UnsafeResource;
+  typedef security_interstitials::UnsafeResource UnsafeResource;
 
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();

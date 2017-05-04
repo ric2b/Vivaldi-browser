@@ -7,12 +7,17 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/stl_util.h"
+#include "base/strings/stringprintf.h"
+#include "base/trace_event/memory_allocator_dump.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "net/base/address_list.h"
+#include "net/base/trace_constants.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties.h"
 #include "net/log/net_log_event_type.h"
@@ -41,7 +46,7 @@ SpdySessionPool::SpdySessionPool(
     TransportSecurityState* transport_security_state,
     bool enable_ping_based_connection_checking,
     size_t session_max_recv_window_size,
-    size_t stream_max_recv_window_size,
+    const SettingsMap& initial_settings,
     SpdySessionPool::TimeFunc time_func,
     ProxyDelegate* proxy_delegate)
     : http_server_properties_(http_server_properties),
@@ -52,8 +57,9 @@ SpdySessionPool::SpdySessionPool(
       enable_ping_based_connection_checking_(
           enable_ping_based_connection_checking),
       session_max_recv_window_size_(session_max_recv_window_size),
-      stream_max_recv_window_size_(stream_max_recv_window_size),
+      initial_settings_(initial_settings),
       time_func_(time_func),
+      push_delegate_(nullptr),
       proxy_delegate_(proxy_delegate) {
   NetworkChangeNotifier::AddIPAddressObserver(this);
   if (ssl_config_service_.get())
@@ -81,16 +87,17 @@ base::WeakPtr<SpdySession> SpdySessionPool::CreateAvailableSessionFromSocket(
     std::unique_ptr<ClientSocketHandle> connection,
     const NetLogWithSource& net_log,
     bool is_secure) {
-  TRACE_EVENT0("net", "SpdySessionPool::CreateAvailableSessionFromSocket");
+  TRACE_EVENT0(kNetTracingCategory,
+               "SpdySessionPool::CreateAvailableSessionFromSocket");
 
   UMA_HISTOGRAM_ENUMERATION(
       "Net.SpdySessionGet", IMPORTED_FROM_SOCKET, SPDY_SESSION_GET_MAX);
 
-  std::unique_ptr<SpdySession> new_session(new SpdySession(
+  auto new_session = base::MakeUnique<SpdySession>(
       key, http_server_properties_, transport_security_state_,
       enable_sending_initial_data_, enable_ping_based_connection_checking_,
-      session_max_recv_window_size_, stream_max_recv_window_size_, time_func_,
-      proxy_delegate_, net_log.net_log()));
+      session_max_recv_window_size_, initial_settings_, time_func_,
+      push_delegate_, proxy_delegate_, net_log.net_log());
 
   new_session->InitializeWithSocket(std::move(connection), this, is_secure);
 
@@ -359,6 +366,49 @@ void SpdySessionPool::OnSSLConfigChanged() {
 
 void SpdySessionPool::OnCertDBChanged(const X509Certificate* cert) {
   CloseCurrentSessions(ERR_CERT_DATABASE_CHANGED);
+}
+
+void SpdySessionPool::DumpMemoryStats(
+    base::trace_event::ProcessMemoryDump* pmd,
+    const std::string& parent_dump_absolute_name) const {
+  std::string dump_name = base::StringPrintf("%s/spdy_session_pool",
+                                             parent_dump_absolute_name.c_str());
+  base::trace_event::MemoryAllocatorDump* dump =
+      pmd->CreateAllocatorDump(dump_name);
+  size_t total_size = 0;
+  size_t buffer_size = 0;
+  size_t cert_count = 0;
+  size_t serialized_cert_size = 0;
+  size_t num_active_sessions = 0;
+  for (const auto& session : sessions_) {
+    StreamSocket::SocketMemoryStats stats;
+    bool is_session_active = false;
+    session->DumpMemoryStats(&stats, &is_session_active);
+    total_size += stats.total_size;
+    buffer_size += stats.buffer_size;
+    cert_count += stats.cert_count;
+    serialized_cert_size += stats.serialized_cert_size;
+    if (is_session_active)
+      num_active_sessions++;
+  }
+  dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                  base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                  total_size);
+  dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameObjectCount,
+                  base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                  sessions_.size());
+  dump->AddScalar("active_session_count",
+                  base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                  num_active_sessions);
+  dump->AddScalar("buffer_size",
+                  base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                  buffer_size);
+  dump->AddScalar("cert_count",
+                  base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                  cert_count);
+  dump->AddScalar("serialized_cert_size",
+                  base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                  serialized_cert_size);
 }
 
 bool SpdySessionPool::IsSessionAvailable(

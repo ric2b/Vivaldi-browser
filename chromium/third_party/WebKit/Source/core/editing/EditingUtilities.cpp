@@ -27,6 +27,7 @@
 
 #include "core/HTMLElementFactory.h"
 #include "core/HTMLNames.h"
+#include "core/clipboard/DataObject.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/NodeComputedStyle.h"
@@ -56,6 +57,8 @@
 #include "core/html/HTMLTableCellElement.h"
 #include "core/html/HTMLUListElement.h"
 #include "core/layout/LayoutObject.h"
+#include "core/layout/LayoutTableCell.h"
+#include "platform/clipboard/ClipboardMimeTypes.h"
 #include "wtf/Assertions.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringBuilder.h"
@@ -269,8 +272,10 @@ int comparePositions(const VisiblePosition& a, const VisiblePosition& b) {
 
 enum EditableLevel { Editable, RichlyEditable };
 static bool hasEditableLevel(const Node& node, EditableLevel editableLevel) {
-  // TODO(yoichio): We should have this check.
-  // DCHECK(!needsLayoutTreeUpdate(node));
+  DCHECK(node.document().isActive());
+  // TODO(editing-dev): We should have this check:
+  // DCHECK_GE(node.document().lifecycle().state(),
+  //           DocumentLifecycle::StyleClean);
   if (node.isPseudoElement())
     return false;
 
@@ -298,10 +303,24 @@ static bool hasEditableLevel(const Node& node, EditableLevel editableLevel) {
 }
 
 bool hasEditableStyle(const Node& node) {
+  // TODO(editing-dev): We shouldn't check editable style in inactive documents.
+  // We should hoist this check in the call stack, replace it by a DCHECK of
+  // active document and ultimately cleanup the code paths with inactive
+  // documents.  See crbug.com/667681
+  if (!node.document().isActive())
+    return false;
+
   return hasEditableLevel(node, Editable);
 }
 
 bool hasRichlyEditableStyle(const Node& node) {
+  // TODO(editing-dev): We shouldn't check editable style in inactive documents.
+  // We should hoist this check in the call stack, replace it by a DCHECK of
+  // active document and ultimately cleanup the code paths with inactive
+  // documents.  See crbug.com/667681
+  if (!node.document().isActive())
+    return false;
+
   return hasEditableLevel(node, RichlyEditable);
 }
 
@@ -937,9 +956,10 @@ TextDirection directionOfEnclosingBlockAlgorithm(
                          position.computeContainerNode()),
                      CannotCrossEditingBoundary);
   if (!enclosingBlockElement)
-    return LTR;
+    return TextDirection::kLtr;
   LayoutObject* layoutObject = enclosingBlockElement->layoutObject();
-  return layoutObject ? layoutObject->style()->direction() : LTR;
+  return layoutObject ? layoutObject->style()->direction()
+                      : TextDirection::kLtr;
 }
 
 TextDirection directionOfEnclosingBlock(const Position& position) {
@@ -952,7 +972,7 @@ TextDirection directionOfEnclosingBlock(const PositionInFlatTree& position) {
 }
 
 TextDirection primaryDirectionOf(const Node& node) {
-  TextDirection primaryDirection = LTR;
+  TextDirection primaryDirection = TextDirection::kLtr;
   for (const LayoutObject* r = node.layoutObject(); r; r = r->parent()) {
     if (r->isLayoutBlockFlow()) {
       primaryDirection = r->style()->direction();
@@ -1521,7 +1541,7 @@ HTMLElement* createDefaultParagraphElement(Document& document) {
 }
 
 HTMLElement* createHTMLElement(Document& document, const QualifiedName& name) {
-  return HTMLElementFactory::createHTMLElement(name.localName(), document, 0,
+  return HTMLElementFactory::createHTMLElement(name.localName(), document,
                                                CreatedByCloneNode);
 }
 
@@ -1574,7 +1594,7 @@ bool isNodeRendered(const Node& node) {
   if (!layoutObject)
     return false;
 
-  return layoutObject->style()->visibility() == EVisibility::Visible;
+  return layoutObject->style()->visibility() == EVisibility::kVisible;
 }
 
 // return first preceding DOM position rendered at a different location, or
@@ -2034,7 +2054,7 @@ DispatchEventResult dispatchBeforeInputInsertText(EventTarget* target,
     return DispatchEventResult::NotCanceled;
   if (!target)
     return DispatchEventResult::NotCanceled;
-  // TODO(chongz): Pass appreciate |ranges| after it's defined on spec.
+  // TODO(chongz): Pass appropriate |ranges| after it's defined on spec.
   // http://w3c.github.io/editing/input-events.html#dom-inputevent-inputtype
   InputEvent* beforeInputEvent = InputEvent::createBeforeInput(
       InputEvent::InputType::InsertText, data,
@@ -2052,7 +2072,7 @@ DispatchEventResult dispatchBeforeInputFromComposition(
     return DispatchEventResult::NotCanceled;
   if (!target)
     return DispatchEventResult::NotCanceled;
-  // TODO(chongz): Pass appreciate |ranges| after it's defined on spec.
+  // TODO(chongz): Pass appropriate |ranges| after it's defined on spec.
   // http://w3c.github.io/editing/input-events.html#dom-inputevent-inputtype
   InputEvent* beforeInputEvent = InputEvent::createBeforeInput(
       inputType, data, cancelable, InputEvent::EventIsComposing::IsComposing,
@@ -2083,9 +2103,27 @@ DispatchEventResult dispatchBeforeInputDataTransfer(
     return DispatchEventResult::NotCanceled;
   if (!target)
     return DispatchEventResult::NotCanceled;
-  InputEvent* beforeInputEvent = InputEvent::createBeforeInput(
-      inputType, dataTransfer, InputEvent::EventCancelable::IsCancelable,
-      InputEvent::EventIsComposing::NotComposing, ranges);
+
+  DCHECK(inputType == InputEvent::InputType::InsertFromPaste ||
+         inputType == InputEvent::InputType::InsertReplacementText ||
+         inputType == InputEvent::InputType::InsertFromDrop ||
+         inputType == InputEvent::InputType::DeleteByCut)
+      << "Unsupported inputType: " << (int)inputType;
+
+  InputEvent* beforeInputEvent;
+
+  if (hasRichlyEditableStyle(*(target->toNode())) || !dataTransfer) {
+    beforeInputEvent = InputEvent::createBeforeInput(
+        inputType, dataTransfer, InputEvent::EventCancelable::IsCancelable,
+        InputEvent::EventIsComposing::NotComposing, ranges);
+  } else {
+    const String& data = dataTransfer->getData(mimeTypeTextPlain);
+    // TODO(chongz): Pass appropriate |ranges| after it's defined on spec.
+    // http://w3c.github.io/editing/input-events.html#dom-inputevent-inputtype
+    beforeInputEvent = InputEvent::createBeforeInput(
+        inputType, data, InputEvent::EventCancelable::IsCancelable,
+        InputEvent::EventIsComposing::NotComposing, nullptr);
+  }
   return target->dispatchEvent(beforeInputEvent);
 }
 

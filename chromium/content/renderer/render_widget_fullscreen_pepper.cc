@@ -22,6 +22,7 @@
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebLayer.h"
+#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/web/WebWidget.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -64,38 +65,39 @@ class FullscreenMouseLockDispatcher : public MouseLockDispatcher {
 };
 
 WebMouseEvent WebMouseEventFromGestureEvent(const WebGestureEvent& gesture) {
-  WebMouseEvent mouse;
 
   // Only convert touch screen gesture events, do not convert
   // touchpad/mouse wheel gesture events. (crbug.com/620974)
   if (gesture.sourceDevice != blink::WebGestureDeviceTouchscreen)
-    return mouse;
+    return WebMouseEvent();
 
-  switch (gesture.type) {
+  WebInputEvent::Type type = WebInputEvent::Undefined;
+  switch (gesture.type()) {
     case WebInputEvent::GestureScrollBegin:
-      mouse.type = WebInputEvent::MouseDown;
+      type = WebInputEvent::MouseDown;
       break;
     case WebInputEvent::GestureScrollUpdate:
-      mouse.type = WebInputEvent::MouseMove;
+      type = WebInputEvent::MouseMove;
       break;
     case WebInputEvent::GestureFlingStart:
       // A scroll gesture on the touchscreen may end with a GestureScrollEnd
       // when there is no velocity, or a GestureFlingStart when it has a
       // velocity. In both cases, it should end the drag that was initiated by
       // the GestureScrollBegin (and subsequent GestureScrollUpdate) events.
-      mouse.type = WebInputEvent::MouseUp;
+      type = WebInputEvent::MouseUp;
+      break;
     case WebInputEvent::GestureScrollEnd:
-      mouse.type = WebInputEvent::MouseUp;
+      type = WebInputEvent::MouseUp;
       break;
     default:
-      return mouse;
+      return WebMouseEvent();
   }
 
-  mouse.timeStampSeconds = gesture.timeStampSeconds;
-  mouse.modifiers = gesture.modifiers | WebInputEvent::LeftButtonDown;
+  WebMouseEvent mouse(type, gesture.modifiers() | WebInputEvent::LeftButtonDown,
+                      gesture.timeStampSeconds());
   mouse.button = WebMouseEvent::Button::Left;
-  mouse.clickCount = (mouse.type == WebInputEvent::MouseDown ||
-                      mouse.type == WebInputEvent::MouseUp);
+  mouse.clickCount = (mouse.type() == WebInputEvent::MouseDown ||
+                      mouse.type() == WebInputEvent::MouseUp);
 
   mouse.x = gesture.x;
   mouse.y = gesture.y;
@@ -163,18 +165,15 @@ class PepperWidget : public WebWidget {
     // Pepper plugins do not accept gesture events. So do not send the gesture
     // events directly to the plugin. Instead, try to convert them to equivalent
     // mouse events, and then send to the plugin.
-    if (WebInputEvent::isGestureEventType(event.type)) {
+    if (WebInputEvent::isGestureEventType(event.type())) {
       bool result = false;
       const WebGestureEvent* gesture_event =
           static_cast<const WebGestureEvent*>(&event);
-      switch (event.type) {
+      switch (event.type()) {
         case WebInputEvent::GestureTap: {
-          WebMouseEvent mouse;
-
-          mouse.timeStampSeconds = gesture_event->timeStampSeconds;
-          mouse.type = WebInputEvent::MouseMove;
-          mouse.modifiers = gesture_event->modifiers;
-
+          WebMouseEvent mouse(WebInputEvent::MouseMove,
+                              gesture_event->modifiers(),
+                              gesture_event->timeStampSeconds());
           mouse.x = gesture_event->x;
           mouse.y = gesture_event->y;
           mouse.windowX = gesture_event->x;
@@ -185,19 +184,19 @@ class PepperWidget : public WebWidget {
           mouse.movementY = 0;
           result |= widget_->plugin()->HandleInputEvent(mouse, &cursor);
 
-          mouse.type = WebInputEvent::MouseDown;
+          mouse.setType(WebInputEvent::MouseDown);
           mouse.button = WebMouseEvent::Button::Left;
           mouse.clickCount = gesture_event->data.tap.tapCount;
           result |= widget_->plugin()->HandleInputEvent(mouse, &cursor);
 
-          mouse.type = WebInputEvent::MouseUp;
+          mouse.setType(WebInputEvent::MouseUp);
           result |= widget_->plugin()->HandleInputEvent(mouse, &cursor);
           break;
         }
 
         default: {
           WebMouseEvent mouse = WebMouseEventFromGestureEvent(*gesture_event);
-          if (mouse.type != WebInputEvent::Undefined)
+          if (mouse.type() != WebInputEvent::Undefined)
             result |= widget_->plugin()->HandleInputEvent(mouse, &cursor);
           break;
         }
@@ -211,7 +210,7 @@ class PepperWidget : public WebWidget {
     // For normal web pages, WebViewImpl does input event translations and
     // generates context menu events. Since we don't have a WebView, we need to
     // do the necessary translation ourselves.
-    if (WebInputEvent::isMouseEventType(event.type)) {
+    if (WebInputEvent::isMouseEventType(event.type())) {
       const WebMouseEvent& mouse_event =
           reinterpret_cast<const WebMouseEvent&>(event);
       bool send_context_menu_event = false;
@@ -219,22 +218,22 @@ class PepperWidget : public WebWidget {
       // On Windows, we handle it on mouse up.
 #if defined(OS_WIN)
       send_context_menu_event =
-          mouse_event.type == WebInputEvent::MouseUp &&
+          mouse_event.type() == WebInputEvent::MouseUp &&
           mouse_event.button == WebMouseEvent::Button::Right;
 #elif defined(OS_MACOSX)
       send_context_menu_event =
-          mouse_event.type == WebInputEvent::MouseDown &&
+          mouse_event.type() == WebInputEvent::MouseDown &&
           (mouse_event.button == WebMouseEvent::Button::Right ||
            (mouse_event.button == WebMouseEvent::Button::Left &&
-            mouse_event.modifiers & WebMouseEvent::ControlKey));
+            mouse_event.modifiers() & WebMouseEvent::ControlKey));
 #else
       send_context_menu_event =
-          mouse_event.type == WebInputEvent::MouseDown &&
+          mouse_event.type() == WebInputEvent::MouseDown &&
           mouse_event.button == WebMouseEvent::Button::Right;
 #endif
       if (send_context_menu_event) {
         WebMouseEvent context_menu_event(mouse_event);
-        context_menu_event.type = WebInputEvent::ContextMenu;
+        context_menu_event.setType(WebInputEvent::ContextMenu);
         widget_->plugin()->HandleInputEvent(context_menu_event, &cursor);
       }
     }
@@ -254,17 +253,17 @@ class PepperWidget : public WebWidget {
 // static
 RenderWidgetFullscreenPepper* RenderWidgetFullscreenPepper::Create(
     int32_t routing_id,
-    int32_t opener_id,
+    const RenderWidget::ShowCallback& show_callback,
     CompositorDependencies* compositor_deps,
     PepperPluginInstanceImpl* plugin,
     const GURL& active_url,
     const ScreenInfo& screen_info) {
   DCHECK_NE(MSG_ROUTING_NONE, routing_id);
-  DCHECK_NE(MSG_ROUTING_NONE, opener_id);
+  DCHECK(!show_callback.is_null());
   scoped_refptr<RenderWidgetFullscreenPepper> widget(
       new RenderWidgetFullscreenPepper(routing_id, compositor_deps, plugin,
                                        active_url, screen_info));
-  widget->Init(opener_id);
+  widget->Init(show_callback, new PepperWidget(widget.get()));
   widget->AddRef();
   return widget.get();
 }
@@ -275,7 +274,13 @@ RenderWidgetFullscreenPepper::RenderWidgetFullscreenPepper(
     PepperPluginInstanceImpl* plugin,
     const GURL& active_url,
     const ScreenInfo& screen_info)
-    : RenderWidgetFullscreen(routing_id, compositor_deps, screen_info),
+    : RenderWidget(routing_id,
+                   compositor_deps,
+                   blink::WebPopupTypeNone,
+                   screen_info,
+                   false,
+                   false,
+                   false),
       active_url_(active_url),
       plugin_(plugin),
       layer_(NULL),
@@ -322,7 +327,7 @@ void RenderWidgetFullscreenPepper::SetLayer(blink::WebLayer* layer) {
       compositor_->clearRootLayer();
     return;
   }
-  if (!layerTreeView())
+  if (!compositor())
     initializeLayerTreeView();
   layer_->setBounds(blink::WebSize(size()));
   layer_->setDrawsContent(true);
@@ -344,7 +349,7 @@ bool RenderWidgetFullscreenPepper::OnMessageReceived(const IPC::Message& msg) {
   if (handled)
     return true;
 
-  return RenderWidgetFullscreen::OnMessageReceived(msg);
+  return RenderWidget::OnMessageReceived(msg);
 }
 
 void RenderWidgetFullscreenPepper::DidInitiatePaint() {
@@ -366,10 +371,6 @@ void RenderWidgetFullscreenPepper::OnResize(const ResizeParams& params) {
   if (layer_)
     layer_->setBounds(blink::WebSize(params.new_size));
   RenderWidget::OnResize(params);
-}
-
-WebWidget* RenderWidgetFullscreenPepper::CreateWebWidget() {
-  return new PepperWidget(this);
 }
 
 GURL RenderWidgetFullscreenPepper::GetURLForGraphicsContext3D() {

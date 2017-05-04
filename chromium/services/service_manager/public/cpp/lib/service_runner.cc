@@ -7,6 +7,7 @@
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/launch.h"
 #include "base/run_loop.h"
@@ -71,12 +72,7 @@ MojoResult ServiceRunner::Run(MojoHandle service_request_handle,
 }
 
 MojoResult ServiceRunner::Run(MojoHandle service_request_handle) {
-  bool init_base = true;
-  if (base::CommandLine::InitializedForCurrentProcess()) {
-    init_base =
-        !base::CommandLine::ForCurrentProcess()->HasSwitch("single-process");
-  }
-  return Run(service_request_handle, init_base);
+  return Run(service_request_handle, false);
 }
 
 void ServiceRunner::Quit() {

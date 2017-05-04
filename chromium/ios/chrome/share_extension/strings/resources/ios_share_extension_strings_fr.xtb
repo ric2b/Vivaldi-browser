@@ -1,7 +1,9 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fr">
-<translation id="2702801445560668637">Liste lecture</translation>
-<translation id="7791543448312431591">Ajouter</translation>
-<translation id="8820817407110198400">Favoris</translation>
+<translation id="1613742542373525524">APPLICATION_NAME ne reconnaît pas ce lien.</translation>
+<translation id="4743991241988563337">Lire plus tard</translation>
+<translation id="6930009216791986919">Ajouter aux favoris</translation>
+<translation id="6965382102122355670">OK</translation>
+<translation id="8258999165172757081">Ajouté</translation>
 </translationbundle>

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="hu">
+<translation id="1152921474424827756">A(z) <ph name="URL" /> egy <ph name="BEGIN_LINK" />tárolt változatának<ph name="END_LINK" /> megtekintése</translation>
+<translation id="1158211211994409885">A(z) <ph name="HOST_NAME" /> váratlanul megszakította a kapcsolatot.</translation>
+<translation id="1375198122581997741">A verzióról</translation>
+<translation id="139305205187523129">A(z) <ph name="HOST_NAME" /> nem küldött adatokat.</translation>
+<translation id="1506687042165942984">Az oldal mentett (pl. köztudottan régi) változatának megjelenítése.</translation>
+<translation id="1559528461873125649">Nincs ilyen fájl vagy könyvtár</translation>
+<translation id="1710259589646384581">OS</translation>
+<translation id="1838667051080421715">Jelenleg egy weboldal forrását látja.</translation>
+<translation id="194030505837763158">Ugrás ide: <ph name="LINK" /></translation>
+<translation id="2030481566774242610">Erre gondolt: <ph name="LINK" />?</translation>
+<translation id="2089090684895656482">Rövidebben</translation>
+<translation id="2166378884831602661">A webhely nem képes biztonságos kapcsolatot nyújtani</translation>
+<translation id="2292556288342944218">Az internethez való hozzáférést a rendszer letiltotta</translation>
+<translation id="255002559098805027">A(z) <ph name="HOST_NAME" /> érvénytelen választ küldött.</translation>
+<translation id="2609632851001447353">Változatok</translation>
+<translation id="2650446666397867134">A hozzáférés a fájlhoz megtagadva</translation>
+<translation id="2705137772291741111">A webhely mentett (gyorsítótárazott) példánya nem olvasható.</translation>
+<translation id="2784949926578158345">A kapcsolat alaphelyzetbe állt.</translation>
+<translation id="284702764277384724">A(z) <ph name="HOST_NAME" /> szervertanúsítványa hamisítványnak tűnik.</translation>
+<translation id="2909946352844186028">Változást érzékeltünk a hálózatban.</translation>
+<translation id="3005723025932146533">Mentett másolat megjelenítése</translation>
+<translation id="3093245981617870298">Kapcsolat nélkül vagy.</translation>
+<translation id="3109728660330352905">Nincs jogosultsága az oldal megjelenítésére.</translation>
+<translation id="3176929007561373547">Ellenőrizze a proxybeállításokat, vagy kérdezze meg a rendszergazdájától, hogy a proxyszerver működik-e. Ha úgy gondolja, hogy nem használ proxyszervert:
+      <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673">A(z) <ph name="HOST_NAME" /> jelenleg nem érhető el.</translation>
+<translation id="3447661539832366887">Az eszköz tulajdonosa kikapcsolta a dinoszauruszos játékot.</translation>
+<translation id="3586931643579894722">Részletek elrejtése</translation>
+<translation id="3630155396527302611">Ha már megjelenik a hálózat elérésére engedélyezett programként, próbálkozzon
+      az eltávolításával, majd a listára való ismételt felvételével.</translation>
+<translation id="3658742229777143148">Ellenőrzés</translation>
+<translation id="382518646247711829">Ha proxyszervert használ...</translation>
+<translation id="3973234410852337861">A(z) <ph name="HOST_NAME" /> le van tiltva</translation>
+<translation id="4021036232240155012">A DNS az a hálózati szolgáltatás, amely a webhelynevet az adott webhely internetes címére fordítja le.</translation>
+<translation id="4432688616882109544">A(z) <ph name="HOST_NAME" /> nem fogadta el az Ön bejelentkezési tanúsítványát, vagy nem talált ilyet.</translation>
+<translation id="4522570452068850558">Részletek</translation>
+<translation id="4670097147947922288">Egy bővítményoldalt tekint meg.</translation>
+<translation id="4708268264240856090">Kapcsolata megszakadt</translation>
+<translation id="4744603770635761495">Végrehajtható fájl útvonala</translation>
+<translation id="4764776831041365478">A <ph name="URL" /> weboldal lehet, hogy ideiglenesen nem érhető el, vagy véglegesen új címre költözött.</translation>
+<translation id="5023310440958281426">Ellenőrizze rendszergazdai házirendjeit</translation>
+<translation id="5115563688576182185">(64 bites)</translation>
+<translation id="5431657950005405462">A fájl nem található</translation>
+<translation id="5452270690849572955">Ez a(z) <ph name="HOST_NAME" /> oldal nem található</translation>
+<translation id="5492298309214877701">Ennek a vállalati, szervezeti vagy iskolai intraneten található webhelynek az URL-címe megegyezik egy külső webhely URL-címével.
+    <ph name="LINE_BREAK" />
+    Javasoljuk, hogy forduljon a rendszergazdához.</translation>
+<translation id="5510766032865166053">Előfordulhat, hogy át lett helyezve, vagy törölve lett.</translation>
+<translation id="5556459405103347317">Újratöltés</translation>
+<translation id="5617949217645503996">A(z) <ph name="HOST_NAME" /> túl sokszor irányította át.</translation>
+<translation id="5675650730144413517">Az oldal nem működik</translation>
+<translation id="5869405914158311789">A webhely nem érhető el</translation>
+<translation id="5990559369517809815">A szerver felé irányuló kéréseket egy bővítmény blokkolja.</translation>
+<translation id="6042308850641462728">Hosszabban</translation>
+<translation id="6146055958333702838">Ellenőrizze a kábeleket, majd indítsa újra a routert, modemet vagy más
+    hálózati eszközt, amelyet használ.</translation>
+<translation id="6165508094623778733">További információ</translation>
+<translation id="6203231073485539293">Ellenőrizze az internetkapcsolatot</translation>
+<translation id="6305205051461490394">A(z) <ph name="URL" /> nem érhető el.</translation>
+<translation id="6321917430147971392">Ellenőrizze a DNS-beállításokat</translation>
+<translation id="6328639280570009161">Próbálkozzon a hálózati előrejelzések kikapcsolásával</translation>
+<translation id="6433595998831338502">A(z) <ph name="HOST_NAME" /> visszautasította a csatlakozást.</translation>
+<translation id="6711464428925977395">Valami gond van a proxyszerverrel, vagy a cím nem megfelelő.</translation>
+<translation id="6757797048963528358">Számítógéped alvó üzemmódba váltott.</translation>
+<translation id="6830600606572693159">A(z) <ph name="URL" /> helyen lévő weboldal pillanatnyilag nem érhető el. Lehetséges, hogy túlterhelt, vagy karbantartás miatt nem működik.</translation>
+<translation id="6897140037006041989">User agent</translation>
+<translation id="7210863904660874423">A(z) <ph name="HOST_NAME" /> nem felel meg a biztonsági szabványoknak.</translation>
+<translation id="7269802741830436641">Ez a weboldal átirányítási körbe került</translation>
+<translation id="7353601530677266744">Parancssor</translation>
+<translation id="7419106976560586862">Profil elérési útja</translation>
+<translation id="7518003948725431193">Nem található weboldal az internetcímen:<ph name="URL" /></translation>
+<translation id="7549584377607005141">Ez a weboldal korábban megadott adatokat kér ahhoz, hogy megfelelően jelenjen meg. Az adatokat újra elküldheti, de ezzel meg fog ismételni minden olyan műveletet, amelyet ez az oldal korábban végrehajtott.</translation>
+<translation id="759889825892636187">A(z) <ph name="HOST_NAME" /> jelenleg nem tudja kezelni ezt a kérést.</translation>
+<translation id="7716424297397655342">A webhely nem tölthető be a gyorsítótárból</translation>
+<translation id="7758069387465995638">Előfordulhat, hogy a tűzfal vagy a vírusirtó szoftver tiltotta le a kapcsolatot.</translation>
+<translation id="778579833039460630">Nincsenek fogadott adatok</translation>
+<translation id="7951415247503192394">(32 bites)</translation>
+<translation id="8134994873729925007"><ph name="HOST_NAME" /> szerverének <ph name="BEGIN_ABBR" />DNS-címe<ph name="END_ABBR" /> nem található.</translation>
+<translation id="8142868475871995937">Látogasson el a &lt;strong&gt;vivaldi://policy&lt;/strong&gt; oldalra a feketelistán lévő URL-ek és egyéb, a rendszergazda által előírt szabályok megtekintéséhez.</translation>
+<translation id="8149426793427495338">Számítógépe alvó üzemmódba váltott.</translation>
+<translation id="8150722005171944719">A fájl (<ph name="URL" />) nem olvasható. Lehet, hogy eltávolították, áthelyezték, vagy a fájlengedélyek megakadályozzák a hozzáférést.</translation>
+<translation id="8225771182978767009">A számítógépet beállító személy a webhely letiltása mellett döntött.</translation>
+<translation id="8289355894181816810">Forduljon a hálózati rendszergazdához, ha nem tudja, hogy ez mit jelent.</translation>
+<translation id="8332188693563227489">A hozzáférés megtagadva a következőhöz: <ph name="HOST_NAME" /></translation>
+<translation id="8498891568109133222">A(z) <ph name="HOST_NAME" /> túl hosszú ideje nem válaszol.</translation>
+<translation id="8740359287975076522">A(z) <ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;DNS-címe&lt;/abbr&gt; nem található. A probléma diagnosztizálása folyamatban van.</translation>
+<translation id="9183425211371246419">A(z) <ph name="HOST_NAME" /> egy nem támogatott protokollt használ.</translation>
+<translation id="933612690413056017">Nincs internetkapcsolat</translation>
+<translation id="969892804517981540">Hivatalos verzió</translation>
+<translation id="988159990683914416">Fejlesztői változat</translation>
+</translationbundle>

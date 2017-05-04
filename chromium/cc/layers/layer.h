@@ -32,7 +32,6 @@
 #include "cc/trees/target_property.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPicture.h"
-#include "third_party/skia/include/core/SkXfermode.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -130,16 +129,16 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
   virtual bool AlwaysUseActiveTreeOpacity() const;
 
-  void SetBlendMode(SkXfermode::Mode blend_mode);
-  SkXfermode::Mode blend_mode() const { return inputs_.blend_mode; }
+  void SetBlendMode(SkBlendMode blend_mode);
+  SkBlendMode blend_mode() const { return inputs_.blend_mode; }
 
-  void set_draw_blend_mode(SkXfermode::Mode blend_mode) {
+  void set_draw_blend_mode(SkBlendMode blend_mode) {
     if (draw_blend_mode_ == blend_mode)
       return;
     draw_blend_mode_ = blend_mode;
     SetNeedsPushProperties();
   }
-  SkXfermode::Mode draw_blend_mode() const { return draw_blend_mode_; }
+  SkBlendMode draw_blend_mode() const { return draw_blend_mode_; }
 
   // A layer is root for an isolated group when it and all its descendants are
   // drawn over a black and fully transparent background, creating an isolated
@@ -161,7 +160,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     return inputs_.background_filters;
   }
 
-  virtual void SetContentsOpaque(bool opaque);
+  void SetContentsOpaque(bool opaque);
   bool contents_opaque() const { return inputs_.contents_opaque; }
 
   void SetPosition(const gfx::PointF& position);
@@ -441,7 +440,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void SetMutableProperties(uint32_t properties);
   uint32_t mutable_properties() const { return inputs_.mutable_properties; }
 
-  bool HasActiveAnimationForTesting() const;
+  bool HasTickingAnimationForTesting() const;
 
   void SetHasWillChangeTransformHint(bool has_will_change);
   bool has_will_change_transform_hint() const {
@@ -588,7 +587,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     scoped_refptr<Layer> mask_layer;
 
     float opacity;
-    SkXfermode::Mode blend_mode;
+    SkBlendMode blend_mode;
 
     bool is_root_for_isolated_group : 1;
 
@@ -682,7 +681,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   SkColor safe_opaque_background_color_;
   // draw_blend_mode may be different than blend_mode_,
   // when a RenderSurface re-parents the layer's blend_mode.
-  SkXfermode::Mode draw_blend_mode_;
+  SkBlendMode draw_blend_mode_;
   std::unique_ptr<std::set<Layer*>> scroll_children_;
 
   std::unique_ptr<std::set<Layer*>> clip_children_;

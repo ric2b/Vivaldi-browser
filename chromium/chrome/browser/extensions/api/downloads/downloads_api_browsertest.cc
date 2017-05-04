@@ -320,7 +320,6 @@ class DownloadExtensionTest : public ExtensionApiTest {
     CreateAndSetDownloadsDirectory();
     current_browser()->profile()->GetPrefs()->SetBoolean(
         prefs::kPromptForDownload, false);
-    GetOnRecordManager()->RemoveAllDownloads();
     events_listener_.reset(new DownloadsEventsListener());
     // Disable file chooser for current profile.
     DownloadTestFileActivityObserver observer(current_browser()->profile());
@@ -332,7 +331,6 @@ class DownloadExtensionTest : public ExtensionApiTest {
   void GoOffTheRecord() {
     if (!incognito_browser_) {
       incognito_browser_ = CreateIncognitoBrowser();
-      GetOffRecordManager()->RemoveAllDownloads();
       // Disable file chooser for incognito profile.
       DownloadTestFileActivityObserver observer(incognito_browser_->profile());
       observer.EnableFileChooser(false);
@@ -950,10 +948,16 @@ scoped_refptr<UIThreadExtensionFunction> MockedGetFileIconFunction(
   return function;
 }
 
+// https://crbug.com/678967
+#if defined(OS_WIN)
+#define MAYBE_DownloadExtensionTest_FileIcon_Active DISABLED_DownloadExtensionTest_FileIcon_Active
+#else
+#define MAYBE_DownloadExtensionTest_FileIcon_Active DownloadExtensionTest_FileIcon_Active
+#endif
 // Test downloads.getFileIcon() on in-progress, finished, cancelled and deleted
 // download items.
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
-    DownloadExtensionTest_FileIcon_Active) {
+    MAYBE_DownloadExtensionTest_FileIcon_Active) {
   DownloadItem* download_item = CreateSlowTestDownload();
   ASSERT_TRUE(download_item);
   ASSERT_FALSE(download_item->GetTargetFilePath().empty());

@@ -4,9 +4,9 @@
 
 #include "components/exo/test/exo_test_helper.h"
 
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/wm/window_positioner.h"
 #include "ash/common/wm/window_positioning_utils.h"
+#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "components/exo/buffer.h"
 #include "components/exo/shell_surface.h"
@@ -29,14 +29,14 @@ ExoTestWindow::ExoTestWindow(std::unique_ptr<gfx::GpuMemoryBuffer> gpu_buffer,
                            : ash::kShellWindowId_DefaultContainer;
   shell_surface_.reset(new ShellSurface(surface_.get(), nullptr,
                                         gfx::Rect(gpu_buffer->GetSize()), true,
-                                        container));
+                                        false, container));
 
   buffer_.reset(new Buffer(std::move(gpu_buffer)));
   surface_->Attach(buffer_.get());
   surface_->Commit();
 
   ash::wm::CenterWindow(
-      ash::WmWindowAura::Get(shell_surface_->GetWidget()->GetNativeWindow()));
+      ash::WmWindow::Get(shell_surface_->GetWidget()->GetNativeWindow()));
 }
 
 ExoTestWindow::ExoTestWindow(ExoTestWindow&& other) {
@@ -65,9 +65,9 @@ std::unique_ptr<gfx::GpuMemoryBuffer> ExoTestHelper::CreateGpuMemoryBuffer(
   return aura::Env::GetInstance()
       ->context_factory()
       ->GetGpuMemoryBufferManager()
-      ->AllocateGpuMemoryBuffer(size, gfx::BufferFormat::RGBA_8888,
-                                gfx::BufferUsage::GPU_READ,
-                                gpu::kNullSurfaceHandle);
+      ->CreateGpuMemoryBuffer(size, gfx::BufferFormat::RGBA_8888,
+                              gfx::BufferUsage::GPU_READ,
+                              gpu::kNullSurfaceHandle);
 }
 
 ExoTestWindow ExoTestHelper::CreateWindow(int width,

@@ -5,6 +5,7 @@
 #include "chrome/installer/setup/installer_crash_reporting.h"
 
 #include <iterator>
+#include <memory>
 #include <vector>
 
 #include "base/command_line.h"
@@ -31,36 +32,14 @@ namespace {
 // Crash Keys
 
 const char kCurrentVersion[] = "current-version";
-const char kDistributionType[] = "dist-type";
-const char kIsMultiInstall[] = "multi-install";
 const char kIsSystemLevel[] = "system-level";
 const char kOperation[] = "operation";
 const char kStateKey[] = "state-key";
-
-const char *DistributionTypeToString(BrowserDistribution::Type type) {
-  switch (type) {
-    case BrowserDistribution::CHROME_BROWSER:
-      return "chrome browser";
-    case BrowserDistribution::CHROME_FRAME:
-      return "chrome frame";
-    case BrowserDistribution::CHROME_BINARIES:
-      return "chrome binaries";
-    case BrowserDistribution::NUM_TYPES:
-      // Fall out of switch.
-      break;
-  }
-  NOTREACHED();
-  return "";
-}
 
 const char *OperationToString(InstallerState::Operation operation) {
   switch (operation) {
     case InstallerState::SINGLE_INSTALL_OR_UPDATE:
       return "single-install-or-update";
-    case InstallerState::MULTI_INSTALL:
-      return "multi-install";
-    case InstallerState::MULTI_UPDATE:
-      return "multi-update";
     case InstallerState::UNINSTALL:
       return "uninstall";
     case InstallerState::UNINITIALIZED:
@@ -94,7 +73,7 @@ void ConfigureCrashReporting(const InstallerState& installer_state) {
   // right here.
 
   // Create the crash client and install it (a la MainDllLoader::Launch).
-  InstallerCrashReporterClient *crash_client =
+  InstallerCrashReporterClient* crash_client =
       new InstallerCrashReporterClient(!installer_state.system_install());
   ANNOTATE_LEAKING_OBJECT_PTR(crash_client);
   crash_reporter::SetCrashReporterClient(crash_client);
@@ -125,8 +104,6 @@ size_t RegisterCrashKeys() {
   const base::debug::CrashKey kFixedKeys[] = {
     { crash_keys::kMetricsClientId, crash_keys::kSmallSize },
     { kCurrentVersion, crash_keys::kSmallSize },
-    { kDistributionType, crash_keys::kSmallSize },
-    { kIsMultiInstall, crash_keys::kSmallSize },
     { kIsSystemLevel, crash_keys::kSmallSize },
     { kOperation, crash_keys::kSmallSize },
 
@@ -146,11 +123,7 @@ size_t RegisterCrashKeys() {
 void SetInitialCrashKeys(const InstallerState& state) {
   using base::debug::SetCrashKeyValue;
 
-  SetCrashKeyValue(kDistributionType,
-                   DistributionTypeToString(state.state_type()));
   SetCrashKeyValue(kOperation, OperationToString(state.operation()));
-  SetCrashKeyValue(kIsMultiInstall,
-                   state.is_multi_install() ? "true" : "false");
   SetCrashKeyValue(kIsSystemLevel, state.system_install() ? "true" : "false");
 
   const base::string16 state_key = state.state_key();

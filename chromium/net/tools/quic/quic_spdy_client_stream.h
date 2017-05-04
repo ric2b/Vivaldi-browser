@@ -11,7 +11,7 @@
 
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_spdy_stream.h"
 #include "net/spdy/spdy_framer.h"
 
@@ -27,8 +27,7 @@ class QuicSpdyClientStream : public QuicSpdyStream {
   ~QuicSpdyClientStream() override;
 
   // Override the base class to close the write side as soon as we get a
-  // response.
-  // SPDY/HTTP does not support bidirectional streaming.
+  // response (if bidirectional streaming is not enabled).
   void OnStreamFrame(const QuicStreamFrame& frame) override;
 
   // Override the base class to parse and store headers.
@@ -59,6 +58,8 @@ class QuicSpdyClientStream : public QuicSpdyStream {
   // Returns whatever headers have been received for this stream.
   const SpdyHeaderBlock& response_headers() { return response_headers_; }
 
+  const SpdyHeaderBlock& preliminary_headers() { return preliminary_headers_; }
+
   size_t header_bytes_read() const { return header_bytes_read_; }
 
   size_t header_bytes_written() const { return header_bytes_written_; }
@@ -81,6 +82,12 @@ class QuicSpdyClientStream : public QuicSpdyStream {
   size_t header_bytes_written_;
 
   QuicClientSession* session_;
+
+  // These preliminary headers are used for the 100 Continue headers
+  // that may arrive before the response headers when the request has
+  // Expect: 100-continue.
+  bool has_preliminary_headers_;
+  SpdyHeaderBlock preliminary_headers_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicSpdyClientStream);
 };

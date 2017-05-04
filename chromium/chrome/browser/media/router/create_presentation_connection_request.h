@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "chrome/browser/media/router/media_route.h"
@@ -36,7 +37,7 @@ class CreatePresentationConnectionRequest {
  public:
   using PresentationSessionSuccessCallback =
       base::Callback<void(const content::PresentationSessionInfo&,
-                          const MediaRoute::Id&)>;
+                          const MediaRoute&)>;
   using PresentationSessionErrorCallback =
       content::PresentationSessionErrorCallback;
   // |presentation_url|: The presentation URL of the request. Must be a valid
@@ -46,7 +47,7 @@ class CreatePresentationConnectionRequest {
   // |erorr_cb|: Callback to invoke when the request fails. Must be valid.
   CreatePresentationConnectionRequest(
       const RenderFrameHostId& render_frame_host_id,
-      const GURL& presentation_url,
+      const std::vector<GURL>& presentation_urls,
       const GURL& frame_url,
       const PresentationSessionSuccessCallback& success_cb,
       const PresentationSessionErrorCallback& error_cb);
@@ -60,7 +61,8 @@ class CreatePresentationConnectionRequest {
   // These functions can only be invoked once per instance. It is an error
   // to invoke these functions more than once.
   void InvokeSuccessCallback(const std::string& presentation_id,
-                             const MediaRoute::Id& route_id);
+                             const GURL& presentation_url,
+                             const MediaRoute& route);
   void InvokeErrorCallback(const content::PresentationError& error);
 
   // Handle route creation/joining response by invoking the right callback.

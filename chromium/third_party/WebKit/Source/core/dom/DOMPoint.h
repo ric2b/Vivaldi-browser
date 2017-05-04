@@ -16,8 +16,8 @@ class CORE_EXPORT DOMPoint final : public DOMPointReadOnly {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static DOMPoint* create(const DOMPointInit&);
   static DOMPoint* create(double x, double y, double z = 0, double w = 1);
+  static DOMPoint* fromPoint(const DOMPointInit&);
 
   void setX(double x) { m_x = x; }
   void setY(double y) { m_y = y; }

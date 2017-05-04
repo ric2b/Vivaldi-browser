@@ -18,11 +18,12 @@
 #include "core/dom/custom/CustomElementDefinition.h"
 #include "core/dom/custom/CustomElementDefinitionBuilder.h"
 #include "core/dom/custom/CustomElementDescriptor.h"
+#include "core/dom/custom/CustomElementReactionStack.h"
 #include "core/dom/custom/CustomElementUpgradeReaction.h"
 #include "core/dom/custom/CustomElementUpgradeSorter.h"
 #include "core/dom/custom/V0CustomElementRegistrationContext.h"
 #include "core/frame/LocalDOMWindow.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "wtf/Allocator.h"
 
 namespace blink {
@@ -88,6 +89,10 @@ DEFINE_TRACE(CustomElementRegistry) {
   visitor->trace(m_v0);
   visitor->trace(m_upgradeCandidates);
   visitor->trace(m_whenDefinedPromiseMap);
+}
+
+DEFINE_TRACE_WRAPPERS(CustomElementRegistry) {
+  visitor->traceWrappers(&CustomElementReactionStack::current());
 }
 
 CustomElementDefinition* CustomElementRegistry::define(
@@ -214,12 +219,16 @@ ScriptValue CustomElementRegistry::get(const AtomicString& name) {
 // At this point, what the spec calls 'is' is 'name' from desc
 CustomElementDefinition* CustomElementRegistry::definitionFor(
     const CustomElementDescriptor& desc) const {
-  // 4&5. If there is a definition in registry with name equal to is/localName
-  // Autonomous elements have the same name and local name
-  CustomElementDefinition* definition = definitionForName(desc.name());
-  // 4&5. and name equal to localName, return that definition
-  if (definition and definition->descriptor().localName() == desc.localName())
+  // desc.name() is 'is' attribute
+  // 4. If definition in registry with name equal to local name...
+  CustomElementDefinition* definition = definitionForName(desc.localName());
+  // 5. If definition in registry with name equal to name...
+  if (!definition)
+    definition = definitionForName(desc.name());
+  // 4&5. ...and local name equal to localName, return that definition
+  if (definition and definition->descriptor().localName() == desc.localName()) {
     return definition;
+  }
   // 6. Return null
   return nullptr;
 }

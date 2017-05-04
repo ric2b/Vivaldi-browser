@@ -110,9 +110,6 @@ bool ContextMenuContentType::SupportsGroupInternal(int group) {
 
     case ITEM_GROUP_SEARCHWEBFORIMAGE:
       // Image menu items imply search web for image item.
-      if (vivaldi::IsVivaldiRunning()) {
-        return false;
-      }
       return SupportsGroupInternal(ITEM_GROUP_MEDIA_IMAGE);
 
     case ITEM_GROUP_MEDIA_VIDEO:

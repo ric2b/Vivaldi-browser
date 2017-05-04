@@ -5,11 +5,13 @@
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/StyleRule.h"
 #include "core/css/StyleSheetContents.h"
+#include "core/css/parser/CSSLazyParsingState.h"
 #include "core/css/parser/CSSParser.h"
-#include "core/css/parser/CSSParserMode.h"
+#include "core/css/parser/CSSParserContext.h"
 #include "core/frame/FrameHost.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/heap/Heap.h"
+#include "platform/testing/HistogramTester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/text/WTFString.h"
 
@@ -24,10 +26,14 @@ class CSSLazyParsingTest : public testing::Test {
   StyleRule* ruleAt(StyleSheetContents* sheet, size_t index) {
     return toStyleRule(sheet->childRules()[index]);
   }
+
+ protected:
+  HistogramTester m_histogramTester;
+  Persistent<StyleSheetContents> m_cachedContents;
 };
 
 TEST_F(CSSLazyParsingTest, Simple) {
-  CSSParserContext context(HTMLStandardMode, nullptr);
+  CSSParserContext* context = CSSParserContext::create(HTMLStandardMode);
   StyleSheetContents* styleSheet = StyleSheetContents::create(context);
 
   String sheetText = "body { background-color: red; }";
@@ -41,7 +47,7 @@ TEST_F(CSSLazyParsingTest, Simple) {
 // Avoiding lazy parsing for trivially empty blocks helps us perform the
 // shouldConsiderForMatchingRules optimization.
 TEST_F(CSSLazyParsingTest, DontLazyParseEmpty) {
-  CSSParserContext context(HTMLStandardMode, nullptr);
+  CSSParserContext* context = CSSParserContext::create(HTMLStandardMode);
   StyleSheetContents* styleSheet = StyleSheetContents::create(context);
 
   String sheetText = "body {  }";
@@ -55,7 +61,7 @@ TEST_F(CSSLazyParsingTest, DontLazyParseEmpty) {
 // Avoid parsing rules with ::before or ::after to avoid causing
 // collectFeatures() when we trigger parsing for attr();
 TEST_F(CSSLazyParsingTest, DontLazyParseBeforeAfter) {
-  CSSParserContext context(HTMLStandardMode, nullptr);
+  CSSParserContext* context = CSSParserContext::create(HTMLStandardMode);
   StyleSheetContents* styleSheet = StyleSheetContents::create(context);
 
   String sheetText =
@@ -71,7 +77,7 @@ TEST_F(CSSLazyParsingTest, DontLazyParseBeforeAfter) {
 // dangerous API because callers will expect the set of matching rules to be
 // identical if the stylesheet is not mutated.
 TEST_F(CSSLazyParsingTest, ShouldConsiderForMatchingRulesDoesntChange1) {
-  CSSParserContext context(HTMLStandardMode, nullptr);
+  CSSParserContext* context = CSSParserContext::create(HTMLStandardMode);
   StyleSheetContents* styleSheet = StyleSheetContents::create(context);
 
   String sheetText = "p::first-letter { ,badness, } ";
@@ -94,7 +100,7 @@ TEST_F(CSSLazyParsingTest, ShouldConsiderForMatchingRulesDoesntChange1) {
 // Test the same thing as above, with a property that does not get lazy parsed,
 // to ensure that we perform the optimization where possible.
 TEST_F(CSSLazyParsingTest, ShouldConsiderForMatchingRulesSimple) {
-  CSSParserContext context(HTMLStandardMode, nullptr);
+  CSSParserContext* context = CSSParserContext::create(HTMLStandardMode);
   StyleSheetContents* styleSheet = StyleSheetContents::create(context);
 
   String sheetText = "p::before { ,badness, } ";
@@ -112,44 +118,103 @@ TEST_F(CSSLazyParsingTest, ShouldConsiderForMatchingRulesSimple) {
 TEST_F(CSSLazyParsingTest, ChangeDocuments) {
   std::unique_ptr<DummyPageHolder> dummyHolder =
       DummyPageHolder::create(IntSize(500, 500));
-  CSSParserContext context(HTMLStandardMode,
-                           UseCounter::getFrom(&dummyHolder->document()));
-  StyleSheetContents* styleSheet = StyleSheetContents::create(context);
-  CSSStyleSheet* sheet =
-      CSSStyleSheet::create(styleSheet, dummyHolder->document());
-  DCHECK(sheet);
+  CSSParserContext* context = CSSParserContext::create(
+      HTMLStandardMode, CSSParserContext::DynamicProfile,
+      UseCounter::getFrom(&dummyHolder->document()));
+  m_cachedContents = StyleSheetContents::create(context);
+  {
+    CSSStyleSheet* sheet =
+        CSSStyleSheet::create(m_cachedContents, dummyHolder->document());
+    DCHECK(sheet);
 
-  String sheetText = "body { background-color: red; } p { color: orange;  }";
-  CSSParser::parseSheet(context, styleSheet, sheetText, true /* lazy parse */);
+    String sheetText = "body { background-color: red; } p { color: orange;  }";
+    CSSParser::parseSheet(context, m_cachedContents, sheetText,
+                          true /* lazy parse */);
 
-  // Parse the first property set with the first document as owner.
-  StyleRule* rule = ruleAt(styleSheet, 0);
-  EXPECT_FALSE(hasParsedProperties(rule));
-  rule->properties();
-  EXPECT_TRUE(hasParsedProperties(rule));
+    // Parse the first property set with the first document as owner.
+    StyleRule* rule = ruleAt(m_cachedContents, 0);
+    EXPECT_FALSE(hasParsedProperties(rule));
+    rule->properties();
+    EXPECT_TRUE(hasParsedProperties(rule));
 
-  EXPECT_EQ(&dummyHolder->document(), styleSheet->singleOwnerDocument());
+    EXPECT_EQ(&dummyHolder->document(),
+              m_cachedContents->singleOwnerDocument());
+    UseCounter& useCounter1 = dummyHolder->document().frameHost()->useCounter();
+    EXPECT_TRUE(useCounter1.isCounted(CSSPropertyBackgroundColor));
+    EXPECT_FALSE(useCounter1.isCounted(CSSPropertyColor));
 
-  // Change owner document.
-  styleSheet->unregisterClient(sheet);
+    // Change owner document.
+    m_cachedContents->unregisterClient(sheet);
+    dummyHolder.reset();
+  }
+  // Ensure no stack references to oilpan objects.
+  ThreadState::current()->collectAllGarbage();
+
   std::unique_ptr<DummyPageHolder> dummyHolder2 =
       DummyPageHolder::create(IntSize(500, 500));
-  CSSStyleSheet::create(styleSheet, dummyHolder2->document());
+  CSSStyleSheet* sheet2 =
+      CSSStyleSheet::create(m_cachedContents, dummyHolder2->document());
 
-  EXPECT_EQ(&dummyHolder2->document(), styleSheet->singleOwnerDocument());
+  EXPECT_EQ(&dummyHolder2->document(), m_cachedContents->singleOwnerDocument());
 
   // Parse the second property set with the second document as owner.
-  StyleRule* rule2 = ruleAt(styleSheet, 1);
+  StyleRule* rule2 = ruleAt(m_cachedContents, 1);
   EXPECT_FALSE(hasParsedProperties(rule2));
   rule2->properties();
   EXPECT_TRUE(hasParsedProperties(rule2));
 
-  UseCounter& useCounter1 = dummyHolder->document().frameHost()->useCounter();
   UseCounter& useCounter2 = dummyHolder2->document().frameHost()->useCounter();
-  EXPECT_TRUE(useCounter1.isCounted(CSSPropertyBackgroundColor));
+  EXPECT_TRUE(sheet2);
   EXPECT_TRUE(useCounter2.isCounted(CSSPropertyColor));
   EXPECT_FALSE(useCounter2.isCounted(CSSPropertyBackgroundColor));
-  EXPECT_FALSE(useCounter1.isCounted(CSSPropertyColor));
+}
+
+TEST_F(CSSLazyParsingTest, SimpleRuleUsagePercent) {
+  CSSParserContext* context = CSSParserContext::create(HTMLStandardMode);
+  StyleSheetContents* styleSheet = StyleSheetContents::create(context);
+
+  std::string metricName = "Style.LazyUsage.Percent";
+  m_histogramTester.expectTotalCount(metricName, 0);
+
+  String sheetText =
+      "body { background-color: red; }"
+      "p { color: blue; }"
+      "a { color: yellow; }"
+      "#id { color: blue; }"
+      "div { color: grey; }";
+  CSSParser::parseSheet(context, styleSheet, sheetText, true /* lazy parse */);
+
+  m_histogramTester.expectTotalCount(metricName, 1);
+  m_histogramTester.expectUniqueSample(metricName,
+                                       CSSLazyParsingState::UsageGe0, 1);
+
+  ruleAt(styleSheet, 0)->properties();
+  m_histogramTester.expectTotalCount(metricName, 2);
+  m_histogramTester.expectBucketCount(metricName,
+                                      CSSLazyParsingState::UsageGt10, 1);
+
+  ruleAt(styleSheet, 1)->properties();
+  m_histogramTester.expectTotalCount(metricName, 3);
+  m_histogramTester.expectBucketCount(metricName,
+                                      CSSLazyParsingState::UsageGt25, 1);
+
+  ruleAt(styleSheet, 2)->properties();
+  m_histogramTester.expectTotalCount(metricName, 4);
+  m_histogramTester.expectBucketCount(metricName,
+                                      CSSLazyParsingState::UsageGt50, 1);
+
+  ruleAt(styleSheet, 3)->properties();
+  m_histogramTester.expectTotalCount(metricName, 5);
+  m_histogramTester.expectBucketCount(metricName,
+                                      CSSLazyParsingState::UsageGt75, 1);
+
+  // Parsing the last rule bumps both Gt90 and All buckets.
+  ruleAt(styleSheet, 4)->properties();
+  m_histogramTester.expectTotalCount(metricName, 7);
+  m_histogramTester.expectBucketCount(metricName,
+                                      CSSLazyParsingState::UsageGt90, 1);
+  m_histogramTester.expectBucketCount(metricName, CSSLazyParsingState::UsageAll,
+                                      1);
 }
 
 }  // namespace blink

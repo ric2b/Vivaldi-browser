@@ -95,9 +95,9 @@ PermissionDescriptorPtr parsePermission(ScriptState* scriptState,
 
 ScriptPromise Permissions::query(ScriptState* scriptState,
                                  const Dictionary& rawPermission) {
-  ExceptionState exceptionState(ExceptionState::GetterContext, "query",
-                                "Permissions", scriptState->context()->Global(),
-                                scriptState->isolate());
+  ExceptionState exceptionState(scriptState->isolate(),
+                                ExceptionState::GetterContext, "Permissions",
+                                "query");
   PermissionDescriptorPtr descriptor =
       parsePermission(scriptState, rawPermission, exceptionState);
   if (exceptionState.hadException())
@@ -126,15 +126,15 @@ ScriptPromise Permissions::query(ScriptState* scriptState,
       scriptState->getExecutionContext()->getSecurityOrigin(),
       convertToBaseCallback(WTF::bind(
           &Permissions::taskComplete, wrapPersistent(this),
-          wrapPersistent(resolver), passed(std::move(descriptorCopy)))));
+          wrapPersistent(resolver), WTF::passed(std::move(descriptorCopy)))));
   return promise;
 }
 
 ScriptPromise Permissions::request(ScriptState* scriptState,
                                    const Dictionary& rawPermission) {
-  ExceptionState exceptionState(ExceptionState::GetterContext, "request",
-                                "Permissions", scriptState->context()->Global(),
-                                scriptState->isolate());
+  ExceptionState exceptionState(scriptState->isolate(),
+                                ExceptionState::GetterContext, "Permissions",
+                                "request");
   PermissionDescriptorPtr descriptor =
       parsePermission(scriptState, rawPermission, exceptionState);
   if (exceptionState.hadException())
@@ -156,18 +156,18 @@ ScriptPromise Permissions::request(ScriptState* scriptState,
   service->RequestPermission(
       std::move(descriptor),
       scriptState->getExecutionContext()->getSecurityOrigin(),
-      UserGestureIndicator::processingUserGesture(),
+      UserGestureIndicator::processingUserGestureThreadSafe(),
       convertToBaseCallback(WTF::bind(
           &Permissions::taskComplete, wrapPersistent(this),
-          wrapPersistent(resolver), passed(std::move(descriptorCopy)))));
+          wrapPersistent(resolver), WTF::passed(std::move(descriptorCopy)))));
   return promise;
 }
 
 ScriptPromise Permissions::revoke(ScriptState* scriptState,
                                   const Dictionary& rawPermission) {
-  ExceptionState exceptionState(ExceptionState::GetterContext, "revoke",
-                                "Permissions", scriptState->context()->Global(),
-                                scriptState->isolate());
+  ExceptionState exceptionState(scriptState->isolate(),
+                                ExceptionState::GetterContext, "Permissions",
+                                "revoke");
   PermissionDescriptorPtr descriptor =
       parsePermission(scriptState, rawPermission, exceptionState);
   if (exceptionState.hadException())
@@ -191,16 +191,16 @@ ScriptPromise Permissions::revoke(ScriptState* scriptState,
       scriptState->getExecutionContext()->getSecurityOrigin(),
       convertToBaseCallback(WTF::bind(
           &Permissions::taskComplete, wrapPersistent(this),
-          wrapPersistent(resolver), passed(std::move(descriptorCopy)))));
+          wrapPersistent(resolver), WTF::passed(std::move(descriptorCopy)))));
   return promise;
 }
 
 ScriptPromise Permissions::requestAll(
     ScriptState* scriptState,
     const Vector<Dictionary>& rawPermissions) {
-  ExceptionState exceptionState(ExceptionState::GetterContext, "request",
-                                "Permissions", scriptState->context()->Global(),
-                                scriptState->isolate());
+  ExceptionState exceptionState(scriptState->isolate(),
+                                ExceptionState::GetterContext, "Permissions",
+                                "requestAll");
   Vector<PermissionDescriptorPtr> internalPermissions;
   Vector<int> callerIndexToInternalIndex;
   callerIndexToInternalIndex.resize(rawPermissions.size());
@@ -222,7 +222,7 @@ ScriptPromise Permissions::requestAll(
     }
     if (internalIndex == kNotFound) {
       internalIndex = internalPermissions.size();
-      internalPermissions.append(std::move(descriptor));
+      internalPermissions.push_back(std::move(descriptor));
     }
     callerIndexToInternalIndex[i] = internalIndex;
   }
@@ -242,22 +242,23 @@ ScriptPromise Permissions::requestAll(
   Vector<PermissionDescriptorPtr> internalPermissionsCopy;
   internalPermissionsCopy.reserveCapacity(internalPermissions.size());
   for (const auto& descriptor : internalPermissions)
-    internalPermissionsCopy.append(descriptor->Clone());
+    internalPermissionsCopy.push_back(descriptor->Clone());
 
   service->RequestPermissions(
       std::move(internalPermissions),
       scriptState->getExecutionContext()->getSecurityOrigin(),
-      UserGestureIndicator::processingUserGesture(),
-      convertToBaseCallback(WTF::bind(
-          &Permissions::batchTaskComplete, wrapPersistent(this),
-          wrapPersistent(resolver), passed(std::move(internalPermissionsCopy)),
-          passed(std::move(callerIndexToInternalIndex)))));
+      UserGestureIndicator::processingUserGestureThreadSafe(),
+      convertToBaseCallback(
+          WTF::bind(&Permissions::batchTaskComplete, wrapPersistent(this),
+                    wrapPersistent(resolver),
+                    WTF::passed(std::move(internalPermissionsCopy)),
+                    WTF::passed(std::move(callerIndexToInternalIndex)))));
   return promise;
 }
 
 PermissionService* Permissions::getService(ExecutionContext* executionContext) {
-  if (!m_service &&
-      connectToPermissionService(executionContext, mojo::GetProxy(&m_service)))
+  if (!m_service && connectToPermissionService(executionContext,
+                                               mojo::MakeRequest(&m_service)))
     m_service.set_connection_error_handler(convertToBaseCallback(WTF::bind(
         &Permissions::serviceConnectionError, wrapWeakPersistent(this))));
   return m_service.get();
@@ -278,7 +279,7 @@ void Permissions::taskComplete(ScriptPromiseResolver* resolver,
                                mojom::blink::PermissionDescriptorPtr descriptor,
                                mojom::blink::PermissionStatus result) {
   if (!resolver->getExecutionContext() ||
-      resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+      resolver->getExecutionContext()->isContextDestroyed())
     return;
   resolver->resolve(
       PermissionStatus::take(resolver, result, std::move(descriptor)));
@@ -290,7 +291,7 @@ void Permissions::batchTaskComplete(
     Vector<int> callerIndexToInternalIndex,
     const Vector<mojom::blink::PermissionStatus>& results) {
   if (!resolver->getExecutionContext() ||
-      resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+      resolver->getExecutionContext()->isContextDestroyed())
     return;
 
   // Create the response vector by finding the status for each index by
@@ -299,7 +300,7 @@ void Permissions::batchTaskComplete(
   HeapVector<Member<PermissionStatus>> result;
   result.reserveInitialCapacity(callerIndexToInternalIndex.size());
   for (int internalIndex : callerIndexToInternalIndex) {
-    result.append(PermissionStatus::createAndListen(
+    result.push_back(PermissionStatus::createAndListen(
         resolver->getExecutionContext(), results[internalIndex],
         descriptors[internalIndex]->Clone()));
   }

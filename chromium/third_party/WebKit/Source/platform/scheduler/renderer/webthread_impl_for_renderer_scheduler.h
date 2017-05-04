@@ -5,8 +5,8 @@
 #ifndef THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_RENDERER_WEBTHREAD_IMPL_FOR_RENDERER_SCHEDULER_H_
 #define THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_RENDERER_WEBTHREAD_IMPL_FOR_RENDERER_SCHEDULER_H_
 
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "public/platform/scheduler/child/webthread_base.h"
+#include "wtf/RefPtr.h"
 
 namespace blink {
 class WebScheduler;
@@ -47,7 +47,7 @@ class BLINK_PLATFORM_EXPORT WebThreadImplForRendererScheduler
   scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner_;
   RendererSchedulerImpl* scheduler_;  // Not owned.
   PlatformThreadId thread_id_;
-  std::unique_ptr<WebTaskRunnerImpl> web_task_runner_;
+  RefPtr<WebTaskRunnerImpl> web_task_runner_;
 };
 
 }  // namespace scheduler

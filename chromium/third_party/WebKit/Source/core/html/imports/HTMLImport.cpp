@@ -103,11 +103,11 @@ void HTMLImport::recalcTreeState(HTMLImport* root) {
     // Once the state reaches Ready, it shouldn't go back.
     DCHECK(!oldState.isReady() || oldState <= newState);
     if (newState != oldState)
-      updated.append(i);
+      updated.push_back(i);
   }
 
-  for (size_t i = 0; i < updated.size(); ++i)
-    updated[i]->stateDidChange();
+  for (const auto& import : updated)
+    import->stateDidChange();
 }
 
 #if !defined(NDEBUG)

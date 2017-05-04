@@ -4,25 +4,41 @@
 
 module payments.mojom;
 
+import "components/payments/payment_request.mojom";
+import "url/mojo/url.mojom";
+
 enum PaymentAppManifestError {
   NONE,
   NOT_IMPLEMENTED,
+  NO_ACTIVE_WORKER,
+  MANIFEST_STORAGE_OPERATION_FAILED,
 };
 
 struct PaymentAppOption {
-  string label;
+  string name;
   string? icon;
   string id;
   array<string> enabled_methods;
 };
 
 struct PaymentAppManifest {
-  string label;
+  string name;
   string? icon;
   array<PaymentAppOption> options;
 };
 
 interface PaymentAppManager {
-  SetManifest(string service_worker_scope, PaymentAppManifest payment_app_manifest)
+  Init(string service_worker_scope);
+  SetManifest(PaymentAppManifest payment_app_manifest)
       => (PaymentAppManifestError error);
+  GetManifest()
+      => (PaymentAppManifest payment_app_manifest, PaymentAppManifestError error);
+};
+
+struct PaymentAppRequestData {
+  url.mojom.Url origin;
+  array<PaymentMethodData> methodData;
+  PaymentItem total;
+  array<PaymentDetailsModifier> modifiers;
+  string optionId;
 };

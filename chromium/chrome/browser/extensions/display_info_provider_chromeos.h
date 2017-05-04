@@ -13,12 +13,20 @@
 
 namespace chromeos {
 class OverscanCalibrator;
+class TouchCalibratorController;
 }
 
 namespace extensions {
 
 class DisplayInfoProviderChromeOS : public DisplayInfoProvider {
  public:
+  static const char kCustomTouchCalibrationInProgressError[];
+  static const char kCompleteCalibrationCalledBeforeStartError[];
+  static const char kTouchBoundsNegativeError[];
+  static const char kTouchCalibrationPointsNegativeError[];
+  static const char kTouchCalibrationPointsTooLargeError[];
+  static const char kNativeTouchCalibrationActiveError[];
+
   DisplayInfoProviderChromeOS();
   ~DisplayInfoProviderChromeOS() override;
 
@@ -39,12 +47,31 @@ class DisplayInfoProviderChromeOS : public DisplayInfoProvider {
       const api::system_display::Insets& delta) override;
   bool OverscanCalibrationReset(const std::string& id) override;
   bool OverscanCalibrationComplete(const std::string& id) override;
+  bool ShowNativeTouchCalibration(
+      const std::string& id, std::string* error,
+      const TouchCalibrationCallback& callback) override;
+  bool StartCustomTouchCalibration(const std::string& id,
+                                   std::string* error) override;
+  bool CompleteCustomTouchCalibration(
+      const api::system_display::TouchCalibrationPairQuad& pairs,
+      const api::system_display::Bounds& bounds,
+      std::string* error) override;
+  bool ClearTouchCalibration(const std::string& id,
+                             std::string* error) override;
+  bool IsNativeTouchCalibrationActive(std::string* error) override;
 
  private:
+  chromeos::TouchCalibratorController* GetTouchCalibrator();
+
+  chromeos::OverscanCalibrator* GetOverscanCalibrator(const std::string& id);
+
   std::map<std::string, std::unique_ptr<chromeos::OverscanCalibrator>>
       overscan_calibrators_;
 
-  chromeos::OverscanCalibrator* GetCalibrator(const std::string& id);
+  std::unique_ptr<chromeos::TouchCalibratorController> touch_calibrator_;
+
+  std::string touch_calibration_target_id_;
+  bool custom_touch_calibration_active_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(DisplayInfoProviderChromeOS);
 };

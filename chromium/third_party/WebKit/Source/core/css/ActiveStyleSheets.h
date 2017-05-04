@@ -12,8 +12,6 @@ namespace blink {
 
 class CSSStyleSheet;
 class RuleSet;
-class StyleEngine;
-class TreeScope;
 
 using ActiveStyleSheet = std::pair<Member<CSSStyleSheet>, Member<RuleSet>>;
 using ActiveStyleSheetVector = HeapVector<ActiveStyleSheet>;
@@ -27,7 +25,7 @@ enum ActiveSheetsChange {
 CORE_EXPORT ActiveSheetsChange
 compareActiveStyleSheets(const ActiveStyleSheetVector& oldStyleSheets,
                          const ActiveStyleSheetVector& newStyleSheets,
-                         HeapVector<Member<RuleSet>>& changedRuleSets);
+                         HeapHashSet<Member<RuleSet>>& changedRuleSets);
 
 }  // namespace blink
 

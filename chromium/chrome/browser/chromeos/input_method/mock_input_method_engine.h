@@ -21,8 +21,6 @@ class KeyEvent;
 
 namespace chromeos {
 
-class CompositionText;
-
 class MockInputMethodEngine : public ui::IMEEngineHandlerInterface {
  public:
   MockInputMethodEngine();
@@ -52,6 +50,7 @@ class MockInputMethodEngine : public ui::IMEEngineHandlerInterface {
   void Disable() override;
   void PropertyActivate(const std::string& property_name) override;
   void Reset() override;
+  void MaybeSwitchEngine() override;
   bool IsInterestedInKeyEvent() const override;
   void ProcessKeyEvent(const ui::KeyEvent& key_event,
                        KeyEventDoneCallback& callback) override;

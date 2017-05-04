@@ -829,20 +829,13 @@ TEST_F(NavigatorTestWithBrowserSideNavigation, Reload) {
   contents()->NavigateAndCommit(kUrl);
 
   FrameTreeNode* node = main_test_rfh()->frame_tree_node();
-  controller().Reload(false);
+  controller().Reload(ReloadType::NORMAL, false);
   int entry_id = controller().GetPendingEntry()->GetUniqueID();
   // A NavigationRequest should have been generated.
   NavigationRequest* main_request = node->navigation_request();
   ASSERT_TRUE(main_request != NULL);
-  // TODO(toyoshim): Modify following checks once the feature is enabled.
-  if (base::FeatureList::IsEnabled(
-          features::kNonValidatingReloadOnNormalReload)) {
-    EXPECT_EQ(FrameMsg_Navigate_Type::RELOAD_MAIN_RESOURCE,
-              main_request->common_params().navigation_type);
-  } else {
-    EXPECT_EQ(FrameMsg_Navigate_Type::RELOAD,
-              main_request->common_params().navigation_type);
-  }
+  EXPECT_EQ(FrameMsg_Navigate_Type::RELOAD,
+            main_request->common_params().navigation_type);
   main_test_rfh()->PrepareForCommit();
   EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
 
@@ -850,7 +843,7 @@ TEST_F(NavigatorTestWithBrowserSideNavigation, Reload) {
   EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
 
   // Now do a shift+reload.
-  controller().ReloadBypassingCache(false);
+  controller().Reload(ReloadType::BYPASSING_CACHE, false);
   // A NavigationRequest should have been generated.
   main_request = node->navigation_request();
   ASSERT_TRUE(main_request != NULL);

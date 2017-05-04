@@ -38,7 +38,7 @@
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/gpu/SharedContextRateLimiter.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
@@ -130,7 +130,7 @@ Canvas2DLayerBridge::Canvas2DLayerBridge(
     sk_sp<SkColorSpace> colorSpace,
     SkColorType colorType)
     : m_contextProvider(std::move(contextProvider)),
-      m_logger(wrapUnique(new Logger)),
+      m_logger(WTF::wrapUnique(new Logger)),
       m_weakPtrFactory(this),
       m_imageBuffer(0),
       m_msaaSampleCount(msaaSampleCount),
@@ -170,7 +170,7 @@ Canvas2DLayerBridge::~Canvas2DLayerBridge() {
 
 void Canvas2DLayerBridge::startRecording() {
   DCHECK(m_isDeferralEnabled);
-  m_recorder = wrapUnique(new SkPictureRecorder);
+  m_recorder = WTF::wrapUnique(new SkPictureRecorder);
   SkCanvas* canvas =
       m_recorder->beginRecording(m_size.width(), m_size.height(), nullptr);
   // Always save an initial frame, to support resetting the top level matrix
@@ -253,8 +253,8 @@ bool Canvas2DLayerBridge::prepareIOSurfaceMailboxFromImage(
   GLuint imageTexture =
       skia::GrBackendObjectToGrGLTextureInfo(image->getTextureHandle(true))
           ->fID;
-  gl->CopySubTextureCHROMIUM(imageTexture, imageInfo->m_textureId, 0, 0, 0, 0,
-                             m_size.width(), m_size.height(), GL_FALSE,
+  gl->CopySubTextureCHROMIUM(imageTexture, 0, imageInfo->m_textureId, 0, 0, 0,
+                             0, 0, m_size.width(), m_size.height(), GL_FALSE,
                              GL_FALSE, GL_FALSE);
 
   MailboxInfo& info = m_mailboxes.first();
@@ -296,7 +296,7 @@ bool Canvas2DLayerBridge::prepareIOSurfaceMailboxFromImage(
 RefPtr<Canvas2DLayerBridge::ImageInfo>
 Canvas2DLayerBridge::createIOSurfaceBackedTexture() {
   if (!m_imageInfoCache.isEmpty()) {
-    RefPtr<Canvas2DLayerBridge::ImageInfo> info = m_imageInfoCache.last();
+    RefPtr<Canvas2DLayerBridge::ImageInfo> info = m_imageInfoCache.back();
     m_imageInfoCache.pop_back();
     return info;
   }
@@ -311,7 +311,7 @@ Canvas2DLayerBridge::createIOSurfaceBackedTexture() {
     return nullptr;
 
   std::unique_ptr<gfx::GpuMemoryBuffer> gpuMemoryBuffer =
-      gpuMemoryBufferManager->AllocateGpuMemoryBuffer(
+      gpuMemoryBufferManager->CreateGpuMemoryBuffer(
           gfx::Size(m_size), gfx::BufferFormat::RGBA_8888,
           gfx::BufferUsage::SCANOUT, gpu::kNullSurfaceHandle);
   if (!gpuMemoryBuffer)
@@ -785,19 +785,24 @@ void Canvas2DLayerBridge::flushRecordingOnly() {
 }
 
 void Canvas2DLayerBridge::flush() {
-  if (!getOrCreateSurface())
+  if (!m_didDrawSinceLastFlush)
     return;
   TRACE_EVENT0("cc", "Canvas2DLayerBridge::flush");
+  if (!getOrCreateSurface())
+    return;
   flushRecordingOnly();
   getOrCreateSurface()->getCanvas()->flush();
+  m_didDrawSinceLastFlush = false;
 }
 
 void Canvas2DLayerBridge::flushGpu() {
-  TRACE_EVENT0("cc", "Canvas2DLayerBridge::flushGpu");
   flush();
   gpu::gles2::GLES2Interface* gl = contextGL();
-  if (isAccelerated() && gl)
+  if (isAccelerated() && gl && m_didDrawSinceLastGpuFlush) {
+    TRACE_EVENT0("cc", "Canvas2DLayerBridge::flushGpu");
     gl->Flush();
+    m_didDrawSinceLastGpuFlush = false;
+  }
 }
 
 gpu::gles2::GLES2Interface* Canvas2DLayerBridge::contextGL() {
@@ -847,7 +852,7 @@ bool Canvas2DLayerBridge::restoreSurface() {
 
   gpu::gles2::GLES2Interface* sharedGL = nullptr;
   m_layer->clearTexture();
-  m_contextProvider = wrapUnique(
+  m_contextProvider = WTF::wrapUnique(
       Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
   if (m_contextProvider)
     sharedGL = m_contextProvider->contextGL();
@@ -923,8 +928,9 @@ bool Canvas2DLayerBridge::PrepareTextureMailbox(
   // If the context is lost, we don't know if we should be producing GPU or
   // software frames, until we get a new context, since the compositor will
   // be trying to get a new context and may change modes.
-  if (m_contextProvider->contextGL()->GetGraphicsResetStatusKHR() !=
-      GL_NO_ERROR)
+  if (!m_contextProvider ||
+      m_contextProvider->contextGL()->GetGraphicsResetStatusKHR() !=
+          GL_NO_ERROR)
     return false;
 
   sk_sp<SkImage> image =
@@ -1052,6 +1058,8 @@ void Canvas2DLayerBridge::didDraw(const FloatRect& rect) {
     Platform::current()->currentThread()->addTaskObserver(this);
     m_isRegisteredTaskObserver = true;
   }
+  m_didDrawSinceLastFlush = true;
+  m_didDrawSinceLastGpuFlush = true;
 }
 
 void Canvas2DLayerBridge::prepareSurfaceForPaintingIfNeeded() {

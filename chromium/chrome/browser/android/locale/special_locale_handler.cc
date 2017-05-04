@@ -32,24 +32,21 @@ Profile* GetOriginalProfile() {
   return ProfileManager::GetActiveUserProfile()->GetOriginalProfile();
 }
 
-int GetDesignatedPrepopulatedIdForLocale(const std::string& locale) {
-  // TODO: Implement this as a map from locale to prepopulated engines.
-  return TemplateURLPrepopulateData::sogou.id;
-}
-
 }  // namespace
 
 static jlong Init(JNIEnv* env,
                   const JavaParamRef<jclass>& clazz,
                   const JavaParamRef<jstring>& jlocale) {
-  return reinterpret_cast<intptr_t>(
-      new SpecialLocaleHandler(ConvertJavaStringToUTF8(env, jlocale)));
+  return reinterpret_cast<intptr_t>(new SpecialLocaleHandler(
+      GetOriginalProfile(),
+      ConvertJavaStringToUTF8(env, jlocale),
+      TemplateURLServiceFactory::GetForProfile(GetOriginalProfile())));
 }
 
-SpecialLocaleHandler::SpecialLocaleHandler(const std::string& locale)
-    : locale_(locale),
-      template_url_service_(
-          TemplateURLServiceFactory::GetForProfile(GetOriginalProfile())) {}
+SpecialLocaleHandler::SpecialLocaleHandler(Profile* profile,
+                                           const std::string& locale,
+                                           TemplateURLService* service)
+    : profile_(profile), locale_(locale), template_url_service_(service) {}
 
 void SpecialLocaleHandler::Destroy(JNIEnv* env,
                                    const JavaParamRef<jobject>& obj) {
@@ -62,14 +59,18 @@ jboolean SpecialLocaleHandler::LoadTemplateUrls(
   DCHECK(locale_.length() == 2);
 
   std::vector<std::unique_ptr<TemplateURLData>> prepopulated_list =
-      TemplateURLPrepopulateData::GetLocalPrepopulatedEngines(
-          locale_, GetOriginalProfile()->GetPrefs());
+      GetLocalPrepopulatedEngines(profile_);
 
   if (prepopulated_list.empty())
     return false;
 
   for (const auto& data_url : prepopulated_list) {
-    data_url.get()->show_in_default_list = false;
+    TemplateURL* existing = template_url_service_->GetTemplateURLForKeyword(
+        data_url.get()->keyword());
+    // Do not add local engines if there is already one.
+    if (existing)
+      continue;
+
     data_url.get()->safe_for_autoreplace = true;
     std::unique_ptr<TemplateURL> turl(
         new TemplateURL(*data_url, TemplateURL::LOCAL));
@@ -104,9 +105,8 @@ void SpecialLocaleHandler::OverrideDefaultSearchProvider(
     return;
   }
 
-  TemplateURL* turl =
-      FindURLByPrepopulateID(template_url_service_->GetTemplateURLs(),
-                             GetDesignatedPrepopulatedIdForLocale(locale_));
+  TemplateURL* turl = FindURLByPrepopulateID(
+      template_url_service_->GetTemplateURLs(), GetDesignatedSearchEngine());
   if (turl) {
     template_url_service_->SetUserSelectedDefaultSearchProvider(turl);
   }
@@ -118,8 +118,7 @@ void SpecialLocaleHandler::SetGoogleAsDefaultSearch(
   // If the user has changed their default search provider, no-op.
   TemplateURL* current_dsp = template_url_service_->GetDefaultSearchProvider();
   if (!current_dsp ||
-      current_dsp->prepopulate_id() !=
-          GetDesignatedPrepopulatedIdForLocale(locale_)) {
+      current_dsp->prepopulate_id() != GetDesignatedSearchEngine()) {
     return;
   }
 
@@ -129,6 +128,16 @@ void SpecialLocaleHandler::SetGoogleAsDefaultSearch(
   if (turl) {
     template_url_service_->SetUserSelectedDefaultSearchProvider(turl);
   }
+}
+
+std::vector<std::unique_ptr<TemplateURLData>>
+SpecialLocaleHandler::GetLocalPrepopulatedEngines(Profile* profile) {
+  return TemplateURLPrepopulateData::GetLocalPrepopulatedEngines(
+      locale_, profile_->GetPrefs());
+}
+
+int SpecialLocaleHandler::GetDesignatedSearchEngine() {
+  return TemplateURLPrepopulateData::sogou.id;
 }
 
 SpecialLocaleHandler::~SpecialLocaleHandler() {}

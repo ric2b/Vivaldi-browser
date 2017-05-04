@@ -32,6 +32,7 @@
 #include "ui/compositor/paint_context.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -181,14 +182,9 @@ std::unique_ptr<Layer> Layer::Clone() const {
     clone->SetAlphaShape(base::MakeUnique<SkRegion>(*alpha_shape_));
 
   // cc::Layer state.
-  if (surface_layer_ && surface_layer_->surface_id().is_valid()) {
-    clone->SetShowSurface(
-        surface_layer_->surface_id(),
-        surface_layer_->satisfy_callback(),
-        surface_layer_->require_callback(),
-        surface_layer_->surface_size(),
-        surface_layer_->surface_scale(),
-        frame_size_in_dip_);
+  if (surface_layer_ && surface_layer_->surface_info().id().is_valid()) {
+    clone->SetShowSurface(surface_layer_->surface_info(),
+                          surface_layer_->surface_reference_factory());
   } else if (type_ == LAYER_SOLID_COLOR) {
     clone->SetColor(GetTargetColor());
   }
@@ -658,27 +654,22 @@ bool Layer::TextureFlipped() const {
 }
 
 void Layer::SetShowSurface(
-    const cc::SurfaceId& surface_id,
-    const cc::SurfaceLayer::SatisfyCallback& satisfy_callback,
-    const cc::SurfaceLayer::RequireCallback& require_callback,
-    gfx::Size surface_size,
-    float scale,
-    gfx::Size frame_size_in_dip) {
+    const cc::SurfaceInfo& surface_info,
+    scoped_refptr<cc::SurfaceReferenceFactory> ref_factory) {
   DCHECK(type_ == LAYER_TEXTURED || type_ == LAYER_SOLID_COLOR);
 
   scoped_refptr<cc::SurfaceLayer> new_layer =
-      cc::SurfaceLayer::Create(satisfy_callback, require_callback);
-  new_layer->SetSurfaceId(surface_id, scale, surface_size);
+      cc::SurfaceLayer::Create(ref_factory);
+  new_layer->SetSurfaceInfo(surface_info);
   SwitchToLayer(new_layer);
   surface_layer_ = new_layer;
 
-  frame_size_in_dip_ = frame_size_in_dip;
+  frame_size_in_dip_ = gfx::ConvertSizeToDIP(surface_info.device_scale_factor(),
+                                             surface_info.size_in_pixels());
   RecomputeDrawsContentAndUVRect();
 
   for (const auto& mirror : mirrors_) {
-    mirror->dest()->SetShowSurface(
-        surface_id, satisfy_callback, require_callback,
-        surface_size, scale, frame_size_in_dip);
+    mirror->dest()->SetShowSurface(surface_info, ref_factory);
   }
 }
 

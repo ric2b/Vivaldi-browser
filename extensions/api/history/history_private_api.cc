@@ -6,6 +6,7 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -337,6 +338,10 @@ std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
     BookmarkModel* bookmark_model) {
   std::unique_ptr<HistoryPrivateItem> history_item(new HistoryPrivateItem());
 
+  base::Time visitTime = visit.visit_time;
+  base::Time::Exploded exploded;
+  visitTime.LocalExplode(&exploded);
+
   history_item->id = visit.id;
   history_item->url.reset(new std::string(visit.url.spec()));
   history_item->protocol.reset(new std::string(visit.url.scheme()));
@@ -345,6 +350,11 @@ std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
   history_item->visit_time.reset(
       new double(MilliSecondsFromTime(visit.visit_time)));
   history_item->is_bookmarked = bookmark_model->IsBookmarked(visit.url);
+  history_item->date_key.reset(new std::string(
+    base::StringPrintf("%04d-%02d-%02d", exploded.year, exploded.month,
+      exploded.day_of_month)));
+  history_item->hour.reset(new int(exploded.hour));
+  history_item->visit_count.reset(new int(visit.visit_count));
 
   TransitionType transition = vivaldi::history_private::TRANSITION_TYPE_LINK;
   switch (visit.transition & ui::PAGE_TRANSITION_CORE_MASK) {

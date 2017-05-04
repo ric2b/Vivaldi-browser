@@ -186,11 +186,14 @@ class DevToolsProtocolTest : public ContentBrowserTest,
     agent_host_->DispatchProtocolMessage(this, json_command);
     // Some messages are dispatched synchronously.
     // Only run loop if we are not finished yet.
-    if (in_dispatch_ && wait) {
-      waiting_for_command_result_id_ = last_sent_id_;
-      base::RunLoop().Run();
-    }
+    if (in_dispatch_ && wait)
+      WaitForResponse();
     in_dispatch_ = false;
+  }
+
+  void WaitForResponse() {
+    waiting_for_command_result_id_ = last_sent_id_;
+    base::RunLoop().Run();
   }
 
   bool HasValue(const std::string& path) {
@@ -409,14 +412,26 @@ class SyntheticKeyEventTest : public DevToolsProtocolTest {
                     int modifier,
                     int windowsKeyCode,
                     int nativeKeyCode,
-                    const std::string& key) {
+                    const std::string& key,
+                    bool wait) {
     std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
     params->SetString("type", type);
     params->SetInteger("modifiers", modifier);
     params->SetInteger("windowsVirtualKeyCode", windowsKeyCode);
     params->SetInteger("nativeVirtualKeyCode", nativeKeyCode);
     params->SetString("key", key);
-    SendCommand("Input.dispatchKeyEvent", std::move(params));
+    SendCommand("Input.dispatchKeyEvent", std::move(params), wait);
+  }
+};
+
+class SyntheticMouseEventTest : public DevToolsProtocolTest {
+ protected:
+  void SendMouseEvent(const std::string& type, int x, int y, bool wait) {
+    std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
+    params->SetString("type", type);
+    params->SetInteger("x", x);
+    params->SetInteger("y", y);
+    SendCommand("Input.dispatchMouseEvent", std::move(params), wait);
   }
 };
 
@@ -435,8 +450,8 @@ IN_PROC_BROWSER_TEST_F(SyntheticKeyEventTest, KeyEventSynthesizeKey) {
   DOMMessageQueue dom_message_queue;
 
   // Send enter (keycode 13).
-  SendKeyEvent("rawKeyDown", 0, 13, 13, "Enter");
-  SendKeyEvent("keyUp", 0, 13, 13, "Enter");
+  SendKeyEvent("rawKeyDown", 0, 13, 13, "Enter", true);
+  SendKeyEvent("keyUp", 0, 13, 13, "Enter", true);
 
   std::string key;
   ASSERT_TRUE(dom_message_queue.WaitForMessage(&key));
@@ -445,13 +460,66 @@ IN_PROC_BROWSER_TEST_F(SyntheticKeyEventTest, KeyEventSynthesizeKey) {
   EXPECT_EQ("\"Enter\"", key);
 
   // Send escape (keycode 27).
-  SendKeyEvent("rawKeyDown", 0, 27, 27, "Escape");
-  SendKeyEvent("keyUp", 0, 27, 27, "Escape");
+  SendKeyEvent("rawKeyDown", 0, 27, 27, "Escape", true);
+  SendKeyEvent("keyUp", 0, 27, 27, "Escape", true);
 
   ASSERT_TRUE(dom_message_queue.WaitForMessage(&key));
   EXPECT_EQ("\"Escape\"", key);
   ASSERT_TRUE(dom_message_queue.WaitForMessage(&key));
   EXPECT_EQ("\"Escape\"", key);
+}
+
+IN_PROC_BROWSER_TEST_F(SyntheticKeyEventTest, KeyboardEventAck) {
+  NavigateToURLBlockUntilNavigationsComplete(shell(), GURL("about:blank"), 1);
+  Attach();
+  ASSERT_TRUE(content::ExecuteScript(
+      shell()->web_contents()->GetRenderViewHost(),
+      "document.body.addEventListener('keydown', () => console.log('x'));"));
+
+  scoped_refptr<InputMsgWatcher> filter = new InputMsgWatcher(
+      RenderWidgetHostImpl::From(
+          shell()->web_contents()->GetRenderViewHost()->GetWidget()),
+      blink::WebInputEvent::MouseMove);
+
+  SendCommand("Runtime.enable", nullptr);
+  SendKeyEvent("rawKeyDown", 0, 13, 13, "Enter", false);
+
+  // We expect that the console log message event arrives *before* the input
+  // event ack, and the subsequent command response for Input.dispatchKeyEvent.
+  WaitForNotification("Runtime.consoleAPICalled");
+  EXPECT_THAT(console_messages_, ElementsAre("x"));
+  EXPECT_FALSE(filter->HasReceivedAck());
+  EXPECT_EQ(1u, result_ids_.size());
+
+  WaitForResponse();
+  EXPECT_EQ(2u, result_ids_.size());
+}
+
+IN_PROC_BROWSER_TEST_F(SyntheticMouseEventTest, MouseEventAck) {
+  NavigateToURLBlockUntilNavigationsComplete(shell(), GURL("about:blank"), 1);
+  Attach();
+  ASSERT_TRUE(content::ExecuteScript(
+      shell()->web_contents()->GetRenderViewHost(),
+      "document.body.addEventListener('mousemove', () => console.log('x'));"));
+
+  scoped_refptr<InputMsgWatcher> filter = new InputMsgWatcher(
+      RenderWidgetHostImpl::From(
+          shell()->web_contents()->GetRenderViewHost()->GetWidget()),
+      blink::WebInputEvent::MouseMove);
+
+  SendCommand("Runtime.enable", nullptr);
+  SendMouseEvent("mouseMoved", 15, 15, false);
+
+  // We expect that the console log message event arrives *before* the input
+  // event ack, and the subsequent command response for
+  // Input.dispatchMouseEvent.
+  WaitForNotification("Runtime.consoleAPICalled");
+  EXPECT_THAT(console_messages_, ElementsAre("x"));
+  EXPECT_FALSE(filter->HasReceivedAck());
+  EXPECT_EQ(1u, result_ids_.size());
+
+  WaitForResponse();
+  EXPECT_EQ(2u, result_ids_.size());
 }
 
 namespace {
@@ -1013,6 +1081,36 @@ class NavigationFinishedObserver : public content::WebContentsObserver {
 };
 }  // namespace
 
+IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, PageStopLoading) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // Navigate to about:blank first so we can make sure there is a target page we
+  // can attach to, and have Page.setControlNavigations complete before we start
+  // the navigations we're interested in.
+  NavigateToURLBlockUntilNavigationsComplete(shell(), GURL("about:blank"), 1);
+  Attach();
+
+  std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
+  params->SetBoolean("enabled", true);
+  SendCommand("Page.setControlNavigations", std::move(params), true);
+
+  NavigationFinishedObserver navigation_finished_observer(
+      shell()->web_contents());
+
+  // The page will try to navigate twice, however since
+  // Page.setControlNavigations is true, it'll wait for confirmation before
+  // committing to the navigation.
+  GURL test_url = embedded_test_server()->GetURL(
+      "/devtools/control_navigations/meta_tag.html");
+  shell()->LoadURL(test_url);
+
+  // Stop all navigations.
+  SendCommand("Page.stopLoading", nullptr);
+
+  // Wait for the initial navigation to finish.
+  navigation_finished_observer.WaitForNavigationsToFinish(1);
+}
+
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, ControlNavigationsMainFrame) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -1326,6 +1424,23 @@ IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, TargetDiscovery) {
   EXPECT_TRUE(notifications_.empty());
 }
 
+// Tests that an interstitialShown event is sent when an interstitial is showing
+// on attach.
+IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, InterstitialShownOnAttach) {
+  TestInterstitialDelegate* delegate = new TestInterstitialDelegate;
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  GURL interstitial_url("https://example.test");
+  InterstitialPageImpl* interstitial = new InterstitialPageImpl(
+      web_contents, static_cast<RenderWidgetHostDelegate*>(web_contents), true,
+      interstitial_url, delegate);
+  interstitial->Show();
+  WaitForInterstitialAttach(web_contents);
+  Attach();
+  SendCommand("Page.enable", nullptr, false);
+  WaitForNotification("Page.interstitialShown", true);
+}
+
 class SitePerProcessDevToolsProtocolTest : public DevToolsProtocolTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -1399,6 +1514,71 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsProtocolTest, TargetNoDiscovery) {
   params = WaitForNotification("Target.detachedFromTarget", true);
   EXPECT_TRUE(params->GetString("targetId", &temp));
   EXPECT_EQ(target_id, temp);
+}
+
+IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, SetAndGetCookies) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL test_url = embedded_test_server()->GetURL("/title1.html");
+  NavigateToURLBlockUntilNavigationsComplete(shell(), test_url, 1);
+  Attach();
+
+  // Set two cookies, one of which matches the loaded URL and another that
+  // doesn't.
+  std::unique_ptr<base::DictionaryValue> command_params;
+  command_params.reset(new base::DictionaryValue());
+  command_params->SetString("url", test_url.spec());
+  command_params->SetString("name", "cookie_for_this_url");
+  command_params->SetString("value", "mendacious");
+  SendCommand("Network.setCookie", std::move(command_params), false);
+
+  command_params.reset(new base::DictionaryValue());
+  command_params->SetString("url", "https://www.chromium.org");
+  command_params->SetString("name", "cookie_for_another_url");
+  command_params->SetString("value", "polyglottal");
+  SendCommand("Network.setCookie", std::move(command_params), false);
+
+  // First get the cookies for just the loaded URL.
+  SendCommand("Network.getCookies", nullptr, true);
+
+  base::ListValue* cookies;
+  EXPECT_TRUE(result_->HasKey("cookies"));
+  EXPECT_TRUE(result_->GetList("cookies", &cookies));
+  EXPECT_EQ(1u, cookies->GetSize());
+
+  base::DictionaryValue* cookie;
+  std::string name;
+  std::string value;
+  EXPECT_TRUE(cookies->GetDictionary(0, &cookie));
+  EXPECT_TRUE(cookie->GetString("name", &name));
+  EXPECT_TRUE(cookie->GetString("value", &value));
+  EXPECT_EQ("cookie_for_this_url", name);
+  EXPECT_EQ("mendacious", value);
+
+  // Then get all the cookies in the cookie jar.
+  SendCommand("Network.getAllCookies", nullptr, true);
+
+  EXPECT_TRUE(result_->HasKey("cookies"));
+  EXPECT_TRUE(result_->GetList("cookies", &cookies));
+  EXPECT_EQ(2u, cookies->GetSize());
+
+  // Note: the cookies will be returned in unspecified order.
+  size_t found = 0;
+  for (size_t i = 0; i < cookies->GetSize(); i++) {
+    EXPECT_TRUE(cookies->GetDictionary(i, &cookie));
+    EXPECT_TRUE(cookie->GetString("name", &name));
+    if (name == "cookie_for_this_url") {
+      EXPECT_TRUE(cookie->GetString("value", &value));
+      EXPECT_EQ("mendacious", value);
+      found++;
+    } else if (name == "cookie_for_another_url") {
+      EXPECT_TRUE(cookie->GetString("value", &value));
+      EXPECT_EQ("polyglottal", value);
+      found++;
+    } else {
+      FAIL();
+    }
+  }
+  EXPECT_EQ(2u, found);
 }
 
 }  // namespace content

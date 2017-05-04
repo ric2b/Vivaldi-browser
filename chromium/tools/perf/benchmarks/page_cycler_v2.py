@@ -13,12 +13,11 @@ import page_sets
 
 from telemetry import benchmark
 from telemetry.page import cache_temperature
-from telemetry.timeline import chrome_trace_category_filter
 from telemetry.web_perf import timeline_based_measurement
 
 
-def TimelineBasedMeasurementOptionsForLoadingMetric():
-  cat_filter = chrome_trace_category_filter.ChromeTraceCategoryFilter()
+def AugmentOptionsForLoadingMetrics(tbm_options):
+  cat_filter = tbm_options.config.chrome_trace_config.category_filter
 
   # "blink.console" is used for marking ranges in
   # cache_temperature.MarkTelemetryInternal.
@@ -36,9 +35,7 @@ def TimelineBasedMeasurementOptionsForLoadingMetric():
   # necessary to compute time-to-interactive.
   cat_filter.AddIncludedCategory('toplevel')
 
-  tbm_options = timeline_based_measurement.Options(
-      overhead_level=cat_filter)
-  tbm_options.SetTimelineBasedMetrics(['loadingMetric'])
+  tbm_options.AddTimelineBasedMetric('loadingMetric')
   return tbm_options
 
 
@@ -46,7 +43,9 @@ class _PageCyclerV2(perf_benchmark.PerfBenchmark):
   options = {'pageset_repeat': 2}
 
   def CreateTimelineBasedMeasurementOptions(self):
-    return TimelineBasedMeasurementOptionsForLoadingMetric()
+    tbm_options = timeline_based_measurement.Options()
+    AugmentOptionsForLoadingMetrics(tbm_options)
+    return tbm_options
 
   @classmethod
   def ShouldDisable(cls, possible_browser):
@@ -58,12 +57,6 @@ class _PageCyclerV2(perf_benchmark.PerfBenchmark):
     if (cls.IsSvelte(possible_browser) or
         possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X' or
         possible_browser.platform.GetDeviceTypeName() == 'AOSP on BullHead'):
-      return True
-
-    # crbug.com/651188
-    if ((possible_browser.platform.GetDeviceTypeName() == 'Nexus 6' or
-         possible_browser.platform.GetDeviceTypeName() == 'AOSP on Shamu') and
-        possible_browser.browser_type == 'android-webview'):
       return True
 
     return False
@@ -136,6 +129,7 @@ class PageCyclerV2IntlHiRu(_PageCyclerV2):
           cache_temperature.PCV1_COLD, cache_temperature.PCV1_WARM])
 
 
+@benchmark.Disabled('android')  # crbug.com/666898
 class PageCyclerV2IntlJaZh(_PageCyclerV2):
   """Page load time benchmark for a variety of pages in Japanese and Chinese.
 
@@ -167,6 +161,7 @@ class PageCyclerV2IntlKoThVi(_PageCyclerV2):
           cache_temperature.PCV1_COLD, cache_temperature.PCV1_WARM])
 
 
+@benchmark.Enabled('android')
 class PageCyclerV2Top10Mobile(_PageCyclerV2):
   """Page load time benchmark for the top 10 mobile web pages.
 
@@ -215,7 +210,7 @@ class PageCyclerV2BasicOopifIsolated(_PageCyclerV2):
     return page_sets.OopifBasicPageSet(cache_temperatures=[
           cache_temperature.PCV1_COLD, cache_temperature.PCV1_WARM])
 
-
+@benchmark.Disabled('android')
 class PageCyclerV2BasicOopif(_PageCyclerV2):
   """ A benchmark measuring performance of the out-of-process iframes page
   set, without running in out-of-process iframes mode.. """

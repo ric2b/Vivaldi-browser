@@ -7,11 +7,13 @@
 
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
 #include "cc/base/cc_export.h"
 #include "cc/output/ca_layer_overlay.h"
+#include "cc/output/filter_operations.h"
 #include "cc/output/overlay_processor.h"
 #include "cc/quads/tile_draw_quad.h"
 #include "cc/resources/resource_provider.h"
@@ -28,7 +30,6 @@ namespace cc {
 class DrawPolygon;
 class OutputSurface;
 class RenderPass;
-class RenderPassId;
 class RendererSettings;
 class ResourceProvider;
 class ScopedResource;
@@ -51,7 +52,7 @@ class CC_EXPORT DirectRenderer {
   void SetVisible(bool visible);
   void DecideRenderPassAllocationsForFrame(
       const RenderPassList& render_passes_in_draw_order);
-  bool HasAllocatedResourcesForTesting(RenderPassId id) const;
+  bool HasAllocatedResourcesForTesting(int render_pass_id) const;
   void DrawFrame(RenderPassList* render_passes_in_draw_order,
                  float device_scale_factor,
                  const gfx::ColorSpace& device_color_space,
@@ -138,6 +139,9 @@ class CC_EXPORT DirectRenderer {
                      const gfx::Rect& render_pass_scissor,
                      bool use_render_pass_scissor);
 
+  const FilterOperations* FiltersForPass(int render_pass_id) const;
+  const FilterOperations* BackgroundFiltersForPass(int render_pass_id) const;
+
   // Private interface implemented by subclasses for use by DirectRenderer.
   virtual bool CanPartialSwap() = 0;
   virtual void BindFramebufferToOutputSurface(DrawingFrame* frame) = 0;
@@ -184,14 +188,16 @@ class CC_EXPORT DirectRenderer {
   bool allow_empty_swap_;
   // Whether partial swap can be used.
   bool use_partial_swap_;
+  // Whether overdraw feedback is enabled and can be used.
+  bool overdraw_feedback_ = false;
 
   // TODO(danakj): Just use a vector of pairs here? Hash map is way overkill.
-  std::unordered_map<RenderPassId,
-                     std::unique_ptr<ScopedResource>,
-                     RenderPassIdHash>
+  std::unordered_map<int, std::unique_ptr<ScopedResource>>
       render_pass_textures_;
-  std::unordered_map<RenderPassId, TileDrawQuad, RenderPassIdHash>
-      render_pass_bypass_quads_;
+  std::unordered_map<int, TileDrawQuad> render_pass_bypass_quads_;
+
+  RenderPassFilterList render_pass_filters_;
+  RenderPassFilterList render_pass_background_filters_;
 
   bool visible_ = false;
 
@@ -207,6 +213,9 @@ class CC_EXPORT DirectRenderer {
 
  private:
   bool initialized_ = false;
+#if DCHECK_IS_ON()
+  bool overdraw_feedback_support_missing_logged_once_ = false;
+#endif
   gfx::Size enlarge_pass_texture_amount_;
 
   // Cached values given to Reshape().
@@ -214,6 +223,7 @@ class CC_EXPORT DirectRenderer {
   float reshape_device_scale_factor_ = 0.f;
   gfx::ColorSpace reshape_device_color_space_;
   bool reshape_has_alpha_ = false;
+  bool reshape_use_stencil_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(DirectRenderer);
 };

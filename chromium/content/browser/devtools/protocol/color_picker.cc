@@ -18,8 +18,7 @@
 #include "ui/gfx/geometry/size_conversions.h"
 
 namespace content {
-namespace devtools {
-namespace page {
+namespace protocol {
 
 ColorPicker::ColorPicker(ColorPickedCallback callback)
     : callback_(callback),
@@ -116,7 +115,7 @@ bool ColorPicker::HandleMouseEvent(const blink::WebMouseEvent& event) {
     return true;
 
   if (event.button == blink::WebMouseEvent::Button::Left &&
-      event.type == blink::WebInputEvent::MouseDown) {
+      event.type() == blink::WebInputEvent::MouseDown) {
     if (last_cursor_x_ < 0 || last_cursor_x_ >= frame_.width() ||
         last_cursor_y_ < 0 || last_cursor_y_ >= frame_.height()) {
       return true;
@@ -210,7 +209,7 @@ void ColorPicker::UpdateCursor() {
   SkPath clip_path;
   clip_path.addOval(SkRect::MakeXYWH(padding, padding, kDiameter, kDiameter));
   clip_path.close();
-  canvas.clipPath(clip_path, SkRegion::kIntersect_Op, true);
+  canvas.clipPath(clip_path, SkClipOp::kIntersect, true);
 
   // Project pixels.
   int pixel_count = kDiameter / kPixelSize;
@@ -259,6 +258,5 @@ void ColorPicker::UpdateCursor() {
   host_->SetCursor(cursor);
 }
 
-}  // namespace page
-}  // namespace devtools
+}  // namespace protocol
 }  // namespace content

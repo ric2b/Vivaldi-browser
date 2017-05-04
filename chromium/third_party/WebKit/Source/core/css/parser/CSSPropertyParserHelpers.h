@@ -15,6 +15,7 @@
 
 namespace blink {
 
+class CSSParserContext;
 class CSSStringValue;
 class CSSURIValue;
 class CSSValuePair;
@@ -24,6 +25,8 @@ class CSSValuePair;
 // the start of the range doesn't match the type we're looking for, the range
 // will not be modified.
 namespace CSSPropertyParserHelpers {
+
+void complete4Sides(CSSValue* side[4]);
 
 // TODO(timloh): These should probably just be consumeComma and consumeSlash.
 bool consumeCommaIncludingWhitespace(CSSParserTokenRange&);
@@ -51,6 +54,7 @@ CSSPrimitiveValue* consumeLengthOrPercent(
     UnitlessQuirk = UnitlessQuirk::Forbid);
 CSSPrimitiveValue* consumeAngle(CSSParserTokenRange&);
 CSSPrimitiveValue* consumeTime(CSSParserTokenRange&, ValueRange);
+CSSPrimitiveValue* consumeResolution(CSSParserTokenRange&);
 
 CSSIdentifierValue* consumeIdent(CSSParserTokenRange&);
 CSSIdentifierValue* consumeIdentRange(CSSParserTokenRange&,
@@ -64,7 +68,7 @@ CSSIdentifierValue* consumeIdent(CSSParserTokenRange&);
 CSSCustomIdentValue* consumeCustomIdent(CSSParserTokenRange&);
 CSSStringValue* consumeString(CSSParserTokenRange&);
 StringView consumeUrlAsStringView(CSSParserTokenRange&);
-CSSURIValue* consumeUrl(CSSParserTokenRange&);
+CSSURIValue* consumeUrl(CSSParserTokenRange&, const CSSParserContext*);
 
 CSSValue* consumeColor(CSSParserTokenRange&,
                        CSSParserMode,
@@ -84,12 +88,13 @@ bool consumeOneOrTwoValuedPosition(CSSParserTokenRange&,
                                    CSSValue*& resultX,
                                    CSSValue*& resultY);
 
-enum class ConsumeGeneratedImage { Allow, Forbid };
+enum class ConsumeGeneratedImagePolicy { Allow, Forbid };
 
-CSSValue* consumeImage(CSSParserTokenRange&,
-                       const CSSParserContext&,
-                       ConsumeGeneratedImage = ConsumeGeneratedImage::Allow);
-CSSValue* consumeImageOrNone(CSSParserTokenRange&, const CSSParserContext&);
+CSSValue* consumeImage(
+    CSSParserTokenRange&,
+    const CSSParserContext*,
+    ConsumeGeneratedImagePolicy = ConsumeGeneratedImagePolicy::Allow);
+CSSValue* consumeImageOrNone(CSSParserTokenRange&, const CSSParserContext*);
 
 bool isCSSWideKeyword(StringView);
 

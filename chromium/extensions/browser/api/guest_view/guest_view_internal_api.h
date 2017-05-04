@@ -21,6 +21,11 @@ class GuestViewInternalCreateGuestFunction : public AsyncExtensionFunction {
   bool RunAsync() final;
 
  private:
+  /* Vivaldi specific: This will return any WebContents created and owned by
+   * either the tabstrip or popup-webcontents manager. Returns true if
+   * WebContents was found elsewhere.*/
+  bool GetExternalWebContents(base::DictionaryValue* create_params);
+
   void CreateGuestCallback(content::WebContents* guest_web_contents);
   DISALLOW_COPY_AND_ASSIGN(GuestViewInternalCreateGuestFunction);
 };

@@ -9,6 +9,7 @@
 #import "base/mac/sdk_forward_declarations.h"
 #include "chrome/browser/themes/theme_service.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
+#include "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_cell.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_editor.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_decoration.h"
@@ -46,6 +47,9 @@ const CGFloat kAnimationDuration = 0.2;
   resizeAnimation_.reset([[NSViewAnimation alloc] init]);
   [resizeAnimation_ setDuration:kAnimationDuration];
   [resizeAnimation_ setAnimationBlockingMode:NSAnimationNonblocking];
+  [self setAlignment:cocoa_l10n_util::ShouldDoExperimentalRTLLayout()
+                         ? NSRightTextAlignment
+                         : NSLeftTextAlignment];
 
   // Disable Force Touch in the Omnibox. Note that this API is defined in
   // 10.10.3 and higher so have to check more than just isYosmiteOrLater().
@@ -283,25 +287,24 @@ const CGFloat kAnimationDuration = 0.2;
   [self addToolTipRect:aRect owner:tooltip userData:nil];
 }
 
-- (void)setGrayTextAutocompletion:(NSString*)suggestText
-                        textColor:(NSColor*)suggestColor {
-  [self setNeedsDisplay:YES];
-  suggestText_.reset([suggestText retain]);
-  suggestColor_.reset([suggestColor retain]);
-}
-
-- (NSString*)suggestText {
-  return suggestText_;
-}
-
-- (NSColor*)suggestColor {
-  return suggestColor_;
-}
-
 - (NSPoint)bubblePointForDecoration:(LocationBarDecoration*)decoration {
-  const NSRect frame =
-      [[self cell] frameForDecoration:decoration inFrame:[self bounds]];
-  const NSPoint point = decoration->GetBubblePointInFrame(frame);
+  NSPoint point;
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+    // Under MD, dialogs have no arrow and anchor to corner of the decoration
+    // frame, not a specific point within it. See http://crbug.com/566115.
+    BOOL isLeftDecoration;
+    const NSRect frame =
+        [[self cell] backgroundFrameForDecoration:decoration
+                                          inFrame:[self bounds]
+                                 isLeftDecoration:&isLeftDecoration];
+    point.y = NSMaxY(frame);
+    point.x = isLeftDecoration ? NSMinX(frame) : NSMaxX(frame);
+  } else {
+    const NSRect frame =
+        [[self cell] frameForDecoration:decoration inFrame:[self bounds]];
+    point = decoration->GetBubblePointInFrame(frame);
+  }
+
   return [self convertPoint:point toView:nil];
 }
 
@@ -493,16 +496,6 @@ const CGFloat kAnimationDuration = 0.2;
   return doResign;
 }
 
-- (void)drawRect:(NSRect)rect {
-  [super drawRect:rect];
-  autocomplete_text_field::DrawGrayTextAutocompletion(
-      [self attributedStringValue],
-      suggestText_,
-      suggestColor_,
-      self,
-      [[self cell] drawingRectForBounds:[self bounds]]);
-}
-
 // (URLDropTarget protocol)
 - (id<URLDropTargetController>)urlDropController {
   BrowserWindowController* windowController =
@@ -563,42 +556,3 @@ const CGFloat kAnimationDuration = 0.2;
 }
 
 @end
-
-namespace autocomplete_text_field {
-
-void DrawGrayTextAutocompletion(NSAttributedString* mainText,
-                                NSString* suggestText,
-                                NSColor* suggestColor,
-                                NSView* controlView,
-                                NSRect frame) {
-  if (![suggestText length])
-    return;
-
-  base::scoped_nsobject<NSTextFieldCell> cell(
-      [[NSTextFieldCell alloc] initTextCell:@""]);
-  [cell setBordered:NO];
-  [cell setDrawsBackground:NO];
-  [cell setEditable:NO];
-
-  base::scoped_nsobject<NSMutableAttributedString> combinedText(
-      [[NSMutableAttributedString alloc] initWithAttributedString:mainText]);
-  NSRange range = NSMakeRange([combinedText length], 0);
-  [combinedText replaceCharactersInRange:range withString:suggestText];
-  [combinedText addAttribute:NSForegroundColorAttributeName
-                       value:suggestColor
-                       range:NSMakeRange(range.location, [suggestText length])];
-  [cell setAttributedStringValue:combinedText];
-
-  CGFloat mainTextWidth = [mainText size].width;
-  CGFloat suggestWidth = NSWidth(frame) - mainTextWidth;
-  NSRect suggestRect = NSMakeRect(NSMinX(frame) + mainTextWidth,
-                                  NSMinY(frame),
-                                  suggestWidth,
-                                  NSHeight(frame));
-
-  gfx::ScopedNSGraphicsContextSaveGState saveGState;
-  NSRectClip(suggestRect);
-  [cell drawInteriorWithFrame:frame inView:controlView];
-}
-
-}  // namespace autocomplete_text_field

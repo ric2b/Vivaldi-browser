@@ -31,22 +31,6 @@ bool HandleVivaldiURLRewrite(GURL* url,
 
   return false;
 }
-
-bool HandleVivaldiURLRewriteReverse(GURL* url,
-                                    content::BrowserContext* browser_context) {
-  // Do nothing in incognito.
-  Profile* profile = Profile::FromBrowserContext(browser_context);
-  if (profile && profile->IsOffTheRecord())
-    return false;
-
-  GURL new_tab_url(vivaldi::kVivaldiNewTabURL);
-  if (new_tab_url.is_valid() &&
-      search::MatchesOriginAndPath(new_tab_url, *url)) {
-    *url = GURL(vivaldi::kVivaldiUINewTabURL);
-    return true;
-  }
-  return false;
-}
 }  // namespace vivaldi
 
 void VivaldiContentBrowserClientParts::BrowserURLHandlerCreated(

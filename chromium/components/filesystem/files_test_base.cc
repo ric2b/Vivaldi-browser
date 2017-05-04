@@ -21,12 +21,12 @@ FilesTestBase::~FilesTestBase() {
 
 void FilesTestBase::SetUp() {
   ServiceTest::SetUp();
-  connector()->ConnectToInterface("filesystem", &files_);
+  connector()->BindInterface("filesystem", &files_);
 }
 
 void FilesTestBase::GetTemporaryRoot(mojom::DirectoryPtr* directory) {
   mojom::FileError error = mojom::FileError::FAILED;
-  bool handled = files()->OpenTempDirectory(GetProxy(directory), &error);
+  bool handled = files()->OpenTempDirectory(MakeRequest(directory), &error);
   ASSERT_TRUE(handled);
   ASSERT_EQ(mojom::FileError::OK, error);
 }

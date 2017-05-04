@@ -19,6 +19,7 @@
 
 .oobe-display #outer-container {
   -webkit-perspective: 600px;
+  bottom: 47px; /* header-bar is 47 pixels high during OOBE */
 }
 
 .pin-container.pin-enabled {
@@ -32,6 +33,10 @@
   transition: none;
   visibility: hidden; /* Needed because pin-keyboard's offsetHeight is
                          checked to determine if loaded. */
+}
+
+.disable-pin-animation .pin-container {
+  transition: none;
 }
 
 #scroll-container {
@@ -62,6 +67,19 @@
   pointer-events: none;
 }
 
+#oobe-shield {
+  display: none;
+}
+
+#oobe-shield[md-mode] {
+  background-color: rgba(20, 29, 40, .8); /* #141D28 80% */
+  display: block;
+  height: 100%;
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 100%;
+}
 
 #oobe[md-mode] #progress-dots {
   display: none;
@@ -81,6 +99,7 @@
 #oobe.kiosk-enable #inner-container,
 #oobe.oauth-enrollment #inner-container,
 #oobe.password-changed #inner-container,
+#oobe.ad-password-change #inner-container,
 #oobe.reset #inner-container,
 #oobe.supervised-user-creation #inner-container,
 #oobe.supervised-user-creation-dialog #inner-container,
@@ -155,6 +174,7 @@
 
 #account-picker-dot,
 #app-launch-splash-dot,
+#arc-kiosk-splash-dot,
 #auto-enrollment-check-dot,
 #autolaunch-dot,
 #confirm-password-dot,

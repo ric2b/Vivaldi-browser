@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-#include "base/debug/activity_tracker.h"
+#include "base/debug/activity_analyzer.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
@@ -72,6 +72,12 @@ class PostmortemReportCollector {
   FRIEND_TEST_ALL_PREFIXES(PostmortemReportCollectorTest, CollectRandomFile);
   FRIEND_TEST_ALL_PREFIXES(PostmortemReportCollectorCollectionTest,
                            CollectSuccess);
+  FRIEND_TEST_ALL_PREFIXES(
+      PostmortemReportCollectorCollectionFromGlobalTrackerTest,
+      LogCollection);
+  FRIEND_TEST_ALL_PREFIXES(
+      PostmortemReportCollectorCollectionFromGlobalTrackerTest,
+      GlobalUserDataCollection);
 
   // Virtual for unittesting.
   virtual std::vector<base::FilePath> GetDebugStateFilePaths(
@@ -88,8 +94,9 @@ class PostmortemReportCollector {
   // TODO(manzagop): move this for reuse in live scenario.
   virtual CollectionStatus Collect(const base::FilePath& debug_state_file,
                                    std::unique_ptr<StabilityReport>* report);
-  void CollectThread(const base::debug::ActivitySnapshot& snapshot,
-                     ThreadState* thread_state);
+  void CollectThread(
+      const base::debug::ThreadActivityAnalyzer::Snapshot& snapshot,
+      ThreadState* thread_state);
 
   virtual bool WriteReportToMinidump(const StabilityReport& report,
                                      const crashpad::UUID& client_id,

@@ -8,7 +8,13 @@ import("//chrome/common/features.gni")
 import("//chrome/process_version_rc_template.gni")  # For branding_file_path.
 import("//extensions/features/features.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//pdf/features.gni")
+import("//ppapi/features/features.gni")
 import("//tools/grit/grit_rule.gni")
+
+if (enable_pdf) {
+  assert(enable_plugins, "PDF support requires plugins be enabled.")
+}
 
 grit("resources") {
   source = "common_resources.grd"
@@ -25,7 +31,6 @@ grit("resources") {
 buildflag_header("features") {
   header = "features.h"
   flags = [
-    "ANDROID_JAVA_UI=$android_java_ui",
     "ENABLE_APP_LIST=$enable_app_list",
     "ENABLE_BACKGROUND=$enable_background",
     "ENABLE_BASIC_PRINT_DIALOG=$enable_basic_print_dialog",
@@ -64,7 +69,6 @@ static_library("common") {
     "chrome_content_client.cc",
     "chrome_content_client.h",
     "chrome_content_client_constants.cc",
-    "chrome_content_client_ios.mm",
     "chrome_media_client_android.cc",
     "chrome_media_client_android.h",
     "chrome_result_codes.h",
@@ -76,9 +80,9 @@ static_library("common") {
     "common_param_traits_macros.h",
     "component_flash_hint_file_linux.cc",
     "component_flash_hint_file_linux.h",
+    "conflicts/module_watcher_win.cc",
+    "conflicts/module_watcher_win.h",
     "content_restriction.h",
-    "content_settings_pattern_serializer.cc",
-    "content_settings_pattern_serializer.h",
     "crash_keys.cc",
     "crash_keys.h",
     "custom_handlers/protocol_handler.cc",
@@ -86,6 +90,7 @@ static_library("common") {
     "descriptors_android.h",
     "ini_parser.cc",
     "ini_parser.h",
+    "instant_type_traits.h",
     "logging_chrome.cc",
     "logging_chrome.h",
     "mac/app_shim_launch.h",
@@ -119,11 +124,9 @@ static_library("common") {
     "profiling.cc",
     "profiling.h",
     "ref_counted_util.h",
-    "render_messages.cc",
     "render_messages.h",
     "resource_usage_reporter_type_converters.cc",
     "resource_usage_reporter_type_converters.h",
-    "safe_browsing/safebrowsing_messages.h",
     "search/instant_types.cc",
     "search/instant_types.h",
     "search/ntp_logging_events.h",
@@ -145,10 +148,6 @@ static_library("common") {
     "tts_utterance_request.h",
     "url_constants.cc",
     "url_constants.h",
-    "v8_breakpad_support_win.cc",
-    "v8_breakpad_support_win.h",
-    "variations/child_process_field_trial_syncer.cc",
-    "variations/child_process_field_trial_syncer.h",
     "web_application_info.cc",
     "web_application_info.h",
     "widevine_cdm_constants.cc",
@@ -192,7 +191,8 @@ static_library("common") {
     "//components/metrics:net",
     "//components/nacl/common:process_type",
     "//components/nacl/common:switches",
-    "//components/offline_pages:switches",
+    "//components/ntp_tiles",
+    "//components/offline_pages/core:switches",
     "//components/omnibox/common",
     "//components/password_manager/content/common:mojo_interfaces",
     "//components/password_manager/core/common",
@@ -220,6 +220,7 @@ static_library("common") {
     "//mojo/edk/system",
     "//mojo/public/cpp/bindings",
     "//net",
+    "//pdf:features",
     "//ppapi/features",
     "//printing/features",
     "//skia",
@@ -322,6 +323,7 @@ static_library("common") {
       "extensions/webstore_install_result.h",
     ]
     public_deps += [
+      "//chrome/common/extensions:mojo_bindings",
       "//chrome/common/extensions/api",
       "//chrome/common/extensions/api:extensions_features",
       "//device/usb",
@@ -432,8 +434,8 @@ static_library("common") {
       "importer/importer_type.h",
       "importer/importer_url_row.cc",
       "importer/importer_url_row.h",
-      "importer/profile_import_process_messages.cc",
-      "importer/profile_import_process_messages.h",
+      "importer/profile_import_process_param_traits.cc",
+      "importer/profile_import_process_param_traits.h",
       "importer/profile_import_process_param_traits_macros.h",
       "importer/safari_importer_utils.h",
       "importer/safari_importer_utils.mm",
@@ -446,6 +448,7 @@ static_library("common") {
 
   if (is_win) {
     public_deps += [
+      "//chrome/install_static:install_static_util",
       "//components/dom_distiller/core",  # Needed by chrome_content_client.cc.
       "//third_party/wtl",
     ]
@@ -581,6 +584,7 @@ static_library("constants") {
     "//components/bookmarks/common",
     "//components/nacl/common:switches",
     "//media:cdm_paths",  # Needed by chrome_paths.cc.
+    "//media:media_features",
     "//ppapi/features",
     "//third_party/widevine/cdm:headers",
   ]
@@ -618,13 +622,18 @@ if (is_win) {
 # require many files from it. This makes linking more efficient.
 static_library("test_support") {
   testonly = true
-  visibility = [ "//chrome/test:test_support" ]
+  visibility = [ "//chrome/test:*" ]
 
-  sources = []
+  sources = [
+    "search/mock_searchbox.cc",
+    "search/mock_searchbox.h",
+  ]
 
   deps = [
     ":common",
+    ":instant_mojom",
     "//base",
+    "//testing/gmock",
     "//testing/gtest",
   ]
 
@@ -666,12 +675,29 @@ source_set("app_mode_app_support") {
 
 mojom("mojo_bindings") {
   sources = [
+    "conflicts/module_event_sink_win.mojom",
+    "field_trial_recorder.mojom",
+    "net_benchmarking.mojom",
     "network_diagnostics.mojom",
+    "prerender.mojom",
+    "renderer_configuration.mojom",
     "resource_usage_reporter.mojom",
     "shell_handler_win.mojom",
   ]
 
   public_deps = [
+    "//components/content_settings/core/common:mojo_bindings",
+    "//url/mojo:url_mojom_gurl",
+  ]
+}
+
+mojom("instant_mojom") {
+  sources = [
+    "instant.mojom",
+  ]
+
+  public_deps = [
+    "//mojo/common:common_custom_types",
     "//url/mojo:url_mojom_gurl",
   ]
 }

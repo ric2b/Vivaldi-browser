@@ -10,13 +10,9 @@
 
 namespace service_manager {
 
-Connector::ConnectParams::ConnectParams(const Identity& target)
-    : target_(target) {}
-
-Connector::ConnectParams::ConnectParams(const std::string& name)
-    : target_(name, mojom::kInheritUserID) {}
-
-Connector::ConnectParams::~ConnectParams() {}
+namespace {
+void EmptyBindCallback(mojom::ConnectResult, const std::string&) {}
+}
 
 ConnectorImpl::ConnectorImpl(mojom::ConnectorPtrInfo unbound_state)
     : unbound_state_(std::move(unbound_state)) {
@@ -36,71 +32,71 @@ void ConnectorImpl::OnConnectionError() {
   connector_.reset();
 }
 
-std::unique_ptr<Connection> ConnectorImpl::Connect(const std::string& name) {
-  ConnectParams params(name);
-  return Connect(&params);
+void ConnectorImpl::StartService(
+    const Identity& identity,
+    mojom::ServicePtr service,
+    mojom::PIDReceiverRequest pid_receiver_request) {
+  if (!BindConnectorIfNecessary())
+    return;
+
+  DCHECK(service.is_bound() && pid_receiver_request.is_pending());
+  connector_->StartService(identity,
+                           service.PassInterface().PassHandle(),
+                           std::move(pid_receiver_request));
 }
 
-std::unique_ptr<Connection> ConnectorImpl::Connect(ConnectParams* params) {
-  if (!BindIfNecessary())
+std::unique_ptr<Connection> ConnectorImpl::Connect(const std::string& name) {
+  return Connect(Identity(name, mojom::kInheritUserID));
+}
+
+std::unique_ptr<Connection> ConnectorImpl::Connect(const Identity& target) {
+  if (!BindConnectorIfNecessary())
     return nullptr;
 
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(params);
 
   mojom::InterfaceProviderPtr remote_interfaces;
-  mojom::InterfaceProviderRequest remote_request = GetProxy(&remote_interfaces);
+  mojom::InterfaceProviderRequest remote_request(&remote_interfaces);
   std::unique_ptr<internal::ConnectionImpl> connection(
-      new internal::ConnectionImpl(params->target(),
-                                   Connection::State::PENDING));
-  if (params->remote_interfaces()) {
-    params->remote_interfaces()->Bind(std::move(remote_interfaces));
-    connection->set_remote_interfaces(params->remote_interfaces());
-  } else {
-    std::unique_ptr<InterfaceProvider> remote_interface_provider(
-        new InterfaceProvider);
-    remote_interface_provider->Bind(std::move(remote_interfaces));
-    connection->SetRemoteInterfaces(std::move(remote_interface_provider));
-  }
+      new internal::ConnectionImpl(target, Connection::State::PENDING));
+  std::unique_ptr<InterfaceProvider> remote_interface_provider(
+      new InterfaceProvider);
+  remote_interface_provider->Bind(std::move(remote_interfaces));
+  connection->SetRemoteInterfaces(std::move(remote_interface_provider));
 
-  mojom::ServicePtr service;
-  mojom::PIDReceiverRequest pid_receiver_request;
-  params->TakeClientProcessConnection(&service, &pid_receiver_request);
-  mojom::ClientProcessConnectionPtr client_process_connection;
-  if (service.is_bound() && pid_receiver_request.is_pending()) {
-    client_process_connection = mojom::ClientProcessConnection::New();
-    client_process_connection->service =
-        service.PassInterface().PassHandle();
-    client_process_connection->pid_receiver_request =
-        pid_receiver_request.PassMessagePipe();
-  } else if (service.is_bound() || pid_receiver_request.is_pending()) {
-    NOTREACHED() << "If one of service or pid_receiver_request is valid, "
-                 << "both must be valid.";
-    return std::move(connection);
-  }
-  connector_->Connect(params->target(), std::move(remote_request),
-                      std::move(client_process_connection),
+  connector_->Connect(target, std::move(remote_request),
                       connection->GetConnectCallback());
   return std::move(connection);
 }
 
+void ConnectorImpl::BindInterface(
+    const Identity& target,
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle interface_pipe) {
+  if (!BindConnectorIfNecessary())
+    return;
+
+  connector_->BindInterface(target, interface_name, std::move(interface_pipe),
+                            base::Bind(&EmptyBindCallback));
+}
+
 std::unique_ptr<Connector> ConnectorImpl::Clone() {
-  if (!BindIfNecessary())
+  if (!BindConnectorIfNecessary())
     return nullptr;
 
   mojom::ConnectorPtr connector;
-  mojom::ConnectorRequest request = GetProxy(&connector);
+  mojom::ConnectorRequest request(&connector);
   connector_->Clone(std::move(request));
   return base::MakeUnique<ConnectorImpl>(connector.PassInterface());
 }
 
-void ConnectorImpl::BindRequest(mojom::ConnectorRequest request) {
-  if (!BindIfNecessary())
+void ConnectorImpl::BindConnectorRequest(mojom::ConnectorRequest request) {
+  if (!BindConnectorIfNecessary())
     return;
   connector_->Clone(std::move(request));
 }
 
-bool ConnectorImpl::BindIfNecessary() {
+bool ConnectorImpl::BindConnectorIfNecessary() {
   // Bind this object to the current thread the first time it is used to
   // connect.
   if (!connector_.is_bound()) {
@@ -125,7 +121,7 @@ bool ConnectorImpl::BindIfNecessary() {
 
 std::unique_ptr<Connector> Connector::Create(mojom::ConnectorRequest* request) {
   mojom::ConnectorPtr proxy;
-  *request = mojo::GetProxy(&proxy);
+  *request = mojo::MakeRequest(&proxy);
   return base::MakeUnique<ConnectorImpl>(proxy.PassInterface());
 }
 

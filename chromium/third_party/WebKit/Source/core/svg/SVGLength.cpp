@@ -67,7 +67,7 @@ bool SVGLength::operator==(const SVGLength& other) const {
 
 float SVGLength::value(const SVGLengthContext& context) const {
   if (isCalculated())
-    return context.resolveValue(*asCSSPrimitiveValue(), unitMode());
+    return context.resolveValue(asCSSPrimitiveValue(), unitMode());
 
   return context.convertValueToUserUnits(m_value->getFloatValue(), unitMode(),
                                          m_value->typeWithCalcResolved());
@@ -140,7 +140,8 @@ SVGParsingError SVGLength::setValueAsString(const String& string) {
     return SVGParseStatus::NoError;
   }
 
-  CSSParserContext svgParserContext(SVGAttributeMode, nullptr);
+  CSSParserContext* svgParserContext =
+      CSSParserContext::create(SVGAttributeMode);
   const CSSValue* parsed =
       CSSParser::parseSingleValue(CSSPropertyX, string, svgParserContext);
   if (!parsed || !parsed->isPrimitiveValue())

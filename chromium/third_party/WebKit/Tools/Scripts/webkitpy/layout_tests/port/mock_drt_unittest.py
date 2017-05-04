@@ -32,7 +32,7 @@ import io
 import optparse
 import unittest
 
-from webkitpy.common.system.systemhost_mock import MockSystemHost
+from webkitpy.common.system.system_host_mock import MockSystemHost
 from webkitpy.layout_tests.port import mock_drt
 from webkitpy.layout_tests.port import port_testcase
 from webkitpy.layout_tests.port import test
@@ -45,9 +45,6 @@ class MockDRTPortTest(port_testcase.PortTestCase):
         host = host or MockSystemHost()
         test.add_unit_tests_to_mock_filesystem(host.filesystem)
         return mock_drt.MockDRTPort(host, port_name='mock-mac', options=options)
-
-    def make_wdiff_available(self, port):
-        port._make_wdiff_available()
 
     def test_port_name_in_constructor(self):
         self.assertTrue(mock_drt.MockDRTPort(MockSystemHost(), port_name='mock-test'))
@@ -77,9 +74,6 @@ class MockDRTPortTest(port_testcase.PortTestCase):
         pass
 
     def test_path_to_apache_config_file(self):
-        pass
-
-    def test_skipped_directories_for_symbols(self):
         pass
 
 

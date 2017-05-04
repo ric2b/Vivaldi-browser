@@ -46,6 +46,7 @@ class NativeInitializationController {
     private boolean mLibraryLoaded;
     private boolean mHasDoneFirstDraw;
     private boolean mWaitingForVariationsFetch;
+    private boolean mHasSignaledLibraryLoaded;
     private boolean mInitializationComplete;
 
     /**
@@ -74,14 +75,6 @@ class NativeInitializationController {
         mActivityDelegate = activityDelegate;
     }
 
-    private static boolean shouldFetchVariationsSeedBeforeFRE() {
-        // For now, only do the fetching on official canary and dev builds, as there is a concern
-        // about the extra latency this adds.
-        // TODO(asvitkine): Revise this logic based on histogram data.
-        return ChromeVersionInfo.isOfficialBuild()
-                && (ChromeVersionInfo.isCanaryBuild() || ChromeVersionInfo.isDevBuild());
-    }
-
     /**
      * Start loading the native library in the background. This kicks off the native initialization
      * process.
@@ -92,18 +85,26 @@ class NativeInitializationController {
     public void startBackgroundTasks(final boolean allocateChildConnection) {
         ThreadUtils.assertOnUiThread();
 
-        if (shouldFetchVariationsSeedBeforeFRE()) {
+        // TODO(asvitkine): Consider moving this logic to a singleton, like
+        // ChromeBrowserInitializer.
+        if (ChromeVersionInfo.isOfficialBuild()) {
             Context context = ContextUtils.getApplicationContext();
             Intent initialIntent = mActivityDelegate.getInitialIntent();
             if (FirstRunFlowSequencer.checkIfFirstRunIsNecessary(context, initialIntent, false)
                     != null) {
                 mWaitingForVariationsFetch = true;
                 IntentFilter filter = new IntentFilter(VariationsSeedService.COMPLETE_BROADCAST);
-                LocalBroadcastManager.getInstance(context).registerReceiver(
+                final LocalBroadcastManager manager = LocalBroadcastManager.getInstance(context);
+                manager.registerReceiver(
                         new BroadcastReceiver() {
                             @Override
                             public void onReceive(Context context, Intent intent) {
+                                // This check is needed because onReceive() can be called multiple
+                                // times even after having unregistered below if two broadcasts
+                                // arrive in rapid succession.
+                                if (!mWaitingForVariationsFetch) return;
                                 mWaitingForVariationsFetch = false;
+                                manager.unregisterReceiver(this);
                                 signalNativeLibraryLoadedIfReady();
                             }
                         },
@@ -155,6 +156,10 @@ class NativeInitializationController {
 
         // Called on UI thread when any of the booleans below have changed.
         if (mHasDoneFirstDraw && mLibraryLoaded && !mWaitingForVariationsFetch) {
+            // This block should only be hit once.
+            assert !mHasSignaledLibraryLoaded;
+            mHasSignaledLibraryLoaded = true;
+
             // Allow the UI thread to continue its initialization - so that this call back
             // doesn't block priority work on the UI thread until it's idle.
             mHandler.post(new Runnable() {

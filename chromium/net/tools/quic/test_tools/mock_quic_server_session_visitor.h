@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_TEST_TOOLS_MOCK_QUIC_SESSION_VISITOR_H_
-#define NET_QUIC_TEST_TOOLS_MOCK_QUIC_SESSION_VISITOR_H_
+#ifndef NET_TOOLS_QUIC_TEST_TOOLS_MOCK_QUIC_SERVER_SESSION_VISITOR_H_
+#define NET_TOOLS_QUIC_TEST_TOOLS_MOCK_QUIC_SERVER_SESSION_VISITOR_H_
 
 #include "base/macros.h"
 #include "net/quic/core/quic_crypto_server_stream.h"
@@ -38,7 +38,7 @@ class MockQuicCryptoServerStreamHelper : public QuicCryptoServerStream::Helper {
                      QuicConnectionId(QuicConnectionId connection_id));
   MOCK_CONST_METHOD3(CanAcceptClientHello,
                      bool(const CryptoHandshakeMessage& message,
-                          const IPEndPoint& self_address,
+                          const QuicSocketAddress& self_address,
                           std::string* error_details));
 
  private:

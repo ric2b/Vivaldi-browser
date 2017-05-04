@@ -38,7 +38,7 @@ class CORE_EXPORT FirstMeaningfulPaintDetector
 
   static FirstMeaningfulPaintDetector& from(Document&);
 
-  FirstMeaningfulPaintDetector(PaintTiming*);
+  FirstMeaningfulPaintDetector(PaintTiming*, Document&);
   virtual ~FirstMeaningfulPaintDetector() {}
 
   void markNextPaintAsMeaningfulIfNeeded(const LayoutObjectCounter&,
@@ -64,7 +64,8 @@ class CORE_EXPORT FirstMeaningfulPaintDetector
   double m_maxSignificanceSoFar = 0.0;
   double m_accumulatedSignificanceWhileHavingBlankText = 0.0;
   unsigned m_prevLayoutObjectCount = 0;
-  Timer<FirstMeaningfulPaintDetector> m_networkStableTimer;
+  bool m_seenFirstMeaningfulPaintCandidate = false;
+  TaskRunnerTimer<FirstMeaningfulPaintDetector> m_networkStableTimer;
 };
 
 }  // namespace blink

@@ -2,8 +2,10 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromecast_build.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//build/split_static_library.gni")
 import("//media/media_options.gni")
 import("//ppapi/features/features.gni")
 import("//printing/features/features.gni")
@@ -13,8 +15,9 @@ import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 if (is_component_build) {
   link_target_type = "source_set"
 } else {
-  link_target_type = "static_library"
+  link_target_type = "split_static_library"
 }
+
 target(link_target_type, "renderer") {
   # Only the public target should depend on this. All other targets (even
   # internal content ones) should depend on the public one.
@@ -51,12 +54,6 @@ target(link_target_type, "renderer") {
     "android/synchronous_compositor_proxy.cc",
     "android/synchronous_compositor_proxy.h",
     "android/synchronous_compositor_registry.h",
-    "background_sync/background_sync_client_impl.cc",
-    "background_sync/background_sync_client_impl.h",
-    "bluetooth/bluetooth_type_converters.cc",
-    "bluetooth/bluetooth_type_converters.h",
-    "bluetooth/web_bluetooth_impl.cc",
-    "bluetooth/web_bluetooth_impl.h",
     "browser_plugin/browser_plugin.cc",
     "browser_plugin/browser_plugin.h",
     "browser_plugin/browser_plugin_manager.cc",
@@ -130,6 +127,8 @@ target(link_target_type, "renderer") {
     "frame_blame_context.h",
     "gamepad_shared_memory_reader.cc",
     "gamepad_shared_memory_reader.h",
+    "gpu/actions_parser.cc",
+    "gpu/actions_parser.h",
     "gpu/compositor_dependencies.h",
     "gpu/compositor_external_begin_frame_source.cc",
     "gpu/compositor_external_begin_frame_source.h",
@@ -156,8 +155,12 @@ target(link_target_type, "renderer") {
     "history_serialization.h",
     "idle_user_detector.cc",
     "idle_user_detector.h",
+    "image_downloader/image_downloader_base.cc",
+    "image_downloader/image_downloader_base.h",
     "image_downloader/image_downloader_impl.cc",
     "image_downloader/image_downloader_impl.h",
+    "image_downloader/single_image_downloader.cc",
+    "image_downloader/single_image_downloader.h",
     "ime_event_guard.cc",
     "ime_event_guard.h",
     "in_process_renderer_thread.cc",
@@ -264,6 +267,7 @@ target(link_target_type, "renderer") {
     "mojo/blink_interface_registry_impl.h",
     "mojo/interface_provider_js_wrapper.cc",
     "mojo/interface_provider_js_wrapper.h",
+    "mojo/thread_safe_associated_interface_ptr_provider.h",
     "mojo_bindings_controller.cc",
     "mojo_bindings_controller.h",
     "mojo_context_state.cc",
@@ -280,8 +284,6 @@ target(link_target_type, "renderer") {
     "origin_trials/web_trial_token_validator_impl.h",
     "peripheral_content_heuristic.cc",
     "peripheral_content_heuristic.h",
-    "presentation/presentation_connection_client.cc",
-    "presentation/presentation_connection_client.h",
     "presentation/presentation_dispatcher.cc",
     "presentation/presentation_dispatcher.h",
     "push_messaging/push_messaging_dispatcher.cc",
@@ -302,8 +304,6 @@ target(link_target_type, "renderer") {
     "render_view_win.cc",
     "render_widget.cc",
     "render_widget.h",
-    "render_widget_fullscreen.cc",
-    "render_widget_fullscreen.h",
     "render_widget_mouse_lock_dispatcher.cc",
     "render_widget_mouse_lock_dispatcher.h",
     "render_widget_owner_delegate.h",
@@ -353,8 +353,10 @@ target(link_target_type, "renderer") {
     "shared_worker/embedded_shared_worker_content_settings_client_proxy.h",
     "shared_worker/embedded_shared_worker_stub.cc",
     "shared_worker/embedded_shared_worker_stub.h",
-    "shared_worker_repository.cc",
-    "shared_worker_repository.h",
+    "shared_worker/shared_worker_repository.cc",
+    "shared_worker/shared_worker_repository.h",
+    "shared_worker/websharedworker_proxy.cc",
+    "shared_worker/websharedworker_proxy.h",
     "skia_benchmarking_extension.cc",
     "skia_benchmarking_extension.h",
     "speech_recognition_dispatcher.cc",
@@ -385,9 +387,16 @@ target(link_target_type, "renderer") {
     "webscrollbarbehavior_impl_aura.h",
     "webscrollbarbehavior_impl_mac.h",
     "webscrollbarbehavior_impl_mac.mm",
-    "websharedworker_proxy.cc",
-    "websharedworker_proxy.h",
   ]
+
+  if (!is_component_build) {
+    if (is_win && is_official_build) {
+      split_count = 2  # In certain configurations a full renderer.lib can
+                       # be 2+ GB which breaks some Windows tools.
+    } else {
+      split_count = 1
+    }
+  }
 
   configs += [
     "//content:content_implementation",
@@ -399,12 +408,15 @@ target(link_target_type, "renderer") {
   deps = [
     "//base:i18n",
     "//cc",
+    "//cc/animation",
     "//cc/blink",
     "//cc/ipc",
     "//cc/proto",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
+    "//cc/surfaces:surfaces",
     "//components/discardable_memory/client",
+    "//components/payments:payment_app",
     "//components/url_formatter",
     "//content:resources",
     "//content/child",
@@ -417,7 +429,8 @@ target(link_target_type, "renderer") {
     "//crypto:platform",
     "//device/base/synchronization",
     "//device/battery:mojo_bindings",
-    "//device/bluetooth",
+    "//device/gamepad/public/interfaces",
+    "//device/screen_orientation/public/interfaces",
     "//device/sensors/public/cpp",
     "//device/usb/public/interfaces",
     "//device/vibration:mojo_bindings",
@@ -433,7 +446,7 @@ target(link_target_type, "renderer") {
     "//media/gpu/ipc/client",
     "//media/gpu/ipc/common",
     "//media/midi",
-    "//media/midi:mojo_cpp_sources",
+    "//media/midi:mojo",
     "//media/mojo/interfaces:remoting",
     "//mojo/common",
     "//mojo/edk/js",
@@ -445,6 +458,7 @@ target(link_target_type, "renderer") {
     "//sandbox",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",
+    "//services/ui/public/cpp/gpu",
     "//skia",
     "//storage/common",
     "//third_party/WebKit/public:blink",
@@ -514,13 +528,6 @@ target(link_target_type, "renderer") {
 
   if (enable_media_remoting) {
     deps += [ "//media/remoting" ]
-}
-
-  if (system_proprietary_codecs) {
-    sources += [
-      "media/ipc_media_pipeline_host_impl.cc",
-      "media/ipc_media_pipeline_host_impl.h",
-    ]
   }
 
   if (enable_webrtc) {
@@ -700,13 +707,15 @@ target(link_target_type, "renderer") {
 
     deps += [
       "//crypto",
-      "//third_party/libjingle:libjingle_webrtc",
+      "//third_party/libjingle/webrtc:libjingle_webrtc",
       "//third_party/libvpx",
+      "//third_party/opus",
       "//third_party/webrtc/api:libjingle_peerconnection",
       "//third_party/webrtc/api:rtc_stats_api",
+      "//third_party/webrtc/api:video_frame_api",
       "//third_party/webrtc/base:rtc_base",
-      "//third_party/webrtc/common_video",
       "//third_party/webrtc/media:rtc_media",
+      "//third_party/webrtc/media:rtc_media_base",
       "//third_party/webrtc/modules/audio_device",
       "//third_party/webrtc/modules/audio_processing",
       "//third_party/webrtc/modules/video_coding:webrtc_h264",
@@ -900,8 +909,8 @@ target(link_target_type, "renderer") {
     ]
   }
 
-  if (use_seccomp_bpf) {
-    defines += [ "USE_SECCOMP_BPF" ]
+  if (is_linux || is_android) {
+    deps += [ "//sandbox:sandbox_features" ]
   }
 
   if (use_ozone) {
@@ -910,6 +919,10 @@ target(link_target_type, "renderer") {
 
   if (enable_ipc_fuzzer) {
     configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
+  }
+
+  if (is_chromecast) {
+    defines += [ "MEDIA_EVENT_LOG_UTILITY=VLOG(1)" ]
   }
 }
 

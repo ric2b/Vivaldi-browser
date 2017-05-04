@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_CHROMEOS_ARC_ARC_OPTIN_UMA_H_
 #define CHROME_BROWSER_CHROMEOS_ARC_ARC_OPTIN_UMA_H_
 
+#include <ostream>
+
 namespace base {
 class TimeDelta;
 }
@@ -104,8 +106,11 @@ enum class ProvisioningResult : int {
 
   // In Chrome, server communication error occurs.
   // For backward compatibility, the UMA is handled differently. Please see
-  // ArcAuthService::OnProvisioningFinished for details.
+  // ArcSessionManager::OnProvisioningFinished for details.
   CHROME_SERVER_COMMUNICATION_ERROR = 18,
+
+  // Network connection is unavailable in ARC.
+  NO_NETWORK_CONNECTION = 19,
 
   // The size of this enum; keep last.
   SIZE,
@@ -119,6 +124,11 @@ void UpdateProvisioningTiming(const base::TimeDelta& elapsed_time,
                               bool success,
                               bool managed);
 void UpdateSilentAuthCodeUMA(OptInSilentAuthCode state);
+void UpdateAuthTiming(const char* histogram_name, base::TimeDelta elapsed_time);
+void UpdateAuthCheckinAttempts(int32_t num_attempts);
+
+// Outputs the stringified |result| to |os|. This is only for logging purposes.
+std::ostream& operator<<(std::ostream& os, const ProvisioningResult& result);
 
 }  // namespace arc
 

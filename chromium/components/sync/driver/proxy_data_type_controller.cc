@@ -11,7 +11,7 @@
 namespace syncer {
 
 ProxyDataTypeController::ProxyDataTypeController(ModelType type)
-    : DataTypeController(type, base::Closure()), state_(NOT_RUNNING) {
+    : DataTypeController(type), state_(NOT_RUNNING) {
   DCHECK(ProxyTypes().Has(type));
 }
 
@@ -29,7 +29,8 @@ void ProxyDataTypeController::LoadModels(
 }
 
 void ProxyDataTypeController::RegisterWithBackend(
-    BackendDataTypeConfigurer* configurer) {}
+    base::Callback<void(bool)> set_downloaded,
+    ModelTypeConfigurer* configurer) {}
 
 void ProxyDataTypeController::StartAssociating(
     const StartCallback& start_callback) {
@@ -55,10 +56,10 @@ DataTypeController::State ProxyDataTypeController::state() const {
 }
 
 void ProxyDataTypeController::ActivateDataType(
-    BackendDataTypeConfigurer* configurer) {}
+    ModelTypeConfigurer* configurer) {}
 
 void ProxyDataTypeController::DeactivateDataType(
-    BackendDataTypeConfigurer* configurer) {}
+    ModelTypeConfigurer* configurer) {}
 
 void ProxyDataTypeController::GetAllNodes(const AllNodesCallback& callback) {
   callback.Run(type(), base::MakeUnique<base::ListValue>());
@@ -68,12 +69,6 @@ void ProxyDataTypeController::GetStatusCounters(
     const StatusCountersCallback& callback) {
   syncer::StatusCounters counters;
   callback.Run(type(), counters);
-}
-
-std::unique_ptr<DataTypeErrorHandler>
-ProxyDataTypeController::CreateErrorHandler() {
-  NOTREACHED();
-  return nullptr;
 }
 
 }  // namespace syncer

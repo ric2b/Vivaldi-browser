@@ -20,7 +20,7 @@
 namespace blink {
 
 Worklet::Worklet(LocalFrame* frame)
-    : ActiveDOMObject(frame->document()),
+    : ContextLifecycleObserver(frame->document()),
       m_fetcher(frame->loader().documentLoader()->fetcher()) {}
 
 ScriptPromise Worklet::import(ScriptState* scriptState, const String& url) {
@@ -58,7 +58,7 @@ void Worklet::notifyFinished(WorkletScriptLoader* scriptLoader) {
   m_scriptLoaders.remove(scriptLoader);
 }
 
-void Worklet::contextDestroyed() {
+void Worklet::contextDestroyed(ExecutionContext*) {
   if (isInitialized()) {
     workletGlobalScopeProxy()->terminateWorkletGlobalScope();
   }
@@ -71,7 +71,7 @@ void Worklet::contextDestroyed() {
 DEFINE_TRACE(Worklet) {
   visitor->trace(m_fetcher);
   visitor->trace(m_scriptLoaders);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 }  // namespace blink

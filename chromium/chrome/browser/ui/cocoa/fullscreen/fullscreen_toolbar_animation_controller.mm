@@ -76,7 +76,7 @@ void FullscreenToolbarAnimationController::AnimateToolbarOutIfPossible() {
   if (animation_.IsClosing())
     return;
 
-  animation_.Reset(animation_start_value_);
+  animation_.Stop();
   animation_.Hide();
 }
 
@@ -87,6 +87,11 @@ CGFloat FullscreenToolbarAnimationController::GetToolbarFractionFromProgress()
 
 bool FullscreenToolbarAnimationController::IsAnimationRunning() const {
   return animation_.is_animating();
+}
+
+void FullscreenToolbarAnimationController::SetAnimationDuration(
+    CGFloat duration) {
+  animation_.SetSlideDuration(duration);
 }
 
 //////////////////////////////////////////////////////////////////

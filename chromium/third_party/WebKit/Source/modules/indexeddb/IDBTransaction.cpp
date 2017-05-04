@@ -26,7 +26,6 @@
 #include "modules/indexeddb/IDBTransaction.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8PerIsolateData.h"
 #include "core/dom/DOMException.h"
@@ -41,11 +40,24 @@
 #include "modules/indexeddb/IDBOpenDBRequest.h"
 #include "modules/indexeddb/IDBTracing.h"
 #include "wtf/PtrUtil.h"
+
 #include <memory>
 
 using blink::WebIDBDatabase;
 
 namespace blink {
+
+IDBTransaction* IDBTransaction::createObserver(
+    ExecutionContext* executionContext,
+    int64_t id,
+    const HashSet<String>& scope,
+    IDBDatabase* db) {
+  DCHECK(!scope.isEmpty()) << "Observer transactions must operate on a "
+                              "well-defined set of stores";
+  IDBTransaction* transaction =
+      new IDBTransaction(executionContext, id, scope, db);
+  return transaction;
+}
 
 IDBTransaction* IDBTransaction::createNonVersionChange(
     ScriptState* scriptState,
@@ -56,10 +68,7 @@ IDBTransaction* IDBTransaction::createNonVersionChange(
   DCHECK_NE(mode, WebIDBTransactionModeVersionChange);
   DCHECK(!scope.isEmpty()) << "Non-version transactions should operate on a "
                               "well-defined set of stores";
-  IDBTransaction* transaction =
-      new IDBTransaction(scriptState, id, scope, mode, db);
-  transaction->suspendIfNeeded();
-  return transaction;
+  return new IDBTransaction(scriptState, id, scope, mode, db);
 }
 
 IDBTransaction* IDBTransaction::createVersionChange(
@@ -68,10 +77,8 @@ IDBTransaction* IDBTransaction::createVersionChange(
     IDBDatabase* db,
     IDBOpenDBRequest* openDBRequest,
     const IDBDatabaseMetadata& oldMetadata) {
-  IDBTransaction* transaction =
-      new IDBTransaction(executionContext, id, db, openDBRequest, oldMetadata);
-  transaction->suspendIfNeeded();
-  return transaction;
+  return new IDBTransaction(executionContext, id, db, openDBRequest,
+                            oldMetadata);
 }
 
 namespace {
@@ -80,7 +87,7 @@ class DeactivateTransactionTask : public V8PerIsolateData::EndOfScopeTask {
  public:
   static std::unique_ptr<DeactivateTransactionTask> create(
       IDBTransaction* transaction) {
-    return wrapUnique(new DeactivateTransactionTask(transaction));
+    return WTF::wrapUnique(new DeactivateTransactionTask(transaction));
   }
 
   void run() override {
@@ -97,13 +104,28 @@ class DeactivateTransactionTask : public V8PerIsolateData::EndOfScopeTask {
 
 }  // namespace
 
+IDBTransaction::IDBTransaction(ExecutionContext* executionContext,
+                               int64_t id,
+                               const HashSet<String>& scope,
+                               IDBDatabase* db)
+    : ContextLifecycleObserver(executionContext),
+      m_id(id),
+      m_database(db),
+      m_mode(WebIDBTransactionModeReadOnly),
+      m_scope(scope),
+      m_state(Active) {
+  DCHECK(m_database);
+  DCHECK(!m_scope.isEmpty()) << "Observer transactions must operate "
+                                "on a well-defined set of stores";
+  m_database->transactionCreated(this);
+}
+
 IDBTransaction::IDBTransaction(ScriptState* scriptState,
                                int64_t id,
                                const HashSet<String>& scope,
                                WebIDBTransactionMode mode,
                                IDBDatabase* db)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(scriptState->getExecutionContext()),
+    : ContextLifecycleObserver(scriptState->getExecutionContext()),
       m_id(id),
       m_database(db),
       m_mode(mode),
@@ -127,8 +149,7 @@ IDBTransaction::IDBTransaction(ExecutionContext* executionContext,
                                IDBDatabase* db,
                                IDBOpenDBRequest* openDBRequest,
                                const IDBDatabaseMetadata& oldMetadata)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(executionContext),
+    : ContextLifecycleObserver(executionContext),
       m_id(id),
       m_database(db),
       m_openDBRequest(openDBRequest),
@@ -156,7 +177,7 @@ DEFINE_TRACE(IDBTransaction) {
   visitor->trace(m_oldStoreMetadata);
   visitor->trace(m_deletedIndexes);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 void IDBTransaction::setError(DOMException* error) {
@@ -246,7 +267,7 @@ void IDBTransaction::objectStoreDeleted(const int64_t objectStoreId,
         m_database->metadata().objectStores.get(objectStoreId);
     DCHECK(metadata.get());
     DCHECK_EQ(metadata->name, name);
-    m_deletedObjectStores.append(std::move(metadata));
+    m_deletedObjectStores.push_back(std::move(metadata));
   } else {
     IDBObjectStore* objectStore = it->value;
     m_objectStoreMap.remove(name);
@@ -313,7 +334,7 @@ void IDBTransaction::indexDeleted(IDBIndex* index) {
     return;
   }
 
-  m_deletedIndexes.append(index);
+  m_deletedIndexes.push_back(index);
 }
 
 void IDBTransaction::setActive(bool active) {
@@ -446,8 +467,7 @@ DOMStringList* IDBTransaction::objectStoreNames() const {
   if (isVersionChange())
     return m_database->objectStoreNames();
 
-  DOMStringList* objectStoreNames =
-      DOMStringList::create(DOMStringList::IndexedDB);
+  DOMStringList* objectStoreNames = DOMStringList::create();
   for (const String& objectStoreName : m_scope)
     objectStoreNames->append(objectStoreName);
   objectStoreNames->sort();
@@ -459,7 +479,7 @@ const AtomicString& IDBTransaction::interfaceName() const {
 }
 
 ExecutionContext* IDBTransaction::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return ContextLifecycleObserver::getExecutionContext();
 }
 
 DispatchEventResult IDBTransaction::dispatchEventInternal(Event* event) {
@@ -475,8 +495,8 @@ DispatchEventResult IDBTransaction::dispatchEventInternal(Event* event) {
   m_state = Finished;
 
   HeapVector<Member<EventTarget>> targets;
-  targets.append(this);
-  targets.append(db());
+  targets.push_back(this);
+  targets.push_back(db());
 
   // FIXME: When we allow custom event dispatching, this will probably need to
   // change.

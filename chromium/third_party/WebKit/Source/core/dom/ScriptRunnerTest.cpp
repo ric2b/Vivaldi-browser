@@ -8,7 +8,6 @@
 #include "core/dom/Element.h"
 #include "core/dom/ScriptLoader.h"
 #include "platform/heap/Handle.h"
-#include "platform/scheduler/CancellableTaskFactory.h"
 #include "platform/testing/TestingPlatformSupport.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebViewScheduler.h"
@@ -51,14 +50,15 @@ class ScriptRunnerTest : public testing::Test {
     // save it in constructor.
     m_scriptRunner = ScriptRunner::create(m_document.get());
   }
-
   void TearDown() override { m_scriptRunner.release(); }
 
+ protected:
   Persistent<Document> m_document;
   Persistent<Element> m_element;
-  TestingPlatformSupportWithMockScheduler m_platform;
   Persistent<ScriptRunner> m_scriptRunner;
   WTF::Vector<int> m_order;
+  ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
+      m_platform;
 };
 
 TEST_F(ScriptRunnerTest, QueueSingleScript_Async) {
@@ -67,7 +67,7 @@ TEST_F(ScriptRunnerTest, QueueSingleScript_Async) {
   m_scriptRunner->notifyScriptReady(scriptLoader, ScriptRunner::Async);
 
   EXPECT_CALL(*scriptLoader, execute());
-  m_platform.runUntilIdle();
+  m_platform->runUntilIdle();
 }
 
 TEST_F(ScriptRunnerTest, QueueSingleScript_InOrder) {
@@ -79,7 +79,7 @@ TEST_F(ScriptRunnerTest, QueueSingleScript_InOrder) {
 
   m_scriptRunner->notifyScriptReady(scriptLoader, ScriptRunner::InOrder);
 
-  m_platform.runUntilIdle();
+  m_platform->runUntilIdle();
 }
 
 TEST_F(ScriptRunnerTest, QueueMultipleScripts_InOrder) {
@@ -88,9 +88,9 @@ TEST_F(ScriptRunnerTest, QueueMultipleScripts_InOrder) {
   MockScriptLoader* scriptLoader3 = MockScriptLoader::create(m_element.get());
 
   HeapVector<Member<MockScriptLoader>> scriptLoaders;
-  scriptLoaders.append(scriptLoader1);
-  scriptLoaders.append(scriptLoader2);
-  scriptLoaders.append(scriptLoader3);
+  scriptLoaders.push_back(scriptLoader1);
+  scriptLoaders.push_back(scriptLoader2);
+  scriptLoaders.push_back(scriptLoader3);
 
   for (ScriptLoader* scriptLoader : scriptLoaders) {
     m_scriptRunner->queueScriptForExecution(scriptLoader,
@@ -99,7 +99,7 @@ TEST_F(ScriptRunnerTest, QueueMultipleScripts_InOrder) {
 
   for (size_t i = 0; i < scriptLoaders.size(); ++i) {
     EXPECT_CALL(*scriptLoaders[i], execute()).WillOnce(Invoke([this, i] {
-      m_order.append(i + 1);
+      m_order.push_back(i + 1);
     }));
   }
 
@@ -114,7 +114,7 @@ TEST_F(ScriptRunnerTest, QueueMultipleScripts_InOrder) {
   for (int i = 2; i >= 0; i--) {
     isReady[i] = true;
     m_scriptRunner->notifyScriptReady(scriptLoaders[i], ScriptRunner::InOrder);
-    m_platform.runUntilIdle();
+    m_platform->runUntilIdle();
   }
 
   // But ensure the scripts were run in the expected order.
@@ -149,22 +149,22 @@ TEST_F(ScriptRunnerTest, QueueMixedScripts) {
   m_scriptRunner->notifyScriptReady(scriptLoader5, ScriptRunner::Async);
 
   EXPECT_CALL(*scriptLoader1, execute()).WillOnce(Invoke([this] {
-    m_order.append(1);
+    m_order.push_back(1);
   }));
   EXPECT_CALL(*scriptLoader2, execute()).WillOnce(Invoke([this] {
-    m_order.append(2);
+    m_order.push_back(2);
   }));
   EXPECT_CALL(*scriptLoader3, execute()).WillOnce(Invoke([this] {
-    m_order.append(3);
+    m_order.push_back(3);
   }));
   EXPECT_CALL(*scriptLoader4, execute()).WillOnce(Invoke([this] {
-    m_order.append(4);
+    m_order.push_back(4);
   }));
   EXPECT_CALL(*scriptLoader5, execute()).WillOnce(Invoke([this] {
-    m_order.append(5);
+    m_order.push_back(5);
   }));
 
-  m_platform.runUntilIdle();
+  m_platform->runUntilIdle();
 
   // Async tasks are expected to run first.
   EXPECT_THAT(m_order, ElementsAre(4, 5, 1, 2, 3));
@@ -182,29 +182,29 @@ TEST_F(ScriptRunnerTest, QueueReentrantScript_Async) {
 
   MockScriptLoader* scriptLoader = scriptLoader2;
   EXPECT_CALL(*scriptLoader1, execute()).WillOnce(Invoke([scriptLoader, this] {
-    m_order.append(1);
+    m_order.push_back(1);
     m_scriptRunner->notifyScriptReady(scriptLoader, ScriptRunner::Async);
   }));
 
   scriptLoader = scriptLoader3;
   EXPECT_CALL(*scriptLoader2, execute()).WillOnce(Invoke([scriptLoader, this] {
-    m_order.append(2);
+    m_order.push_back(2);
     m_scriptRunner->notifyScriptReady(scriptLoader, ScriptRunner::Async);
   }));
 
   EXPECT_CALL(*scriptLoader3, execute()).WillOnce(Invoke([this] {
-    m_order.append(3);
+    m_order.push_back(3);
   }));
 
   // Make sure that re-entrant calls to notifyScriptReady don't cause
   // ScriptRunner::execute to do more work than expected.
-  m_platform.runSingleTask();
+  m_platform->runSingleTask();
   EXPECT_THAT(m_order, ElementsAre(1));
 
-  m_platform.runSingleTask();
+  m_platform->runSingleTask();
   EXPECT_THAT(m_order, ElementsAre(1, 2));
 
-  m_platform.runSingleTask();
+  m_platform->runSingleTask();
   EXPECT_THAT(m_order, ElementsAre(1, 2, 3));
 }
 
@@ -223,7 +223,7 @@ TEST_F(ScriptRunnerTest, QueueReentrantScript_InOrder) {
   MockScriptLoader* scriptLoader = scriptLoader2;
   EXPECT_CALL(*scriptLoader1, execute())
       .WillOnce(Invoke([scriptLoader, &scriptLoader2, this] {
-        m_order.append(1);
+        m_order.push_back(1);
         m_scriptRunner->queueScriptForExecution(scriptLoader,
                                                 ScriptRunner::InOrder);
         m_scriptRunner->notifyScriptReady(scriptLoader2, ScriptRunner::InOrder);
@@ -232,25 +232,25 @@ TEST_F(ScriptRunnerTest, QueueReentrantScript_InOrder) {
   scriptLoader = scriptLoader3;
   EXPECT_CALL(*scriptLoader2, execute())
       .WillOnce(Invoke([scriptLoader, &scriptLoader3, this] {
-        m_order.append(2);
+        m_order.push_back(2);
         m_scriptRunner->queueScriptForExecution(scriptLoader,
                                                 ScriptRunner::InOrder);
         m_scriptRunner->notifyScriptReady(scriptLoader3, ScriptRunner::InOrder);
       }));
 
   EXPECT_CALL(*scriptLoader3, execute()).WillOnce(Invoke([this] {
-    m_order.append(3);
+    m_order.push_back(3);
   }));
 
   // Make sure that re-entrant calls to queueScriptForExecution don't cause
   // ScriptRunner::execute to do more work than expected.
-  m_platform.runSingleTask();
+  m_platform->runSingleTask();
   EXPECT_THAT(m_order, ElementsAre(1));
 
-  m_platform.runSingleTask();
+  m_platform->runSingleTask();
   EXPECT_THAT(m_order, ElementsAre(1, 2));
 
-  m_platform.runSingleTask();
+  m_platform->runSingleTask();
   EXPECT_THAT(m_order, ElementsAre(1, 2, 3));
 }
 
@@ -268,7 +268,7 @@ TEST_F(ScriptRunnerTest, QueueReentrantScript_ManyAsyncScripts) {
 
     if (i > 0) {
       EXPECT_CALL(*scriptLoaders[i], execute()).WillOnce(Invoke([this, i] {
-        m_order.append(i);
+        m_order.push_back(i);
       }));
     }
   }
@@ -281,10 +281,10 @@ TEST_F(ScriptRunnerTest, QueueReentrantScript_ManyAsyncScripts) {
         for (int i = 2; i < 20; i++)
           m_scriptRunner->notifyScriptReady(scriptLoaders[i],
                                             ScriptRunner::Async);
-        m_order.append(0);
+        m_order.push_back(0);
       }));
 
-  m_platform.runUntilIdle();
+  m_platform->runUntilIdle();
 
   int expected[] = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
                     10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
@@ -302,13 +302,13 @@ TEST_F(ScriptRunnerTest, ResumeAndSuspend_InOrder) {
   m_scriptRunner->queueScriptForExecution(scriptLoader3, ScriptRunner::InOrder);
 
   EXPECT_CALL(*scriptLoader1, execute()).WillOnce(Invoke([this] {
-    m_order.append(1);
+    m_order.push_back(1);
   }));
   EXPECT_CALL(*scriptLoader2, execute()).WillOnce(Invoke([this] {
-    m_order.append(2);
+    m_order.push_back(2);
   }));
   EXPECT_CALL(*scriptLoader3, execute()).WillOnce(Invoke([this] {
-    m_order.append(3);
+    m_order.push_back(3);
   }));
 
   EXPECT_CALL(*scriptLoader2, isReady()).WillRepeatedly(Return(true));
@@ -325,10 +325,10 @@ TEST_F(ScriptRunnerTest, ResumeAndSuspend_InOrder) {
   EXPECT_CALL(*scriptLoader3, isReady()).WillRepeatedly(Return(true));
   m_scriptRunner->notifyScriptReady(scriptLoader3, ScriptRunner::InOrder);
 
-  m_platform.runSingleTask();
+  m_platform->runSingleTask();
   m_scriptRunner->suspend();
   m_scriptRunner->resume();
-  m_platform.runUntilIdle();
+  m_platform->runUntilIdle();
 
   // Make sure elements are correct and in right order.
   EXPECT_THAT(m_order, ElementsAre(1, 2, 3));
@@ -348,19 +348,19 @@ TEST_F(ScriptRunnerTest, ResumeAndSuspend_Async) {
   m_scriptRunner->notifyScriptReady(scriptLoader3, ScriptRunner::Async);
 
   EXPECT_CALL(*scriptLoader1, execute()).WillOnce(Invoke([this] {
-    m_order.append(1);
+    m_order.push_back(1);
   }));
   EXPECT_CALL(*scriptLoader2, execute()).WillOnce(Invoke([this] {
-    m_order.append(2);
+    m_order.push_back(2);
   }));
   EXPECT_CALL(*scriptLoader3, execute()).WillOnce(Invoke([this] {
-    m_order.append(3);
+    m_order.push_back(3);
   }));
 
-  m_platform.runSingleTask();
+  m_platform->runSingleTask();
   m_scriptRunner->suspend();
   m_scriptRunner->resume();
-  m_platform.runUntilIdle();
+  m_platform->runUntilIdle();
 
   // Make sure elements are correct.
   EXPECT_THAT(m_order, WhenSorted(ElementsAre(1, 2, 3)));
@@ -377,19 +377,19 @@ TEST_F(ScriptRunnerTest, LateNotifications) {
   m_scriptRunner->queueScriptForExecution(scriptLoader2, ScriptRunner::InOrder);
 
   EXPECT_CALL(*scriptLoader1, execute()).WillOnce(Invoke([this] {
-    m_order.append(1);
+    m_order.push_back(1);
   }));
   EXPECT_CALL(*scriptLoader2, execute()).WillOnce(Invoke([this] {
-    m_order.append(2);
+    m_order.push_back(2);
   }));
 
   m_scriptRunner->notifyScriptReady(scriptLoader1, ScriptRunner::InOrder);
-  m_platform.runUntilIdle();
+  m_platform->runUntilIdle();
 
   // At this moment all tasks can be already executed. Make sure that we do not
   // crash here.
   m_scriptRunner->notifyScriptReady(scriptLoader2, ScriptRunner::InOrder);
-  m_platform.runUntilIdle();
+  m_platform->runUntilIdle();
 
   EXPECT_THAT(m_order, ElementsAre(1, 2));
 }
@@ -418,7 +418,7 @@ TEST_F(ScriptRunnerTest, TasksWithDeadScriptRunner) {
   EXPECT_CALL(*scriptLoader1, execute()).Times(0);
   EXPECT_CALL(*scriptLoader2, execute()).Times(0);
 
-  m_platform.runUntilIdle();
+  m_platform->runUntilIdle();
 }
 
 }  // namespace blink

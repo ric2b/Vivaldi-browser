@@ -7,7 +7,6 @@
 
 #include <vector>
 
-#include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
@@ -17,11 +16,11 @@
 #include "chrome/browser/ui/search/search_model.h"
 #include "chrome/common/search/instant_types.h"
 #include "chrome/common/search/ntp_logging_events.h"
+#include "components/ntp_tiles/ntp_tile_source.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "ui/base/window_open_disposition.h"
 
 namespace content {
 class WebContents;
@@ -69,10 +68,6 @@ class SearchTabHelper : public content::WebContentsObserver,
   // the notification system and shouldn't call this method.
   void NavigationEntryUpdated();
 
-  // Returns true if the page supports instant. If the instant support state is
-  // not determined or if the page does not support instant returns false.
-  bool SupportsInstant() const;
-
   // Sends the current SearchProvider suggestion to the Instant page if any.
   void SetSuggestionToPrefetch(const InstantSuggestion& suggestion);
 
@@ -88,12 +83,12 @@ class SearchTabHelper : public content::WebContentsObserver,
 
   void set_delegate(SearchTabHelperDelegate* delegate) { delegate_ = delegate; }
 
+  SearchIPCRouter& ipc_router_for_testing() { return ipc_router_; }
+
  private:
   friend class content::WebContentsUserData<SearchTabHelper>;
-  friend class InstantTabTest;
   friend class SearchIPCRouterPolicyTest;
   friend class SearchIPCRouterTest;
-  friend class SearchTabHelperPrerenderTest;
 
   FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
                            DetermineIfPageSupportsInstant_Local);
@@ -131,9 +126,10 @@ class SearchTabHelper : public content::WebContentsObserver,
   void DidStartNavigationToPendingEntry(
       const GURL& url,
       content::ReloadType reload_type) override;
-  void DidNavigateMainFrame(
-      const content::LoadCommittedDetails& details,
-      const content::FrameNavigateParams& params) override;
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
   void NavigationEntryCommitted(
@@ -146,10 +142,12 @@ class SearchTabHelper : public content::WebContentsObserver,
   void OnUndoMostVisitedDeletion(const GURL& url) override;
   void OnUndoAllMostVisitedDeletions() override;
   void OnLogEvent(NTPLoggingEventType event, base::TimeDelta time) override;
-  void OnLogMostVisitedImpression(int position,
-                                  NTPLoggingTileSource tile_source) override;
-  void OnLogMostVisitedNavigation(int position,
-                                  NTPLoggingTileSource tile_source) override;
+  void OnLogMostVisitedImpression(
+      int position,
+      ntp_tiles::NTPTileSource tile_source) override;
+  void OnLogMostVisitedNavigation(
+      int position,
+      ntp_tiles::NTPTileSource tile_source) override;
   void PasteIntoOmnibox(const base::string16& text) override;
   void OnChromeIdentityCheck(const base::string16& identity) override;
   void OnHistorySyncCheck() override;
@@ -171,9 +169,6 @@ class SearchTabHelper : public content::WebContentsObserver,
   // results in a call to OnInstantSupportDetermined() when the reply is
   // received.
   void DetermineIfPageSupportsInstant();
-
-  // Used by unit tests.
-  SearchIPCRouter& ipc_router() { return ipc_router_; }
 
   Profile* profile() const;
 

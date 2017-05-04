@@ -63,16 +63,20 @@ class StartupTabProviderImpl : public StartupTabProvider {
   static StartupTabs CheckStandardOnboardingTabPolicy(
       bool is_first_run,
       bool has_seen_welcome_page,
-      bool is_signed_in);
+      bool is_signed_in,
+      bool is_supervised_user);
 
 #if defined(OS_WIN)
   // Determines which tabs should be shown according to onboarding/first run
   // policy, including promo content specific to Windows 10.
-  static StartupTabs CheckWin10OnboardingTabPolicy(bool is_first_run,
-                                                   bool has_seen_welcome_page,
-                                                   bool has_seen_win10_promo,
-                                                   bool is_signed_in,
-                                                   bool is_default_browser);
+  static StartupTabs CheckWin10OnboardingTabPolicy(
+      bool is_first_run,
+      bool has_seen_welcome_page,
+      bool has_seen_win10_promo,
+      bool is_signed_in,
+      bool set_default_browser_allowed,
+      bool is_default_browser,
+      bool is_supervised_user);
 #endif
 
   // Processes first run URLs specified in Master Preferences file, replacing
@@ -88,13 +92,17 @@ class StartupTabProviderImpl : public StartupTabProvider {
   // Determines whether the startup preference requires the contents of
   // |pinned_tabs| to be shown. This is needed to avoid duplicates, as the
   // session restore logic will also resurface pinned tabs on its own.
-  static StartupTabs CheckPinnedTabPolicy(const SessionStartupPref& pref,
-                                          const StartupTabs& pinned_tabs);
+  static StartupTabs CheckPinnedTabPolicy(
+      const SessionStartupPref& pref,
+      const StartupTabs& pinned_tabs,
+      bool profile_has_other_tabbed_browser);
 
-  // Determines whether preferences indicate that user-specified tabs should be
-  // shown as the default new window content, and returns the specified tabs if
-  // so.
-  static StartupTabs CheckPreferencesTabPolicy(const SessionStartupPref& pref);
+  // Determines whether preferences and window state indicate that
+  // user-specified tabs should be shown as the default new window content, and
+  // returns the specified tabs if so.
+  static StartupTabs CheckPreferencesTabPolicy(
+      const SessionStartupPref& pref,
+      bool profile_has_other_tabbed_browser);
 
   // Determines whether startup preferences require the New Tab Page to be
   // explicitly specified. Session Restore does not expect the NTP to be passed.

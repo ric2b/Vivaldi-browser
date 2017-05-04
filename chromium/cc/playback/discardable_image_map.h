@@ -36,7 +36,7 @@ class CC_EXPORT DiscardableImageMap {
 
    private:
     DiscardableImageMap* image_map_;
-    sk_sp<SkCanvas> metadata_canvas_;
+    std::unique_ptr<SkCanvas> metadata_canvas_;
   };
 
   DiscardableImageMap();
@@ -44,14 +44,14 @@ class CC_EXPORT DiscardableImageMap {
 
   bool empty() const { return all_images_.empty(); }
   void GetDiscardableImagesInRect(const gfx::Rect& rect,
-                                  const gfx::SizeF& raster_scales,
+                                  float contents_scale,
                                   std::vector<DrawImage>* images) const;
 
  private:
   friend class ScopedMetadataGenerator;
   friend class DiscardableImageMapTest;
 
-  sk_sp<SkCanvas> BeginGeneratingMetadata(const gfx::Size& bounds);
+  std::unique_ptr<SkCanvas> BeginGeneratingMetadata(const gfx::Size& bounds);
   void EndGeneratingMetadata();
 
   std::vector<std::pair<DrawImage, gfx::Rect>> all_images_;

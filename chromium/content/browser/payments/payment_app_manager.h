@@ -12,36 +12,39 @@
 #include "components/payments/payment_app.mojom.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "url/gurl.h"
 
 namespace content {
 
-class PaymentAppContext;
+class PaymentAppContextImpl;
 
 class CONTENT_EXPORT PaymentAppManager
     : public NON_EXPORTED_BASE(payments::mojom::PaymentAppManager) {
  public:
   PaymentAppManager(
-      PaymentAppContext* payment_app_context,
+      PaymentAppContextImpl* payment_app_context,
       mojo::InterfaceRequest<payments::mojom::PaymentAppManager> request);
 
   ~PaymentAppManager() override;
 
  private:
+  friend class PaymentAppContentUnitTestBase;
+
   // payments::mojom::PaymentAppManager methods:
-  void SetManifest(const std::string& scope,
-                   payments::mojom::PaymentAppManifestPtr manifest,
+  void Init(const std::string& scope) override;
+  void SetManifest(payments::mojom::PaymentAppManifestPtr manifest,
                    const SetManifestCallback& callback) override;
+  void GetManifest(const GetManifestCallback& callback) override;
 
   // Called when an error is detected on binding_.
   void OnConnectionError();
 
-  // payment_app_context_ owns this.
-  PaymentAppContext* payment_app_context_;
+  // PaymentAppContextImpl owns PaymentAppManager
+  PaymentAppContextImpl* payment_app_context_;
 
+  GURL scope_;
   mojo::Binding<payments::mojom::PaymentAppManager> binding_;
-
   base::WeakPtrFactory<PaymentAppManager> weak_ptr_factory_;
-
   DISALLOW_COPY_AND_ASSIGN(PaymentAppManager);
 };
 

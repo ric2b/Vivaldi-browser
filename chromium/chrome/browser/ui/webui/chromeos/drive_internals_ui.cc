@@ -353,7 +353,7 @@ void DriveInternalsWebUIHandler::OnGetAppList(
 
   base::ListValue* items = new base::ListValue();
   for (size_t i = 0; i < parsed_app_list->items().size(); ++i) {
-    const google_apis::AppResource* app = parsed_app_list->items()[i];
+    const google_apis::AppResource* app = parsed_app_list->items()[i].get();
     auto app_data = base::MakeUnique<base::DictionaryValue>();
     app_data->SetString("name", app->name());
     app_data->SetString("application_id", app->application_id());
@@ -893,7 +893,7 @@ void DriveInternalsWebUIHandler::OnPeriodicUpdate(const base::ListValue* args) {
 
 DriveInternalsUI::DriveInternalsUI(content::WebUI* web_ui)
     : WebUIController(web_ui) {
-  web_ui->AddMessageHandler(new DriveInternalsWebUIHandler());
+  web_ui->AddMessageHandler(base::MakeUnique<DriveInternalsWebUIHandler>());
 
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIDriveInternalsHost);

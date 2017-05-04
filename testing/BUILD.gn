@@ -6,7 +6,6 @@ if (is_win) {
       "//chrome/test:interactive_ui_tests",
       "//chrome/test:sync_integration_tests",
       "//chrome/test:unit_tests",
-      "//ash:ash_unittests",
       "//ui/aura:aura_unittests",
       "//ui/compositor:compositor_unittests",
       "//ui/views:views_unittests",

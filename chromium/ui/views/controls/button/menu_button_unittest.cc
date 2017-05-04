@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -343,15 +344,10 @@ TEST_F(MenuButtonTest, ActivateDropDownOnMouseClick) {
 
 // Test that the MenuButton stays pressed while there are any PressedLocks.
 TEST_F(MenuButtonTest, ButtonStateForMenuButtonsWithPressedLocks) {
-  // Hovered-state is not updated under mus when EventGenerator send a
-  // mouse-move event. https://crbug.com/615033
-  if (IsMus())
-    return;
-
   // Similarly for aura-mus-client the location of the cursor is not updated by
   // EventGenerator so that IsMouseHovered() checks the wrong thing.
   // https://crbug.com/615033.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   CreateMenuButtonWithNoListener();
@@ -542,13 +538,9 @@ TEST_F(MenuButtonTest,
 // Tests that the MenuButton does not become pressed if it can be dragged, and a
 // DragDropClient is processing the events.
 TEST_F(MenuButtonTest, DraggableMenuButtonDoesNotActivateOnDrag) {
-  // The test uses drag-n-drop, which isn't yet supported on mus.
-  // https://crbug.com/614037.
-  if (IsMus())
-    return;
   // TODO: test uses GetContext(), which is not applicable to aura-mus.
   // http://crbug.com/663809.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
   TestMenuButtonListener menu_button_listener;
   CreateMenuButtonWithMenuButtonListener(&menu_button_listener);
@@ -572,14 +564,10 @@ TEST_F(MenuButtonTest, DraggableMenuButtonDoesNotActivateOnDrag) {
 // Tests if the listener is notified correctly when a gesture tap happens on a
 // MenuButton that has a MenuButtonListener.
 TEST_F(MenuButtonTest, ActivateDropDownOnGestureTap) {
-  // Hovered-state is not updated under mus when EventGenerator send a
-  // mouse-move event. https://crbug.com/615033
-  if (IsMus())
-    return;
   // Similarly for aura-mus-client the location of the cursor is not updated by
   // EventGenerator so that IsMouseHovered() checks the wrong thing.
   // https://crbug.com/615033.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
   TestMenuButtonListener menu_button_listener;
   CreateMenuButtonWithMenuButtonListener(&menu_button_listener);

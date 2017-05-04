@@ -44,6 +44,7 @@ class ChromeURLRequestContextGetter;
 class ChromeExpectCTReporter;
 class HostContentSettingsMap;
 class MediaDeviceIDSalt;
+class NetHttpSessionParamsObserver;
 class ProtocolHandlerRegistry;
 class SupervisedUserURLFilter;
 
@@ -79,7 +80,6 @@ class ChannelIDService;
 class ClientCertStore;
 class CookieStore;
 class CTVerifier;
-class HttpServerProperties;
 class HttpTransactionFactory;
 class ProxyConfigService;
 class ProxyService;
@@ -161,10 +161,6 @@ class ProfileIOData {
   content_settings::CookieSettings* GetCookieSettings() const;
   HostContentSettingsMap* GetHostContentSettingsMap() const;
 
-  IntegerPrefMember* session_startup_pref() const {
-    return &session_startup_pref_;
-  }
-
   StringPrefMember* google_services_account_id() const {
     return &google_services_user_account_id_;
   }
@@ -175,14 +171,6 @@ class ProfileIOData {
 
   BooleanPrefMember* safe_browsing_enabled() const {
     return &safe_browsing_enabled_;
-  }
-
-  BooleanPrefMember* sync_disabled() const {
-    return &sync_disabled_;
-  }
-
-  BooleanPrefMember* signin_allowed() const {
-    return &signin_allowed_;
   }
 
   IntegerPrefMember* network_prediction_options() const {
@@ -248,8 +236,6 @@ class ProfileIOData {
     client_cert_store_factory_ = factory;
   }
 
-  bool IsDataReductionProxyEnabled() const;
-
   data_reduction_proxy::DataReductionProxyIOData*
   data_reduction_proxy_io_data() const {
     return data_reduction_proxy_io_data_.get();
@@ -267,12 +253,18 @@ class ProfileIOData {
   // Get platform ClientCertStore. May return nullptr.
   std::unique_ptr<net::ClientCertStore> CreateClientCertStore();
 
+  // Called on IO thread thread to disable QUIC.
+  void DisableQuicOnIOThread();
+
  protected:
   // A URLRequestContext for media that owns its HTTP factory, to ensure
   // it is deleted.
   class MediaRequestContext : public net::URLRequestContext {
    public:
-    MediaRequestContext();
+    // |name| is used to describe this context. Currently there are two kinds of
+    // media request context -- main media request context ("main_meda") and
+    // isolated app media request context ("isolated_media").
+    explicit MediaRequestContext(const std::string& name);
 
     void SetHttpTransactionFactory(
         std::unique_ptr<net::HttpTransactionFactory> http_factory);
@@ -440,12 +432,6 @@ class ProfileIOData {
     // ResourceContext implementation:
     net::HostResolver* GetHostResolver() override;
     net::URLRequestContext* GetRequestContext() override;
-    void CreateKeygenHandler(
-        uint32_t key_size_in_bits,
-        const std::string& challenge_string,
-        const GURL& url,
-        const base::Callback<void(std::unique_ptr<net::KeygenHandler>)>&
-            callback) override;
     std::string GetMediaDeviceIDSalt() override;
 
    private:
@@ -493,7 +479,8 @@ class ProfileIOData {
   // isolated app.
   virtual net::URLRequestContext* InitializeMediaRequestContext(
       net::URLRequestContext* original_context,
-      const StoragePartitionDescriptor& details) const = 0;
+      const StoragePartitionDescriptor& details,
+      const std::string& name) const = 0;
 
   // These functions are used to transfer ownership of the lazily initialized
   // context from ProfileIOData to the URLRequestContextGetter.
@@ -547,15 +534,15 @@ class ProfileIOData {
   mutable IntegerPrefMember force_youtube_restrict_;
   mutable BooleanPrefMember safe_browsing_enabled_;
   mutable StringPrefMember allowed_domains_for_apps_;
-  mutable BooleanPrefMember sync_disabled_;
-  mutable BooleanPrefMember signin_allowed_;
   mutable IntegerPrefMember network_prediction_options_;
-  // TODO(marja): Remove session_startup_pref_ if no longer needed.
-  mutable IntegerPrefMember session_startup_pref_;
-  mutable BooleanPrefMember quick_check_enabled_;
   mutable IntegerPrefMember incognito_availibility_pref_;
 
   BooleanPrefMember enable_metrics_;
+
+  // Observes profile's preference for changes to prefs which affect
+  // HttpNetworkSession params.
+  std::unique_ptr<NetHttpSessionParamsObserver>
+      net_http_session_params_observer_;
 
   // Pointed to by NetworkDelegate.
   mutable std::unique_ptr<policy::URLBlacklistManager> url_blacklist_manager_;

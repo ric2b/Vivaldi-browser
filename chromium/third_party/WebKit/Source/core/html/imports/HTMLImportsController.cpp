@@ -52,8 +52,8 @@ void HTMLImportsController::dispose() {
     m_root.clear();
   }
 
-  for (size_t i = 0; i < m_loaders.size(); ++i)
-    m_loaders[i]->dispose();
+  for (const auto& loader : m_loaders)
+    loader->dispose();
   m_loaders.clear();
 }
 
@@ -133,15 +133,15 @@ bool HTMLImportsController::shouldBlockScriptExecution(
 }
 
 HTMLImportLoader* HTMLImportsController::createLoader() {
-  m_loaders.append(HTMLImportLoader::create(this));
-  return m_loaders.last().get();
+  m_loaders.push_back(HTMLImportLoader::create(this));
+  return m_loaders.back().get();
 }
 
 HTMLImportLoader* HTMLImportsController::loaderFor(
     const Document& document) const {
-  for (size_t i = 0; i < m_loaders.size(); ++i) {
-    if (m_loaders[i]->document() == &document)
-      return m_loaders[i].get();
+  for (const auto& loader : m_loaders) {
+    if (loader->document() == &document)
+      return loader.get();
   }
 
   return nullptr;

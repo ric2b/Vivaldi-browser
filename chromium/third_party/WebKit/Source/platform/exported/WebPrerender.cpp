@@ -52,7 +52,7 @@ class ExtraDataContainer : public Prerender::ExtraData {
 
  private:
   explicit ExtraDataContainer(WebPrerender::ExtraData* extraData)
-      : m_extraData(wrapUnique(extraData)) {}
+      : m_extraData(WTF::wrapUnique(extraData)) {}
 
   std::unique_ptr<WebPrerender::ExtraData> m_extraData;
 };
@@ -89,7 +89,7 @@ WebString WebPrerender::referrer() const {
   return m_private->getReferrer();
 }
 
-WebReferrerPolicy WebPrerender::referrerPolicy() const {
+WebReferrerPolicy WebPrerender::getReferrerPolicy() const {
   return static_cast<WebReferrerPolicy>(m_private->getReferrerPolicy());
 }
 

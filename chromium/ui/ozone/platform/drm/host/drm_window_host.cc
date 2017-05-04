@@ -145,14 +145,14 @@ bool DrmWindowHost::CanDispatchEvent(const PlatformEvent& ne) {
         DeviceDataManager::GetInstance()->GetTargetDisplayForTouchDevice(
             event->source_device_id());
 
-    if (display_id == display::Display::kInvalidDisplayID)
+    if (display_id == display::kInvalidDisplayId)
       return false;
 
     DrmDisplayHost* display = display_manager_->GetDisplay(display_id);
     if (!display)
       return false;
 
-    DisplaySnapshot* snapshot = display->snapshot();
+    display::DisplaySnapshot* snapshot = display->snapshot();
     if (!snapshot->current_mode())
       return false;
 

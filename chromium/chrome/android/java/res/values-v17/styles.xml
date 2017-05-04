@@ -564,9 +564,6 @@
         <item name="android:fontFamily">sans-serif</item>
         <item name="android:textStyle">bold</item>
     </style>
-    <style name="MaterialProgressBar" parent="Widget.AppCompat.ProgressBar.Horizontal">
-        <item name="android:progressDrawable">@drawable/material_progressbar</item>
-    </style>
     <style name="NumberRollTextViewStyle">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
@@ -575,9 +572,45 @@
         <item name="android:textColor">@android:color/white</item>
         <item name="android:textSize">20sp</item>
     </style>
+    <style name="PrivacyDisclaimerText">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">16dp</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:visibility">gone</item>
+    </style>
 
     <!-- New tab page RecyclerView overscroll color -->
     <style name="NewTabPageRecyclerView">
         <item name="android:colorEdgeEffect">@color/google_grey_300</item>
+    </style>
+
+    <!-- History UI -->
+    <style name="HistoryStartIcon">
+        <item name="android:layout_width">@dimen/selectable_list_layout_start_icon_width</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:scaleType">center</item>
+    </style>
+    <style name="HistoryEndIcon">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">16dp</item>
+        <item name="android:background">@null</item>
+        <item name="android:scaleType">center</item>
+    </style>
+
+    <!-- Download Home -->
+    <style name="DownloadHomeStatusText">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:minHeight">18dp</item>
+        <item name="android:textColor">@color/google_grey_600</item>
+        <item name="android:textSize">12sp</item>1
+        <item name="android:ellipsize">start</item>
+        <item name="android:singleLine">true</item>
     </style>
 </resources>

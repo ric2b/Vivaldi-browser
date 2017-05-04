@@ -23,10 +23,10 @@
 #include "net/log/net_log.h"
 #include "net/log/net_log_capture_mode.h"
 #include "net/log/net_log_event_type.h"
+#include "net/quic/chromium/quic_address_mismatch.h"
 #include "net/quic/core/crypto/crypto_handshake_message.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
-#include "net/quic/core/quic_address_mismatch.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_socket_address_coder.h"
 #include "net/quic/core/quic_time.h"
 
@@ -113,22 +113,10 @@ std::unique_ptr<base::Value> NetLogQuicAckFrameCallback(
                   base::Uint64ToString(frame->largest_observed));
   dict->SetString("delta_time_largest_observed_us",
                   base::Int64ToString(frame->ack_delay_time.ToMicroseconds()));
-  if (frame->missing) {
-    // Entropy and Truncated are not present in v34 and above.
-    dict->SetInteger("entropy_hash", frame->entropy_hash);
-    dict->SetBoolean("truncated", frame->is_truncated);
-  }
 
   base::ListValue* missing = new base::ListValue();
   dict->Set("missing_packets", missing);
-  if (frame->missing) {
-    for (const Interval<QuicPacketNumber>& interval : frame->packets) {
-      for (QuicPacketNumber packet = interval.min(); packet < interval.max();
-           ++packet) {
-        missing->AppendString(base::Uint64ToString(packet));
-      }
-    }
-  } else if (!frame->packets.Empty()) {
+  if (!frame->packets.Empty()) {
     // V34 and above express acked packets, but only print
     // missing packets, because it's typically a shorter list.
     for (QuicPacketNumber packet = frame->packets.Min();
@@ -269,11 +257,6 @@ std::unique_ptr<base::Value> NetLogQuicCertificateVerifiedCallback(
   return std::move(dict);
 }
 
-void UpdatePacketGapSentHistogram(size_t num_consecutive_missing_packets) {
-  UMA_HISTOGRAM_COUNTS("Net.QuicSession.PacketGapSent",
-                       num_consecutive_missing_packets);
-}
-
 void UpdatePublicResetAddressMismatchHistogram(
     const IPEndPoint& server_hello_address,
     const IPEndPoint& public_reset_address) {
@@ -308,7 +291,6 @@ QuicConnectionLogger::QuicConnectionLogger(
       no_packet_received_after_ping_(false),
       previous_received_packet_size_(0),
       largest_received_packet_number_(0),
-      largest_received_missing_packet_number_(0),
       num_out_of_order_received_packets_(0),
       num_out_of_order_large_received_packets_(0),
       num_packets_received_(0),
@@ -450,21 +432,25 @@ void QuicConnectionLogger::OnPingSent() {
   no_packet_received_after_ping_ = true;
 }
 
-void QuicConnectionLogger::OnPacketReceived(const IPEndPoint& self_address,
-                                            const IPEndPoint& peer_address,
-                                            const QuicEncryptedPacket& packet) {
+void QuicConnectionLogger::OnPacketReceived(
+    const QuicSocketAddress& self_address,
+    const QuicSocketAddress& peer_address,
+    const QuicEncryptedPacket& packet) {
   if (local_address_from_self_.GetFamily() == ADDRESS_FAMILY_UNSPECIFIED) {
-    local_address_from_self_ = self_address;
-    UMA_HISTOGRAM_ENUMERATION("Net.QuicSession.ConnectionTypeFromSelf",
-                              GetRealAddressFamily(self_address.address()),
-                              ADDRESS_FAMILY_LAST);
+    local_address_from_self_ = self_address.impl().socket_address();
+    UMA_HISTOGRAM_ENUMERATION(
+        "Net.QuicSession.ConnectionTypeFromSelf",
+        GetRealAddressFamily(self_address.impl().socket_address().address()),
+        ADDRESS_FAMILY_LAST);
   }
 
   previous_received_packet_size_ = last_received_packet_size_;
   last_received_packet_size_ = packet.length();
-  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_PACKET_RECEIVED,
-                    base::Bind(&NetLogQuicPacketCallback, &self_address,
-                               &peer_address, packet.length()));
+  net_log_.AddEvent(
+      NetLogEventType::QUIC_SESSION_PACKET_RECEIVED,
+      base::Bind(&NetLogQuicPacketCallback,
+                 &self_address.impl().socket_address(),
+                 &peer_address.impl().socket_address(), packet.length()));
 }
 
 void QuicConnectionLogger::OnUnauthenticatedHeader(
@@ -550,42 +536,6 @@ void QuicConnectionLogger::OnAckFrame(const QuicAckFrame& frame) {
     return;
 
   // TODO(rch, rtenneti) sort out histograms for QUIC_VERSION_34 and above.
-  if (session_->connection()->version() > QUIC_VERSION_33) {
-    return;
-  }
-  const PacketNumberQueue& missing_packets = frame.packets;
-  PacketNumberQueue::const_iterator it =
-      missing_packets.lower_bound(largest_received_missing_packet_number_);
-  if (it == missing_packets.end() ||
-      largest_received_missing_packet_number_ == missing_packets.Max()) {
-    return;
-  }
-
-  // Scan through the list and log consecutive ranges of missing packets.
-  size_t num_consecutive_missing_packets = 1;
-  QuicPacketNumber previous_missing_packet =
-      largest_received_missing_packet_number_;
-  for (; it != missing_packets.end(); ++it) {
-    // Account for case where first interval starts below
-    // largest_received_missing_packet_number_.
-    QuicPacketNumber interval_min =
-        std::max(previous_missing_packet + 1, it->min());
-    DCHECK_LE(interval_min, it->max());
-
-    size_t interval_len = it->max() - interval_min;
-    if (interval_len == 0) {
-      continue;
-    }
-    if (interval_min == previous_missing_packet + 1) {
-      num_consecutive_missing_packets += interval_len;
-    } else {
-      UpdatePacketGapSentHistogram(num_consecutive_missing_packets);
-      num_consecutive_missing_packets = interval_len;
-    }
-    previous_missing_packet = it->max() - 1;
-  }
-  UpdatePacketGapSentHistogram(num_consecutive_missing_packets);
-  largest_received_missing_packet_number_ = missing_packets.Max();
 }
 
 void QuicConnectionLogger::OnStopWaitingFrame(
@@ -635,12 +585,12 @@ void QuicConnectionLogger::OnPingFrame(const QuicPingFrame& frame) {
 
 void QuicConnectionLogger::OnPublicResetPacket(
     const QuicPublicResetPacket& packet) {
-  net_log_.AddEvent(
-      NetLogEventType::QUIC_SESSION_PUBLIC_RESET_PACKET_RECEIVED,
-      base::Bind(&NetLogQuicPublicResetPacketCallback,
-                 &local_address_from_shlo_, &packet.client_address));
-  UpdatePublicResetAddressMismatchHistogram(local_address_from_shlo_,
-                                            packet.client_address);
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_PUBLIC_RESET_PACKET_RECEIVED,
+                    base::Bind(&NetLogQuicPublicResetPacketCallback,
+                               &local_address_from_shlo_,
+                               &packet.client_address.impl().socket_address()));
+  UpdatePublicResetAddressMismatchHistogram(
+      local_address_from_shlo_, packet.client_address.impl().socket_address());
 }
 
 void QuicConnectionLogger::OnVersionNegotiationPacket(
@@ -661,7 +611,8 @@ void QuicConnectionLogger::OnCryptoHandshakeMessageReceived(
     QuicSocketAddressCoder decoder;
     if (message.GetStringPiece(kCADR, &address) &&
         decoder.Decode(address.data(), address.size())) {
-      local_address_from_shlo_ = IPEndPoint(decoder.ip(), decoder.port());
+      local_address_from_shlo_ =
+          IPEndPoint(decoder.ip().impl().ip_address(), decoder.port());
       UMA_HISTOGRAM_ENUMERATION(
           "Net.QuicSession.ConnectionTypeFromPeer",
           GetRealAddressFamily(local_address_from_shlo_.address()),
@@ -736,7 +687,8 @@ void QuicConnectionLogger::OnRttChanged(QuicTime::Delta rtt) const {
     return;
 
   int64_t microseconds = rtt.ToMicroseconds();
-  if (microseconds != 0) {
+  if (microseconds != 0 &&
+      socket_performance_watcher_->ShouldNotifyUpdatedRTT()) {
     socket_performance_watcher_->OnUpdatedRTTAvailable(
         base::TimeDelta::FromMicroseconds(rtt.ToMicroseconds()));
   }

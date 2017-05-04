@@ -31,6 +31,7 @@
 
 #include "core/loader/PingLoader.h"
 
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/Document.h"
 #include "core/dom/SecurityContext.h"
@@ -52,6 +53,7 @@
 #include "core/loader/FrameLoaderClient.h"
 #include "core/loader/MixedContentChecker.h"
 #include "core/page/Page.h"
+#include "platform/WebFrameScheduler.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
 #include "platform/network/EncodedFormData.h"
@@ -62,7 +64,6 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebFrameScheduler.h"
 #include "public/platform/WebURLLoader.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebURLResponse.h"
@@ -124,7 +125,7 @@ class BeaconBlob final : public Beacon {
     else
       entityBody->appendBlob(m_data->uuid(), m_data->blobDataHandle());
 
-    request.setHTTPBody(entityBody.release());
+    request.setHTTPBody(std::move(entityBody));
 
     if (!m_contentType.isEmpty())
       request.setHTTPContentType(m_contentType);
@@ -148,7 +149,7 @@ class BeaconDOMArrayBufferView final : public Beacon {
 
     RefPtr<EncodedFormData> entityBody =
         EncodedFormData::create(m_data->baseAddress(), m_data->byteLength());
-    request.setHTTPBody(entityBody.release());
+    request.setHTTPBody(std::move(entityBody));
 
     // FIXME: a reasonable choice, but not in the spec; should it give a
     // default?
@@ -187,7 +188,7 @@ class BeaconFormData final : public Beacon {
 };
 
 class PingLoaderImpl : public GarbageCollectedFinalized<PingLoaderImpl>,
-                       public DOMWindowProperty,
+                       public ContextClient,
                        private WebURLLoaderClient {
   USING_GARBAGE_COLLECTED_MIXIN(PingLoaderImpl);
   WTF_MAKE_NONCOPYABLE(PingLoaderImpl);
@@ -206,13 +207,11 @@ class PingLoaderImpl : public GarbageCollectedFinalized<PingLoaderImpl>,
   void dispose();
 
   // WebURLLoaderClient
-  bool willFollowRedirect(WebURLLoader*,
-                          WebURLRequest&,
-                          const WebURLResponse&) override;
-  void didReceiveResponse(WebURLLoader*, const WebURLResponse&) final;
-  void didReceiveData(WebURLLoader*, const char*, int, int, int) final;
-  void didFinishLoading(WebURLLoader*, double, int64_t) final;
-  void didFail(WebURLLoader*, const WebURLError&) final;
+  bool willFollowRedirect(WebURLRequest&, const WebURLResponse&) override;
+  void didReceiveResponse(const WebURLResponse&) final;
+  void didReceiveData(const char*, int) final;
+  void didFinishLoading(double, int64_t, int64_t encodedDataLength) final;
+  void didFail(const WebURLError&, int64_t, int64_t encodedDataLength) final;
 
   void timeout(TimerBase*);
 
@@ -223,6 +222,7 @@ class PingLoaderImpl : public GarbageCollectedFinalized<PingLoaderImpl>,
   String m_url;
   unsigned long m_identifier;
   SelfKeepAlive<PingLoaderImpl> m_keepAlive;
+  AtomicString m_initiator;
 
   bool m_isBeacon;
 
@@ -235,11 +235,12 @@ PingLoaderImpl::PingLoaderImpl(LocalFrame* frame,
                                const AtomicString& initiator,
                                StoredCredentials credentialsAllowed,
                                bool isBeacon)
-    : DOMWindowProperty(frame),
+    : ContextClient(frame),
       m_timeout(this, &PingLoaderImpl::timeout),
       m_url(request.url()),
       m_identifier(createUniqueIdentifier()),
       m_keepAlive(this),
+      m_initiator(initiator),
       m_isBeacon(isBeacon),
       m_origin(frame->document()->getSecurityOrigin()),
       m_corsMode(IsCORSEnabled) {
@@ -252,7 +253,8 @@ PingLoaderImpl::PingLoaderImpl(LocalFrame* frame,
 
   FetchContext& fetchContext = frame->document()->fetcher()->context();
 
-  fetchContext.willStartLoadingResource(m_identifier, request, Resource::Image);
+  fetchContext.willStartLoadingResource(m_identifier, request, Resource::Image,
+                                        initiator, false);
 
   FetchInitiatorInfo initiatorInfo;
   initiatorInfo.name = initiator;
@@ -263,7 +265,7 @@ PingLoaderImpl::PingLoaderImpl(LocalFrame* frame,
   if (frame->frameScheduler())
     frame->frameScheduler()->didStopLoading(m_identifier);
 
-  m_loader = wrapUnique(Platform::current()->createURLLoader());
+  m_loader = WTF::wrapUnique(Platform::current()->createURLLoader());
   DCHECK(m_loader);
   WrappedResourceRequest wrappedRequest(request);
   wrappedRequest.setAllowStoredCredentials(credentialsAllowed ==
@@ -291,98 +293,103 @@ void PingLoaderImpl::dispose() {
 }
 
 bool PingLoaderImpl::willFollowRedirect(
-    WebURLLoader*,
     WebURLRequest& passedNewRequest,
     const WebURLResponse& passedRedirectResponse) {
-  if (!m_isBeacon)
-    return true;
+  if (m_isBeacon && m_corsMode == IsCORSEnabled) {
+    DCHECK(passedNewRequest.allowStoredCredentials());
 
-  if (m_corsMode == NotCORSEnabled)
-    return true;
+    ResourceRequest& newRequest(passedNewRequest.toMutableResourceRequest());
+    const ResourceResponse& redirectResponse(
+        passedRedirectResponse.toResourceResponse());
 
-  DCHECK(passedNewRequest.allowStoredCredentials());
+    DCHECK(!newRequest.isNull());
+    DCHECK(!redirectResponse.isNull());
 
-  ResourceRequest& newRequest(passedNewRequest.toMutableResourceRequest());
-  const ResourceResponse& redirectResponse(
-      passedRedirectResponse.toResourceResponse());
-
-  DCHECK(!newRequest.isNull());
-  DCHECK(!redirectResponse.isNull());
-
-  String errorDescription;
-  ResourceLoaderOptions options;
-  // TODO(tyoshino): Save updated data in options.securityOrigin and pass it
-  // on the next time.
-  if (!CrossOriginAccessControl::handleRedirect(
-          m_origin, newRequest, redirectResponse, AllowStoredCredentials,
-          options, errorDescription)) {
-    if (LocalFrame* localFrame = frame()) {
-      if (localFrame->document()) {
-        localFrame->document()->addConsoleMessage(ConsoleMessage::create(
-            JSMessageSource, ErrorMessageLevel, errorDescription));
+    String errorDescription;
+    ResourceLoaderOptions options;
+    // TODO(tyoshino): Save updated data in options.securityOrigin and pass it
+    // on the next time.
+    if (!CrossOriginAccessControl::handleRedirect(
+            m_origin, newRequest, redirectResponse, AllowStoredCredentials,
+            options, errorDescription)) {
+      if (frame()) {
+        if (frame()->document()) {
+          frame()->document()->addConsoleMessage(ConsoleMessage::create(
+              JSMessageSource, ErrorMessageLevel, errorDescription));
+        }
       }
-    }
-    // Cancel the load and self destruct.
-    dispose();
+      // Cancel the load and self destruct.
+      dispose();
 
-    return false;
+      return false;
+    }
   }
   // FIXME: http://crbug.com/427429 is needed to correctly propagate updates of
   // Origin: following this successful redirect.
 
+  if (frame() && frame()->document()) {
+    FetchInitiatorInfo initiatorInfo;
+    initiatorInfo.name = m_initiator;
+    FetchContext& fetchContext = frame()->document()->fetcher()->context();
+    fetchContext.dispatchWillSendRequest(
+        m_identifier, passedNewRequest.toMutableResourceRequest(),
+        passedRedirectResponse.toResourceResponse(), initiatorInfo);
+  }
+
   return true;
 }
 
-void PingLoaderImpl::didReceiveResponse(WebURLLoader*,
-                                        const WebURLResponse& response) {
-  if (LocalFrame* frame = this->frame()) {
-    TRACE_EVENT_INSTANT1(
-        "devtools.timeline", "ResourceFinish", TRACE_EVENT_SCOPE_THREAD, "data",
-        InspectorResourceFinishEvent::data(m_identifier, 0, true));
+void PingLoaderImpl::didReceiveResponse(const WebURLResponse& response) {
+  if (frame()) {
+    TRACE_EVENT1("devtools.timeline", "ResourceFinish", "data",
+                 InspectorResourceFinishEvent::data(m_identifier, 0, true, 0));
     const ResourceResponse& resourceResponse = response.toResourceResponse();
-    InspectorInstrumentation::didReceiveResourceResponse(frame, m_identifier, 0,
-                                                         resourceResponse, 0);
-    didFailLoading(frame);
+    InspectorInstrumentation::didReceiveResourceResponse(
+        frame(), m_identifier, 0, resourceResponse, 0);
+    didFailLoading(frame());
   }
   dispose();
 }
 
-void PingLoaderImpl::didReceiveData(WebURLLoader*, const char*, int, int, int) {
-  if (LocalFrame* frame = this->frame()) {
-    TRACE_EVENT_INSTANT1(
-        "devtools.timeline", "ResourceFinish", TRACE_EVENT_SCOPE_THREAD, "data",
-        InspectorResourceFinishEvent::data(m_identifier, 0, true));
-    didFailLoading(frame);
+void PingLoaderImpl::didReceiveData(const char*, int dataLength) {
+  if (frame()) {
+    TRACE_EVENT1(
+        "devtools.timeline", "ResourceFinish", "data",
+        InspectorResourceFinishEvent::data(m_identifier, 0, true, dataLength));
+    didFailLoading(frame());
   }
   dispose();
 }
 
-void PingLoaderImpl::didFinishLoading(WebURLLoader*, double, int64_t) {
-  if (LocalFrame* frame = this->frame()) {
-    TRACE_EVENT_INSTANT1(
-        "devtools.timeline", "ResourceFinish", TRACE_EVENT_SCOPE_THREAD, "data",
-        InspectorResourceFinishEvent::data(m_identifier, 0, true));
-    didFailLoading(frame);
+void PingLoaderImpl::didFinishLoading(double,
+                                      int64_t,
+                                      int64_t encodedDataLength) {
+  if (frame()) {
+    TRACE_EVENT1("devtools.timeline", "ResourceFinish", "data",
+                 InspectorResourceFinishEvent::data(m_identifier, 0, true,
+                                                    encodedDataLength));
+    didFailLoading(frame());
   }
   dispose();
 }
 
-void PingLoaderImpl::didFail(WebURLLoader*, const WebURLError& resourceError) {
-  if (LocalFrame* frame = this->frame()) {
-    TRACE_EVENT_INSTANT1(
-        "devtools.timeline", "ResourceFinish", TRACE_EVENT_SCOPE_THREAD, "data",
-        InspectorResourceFinishEvent::data(m_identifier, 0, true));
-    didFailLoading(frame);
+void PingLoaderImpl::didFail(const WebURLError& resourceError,
+                             int64_t,
+                             int64_t encodedDataLength) {
+  if (frame()) {
+    TRACE_EVENT1("devtools.timeline", "ResourceFinish", "data",
+                 InspectorResourceFinishEvent::data(m_identifier, 0, true,
+                                                    encodedDataLength));
+    didFailLoading(frame());
   }
   dispose();
 }
 
 void PingLoaderImpl::timeout(TimerBase*) {
-  if (LocalFrame* frame = this->frame()) {
-    TRACE_EVENT_INSTANT1(
-        "devtools.timeline", "ResourceFinish", TRACE_EVENT_SCOPE_THREAD, "data",
-        InspectorResourceFinishEvent::data(m_identifier, 0, true));
-    didFailLoading(frame);
+  if (frame()) {
+    TRACE_EVENT1("devtools.timeline", "ResourceFinish", "data",
+                 InspectorResourceFinishEvent::data(m_identifier, 0, true, 0));
+    didFailLoading(frame());
   }
   dispose();
 }
@@ -395,7 +402,7 @@ void PingLoaderImpl::didFailLoading(LocalFrame* frame) {
 }
 
 DEFINE_TRACE(PingLoaderImpl) {
-  DOMWindowProperty::trace(visitor);
+  ContextClient::trace(visitor);
 }
 
 void finishPingRequestInitialization(
@@ -405,7 +412,8 @@ void finishPingRequestInitialization(
   request.setRequestContext(requestContext);
   FetchContext& fetchContext = frame->document()->fetcher()->context();
   fetchContext.addAdditionalRequestHeaders(request, FetchSubresource);
-  fetchContext.populateRequestData(request);
+  // TODO(tyoshino): Call populateResourceRequest() if appropriate.
+  fetchContext.setFirstPartyCookieAndRequestorOrigin(request);
 }
 
 bool sendPingCommon(LocalFrame* frame,

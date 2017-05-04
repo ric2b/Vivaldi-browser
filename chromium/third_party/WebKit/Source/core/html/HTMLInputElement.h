@@ -50,7 +50,6 @@ class CORE_EXPORT HTMLInputElement : public TextControlElement {
 
  public:
   static HTMLInputElement* create(Document&,
-                                  HTMLFormElement*,
                                   bool createdByParser);
   ~HTMLInputElement() override;
   DECLARE_VIRTUAL_TRACE();
@@ -288,7 +287,7 @@ class CORE_EXPORT HTMLInputElement : public TextControlElement {
   unsigned sizeOfRadioGroup() const;
 
  protected:
-  HTMLInputElement(Document&, HTMLFormElement*, bool createdByParser);
+  HTMLInputElement(Document&, bool createdByParser);
 
   void defaultEventHandler(Event*) override;
 
@@ -325,9 +324,7 @@ class CORE_EXPORT HTMLInputElement : public TextControlElement {
 
   void accessKeyAction(bool sendMouseEvents) final;
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   bool isPresentationAttribute(const QualifiedName&) const final;
   void collectStyleForPresentationAttribute(const QualifiedName&,
                                             const AtomicString&,

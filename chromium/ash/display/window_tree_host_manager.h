@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef ASH_DISPLAY_DISPLAY_CONTROLLER_H_
-#define ASH_DISPLAY_DISPLAY_CONTROLLER_H_
+#ifndef ASH_DISPLAY_WINDOW_TREE_HOST_MANAGER_H_
+#define ASH_DISPLAY_WINDOW_TREE_HOST_MANAGER_H_
 
 #include <stdint.h>
 
@@ -28,12 +28,6 @@
 
 namespace aura {
 class WindowTreeHost;
-}
-
-namespace base {
-class Value;
-template <typename T>
-class JSONValueConverter;
 }
 
 namespace gfx {
@@ -122,9 +116,6 @@ class ASH_EXPORT WindowTreeHostManager
   // root window host to to new primary display.
   void SetPrimaryDisplayId(int64_t id);
 
-  // Closes all child windows in the all root windows.
-  void CloseChildWindows();
-
   // Returns all root windows. In non extended desktop mode, this
   // returns the primary root window only.
   aura::Window::Windows GetAllRootWindows();
@@ -163,11 +154,7 @@ class ASH_EXPORT WindowTreeHostManager
   void CloseMirroringDisplayIfNotNecessary() override;
   void PreDisplayConfigurationChange(bool clear_focus) override;
   void PostDisplayConfigurationChange(bool must_clear_window) override;
-#if defined(OS_CHROMEOS)
-  ui::DisplayConfigurator* display_configurator() override;
-#endif
-  std::string GetInternalDisplayNameString() override;
-  std::string GetUnknownDisplayNameString() override;
+  display::DisplayConfigurator* display_configurator() override;
 
   // ui::internal::InputMethodDelegate overrides:
   ui::EventDispatchDetails DispatchKeyEventPostIME(
@@ -180,7 +167,6 @@ class ASH_EXPORT WindowTreeHostManager
  private:
   FRIEND_TEST_ALL_PREFIXES(WindowTreeHostManagerTest, BoundsUpdated);
   FRIEND_TEST_ALL_PREFIXES(WindowTreeHostManagerTest, SecondaryDisplayLayout);
-  friend class DisplayManager;
   friend class MirrorWindowController;
 
   // Creates a WindowTreeHost for |display| and stores it in the
@@ -229,4 +215,4 @@ class ASH_EXPORT WindowTreeHostManager
 
 }  // namespace ash
 
-#endif  // ASH_DISPLAY_DISPLAY_CONTROLLER_H_
+#endif  // ASH_DISPLAY_WINDOW_TREE_HOST_MANAGER_H_

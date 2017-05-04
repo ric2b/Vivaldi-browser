@@ -12,8 +12,8 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "media/base/content_decryption_module.h"
 #include "media/base/media_export.h"
-#include "media/base/media_keys.h"
 
 namespace media {
 
@@ -22,15 +22,18 @@ class MEDIA_EXPORT CdmSessionTracker {
   CdmSessionTracker();
   ~CdmSessionTracker();
 
-  // Add |session_id| to the list of sessions being tracked.
+  // Adds |session_id| to the list of sessions being tracked.
   void AddSession(const std::string& session_id);
 
-  // Remove |session_id| from the list of sessions being tracked.
+  // Removes |session_id| from the list of sessions being tracked.
   void RemoveSession(const std::string& session_id);
 
-  // Call |session_closed_cb| on any remaining sessions in the list and then
+  // Calls |session_closed_cb| on any remaining sessions in the list and then
   // clear the list.
   void CloseRemainingSessions(const SessionClosedCB& session_closed_cb);
+
+  // Returns whether there are any remaining sessions being tracked.
+  bool HasRemainingSessions() const;
 
  private:
   std::unordered_set<std::string> session_ids_;

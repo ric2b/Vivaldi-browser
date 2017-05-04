@@ -47,6 +47,7 @@
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_service_manager.h"
 #include "components/arc/common/enterprise_reporting.mojom.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
@@ -108,11 +109,17 @@ std::vector<em::VolumeInfo> GetVolumeInfo(
   std::vector<em::VolumeInfo> result;
   for (const std::string& mount_point : mount_points) {
     base::FilePath mount_path(mount_point);
+
+    // Non-native file systems do not have a mount point in the local file
+    // system. However, it's worth checking here, as it's easier than checking
+    // earlier which mount point is local, and which one is not.
+    if (mount_point.empty() || !base::PathExists(mount_path))
+      continue;
+
     int64_t free_size = base::SysInfo::AmountOfFreeDiskSpace(mount_path);
     int64_t total_size = base::SysInfo::AmountOfTotalDiskSpace(mount_path);
     if (free_size < 0 || total_size < 0) {
-      LOG_IF(ERROR, !mount_point.empty()) << "Unable to get volume status for "
-                                          << mount_point;
+      LOG(ERROR) << "Unable to get volume status for " << mount_point;
       continue;
     }
     em::VolumeInfo info;
@@ -218,13 +225,15 @@ std::vector<em::CPUTempInfo> ReadCPUTempInfo() {
 
 bool ReadAndroidStatus(
     const policy::DeviceStatusCollector::AndroidStatusReceiver& receiver) {
-  auto* const arc_service = arc::ArcBridgeService::Get();
-  if (!arc_service)
+  auto* const arc_service_manager = arc::ArcServiceManager::Get();
+  if (!arc_service_manager)
     return false;
-  auto* const instance_holder = arc_service->enterprise_reporting();
+  auto* const instance_holder =
+      arc_service_manager->arc_bridge_service()->enterprise_reporting();
   if (!instance_holder)
     return false;
-  auto* const instance = instance_holder->GetInstanceForMethod("GetStatus", 1);
+  auto* const instance =
+      ARC_GET_INSTANCE_FOR_METHOD(instance_holder, GetStatus);
   if (!instance)
     return false;
   instance->GetStatus(receiver);

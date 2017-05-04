@@ -32,7 +32,6 @@
 #define ScrollAnimatorBase_h
 
 #include "platform/PlatformExport.h"
-#include "platform/PlatformWheelEvent.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollAnimatorCompositorCoordinator.h"
 #include "platform/scroll/ScrollTypes.h"
@@ -63,10 +62,6 @@ class PLATFORM_EXPORT ScrollAnimatorBase
 
   virtual void scrollToOffsetWithoutAnimation(const ScrollOffset&);
 
-#if OS(MACOSX)
-  virtual void handleWheelEventPhase(PlatformWheelEventPhase) {}
-#endif
-
   void setCurrentOffset(const ScrollOffset&);
   ScrollOffset currentOffset() const;
   virtual ScrollOffset desiredTargetOffset() const { return currentOffset(); }
@@ -94,7 +89,6 @@ class PLATFORM_EXPORT ScrollAnimatorBase
   virtual void mouseMovedInContentArea() const {}
   virtual void mouseEnteredScrollbar(Scrollbar&) const {}
   virtual void mouseExitedScrollbar(Scrollbar&) const {}
-  virtual void updateAfterLayout() {}
   virtual void contentsResized() const {}
   virtual void contentAreaDidShow() const {}
   virtual void contentAreaDidHide() const {}

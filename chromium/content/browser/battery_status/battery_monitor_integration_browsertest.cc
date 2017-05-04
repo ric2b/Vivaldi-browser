@@ -7,6 +7,7 @@
 #include "base/callback_list.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/public/browser/content_browser_client.h"
@@ -38,7 +39,7 @@ typedef BatteryUpdateCallbackList::Subscription BatteryUpdateSubscription;
 device::BatteryStatus g_battery_status;
 // Global list of test battery monitors to notify when |g_battery_status|
 // changes.
-base::LazyInstance<BatteryUpdateCallbackList> g_callback_list =
+base::LazyInstance<BatteryUpdateCallbackList>::Leaky g_callback_list =
     LAZY_INSTANCE_INITIALIZER;
 
 // Updates the global battery state and notifies existing test monitors.
@@ -108,10 +109,9 @@ class TestContentBrowserClient : public ContentBrowserClient {
   void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
       int child_process_id,
-      FileDescriptorInfo* mappings,
-      std::map<int, base::MemoryMappedFile::Region>* regions) override {
+      FileDescriptorInfo* mappings) override {
     ShellContentBrowserClient::Get()->GetAdditionalMappedFilesForChildProcess(
-        command_line, child_process_id, mappings, regions);
+        command_line, child_process_id, mappings);
   }
 #endif  // defined(OS_ANDROID)
 };

@@ -34,12 +34,10 @@ void CleanupDeprecatedTrackedPreferences(
   // Add deprecated previously tracked preferences below for them to be cleaned
   // up from both the pref files and the hash store.
   static const char* const kDeprecatedTrackedPreferences[] = {
-      // TODO(grt): Remove in M44+.
-      "safebrowsing.incident_report_sent",
-      // TODO(mad): Remove in M48+.
-      "software_reporter.prompt_reason",
-      // TODO(zea): Remove in M52+,
-      "sync.remaining_rollback_tries"
+      // TODO(a-v-y): Remove in M60+,
+      "default_search_provider.search_url",
+      "default_search_provider.name",
+      "default_search_provider.keyword"
   };
 
   for (size_t i = 0; i < arraysize(kDeprecatedTrackedPreferences); ++i) {
@@ -101,8 +99,10 @@ PrefHashFilter::PrefHashFilter(
     }
     DCHECK(tracked_preference);
 
-    bool is_new =
-        tracked_paths_.add(metadata.name, std::move(tracked_preference)).second;
+    bool is_new = tracked_paths_
+                      .insert(std::make_pair(metadata.name,
+                                             std::move(tracked_preference)))
+                      .second;
     DCHECK(is_new);
   }
 }
@@ -148,10 +148,9 @@ void PrefHashFilter::Initialize(base::DictionaryValue* pref_store_contents) {
   DictionaryHashStoreContents dictionary_contents(pref_store_contents);
   std::unique_ptr<PrefHashStoreTransaction> hash_store_transaction(
       pref_hash_store_->BeginTransaction(&dictionary_contents));
-  for (TrackedPreferencesMap::const_iterator it = tracked_paths_.begin();
-       it != tracked_paths_.end(); ++it) {
+  for (auto it = tracked_paths_.begin(); it != tracked_paths_.end(); ++it) {
     const std::string& initialized_path = it->first;
-    const TrackedPreference* initialized_preference = it->second;
+    const TrackedPreference* initialized_preference = it->second.get();
     const base::Value* value = nullptr;
     pref_store_contents->Get(initialized_path, &value);
     initialized_preference->OnNewValue(value, hash_store_transaction.get());
@@ -161,9 +160,9 @@ void PrefHashFilter::Initialize(base::DictionaryValue* pref_store_contents) {
 // Marks |path| has having changed if it is part of |tracked_paths_|. A new hash
 // will be stored for it the next time FilterSerializeData() is invoked.
 void PrefHashFilter::FilterUpdate(const std::string& path) {
-  TrackedPreferencesMap::const_iterator it = tracked_paths_.find(path);
+  auto it = tracked_paths_.find(path);
   if (it != tracked_paths_.end())
-    changed_paths_.insert(std::make_pair(path, it->second));
+    changed_paths_.insert(std::make_pair(path, it->second.get()));
 }
 
 // Updates the stored hashes for |changed_paths_| before serializing data to
@@ -236,8 +235,7 @@ void PrefHashFilter::FinalizeFilterOnLoad(
                             hash_store_transaction->IsSuperMACValid());
     }
 
-    for (TrackedPreferencesMap::const_iterator it = tracked_paths_.begin();
-         it != tracked_paths_.end(); ++it) {
+    for (auto it = tracked_paths_.begin(); it != tracked_paths_.end(); ++it) {
       if (it->second->EnforceAndReport(
               pref_store_contents.get(), hash_store_transaction.get(),
               external_validation_hash_store_transaction.get())) {

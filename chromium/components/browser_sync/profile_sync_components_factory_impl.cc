@@ -6,11 +6,9 @@
 
 #include <utility>
 
-#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_wallet_data_type_controller.h"
 #include "components/autofill/core/browser/webdata/autofill_data_type_controller.h"
@@ -26,19 +24,20 @@
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/sync/browser/password_data_type_controller.h"
 #include "components/prefs/pref_service.h"
+#include "components/reading_list/core/reading_list_switches.h"
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/device_info/device_info_data_type_controller.h"
 #include "components/sync/device_info/local_device_info_provider_impl.h"
+#include "components/sync/driver/async_directory_type_controller.h"
 #include "components/sync/driver/data_type_manager_impl.h"
-#include "components/sync/driver/glue/sync_backend_host.h"
 #include "components/sync/driver/glue/sync_backend_host_impl.h"
 #include "components/sync/driver/model_type_controller.h"
 #include "components/sync/driver/proxy_data_type_controller.h"
 #include "components/sync/driver/sync_client.h"
 #include "components/sync/driver/sync_driver_switches.h"
-#include "components/sync/driver/ui_data_type_controller.h"
 #include "components/sync/engine/attachments/attachment_downloader.h"
 #include "components/sync/engine/attachments/attachment_uploader.h"
+#include "components/sync/engine/sync_engine.h"
 #include "components/sync/model/attachments/attachment_service.h"
 #include "components/sync_bookmarks/bookmark_change_processor.h"
 #include "components/sync_bookmarks/bookmark_data_type_controller.h"
@@ -48,22 +47,35 @@
 #include "google_apis/gaia/oauth2_token_service_request.h"
 #include "net/url_request/url_request_context_getter.h"
 
+#include "notes/notes_factory.h"
+#include "sync/glue/notes_change_processor.h"
+#include "sync/glue/notes_data_type_controller.h"
+#include "sync/glue/notes_model_associator.h"
+
+#include "sync/vivaldi_syncmanager.h"
+#include "sync/vivaldi_syncmanager_factory.h"
+
 using bookmarks::BookmarkModel;
 using sync_bookmarks::BookmarkChangeProcessor;
 using sync_bookmarks::BookmarkDataTypeController;
 using sync_bookmarks::BookmarkModelAssociator;
+using sync_sessions::SessionDataTypeController;
+using syncer::AsyncDirectoryTypeController;
 using syncer::DataTypeController;
 using syncer::DataTypeManager;
 using syncer::DataTypeManagerImpl;
 using syncer::DataTypeManagerObserver;
 using syncer::DeviceInfoDataTypeController;
-using syncer::ProxyDataTypeController;
-using syncer::UIDataTypeController;
 using syncer::ModelTypeController;
-using sync_sessions::SessionDataTypeController;
+using syncer::ProxyDataTypeController;
+
+using vivaldi::NotesDataTypeController;
+using vivaldi::NotesModelAssociator;
+using vivaldi::NotesChangeProcessor;
+using vivaldi::NotesModelFactory;
+
 
 namespace browser_sync {
-
 namespace {
 
 syncer::ModelTypeSet GetDisabledTypesFromCommandLine(
@@ -142,9 +154,8 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
     // Use an error callback that always uploads a stacktrace if it can to help
     // get USS as stable as possible.
     sync_service->RegisterDataTypeController(
-        base::MakeUnique<ModelTypeController>(
-            syncer::DEVICE_INFO, base::Bind(&base::debug::DumpWithoutCrashing),
-            sync_client_, base::ThreadTaskRunnerHandle::Get()));
+        base::MakeUnique<ModelTypeController>(syncer::DEVICE_INFO, sync_client_,
+                                              ui_thread_));
   } else {
     sync_service->RegisterDataTypeController(
         base::MakeUnique<DeviceInfoDataTypeController>(
@@ -152,15 +163,21 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
             sync_service->GetLocalDeviceInfoProvider()));
   }
 
-  // Autofill sync is enabled by default.  Register unless explicitly
+  // Autocomplete sync is enabled by default.  Register unless explicitly
   // disabled.
   if (!disabled_types.Has(syncer::AUTOFILL)) {
-    sync_service->RegisterDataTypeController(
-        base::MakeUnique<AutofillDataTypeController>(
-            db_thread_, error_callback, sync_client_, web_data_service_));
+    if (base::FeatureList::IsEnabled(switches::kSyncUSSAutocomplete)) {
+      sync_service->RegisterDataTypeController(
+          base::MakeUnique<ModelTypeController>(syncer::AUTOFILL, sync_client_,
+                                                db_thread_));
+    } else {
+      sync_service->RegisterDataTypeController(
+          base::MakeUnique<AutofillDataTypeController>(
+              db_thread_, error_callback, sync_client_, web_data_service_));
+    }
   }
 
-  // Autofill profile sync is enabled by default.  Register unless explicitly
+  // Autofill sync is enabled by default.  Register unless explicitly
   // disabled.
   if (!disabled_types.Has(syncer::AUTOFILL_PROFILE)) {
     sync_service->RegisterDataTypeController(
@@ -194,6 +211,13 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
     sync_service->RegisterDataTypeController(
         base::MakeUnique<BookmarkDataTypeController>(error_callback,
                                                      sync_client_));
+  }
+
+  // Notes sync is enabled by default.  Register unless explicitly
+  // disabled.
+  if (!disabled_types.Has(syncer::NOTES)) {
+    sync_service->RegisterDataTypeController(
+      base::MakeUnique<NotesDataTypeController>(error_callback, sync_client_));
   }
 
   const bool history_disabled =
@@ -233,11 +257,13 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
       !disabled_types.Has(syncer::FAVICON_TRACKING) && !history_disabled) {
     // crbug/384552. We disable error uploading for this data types for now.
     sync_service->RegisterDataTypeController(
-        base::MakeUnique<UIDataTypeController>(syncer::FAVICON_IMAGES,
-                                               base::Closure(), sync_client_));
+        base::MakeUnique<AsyncDirectoryTypeController>(
+            syncer::FAVICON_IMAGES, base::Closure(), sync_client_,
+            syncer::GROUP_UI, ui_thread_));
     sync_service->RegisterDataTypeController(
-        base::MakeUnique<UIDataTypeController>(syncer::FAVICON_TRACKING,
-                                               base::Closure(), sync_client_));
+        base::MakeUnique<AsyncDirectoryTypeController>(
+            syncer::FAVICON_TRACKING, base::Closure(), sync_client_,
+            syncer::GROUP_UI, ui_thread_));
   }
 
   // Password sync is enabled by default.  Register unless explicitly
@@ -252,49 +278,61 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
   if (!disabled_types.Has(syncer::PREFERENCES)) {
     if (!override_prefs_controller_to_uss_for_test_) {
       sync_service->RegisterDataTypeController(
-          base::MakeUnique<UIDataTypeController>(syncer::PREFERENCES,
-                                                 error_callback, sync_client_));
+          base::MakeUnique<AsyncDirectoryTypeController>(
+              syncer::PREFERENCES, error_callback, sync_client_,
+              syncer::GROUP_UI, ui_thread_));
     } else {
       sync_service->RegisterDataTypeController(
-          base::MakeUnique<ModelTypeController>(
-              syncer::PREFERENCES, error_callback, sync_client_,
-              base::ThreadTaskRunnerHandle::Get()));
+          base::MakeUnique<ModelTypeController>(syncer::PREFERENCES,
+                                                sync_client_, ui_thread_));
     }
   }
 
   if (!disabled_types.Has(syncer::PRIORITY_PREFERENCES)) {
     sync_service->RegisterDataTypeController(
-        base::MakeUnique<UIDataTypeController>(syncer::PRIORITY_PREFERENCES,
-                                               error_callback, sync_client_));
+        base::MakeUnique<AsyncDirectoryTypeController>(
+            syncer::PRIORITY_PREFERENCES, error_callback, sync_client_,
+            syncer::GROUP_UI, ui_thread_));
   }
 
   // Article sync is disabled by default.  Register only if explicitly enabled.
   if (dom_distiller::IsEnableSyncArticlesSet()) {
     sync_service->RegisterDataTypeController(
-        base::MakeUnique<UIDataTypeController>(syncer::ARTICLES, error_callback,
-                                               sync_client_));
+        base::MakeUnique<AsyncDirectoryTypeController>(
+            syncer::ARTICLES, error_callback, sync_client_, syncer::GROUP_UI,
+            ui_thread_));
+  }
+
+  // Reading list sync is enabled by default only on iOS. Register unless
+  // Reading List or Reading List Sync is explicitly disabled.
+  if (!disabled_types.Has(syncer::READING_LIST) &&
+      reading_list::switches::IsReadingListEnabled()) {
+    sync_service->RegisterDataTypeController(
+        base::MakeUnique<ModelTypeController>(syncer::READING_LIST,
+                                              sync_client_, ui_thread_));
   }
 }
 
 DataTypeManager* ProfileSyncComponentsFactoryImpl::CreateDataTypeManager(
+    syncer::ModelTypeSet initial_types,
     const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
         debug_info_listener,
     const DataTypeController::TypeMap* controllers,
     const syncer::DataTypeEncryptionHandler* encryption_handler,
-    syncer::SyncBackendHost* backend,
+    syncer::ModelTypeConfigurer* configurer,
     DataTypeManagerObserver* observer) {
-  return new DataTypeManagerImpl(debug_info_listener, controllers,
-                                 encryption_handler, backend, observer);
+  return new DataTypeManagerImpl(sync_client_, initial_types,
+                                 debug_info_listener, controllers,
+                                 encryption_handler, configurer, observer);
 }
 
-syncer::SyncBackendHost*
-ProfileSyncComponentsFactoryImpl::CreateSyncBackendHost(
+syncer::SyncEngine* ProfileSyncComponentsFactoryImpl::CreateSyncEngine(
     const std::string& name,
     invalidation::InvalidationService* invalidator,
     const base::WeakPtr<syncer::SyncPrefs>& sync_prefs,
-    const base::FilePath& sync_folder) {
-  return new syncer::SyncBackendHostImpl(name, sync_client_, ui_thread_,
-                                         invalidator, sync_prefs, sync_folder);
+    const base::FilePath& sync_data_folder) {
+  return new syncer::SyncBackendHostImpl(name, sync_client_, invalidator,
+                                         sync_prefs, sync_data_folder);
 }
 
 std::unique_ptr<syncer::LocalDeviceInfoProvider>
@@ -415,5 +453,21 @@ void ProfileSyncComponentsFactoryImpl::OverridePrefsForUssTest(bool use_uss) {
 
 bool ProfileSyncComponentsFactoryImpl::
     override_prefs_controller_to_uss_for_test_ = false;
+
+syncer::SyncApiComponentFactory::SyncComponents
+    ProfileSyncComponentsFactoryImpl::CreateNotesSyncComponents(
+        syncer::SyncService* sync_service,
+        std::unique_ptr<syncer::DataTypeErrorHandler> error_handler) {
+  Notes_Model* notes_model = NotesModelFactory::GetForProfile(
+        sync_service->GetSyncClient()->GetProfile());
+  syncer::UserShare* user_share = sync_service->GetUserShare();
+  NotesModelAssociator* model_associator =
+      new NotesModelAssociator(notes_model, sync_service->GetSyncClient(),
+                               user_share, error_handler->Copy());
+  NotesChangeProcessor* change_processor =
+      new NotesChangeProcessor(sync_service->GetSyncClient(), model_associator,
+                               std::move(error_handler));
+  return SyncComponents(model_associator, change_processor);
+}
 
 }  // namespace browser_sync

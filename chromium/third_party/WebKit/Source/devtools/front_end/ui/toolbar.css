@@ -31,7 +31,7 @@
 .toolbar-shadow.vertical {
     flex-direction: column;
     height: auto;
-    width: 26px;
+    align-items: flex-start;
 }
 
 .toolbar-item {
@@ -87,7 +87,7 @@
 }
 
 .toolbar-has-glyph .toolbar-text {
-    margin-left: 0;
+    margin-left: -4px;
 }
 
 .toolbar-button:not(.toolbar-has-glyph):not(.toolbar-has-dropdown):not(.largeicon-menu) {
@@ -159,11 +159,13 @@
     background-color: #f3f3f3 !important;
 }
 
-.toolbar-button.toolbar-state-on.toolbar-toggle-with-red-color .toolbar-glyph {
+.toolbar-button.toolbar-state-on.toolbar-toggle-with-red-color .toolbar-glyph,
+.toolbar-button.toolbar-state-off.toolbar-default-with-red-color .toolbar-glyph {
     background-color: rgb(216, 0, 0) !important;
 }
 
-:host-context(.-theme-with-dark-background) .toolbar-button.toolbar-state-on.toolbar-toggle-with-red-color .toolbar-glyph {
+:host-context(.-theme-with-dark-background) .toolbar-button.toolbar-state-on.toolbar-toggle-with-red-color .toolbar-glyph,
+:host-context(.-theme-with-dark-background) .toolbar-button.toolbar-state-off.toolbar-default-with-red-color .toolbar-glyph {
     background-color: hsl(0, 100%, 65%) !important;
 }
 

@@ -34,6 +34,16 @@ static const float kDefaultVolume = 1.0f;
 
 namespace media {
 
+namespace {
+
+gfx::Size GetRotatedVideoSize(VideoRotation rotation, gfx::Size natural_size) {
+  if (rotation == VIDEO_ROTATION_90 || rotation == VIDEO_ROTATION_270)
+    return gfx::Size(natural_size.height(), natural_size.width());
+  return natural_size;
+}
+
+}  // namespace
+
 class PipelineImpl::RendererWrapper : public DemuxerHost,
                                       public RendererClient {
  public:
@@ -571,6 +581,16 @@ void PipelineImpl::RendererWrapper::OnEnabledAudioTracksChanged(
     const std::vector<MediaTrack::Id>& enabledTrackIds) {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
 
+  // If the pipeline has been created, but not started yet, we may still receive
+  // track notifications from blink level (e.g. when video track gets deselected
+  // due to player/pipeline belonging to a background tab). We can safely ignore
+  // these, since WebMediaPlayerImpl will ensure that demuxer stream / track
+  // status is in sync with blink after pipeline is started.
+  if (state_ == kCreated) {
+    DCHECK(!demuxer_);
+    return;
+  }
+
   // Track status notifications might be delivered asynchronously. If we receive
   // a notification when pipeline is stopped/shut down, it's safe to ignore it.
   if (state_ == kStopping || state_ == kStopped) {
@@ -589,6 +609,16 @@ void PipelineImpl::RendererWrapper::OnEnabledAudioTracksChanged(
 void PipelineImpl::RendererWrapper::OnSelectedVideoTrackChanged(
     const std::vector<MediaTrack::Id>& selectedTrackId) {
   DCHECK(media_task_runner_->BelongsToCurrentThread());
+
+  // If the pipeline has been created, but not started yet, we may still receive
+  // track notifications from blink level (e.g. when video track gets deselected
+  // due to player/pipeline belonging to a background tab). We can safely ignore
+  // these, since WebMediaPlayerImpl will ensure that demuxer stream / track
+  // status is in sync with blink after pipeline is started.
+  if (state_ == kCreated) {
+    DCHECK(!demuxer_);
+    return;
+  }
 
   // Track status notifications might be delivered asynchronously. If we receive
   // a notification when pipeline is stopped/shut down, it's safe to ignore it.
@@ -617,6 +647,20 @@ void PipelineImpl::RendererWrapper::OnStatisticsUpdate(
   shared_state_.statistics.video_frames_dropped += stats.video_frames_dropped;
   shared_state_.statistics.audio_memory_usage += stats.audio_memory_usage;
   shared_state_.statistics.video_memory_usage += stats.video_memory_usage;
+
+  base::TimeDelta old_average =
+      shared_state_.statistics.video_keyframe_distance_average;
+  if (stats.video_keyframe_distance_average != kNoTimestamp) {
+    shared_state_.statistics.video_keyframe_distance_average =
+        stats.video_keyframe_distance_average;
+  }
+
+  if (shared_state_.statistics.video_keyframe_distance_average != old_average) {
+    main_task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&PipelineImpl::OnVideoAverageKeyframeDistanceUpdate,
+                   weak_pipeline_));
+  }
 }
 
 void PipelineImpl::RendererWrapper::OnBufferingStateChange(
@@ -874,7 +918,9 @@ void PipelineImpl::RendererWrapper::ReportMetadata() {
       stream = demuxer_->GetStream(DemuxerStream::VIDEO);
       if (stream) {
         metadata.has_video = true;
-        metadata.natural_size = stream->video_decoder_config().natural_size();
+        metadata.natural_size =
+            GetRotatedVideoSize(stream->video_rotation(),
+                                stream->video_decoder_config().natural_size());
         metadata.video_rotation = stream->video_rotation();
         metadata.video_decoder_config = stream->video_decoder_config();
       }
@@ -1128,7 +1174,7 @@ base::TimeDelta PipelineImpl::GetMediaTime() const {
     return last_media_time_;
   }
 
-  DVLOG(3) << __FUNCTION__ << ": " << media_time.InMilliseconds() << " ms";
+  DVLOG(3) << __func__ << ": " << media_time.InMilliseconds() << " ms";
   last_media_time_ = media_time;
   return last_media_time_;
 }
@@ -1285,6 +1331,15 @@ void PipelineImpl::OnVideoOpacityChange(bool opaque) {
 
   DCHECK(client_);
   client_->OnVideoOpacityChange(opaque);
+}
+
+void PipelineImpl::OnVideoAverageKeyframeDistanceUpdate() {
+  DVLOG(2) << __func__;
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(IsRunning());
+
+  DCHECK(client_);
+  client_->OnVideoAverageKeyframeDistanceUpdate();
 }
 
 void PipelineImpl::OnSeekDone() {

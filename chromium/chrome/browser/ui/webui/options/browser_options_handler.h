@@ -37,13 +37,11 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/system/pointer_device_observer.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
+#include "components/user_manager/user_manager.h"
 #else  // defined(OS_CHROMEOS)
 #include "chrome/browser/shell_integration.h"
 #endif  // !defined(OS_CHROMEOS)
 
-class AutocompleteController;
-class CloudPrintSetupHandler;
-class CustomHomePagesTableModel;
 class TemplateURLService;
 
 namespace base {
@@ -66,6 +64,7 @@ class BrowserOptionsHandler
 #if defined(OS_CHROMEOS)
       public chromeos::system::PointerDeviceObserver::Observer,
       public ArcAppListPrefs::Observer,
+      public user_manager::UserManager::Observer,
 #endif
       public TemplateURLServiceObserver,
       public extensions::ExtensionRegistryObserver,
@@ -152,6 +151,9 @@ class BrowserOptionsHandler
   void OnAppRemoved(const std::string& app_id) override;
   void OnAppRegistered(const std::string& app_id,
                        const ArcAppListPrefs::AppInfo& app_info) override;
+
+  // user_manager::UserManager::Observer overrides.
+  void OnUserImageChanged(const user_manager::User& user) override;
 #endif
 
   void UpdateSyncState();
@@ -338,6 +340,9 @@ class BrowserOptionsHandler
 
   // Called to show Android apps settings.
   void ShowAndroidAppsSettings(const base::ListValue* args);
+
+  // Called to show apps based on a url for the Play Store.
+  void ShowPlayStoreApps(const base::ListValue* args);
 
   // Called to show TalkBack settings.
   void ShowAccessibilityTalkBackSettings(const base::ListValue *args);

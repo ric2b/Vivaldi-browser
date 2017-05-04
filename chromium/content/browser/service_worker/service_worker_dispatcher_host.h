@@ -13,6 +13,7 @@
 #include "base/id_map.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "content/browser/service_worker/service_worker_registration_status.h"
 #include "content/common/service_worker/service_worker.mojom.h"
@@ -105,6 +106,10 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
                          int route_id,
                          ServiceWorkerProviderType provider_type,
                          bool is_parent_frame_secure) override;
+  void OnProviderDestroyed(int provider_id) override;
+  void OnSetHostedVersionId(int provider_id,
+                            int64_t version_id,
+                            int embedded_worker_id) override;
 
   // IPC Message handlers
   void OnRegisterServiceWorker(int thread_id,
@@ -142,10 +147,6 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
                                     int provider_id,
                                     int64_t registration_id,
                                     const std::string& value);
-  void OnProviderDestroyed(int provider_id);
-  void OnSetHostedVersionId(int provider_id,
-                            int64_t version_id,
-                            int embedded_worker_id);
   void OnWorkerReadyForInspection(int embedded_worker_id);
   void OnWorkerScriptLoaded(int embedded_worker_id);
   void OnWorkerThreadStarted(int embedded_worker_id,
@@ -188,6 +189,7 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
       const base::string16& message,
       const url::Origin& source_origin,
       const std::vector<int>& sent_message_ports,
+      const base::Optional<base::TimeDelta>& timeout,
       const StatusCallback& callback,
       const SourceInfo& source_info);
   void DispatchExtendableMessageEventAfterStartWorker(
@@ -196,6 +198,7 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
       const url::Origin& source_origin,
       const std::vector<int>& sent_message_ports,
       const ExtendableMessageEventSource& source,
+      const base::Optional<base::TimeDelta>& timeout,
       const StatusCallback& callback);
   template <typename SourceInfo>
   void DidFailToDispatchExtendableMessageEvent(
@@ -259,15 +262,26 @@ class CONTENT_EXPORT ServiceWorkerDispatcherHost
       ProviderStatus* out_status,
       int provider_id);
 
+  void DidUpdateNavigationPreloadEnabled(int thread_id,
+                                         int request_id,
+                                         int registration_id,
+                                         bool enable,
+                                         ServiceWorkerStatusCode status);
+  void DidUpdateNavigationPreloadHeader(int thread_id,
+                                        int request_id,
+                                        int registration_id,
+                                        const std::string& value,
+                                        ServiceWorkerStatusCode status);
+
   const int render_process_id_;
   MessagePortMessageFilter* const message_port_message_filter_;
   ResourceContext* resource_context_;
   scoped_refptr<ServiceWorkerContextWrapper> context_wrapper_;
 
-  IDMap<ServiceWorkerHandle, IDMapOwnPointer> handles_;
+  IDMap<std::unique_ptr<ServiceWorkerHandle>> handles_;
 
   using RegistrationHandleMap =
-      IDMap<ServiceWorkerRegistrationHandle, IDMapOwnPointer>;
+      IDMap<std::unique_ptr<ServiceWorkerRegistrationHandle>>;
   RegistrationHandleMap registration_handles_;
 
   bool channel_ready_;  // True after BrowserMessageFilter::sender_ != NULL.

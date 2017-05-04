@@ -14,11 +14,11 @@ class CSSNumberInterpolationType : public CSSInterpolationType {
   CSSNumberInterpolationType(PropertyHandle property)
       : CSSInterpolationType(property) {}
 
-  InterpolationValue maybeConvertUnderlyingValue(
-      const InterpolationEnvironment&) const final;
-  void apply(const InterpolableValue&,
-             const NonInterpolableValue*,
-             InterpolationEnvironment&) const final;
+  InterpolationValue maybeConvertStandardPropertyUnderlyingValue(
+      const StyleResolverState&) const final;
+  void applyStandardPropertyValue(const InterpolableValue&,
+                                  const NonInterpolableValue*,
+                                  StyleResolverState&) const final;
 
  private:
   InterpolationValue createNumberValue(double number) const;

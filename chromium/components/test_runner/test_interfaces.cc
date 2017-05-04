@@ -94,9 +94,14 @@ void TestInterfaces::ConfigureForTestWithURL(const blink::WebURL& test_url,
     test_runner_->setShouldGeneratePixelResults(false);
   }
   if (spec.find("/inspector/") != std::string::npos ||
-      spec.find("/inspector-enabled/") != std::string::npos)
+      spec.find("/inspector-enabled/") != std::string::npos) {
     test_runner_->ClearDevToolsLocalStorage();
-  if (spec.find("/inspector/") != std::string::npos) {
+    test_runner_->SetV8CacheDisabled(true);
+  } else {
+    test_runner_->SetV8CacheDisabled(false);
+  }
+  if (spec.find("/inspector/") != std::string::npos &&
+      spec.find("unit_test_runner.html") == std::string::npos) {
     // Subfolder name determines default panel to open.
     std::string test_path = spec.substr(spec.find("/inspector/") + 11);
     base::DictionaryValue settings;
@@ -110,8 +115,8 @@ void TestInterfaces::ConfigureForTestWithURL(const blink::WebURL& test_url,
     test_runner_->setShouldGeneratePixelResults(false);
     test_runner_->setShouldDumpAsMarkup(true);
   }
-  if (spec.find("/imported/wpt/") != std::string::npos ||
-      spec.find("/imported/csswg-test/") != std::string::npos ||
+  if (spec.find("/external/wpt/") != std::string::npos ||
+      spec.find("/external/csswg-test/") != std::string::npos ||
       spec.find("://web-platform.test") != std::string::npos)
     test_runner_->set_is_web_platform_tests_mode();
 }

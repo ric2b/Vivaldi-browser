@@ -6,16 +6,13 @@
 #define COMPONENTS_DOM_DISTILLER_IOS_DISTILLER_PAGE_IOS_H_
 
 #include <memory>
+#include <objc/objc.h>
 #include <string>
 
 #include "base/memory/weak_ptr.h"
 #include "components/dom_distiller/core/distiller_page.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 #include "url/gurl.h"
-
-namespace ios {
-class WebControllerProvider;
-}
 
 namespace web {
 class BrowserState;
@@ -37,22 +34,33 @@ class DistillerPageIOS : public DistillerPage {
   bool StringifyOutput() override;
   void DistillPageImpl(const GURL& url, const std::string& script) override;
 
- private:
-  friend class DistillerWebStateObserver;
+  // Sets the WebState that will be used for the distillation. Do not call
+  // between |DistillPageImpl| and |OnDistillationDone|.
+  virtual void AttachWebState(std::unique_ptr<web::WebState> web_state);
+
+  // Release the WebState used for distillation. Do not call between
+  // |DistillPageImpl| and |OnDistillationDone|.
+  virtual std::unique_ptr<web::WebState> DetachWebState();
+
+  // Return the current WebState.
+  virtual web::WebState* CurrentWebState();
 
   // Called by |web_state_observer_| once the page has finished loading.
-  void OnLoadURLDone(web::PageLoadCompletionStatus load_completion_status);
+  virtual void OnLoadURLDone(
+      web::PageLoadCompletionStatus load_completion_status);
 
+ private:
+  friend class DistillerWebStateObserver;
   // Called once the |script_| has been evaluated on the page.
   void HandleJavaScriptResult(id result);
 
   // Converts result of WKWebView script evaluation to base::Value
   std::unique_ptr<base::Value> ValueResultFromScriptResult(id wk_result);
 
-  web::BrowserState* browser_state_;
   GURL url_;
   std::string script_;
-  std::unique_ptr<ios::WebControllerProvider> provider_;
+  web::BrowserState* browser_state_;
+  std::unique_ptr<web::WebState> web_state_;
   std::unique_ptr<DistillerWebStateObserver> web_state_observer_;
   base::WeakPtrFactory<DistillerPageIOS> weak_ptr_factory_;
 };

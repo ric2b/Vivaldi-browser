@@ -1,18 +1,33 @@
-// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #include "chromeos/dbus/auth_policy_client.h"
 
 #include "base/bind.h"
 #include "base/memory/weak_ptr.h"
+#include "components/signin/core/account_id/account_id.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
 #include "dbus/object_proxy.h"
-#include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace chromeos {
 
 namespace {
+
+// The first device policy fetch after joining Active Directory can be very slow
+// because machine credentials need to propagate through the AD deployment.
+const int kRefreshDevicePolicyTimeoutMilliseconds = 90000;
+
+authpolicy::ErrorType GetErrorFromReader(dbus::MessageReader* reader) {
+  int32_t int_error;
+  if (!reader->PopInt32(&int_error)) {
+    DLOG(ERROR) << "AuthPolicyClient: Failed to get an error from the response";
+    return authpolicy::ERROR_DBUS_FAILURE;
+  }
+  if (int_error < 0 || int_error >= authpolicy::ERROR_COUNT)
+    return authpolicy::ERROR_UNKNOWN;
+  return static_cast<authpolicy::ErrorType>(int_error);
+}
 
 class AuthPolicyClientImpl : public AuthPolicyClient {
  public:
@@ -22,17 +37,30 @@ class AuthPolicyClientImpl : public AuthPolicyClient {
 
   // AuthPolicyClient override.
   void JoinAdDomain(const std::string& machine_name,
-                    const std::string& user,
+                    const std::string& user_principal_name,
                     int password_fd,
                     const JoinCallback& callback) override {
     dbus::MethodCall method_call(authpolicy::kAuthPolicyInterface,
                                  authpolicy::kAuthPolicyJoinADDomain);
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(machine_name);
-    writer.AppendString(user);
+    writer.AppendString(user_principal_name);
     writer.AppendFileDescriptor(password_fd);
     proxy_->CallMethod(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
                        base::Bind(&AuthPolicyClientImpl::HandleJoinCallback,
+                                  weak_ptr_factory_.GetWeakPtr(), callback));
+  }
+
+  void AuthenticateUser(const std::string& user_principal_name,
+                        int password_fd,
+                        const AuthCallback& callback) override {
+    dbus::MethodCall method_call(authpolicy::kAuthPolicyInterface,
+                                 authpolicy::kAuthPolicyAuthenticateUser);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(user_principal_name);
+    writer.AppendFileDescriptor(password_fd);
+    proxy_->CallMethod(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+                       base::Bind(&AuthPolicyClientImpl::HandleAuthCallback,
                                   weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
@@ -40,17 +68,18 @@ class AuthPolicyClientImpl : public AuthPolicyClient {
     dbus::MethodCall method_call(authpolicy::kAuthPolicyInterface,
                                  authpolicy::kAuthPolicyRefreshDevicePolicy);
     proxy_->CallMethod(
-        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        &method_call, kRefreshDevicePolicyTimeoutMilliseconds,
         base::Bind(&AuthPolicyClientImpl::HandleRefreshPolicyCallback,
                    weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
-  void RefreshUserPolicy(const std::string& account_id,
+  void RefreshUserPolicy(const AccountId& account_id,
                          const RefreshPolicyCallback& callback) override {
+    DCHECK(account_id.GetAccountType() == AccountType::ACTIVE_DIRECTORY);
     dbus::MethodCall method_call(authpolicy::kAuthPolicyInterface,
                                  authpolicy::kAuthPolicyRefreshUserPolicy);
     dbus::MessageWriter writer(&method_call);
-    writer.AppendString(account_id);
+    writer.AppendString(account_id.GetAccountIdKey());
     proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::Bind(&AuthPolicyClientImpl::HandleRefreshPolicyCallback,
@@ -69,32 +98,39 @@ class AuthPolicyClientImpl : public AuthPolicyClient {
   void HandleRefreshPolicyCallback(const RefreshPolicyCallback& callback,
                                    dbus::Response* response) {
     if (!response) {
-      LOG(ERROR) << "RefreshDevicePolicy: failed to call to authpolicy";
+      DLOG(ERROR) << "RefreshDevicePolicy: failed to call to authpolicy";
       callback.Run(false);
       return;
     }
-    callback.Run(true);
+    dbus::MessageReader reader(response);
+    callback.Run(GetErrorFromReader(&reader) == authpolicy::ERROR_NONE);
   }
 
   void HandleJoinCallback(const JoinCallback& callback,
                           dbus::Response* response) {
     if (!response) {
-      LOG(ERROR) << "Join: Couldn't call to authpolicy";
-      // TODO(rsorokin): make proper call, after defining possible errors codes.
-      callback.Run(authpolicy::AD_JOIN_ERROR_UNKNOWN);
+      DLOG(ERROR) << "Join: Couldn't call to authpolicy";
+      callback.Run(authpolicy::ERROR_DBUS_FAILURE);
       return;
     }
 
     dbus::MessageReader reader(response);
-    int res = authpolicy::AD_JOIN_ERROR_UNKNOWN;
-    if (!reader.PopInt32(&res)) {
-      LOG(ERROR) << "Join: Couldn't get an error from the response";
-      // TODO(rsorokin): make proper call, after defining possible errors codes.
-      callback.Run(authpolicy::AD_JOIN_ERROR_DBUS_FAIL);
+    callback.Run(GetErrorFromReader(&reader));
+  }
+
+  void HandleAuthCallback(const AuthCallback& callback,
+                          dbus::Response* response) {
+    if (!response) {
+      DLOG(ERROR) << "Auth: Failed to  call to authpolicy";
+      callback.Run(authpolicy::ERROR_DBUS_FAILURE, std::string());
       return;
     }
-
-    callback.Run(res);
+    dbus::MessageReader reader(response);
+    const authpolicy::ErrorType error(GetErrorFromReader(&reader));
+    std::string user_id;
+    if (!reader.PopString(&user_id))
+      DLOG(ERROR) << "Auth: Failed to get user_id from the response";
+    callback.Run(error, user_id);
   }
 
   dbus::Bus* bus_ = nullptr;

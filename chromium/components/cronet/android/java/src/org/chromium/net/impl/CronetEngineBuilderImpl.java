@@ -6,7 +6,6 @@ package org.chromium.net.impl;
 import android.content.Context;
 import android.support.annotation.IntDef;
 import android.support.annotation.VisibleForTesting;
-import android.util.Log;
 
 import static org.chromium.net.CronetEngine.Builder.HTTP_CACHE_DISABLED;
 import static org.chromium.net.CronetEngine.Builder.HTTP_CACHE_DISK;
@@ -14,13 +13,11 @@ import static org.chromium.net.CronetEngine.Builder.HTTP_CACHE_DISK_NO_HTTP;
 import static org.chromium.net.CronetEngine.Builder.HTTP_CACHE_IN_MEMORY;
 
 import org.chromium.net.CronetEngine;
-import org.chromium.net.ExperimentalCronetEngine;
 import org.chromium.net.ICronetEngineBuilder;
 
 import java.io.File;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.lang.reflect.Constructor;
 import java.net.IDN;
 import java.util.Date;
 import java.util.HashSet;
@@ -32,7 +29,7 @@ import java.util.regex.Pattern;
 /**
  * Implementation of {@link ICronetEngineBuilder}.
  */
-public class CronetEngineBuilderImpl extends ICronetEngineBuilder {
+public abstract class CronetEngineBuilderImpl extends ICronetEngineBuilder {
     /**
      * A hint that a host supports QUIC.
      */
@@ -72,10 +69,6 @@ public class CronetEngineBuilderImpl extends ICronetEngineBuilder {
         }
     }
 
-    private static final String TAG = "CronetEngineBuilder";
-    private static final String NATIVE_CRONET_IMPL_CLASS =
-            "org.chromium.net.impl.CronetUrlRequestContext";
-    private static final String JAVA_CRONET_IMPL_CLASS = "org.chromium.net.impl.JavaCronetEngine";
     private static final Pattern INVALID_PKP_HOST_NAME = Pattern.compile("^[0-9\\.]*$");
 
     // Private fields are simply storage of configuration for the resulting CronetEngine.
@@ -86,9 +79,7 @@ public class CronetEngineBuilderImpl extends ICronetEngineBuilder {
     private boolean mPublicKeyPinningBypassForLocalTrustAnchorsEnabled;
     private String mUserAgent;
     private String mStoragePath;
-    private boolean mLegacyModeEnabled;
-    private CronetEngine.Builder.LibraryLoader mLibraryLoader;
-    private String mLibraryName;
+    private VersionSafeCallbacks.LibraryLoader mLibraryLoader;
     private boolean mQuicEnabled;
     private boolean mHttp2Enabled;
     private boolean mSdchEnabled;
@@ -100,7 +91,7 @@ public class CronetEngineBuilderImpl extends ICronetEngineBuilder {
     private int mHttpCacheMode;
     private long mHttpCacheMaxSize;
     private String mExperimentalOptions;
-    private long mMockCertVerifier;
+    protected long mMockCertVerifier;
     private boolean mNetworkQualityEstimatorEnabled;
     private String mCertVerifierData;
 
@@ -110,8 +101,6 @@ public class CronetEngineBuilderImpl extends ICronetEngineBuilder {
      */
     public CronetEngineBuilderImpl(Context context) {
         mApplicationContext = context.getApplicationContext();
-        setLibraryName("cronet");
-        enableLegacyMode(false);
         enableQuic(false);
         enableHttp2(true);
         enableSdch(false);
@@ -149,36 +138,12 @@ public class CronetEngineBuilderImpl extends ICronetEngineBuilder {
     }
 
     @Override
-    public CronetEngineBuilderImpl enableLegacyMode(boolean value) {
-        mLegacyModeEnabled = value;
-        return this;
-    }
-
-    private boolean legacyMode() {
-        return mLegacyModeEnabled;
-    }
-
-    /**
-     * Overrides the name of the native library backing Cronet.
-     * @param libName the name of the native library backing Cronet.
-     * @return the builder to facilitate chaining.
-     */
-    public CronetEngineBuilderImpl setLibraryName(String libName) {
-        mLibraryName = libName;
-        return this;
-    }
-
-    String libraryName() {
-        return mLibraryName;
-    }
-
-    @Override
     public CronetEngineBuilderImpl setLibraryLoader(CronetEngine.Builder.LibraryLoader loader) {
-        mLibraryLoader = loader;
+        mLibraryLoader = new VersionSafeCallbacks.LibraryLoader(loader);
         return this;
     }
 
-    CronetEngine.Builder.LibraryLoader libraryLoader() {
+    VersionSafeCallbacks.LibraryLoader libraryLoader() {
         return mLibraryLoader;
     }
 
@@ -456,61 +421,5 @@ public class CronetEngineBuilderImpl extends ICronetEngineBuilder {
      */
     Context getContext() {
         return mApplicationContext;
-    }
-
-    @Override
-    public ExperimentalCronetEngine build() {
-        final ClassLoader loader = getClass().getClassLoader();
-        if (getUserAgent() == null) {
-            setUserAgent(getDefaultUserAgent());
-        }
-
-        ExperimentalCronetEngine cronetEngine = null;
-        if (!legacyMode()) {
-            cronetEngine = createNativeCronetEngine(loader);
-        }
-        if (cronetEngine == null) {
-            cronetEngine = createJavaCronetEngine(loader);
-        }
-
-        if (cronetEngine == null) {
-            Log.i(TAG,
-                    "Class loader " + loader + " couldn't find any Cronet engine implementation.");
-        } else {
-            Log.i(TAG, loader.toString() + " found Cronet engine implementation "
-                            + cronetEngine.getClass() + ". Network stack version "
-                            + cronetEngine.getVersionString());
-            // Clear MOCK_CERT_VERIFIER reference if there is any, since
-            // the ownership has been transferred to the engine.
-            mMockCertVerifier = 0;
-        }
-        return cronetEngine;
-    }
-
-    private ExperimentalCronetEngine createNativeCronetEngine(ClassLoader loader) {
-        return createCronetEngine(loader, NATIVE_CRONET_IMPL_CLASS, this);
-    }
-
-    private ExperimentalCronetEngine createJavaCronetEngine(ClassLoader loader) {
-        return createCronetEngine(loader, JAVA_CRONET_IMPL_CLASS, getUserAgent());
-    }
-
-    private ExperimentalCronetEngine createCronetEngine(
-            ClassLoader loader, String name, Object argument) {
-        ExperimentalCronetEngine cronetEngine = null;
-        try {
-            Class<? extends ExperimentalCronetEngine> engineClass =
-                    loader.loadClass(name).asSubclass(ExperimentalCronetEngine.class);
-            Constructor<? extends ExperimentalCronetEngine> constructor =
-                    engineClass.getConstructor(argument.getClass());
-            cronetEngine = constructor.newInstance(argument);
-        } catch (ClassNotFoundException e) {
-            // Leave as null.
-            Log.i(TAG, "Class loader " + loader + " cannot find Cronet engine implementation: "
-                            + name + ". Will try to find an alternative implementation.");
-        } catch (Exception e) {
-            throw new IllegalStateException("Cannot instantiate: " + name, e);
-        }
-        return cronetEngine;
     }
 }

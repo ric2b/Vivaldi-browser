@@ -34,16 +34,12 @@
 #include "ui/views/widget/widget_removals_observer.h"
 #include "ui/wm/public/scoped_drag_drop_disabler.h"
 
-class PrefService;
+class AccountId;
 class ScopedKeepAlive;
-
-namespace content {
-class RenderFrameHost;
-class WebContents;
-}
 
 namespace chromeos {
 
+class ArcKioskController;
 class DemoAppLauncher;
 class FocusRingController;
 class KeyboardDrivenOobeKeyHandler;
@@ -77,7 +73,7 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   void OpenProxySettings() override;
   void SetStatusAreaVisible(bool visible) override;
   AutoEnrollmentController* GetAutoEnrollmentController() override;
-  void StartWizard(const std::string& first_screen_name) override;
+  void StartWizard(OobeScreen first_screen) override;
   WizardController* GetWizardController() override;
   AppLaunchController* GetAppLaunchController() override;
   void StartUserAdding(const base::Closure& completion_callback) override;
@@ -90,6 +86,7 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
       bool diagnostic_mode,
       bool auto_launch) override;
   void StartDemoAppLaunch() override;
+  void StartArcKiosk(const AccountId& account_id) override;
 
   // Creates WizardController instance.
   WizardController* CreateWizardController();
@@ -223,6 +220,9 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   // Demo app launcher.
   std::unique_ptr<DemoAppLauncher> demo_app_launcher_;
 
+  // ARC kiosk controller.
+  std::unique_ptr<ArcKioskController> arc_kiosk_controller_;
+
   // Make sure chrome won't exit while we are at login/oobe screen.
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
 
@@ -278,7 +278,7 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
   RestorePath restore_path_;
 
   // Stored parameters for StartWizard, required to restore in case of crash.
-  std::string first_screen_name_;
+  OobeScreen first_screen_;
 
   // Called before host deletion.
   base::Closure completion_callback_;

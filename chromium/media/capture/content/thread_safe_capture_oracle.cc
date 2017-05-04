@@ -61,7 +61,7 @@ bool ThreadSafeCaptureOracle::ObserveEventAndDecideCapture(
 
   gfx::Size visible_size;
   gfx::Size coded_size;
-  std::unique_ptr<media::VideoCaptureDevice::Client::Buffer> output_buffer;
+  media::VideoCaptureDevice::Client::Buffer output_buffer;
   double attenuated_utilization;
   int frame_number;
   base::TimeDelta estimated_frame_duration;
@@ -81,6 +81,7 @@ bool ThreadSafeCaptureOracle::ObserveEventAndDecideCapture(
       return false;
     }
 
+    frame_number = oracle_.next_frame_number();
     visible_size = oracle_.capture_size();
     // TODO(miu): Clients should request exact padding, instead of this
     // memory-wasting hack to make frames that are compatible with all HW
@@ -91,8 +92,8 @@ bool ThreadSafeCaptureOracle::ObserveEventAndDecideCapture(
     if (event == VideoCaptureOracle::kPassiveRefreshRequest) {
       output_buffer = client_->ResurrectLastOutputBuffer(
           coded_size, params_.requested_format.pixel_format,
-          params_.requested_format.pixel_storage);
-      if (!output_buffer) {
+          params_.requested_format.pixel_storage, frame_number);
+      if (!output_buffer.is_valid()) {
         TRACE_EVENT_INSTANT0("gpu.capture", "ResurrectionFailed",
                              TRACE_EVENT_SCOPE_THREAD);
         return false;
@@ -100,7 +101,7 @@ bool ThreadSafeCaptureOracle::ObserveEventAndDecideCapture(
     } else {
       output_buffer = client_->ReserveOutputBuffer(
           coded_size, params_.requested_format.pixel_format,
-          params_.requested_format.pixel_storage);
+          params_.requested_format.pixel_storage, frame_number);
     }
 
     // Get the current buffer pool utilization and attenuate it: The utilization
@@ -109,7 +110,7 @@ bool ThreadSafeCaptureOracle::ObserveEventAndDecideCapture(
     attenuated_utilization = client_->GetBufferPoolUtilization() *
                              (100.0 / kTargetMaxPoolUtilizationPercent);
 
-    if (!output_buffer) {
+    if (!output_buffer.is_valid()) {
       TRACE_EVENT_INSTANT2(
           "gpu.capture", "PipelineLimited", TRACE_EVENT_SCOPE_THREAD, "trigger",
           VideoCaptureOracle::EventAsString(event), "atten_util_percent",
@@ -118,7 +119,7 @@ bool ThreadSafeCaptureOracle::ObserveEventAndDecideCapture(
       return false;
     }
 
-    frame_number = oracle_.RecordCapture(attenuated_utilization);
+    oracle_.RecordCapture(attenuated_utilization);
     estimated_frame_duration = oracle_.estimated_frame_duration();
   }  // End of critical section.
 
@@ -130,16 +131,17 @@ bool ThreadSafeCaptureOracle::ObserveEventAndDecideCapture(
         base::saturated_cast<int>(attenuated_utilization * 100.0 + 0.5));
   }
 
-  TRACE_EVENT_ASYNC_BEGIN2("gpu.capture", "Capture", output_buffer.get(),
+  TRACE_EVENT_ASYNC_BEGIN2("gpu.capture", "Capture", output_buffer.id(),
                            "frame_number", frame_number, "trigger",
                            VideoCaptureOracle::EventAsString(event));
 
+  auto output_buffer_access =
+      output_buffer.handle_provider()->GetHandleForInProcessAccess();
   DCHECK_EQ(media::PIXEL_STORAGE_CPU, params_.requested_format.pixel_storage);
   *storage = VideoFrame::WrapExternalSharedMemory(
       params_.requested_format.pixel_format, coded_size,
-      gfx::Rect(visible_size), visible_size,
-      static_cast<uint8_t*>(output_buffer->data()),
-      output_buffer->mapped_size(), base::SharedMemory::NULLHandle(), 0u,
+      gfx::Rect(visible_size), visible_size, output_buffer_access->data(),
+      output_buffer_access->mapped_size(), base::SharedMemory::NULLHandle(), 0u,
       base::TimeDelta());
   // If creating the VideoFrame wrapper failed, call DidCaptureFrame() with
   // !success to execute the required post-capture steps (tracing, notification
@@ -198,55 +200,52 @@ void ThreadSafeCaptureOracle::ReportError(
 
 void ThreadSafeCaptureOracle::DidCaptureFrame(
     int frame_number,
-    std::unique_ptr<VideoCaptureDevice::Client::Buffer> buffer,
+    VideoCaptureDevice::Client::Buffer buffer,
     base::TimeTicks capture_begin_time,
     base::TimeDelta estimated_frame_duration,
     scoped_refptr<VideoFrame> frame,
     base::TimeTicks reference_time,
     bool success) {
-  TRACE_EVENT_ASYNC_END2("gpu.capture", "Capture", buffer.get(), "success",
+  TRACE_EVENT_ASYNC_END2("gpu.capture", "Capture", buffer.id(), "success",
                          success, "timestamp",
                          reference_time.ToInternalValue());
 
   base::AutoLock guard(lock_);
 
-  if (oracle_.CompleteCapture(frame_number, success, &reference_time)) {
-    TRACE_EVENT_INSTANT0("gpu.capture", "CaptureSucceeded",
-                         TRACE_EVENT_SCOPE_THREAD);
+  if (!oracle_.CompleteCapture(frame_number, success, &reference_time))
+    return;
 
-    if (!client_)
-      return;  // Capture is stopped.
+  TRACE_EVENT_INSTANT0("gpu.capture", "CaptureSucceeded",
+                       TRACE_EVENT_SCOPE_THREAD);
 
-    frame->metadata()->SetDouble(VideoFrameMetadata::FRAME_RATE,
-                                 params_.requested_format.frame_rate);
-    frame->metadata()->SetTimeTicks(VideoFrameMetadata::CAPTURE_BEGIN_TIME,
-                                    capture_begin_time);
-    frame->metadata()->SetTimeTicks(VideoFrameMetadata::CAPTURE_END_TIME,
-                                    base::TimeTicks::Now());
-    frame->metadata()->SetTimeDelta(VideoFrameMetadata::FRAME_DURATION,
-                                    estimated_frame_duration);
-    frame->metadata()->SetTimeTicks(VideoFrameMetadata::REFERENCE_TIME,
-                                    reference_time);
+  if (!client_)
+    return;  // Capture is stopped.
 
-    frame->AddDestructionObserver(
-        base::Bind(&ThreadSafeCaptureOracle::DidConsumeFrame, this,
-                   frame_number, frame->metadata()));
+  frame->metadata()->SetDouble(VideoFrameMetadata::FRAME_RATE,
+                               params_.requested_format.frame_rate);
+  frame->metadata()->SetTimeTicks(VideoFrameMetadata::CAPTURE_BEGIN_TIME,
+                                  capture_begin_time);
+  frame->metadata()->SetTimeTicks(VideoFrameMetadata::CAPTURE_END_TIME,
+                                  base::TimeTicks::Now());
+  frame->metadata()->SetTimeDelta(VideoFrameMetadata::FRAME_DURATION,
+                                  estimated_frame_duration);
+  frame->metadata()->SetTimeTicks(VideoFrameMetadata::REFERENCE_TIME,
+                                  reference_time);
 
-    client_->OnIncomingCapturedVideoFrame(std::move(buffer), std::move(frame));
-  }
+  DCHECK(frame->IsMappable());
+  media::VideoCaptureFormat format(frame->coded_size(),
+                                   params_.requested_format.frame_rate,
+                                   frame->format(), media::PIXEL_STORAGE_CPU);
+  client_->OnIncomingCapturedBufferExt(
+      std::move(buffer), format, reference_time, frame->timestamp(),
+      frame->visible_rect(), *frame->metadata());
 }
 
-void ThreadSafeCaptureOracle::DidConsumeFrame(
+void ThreadSafeCaptureOracle::OnConsumerReportingUtilization(
     int frame_number,
-    const media::VideoFrameMetadata* metadata) {
-  // Note: This function may be called on any thread by the VideoFrame
-  // destructor.  |metadata| is still valid for read-access at this point.
-  double utilization = -1.0;
-  if (metadata->GetDouble(media::VideoFrameMetadata::RESOURCE_UTILIZATION,
-                          &utilization)) {
-    base::AutoLock guard(lock_);
-    oracle_.RecordConsumerFeedback(frame_number, utilization);
-  }
+    double utilization) {
+  base::AutoLock guard(lock_);
+  oracle_.RecordConsumerFeedback(frame_number, utilization);
 }
 
 }  // namespace media

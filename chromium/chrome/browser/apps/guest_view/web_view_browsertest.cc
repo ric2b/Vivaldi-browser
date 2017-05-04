@@ -78,27 +78,21 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "ppapi/features/features.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/display/display_switches.h"
-#include "ui/events/event_switches.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/public/browser/plugin_service.h"
 #include "content/public/common/webplugininfo.h"
 #include "content/public/test/ppapi_test_utils.h"
-#endif
-
-#if defined(OS_CHROMEOS)
-#include "ash/common/accessibility_types.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
-#include "chrome/browser/chromeos/accessibility/speech_monitor.h"
 #endif
 
 using extensions::ContextMenuMatcher;
@@ -298,7 +292,12 @@ class SelectControlWaiter : public aura::WindowObserver,
 class LeftMouseClick {
  public:
   explicit LeftMouseClick(content::WebContents* web_contents)
-      : web_contents_(web_contents) {}
+      : web_contents_(web_contents),
+        mouse_event_(blink::WebInputEvent::MouseDown,
+                     blink::WebInputEvent::NoModifiers,
+                     blink::WebInputEvent::TimeStampForTesting) {
+    mouse_event_.button = blink::WebMouseEvent::Button::Left;
+  }
 
   ~LeftMouseClick() {
     DCHECK(click_completed_);
@@ -307,11 +306,9 @@ class LeftMouseClick {
   void Click(const gfx::Point& point, int duration_ms) {
     DCHECK(click_completed_);
     click_completed_ = false;
-    mouse_event_.type = blink::WebInputEvent::MouseDown;
-    mouse_event_.button = blink::WebMouseEvent::Button::Left;
+    mouse_event_.setType(blink::WebInputEvent::MouseDown);
     mouse_event_.x = point.x();
     mouse_event_.y = point.y();
-    mouse_event_.modifiers = 0;
     const gfx::Rect offset = web_contents_->GetContainerBounds();
     mouse_event_.globalX = point.x() + offset.x();
     mouse_event_.globalY = point.y() + offset.y();
@@ -336,7 +333,7 @@ class LeftMouseClick {
 
  private:
   void SendMouseUp() {
-    mouse_event_.type = blink::WebInputEvent::MouseUp;
+    mouse_event_.setType(blink::WebInputEvent::MouseUp);
     web_contents_->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
         mouse_event_);
     click_completed_ = true;
@@ -624,7 +621,7 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
                   TestServer test_server) {
     // For serving guest pages.
     if (test_server == NEEDS_TEST_SERVER) {
-      if (!StartEmbeddedTestServer()) {
+      if (!InitializeEmbeddedTestServer()) {
         LOG(ERROR) << "FAILED TO START TEST SERVER.";
         return;
       }
@@ -642,6 +639,8 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
 
       embedded_test_server()->RegisterRequestHandler(base::Bind(
           &WebViewTestBase::CacheControlResponseHandler, kCacheResponsePath));
+
+      EmbeddedTestServerAcceptConnections();
     }
 
     LoadAndLaunchPlatformApp(app_location.c_str(), "Launched");
@@ -776,14 +775,15 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
   }
 
   void OpenContextMenu(content::WebContents* web_contents) {
-    blink::WebMouseEvent mouse_event;
-    mouse_event.type = blink::WebInputEvent::MouseDown;
+    blink::WebMouseEvent mouse_event(blink::WebInputEvent::MouseDown,
+                                     blink::WebInputEvent::NoModifiers,
+                                     blink::WebInputEvent::TimeStampForTesting);
     mouse_event.button = blink::WebMouseEvent::Button::Right;
     mouse_event.x = 1;
     mouse_event.y = 1;
     web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
         mouse_event);
-    mouse_event.type = blink::WebInputEvent::MouseUp;
+    mouse_event.setType(blink::WebInputEvent::MouseUp);
     web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
         mouse_event);
   }
@@ -1094,7 +1094,8 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, ReloadEmbedder) {
 
   ExtensionTestMessageListener launched_again_listener("WebViewTest.LAUNCHED",
                                                        false);
-  GetEmbedderWebContents()->GetController().Reload(false);
+  GetEmbedderWebContents()->GetController().Reload(content::ReloadType::NORMAL,
+                                                   false);
   ASSERT_TRUE(launched_again_listener.WaitUntilSatisfied());
 }
 
@@ -1479,7 +1480,13 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestNestedCrossOriginSubframes) {
              "web_view/shim", NEEDS_TEST_SERVER);
 }
 
-IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestNestedSubframes) {
+#if defined(OS_MACOSX)
+// Flaky on Mac. See https://crbug.com/674904.
+#define MAYBE_Shim_TestNestedSubframes DISABLED_Shim_TestNestedSubframes
+#else
+#define MAYBE_Shim_TestNestedSubframes Shim_TestNestedSubframes
+#endif
+IN_PROC_BROWSER_TEST_P(WebViewTest, MAYBE_Shim_TestNestedSubframes) {
   TestHelper("testNestedSubframes", "web_view/shim", NO_TEST_SERVER);
 }
 
@@ -2208,30 +2215,6 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, ScreenCoordinates) {
       "platform_apps/web_view/common", "screen_coordinates"))
           << message_;
 }
-
-#if defined(OS_CHROMEOS)
-// Flaky, see http://crbug.com/611736.
-IN_PROC_BROWSER_TEST_P(WebViewTest, DISABLED_ChromeVoxInjection) {
-  EXPECT_FALSE(
-      chromeos::AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
-
-  chromeos::SpeechMonitor monitor;
-  chromeos::AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ash::A11Y_NOTIFICATION_NONE);
-  EXPECT_TRUE(monitor.SkipChromeVoxEnabledMessage());
-
-  ASSERT_TRUE(StartEmbeddedTestServer());
-  content::WebContents* guest_web_contents = LoadGuest(
-      "/extensions/platform_apps/web_view/chromevox_injection/guest.html",
-      "web_view/chromevox_injection");
-  ASSERT_TRUE(guest_web_contents);
-
-  for (;;) {
-    if (monitor.GetNextUtterance() == "chrome vox test title")
-      break;
-  }
-}
-#endif
 
 // Flaky on Windows. http://crbug.com/303966
 #if defined(OS_WIN)
@@ -2987,7 +2970,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, NoContentSettingsAPI) {
   TestHelper("testPostMessageCommChannel", "web_view/shim", NO_TEST_SERVER);
 }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 class WebViewPluginTest : public WebViewTest {
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -3013,7 +2996,7 @@ IN_PROC_BROWSER_TEST_P(WebViewPluginTest, TestLoadPluginInternalResource) {
 
   TestHelper("testPluginLoadInternalResource", "web_view/shim", NO_TEST_SERVER);
 }
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 class WebViewCaptureTest : public WebViewTest {
  public:
@@ -3354,12 +3337,12 @@ IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, DISABLED_TouchAccessibility) {
 
   // Send an accessibility touch event to the main WebContents, but
   // positioned on top of the button inside the inner WebView.
-  blink::WebMouseEvent accessibility_touch_event;
-  accessibility_touch_event.type = blink::WebInputEvent::MouseMove;
+  blink::WebMouseEvent accessibility_touch_event(
+      blink::WebInputEvent::MouseMove,
+      blink::WebInputEvent::IsTouchAccessibility,
+      blink::WebInputEvent::TimeStampForTesting);
   accessibility_touch_event.x = 95;
   accessibility_touch_event.y = 55;
-  accessibility_touch_event.modifiers =
-      blink::WebInputEvent::IsTouchAccessibility;
   web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
       accessibility_touch_event);
 
@@ -3403,8 +3386,9 @@ class WebViewGuestScrollTouchTest : public WebViewGuestScrollTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     WebViewGuestScrollTest::SetUpCommandLine(command_line);
 
-    command_line->AppendSwitchASCII(switches::kTouchEvents,
-                                    switches::kTouchEventsEnabled);
+    command_line->AppendSwitchASCII(
+        switches::kTouchEventFeatureDetection,
+        switches::kTouchEventFeatureDetectionEnabled);
   }
 };
 
@@ -3525,8 +3509,9 @@ class WebViewGuestTouchFocusTest : public WebViewTestBase {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     WebViewTestBase::SetUpCommandLine(command_line);
 
-    command_line->AppendSwitchASCII(switches::kTouchEvents,
-                                    switches::kTouchEventsEnabled);
+    command_line->AppendSwitchASCII(
+        switches::kTouchEventFeatureDetection,
+        switches::kTouchEventFeatureDetectionEnabled);
   }
 
  private:
@@ -3693,8 +3678,9 @@ class WebViewScrollGuestContentTest : public WebViewTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     WebViewTest::SetUpCommandLine(command_line);
 
-    command_line->AppendSwitchASCII(switches::kTouchEvents,
-                                    switches::kTouchEventsEnabled);
+    command_line->AppendSwitchASCII(
+        switches::kTouchEventFeatureDetection,
+        switches::kTouchEventFeatureDetectionEnabled);
   }
 };
 
@@ -3769,8 +3755,9 @@ class WebViewFocusTest : public WebViewTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     WebViewTest::SetUpCommandLine(command_line);
 
-    command_line->AppendSwitchASCII(switches::kTouchEvents,
-                                    switches::kTouchEventsEnabled);
+    command_line->AppendSwitchASCII(
+        switches::kTouchEventFeatureDetection,
+        switches::kTouchEventFeatureDetectionEnabled);
   }
 
   void ForceCompositorFrame() {

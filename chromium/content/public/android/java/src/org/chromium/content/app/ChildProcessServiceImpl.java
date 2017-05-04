@@ -20,6 +20,7 @@ import org.chromium.base.BaseSwitches;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
+import org.chromium.base.UnguessableToken;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.MainDex;
@@ -68,7 +69,7 @@ public class ChildProcessServiceImpl {
     private int mLibraryProcessType;
 
     private static AtomicReference<Context> sContext = new AtomicReference<>(null);
-    private boolean mLibraryInitialized = false;
+    private boolean mLibraryInitialized;
 
     /**
      * If >= 0 enables "validation of caller of {@link mBinder}'s methods". A RemoteException
@@ -361,7 +362,7 @@ public class ChildProcessServiceImpl {
     @SuppressWarnings("unused")
     @CalledByNative
     private void forwardSurfaceTextureForSurfaceRequest(
-            long requestTokenHigh, long requestTokenLow, SurfaceTexture surfaceTexture) {
+            UnguessableToken requestToken, SurfaceTexture surfaceTexture) {
         if (mCallback == null) {
             Log.e(TAG, "No callback interface has been provided.");
             return;
@@ -370,7 +371,7 @@ public class ChildProcessServiceImpl {
         Surface surface = new Surface(surfaceTexture);
 
         try {
-            mCallback.forwardSurfaceForSurfaceRequest(requestTokenHigh, requestTokenLow, surface);
+            mCallback.forwardSurfaceForSurfaceRequest(requestToken, surface);
         } catch (RemoteException e) {
             Log.e(TAG, "Unable to call forwardSurfaceForSurfaceRequest: %s", e);
             return;
@@ -392,55 +393,6 @@ public class ChildProcessServiceImpl {
             return wrapper != null ? wrapper.getSurface() : null;
         } catch (RemoteException e) {
             Log.e(TAG, "Unable to call getViewSurface: %s", e);
-            return null;
-        }
-    }
-
-    @SuppressWarnings("unused")
-    @CalledByNative
-    private void createSurfaceTextureSurface(
-            int surfaceTextureId, int clientId, SurfaceTexture surfaceTexture) {
-        if (mCallback == null) {
-            Log.e(TAG, "No callback interface has been provided.");
-            return;
-        }
-
-        Surface surface = new Surface(surfaceTexture);
-        try {
-            mCallback.registerSurfaceTextureSurface(surfaceTextureId, clientId, surface);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Unable to call registerSurfaceTextureSurface: %s", e);
-        }
-        surface.release();
-    }
-
-    @SuppressWarnings("unused")
-    @CalledByNative
-    private void destroySurfaceTextureSurface(int surfaceTextureId, int clientId) {
-        if (mCallback == null) {
-            Log.e(TAG, "No callback interface has been provided.");
-            return;
-        }
-
-        try {
-            mCallback.unregisterSurfaceTextureSurface(surfaceTextureId, clientId);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Unable to call unregisterSurfaceTextureSurface: %s", e);
-        }
-    }
-
-    @SuppressWarnings("unused")
-    @CalledByNative
-    private Surface getSurfaceTextureSurface(int surfaceTextureId) {
-        if (mCallback == null) {
-            Log.e(TAG, "No callback interface has been provided.");
-            return null;
-        }
-
-        try {
-            return mCallback.getSurfaceTextureSurface(surfaceTextureId).getSurface();
-        } catch (RemoteException e) {
-            Log.e(TAG, "Unable to call getSurfaceTextureSurface: %s", e);
             return null;
         }
     }

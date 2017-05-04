@@ -152,7 +152,8 @@ create_ct_font (CGFontRef cg_font, CGFloat font_size)
    * operating system versions. Except for the emoji font, where _not_
    * reconfiguring the cascade list causes CoreText crashes. For details, see
    * crbug.com/549610 */
-  if (&CTGetCoreTextVersion != NULL && CTGetCoreTextVersion() < kCTVersionNumber10_10) {
+  // 0x00070000 stands for "kCTVersionNumber10_10", see CoreText.h
+  if (&CTGetCoreTextVersion != NULL && CTGetCoreTextVersion() < 0x00070000) {
     CFStringRef fontName = CTFontCopyPostScriptName (ct_font);
     bool isEmojiFont = CFStringCompare (fontName, CFSTR("AppleColorEmoji"), 0) == kCFCompareEqualTo;
     CFRelease (fontName);
@@ -287,7 +288,9 @@ struct hb_coretext_shaper_shape_plan_data_t {};
 hb_coretext_shaper_shape_plan_data_t *
 _hb_coretext_shaper_shape_plan_data_create (hb_shape_plan_t    *shape_plan HB_UNUSED,
 					     const hb_feature_t *user_features HB_UNUSED,
-					     unsigned int        num_user_features HB_UNUSED)
+					     unsigned int        num_user_features HB_UNUSED,
+					     const int          *coords HB_UNUSED,
+					     unsigned int        num_coords HB_UNUSED)
 {
   return (hb_coretext_shaper_shape_plan_data_t *) HB_SHAPER_DATA_SUCCEEDED;
 }
@@ -1279,7 +1282,9 @@ struct hb_coretext_aat_shaper_shape_plan_data_t {};
 hb_coretext_aat_shaper_shape_plan_data_t *
 _hb_coretext_aat_shaper_shape_plan_data_create (hb_shape_plan_t    *shape_plan HB_UNUSED,
 					     const hb_feature_t *user_features HB_UNUSED,
-					     unsigned int        num_user_features HB_UNUSED)
+					     unsigned int        num_user_features HB_UNUSED,
+					     const int          *coords HB_UNUSED,
+					     unsigned int        num_coords HB_UNUSED)
 {
   return (hb_coretext_aat_shaper_shape_plan_data_t *) HB_SHAPER_DATA_SUCCEEDED;
 }

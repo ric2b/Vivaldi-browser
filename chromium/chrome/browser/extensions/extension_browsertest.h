@@ -8,9 +8,9 @@
 #include <string>
 
 #include "base/command_line.h"
-
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/test/scoped_path_override.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/chrome_extension_test_notification_observer.h"
@@ -19,6 +19,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_host.h"
+#include "extensions/browser/extension_protocols.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/feature_switch.h"
@@ -325,7 +326,8 @@ class ExtensionBrowserTest : virtual public InProcessBrowserTest {
   // test_data/extensions.
   base::FilePath test_data_dir_;
 
-  std::unique_ptr<ChromeExtensionTestNotificationObserver> observer_;
+  std::unique_ptr<extensions::ChromeExtensionTestNotificationObserver>
+      observer_;
 
  private:
   // Temporary directory for testing.
@@ -390,6 +392,12 @@ class ExtensionBrowserTest : virtual public InProcessBrowserTest {
 
   // Cache cache implementation.
   std::unique_ptr<extensions::ExtensionCacheFake> test_extension_cache_;
+
+  // An override so that chrome-extensions://<extension_id>/_test_resources/foo
+  // maps to chrome/test/data/extensions/foo.
+  extensions::ExtensionProtocolTestHandler test_protocol_handler_;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionBrowserTest);
 };
 
 #endif  // CHROME_BROWSER_EXTENSIONS_EXTENSION_BROWSERTEST_H_

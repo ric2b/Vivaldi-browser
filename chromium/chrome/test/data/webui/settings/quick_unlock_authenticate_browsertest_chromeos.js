@@ -6,6 +6,7 @@ cr.define('settings_people_page_quick_unlock', function() {
   var element = null;
   var quickUnlockPrivateApi = null;
   var QuickUnlockMode = chrome.quickUnlockPrivate.QuickUnlockMode;
+  var fakeUma = null;
 
   /**
    * Returns if the element is visible.
@@ -61,9 +62,11 @@ cr.define('settings_people_page_quick_unlock', function() {
         PolymerTest.clearBody();
 
         quickUnlockPrivateApi = new settings.FakeQuickUnlockPrivate();
+        fakeUma = new settings.FakeQuickUnlockUma();
 
         element = document.createElement('settings-password-prompt-dialog');
         element.quickUnlockPrivate_ = quickUnlockPrivateApi;
+        element.writeUma_ = fakeUma.recordProgress.bind(fakeUma);
         document.body.appendChild(element);
 
         passwordElement = getFromElement('#passwordInput');
@@ -86,23 +89,29 @@ cr.define('settings_people_page_quick_unlock', function() {
         assertDeepEquals([''], quickUnlockPrivateApi.credentials);
       });
 
-      // A bad password does not provide an authenticated setModes object.
+      // A bad password does not provide an authenticated setModes object, and a
+      // entered password correctly uma should not be recorded.
       test('InvalidPasswordDoesNotProvideAuthentication', function() {
         quickUnlockPrivateApi.accountPassword = 'bar';
 
         passwordElement.value = 'foo';
         element.submitPassword_();
 
+        assertEquals(0, fakeUma.getHistogramValue(
+            LockScreenProgress.ENTER_PASSWORD_CORRECTLY));
         assertFalse(!!element.setModes);
       });
 
-      // A valid password provides an authenticated setModes object.
+      // A valid password provides an authenticated setModes object, and a
+      // entered password correctly uma should be recorded.
       test('ValidPasswordProvidesAuthentication', function() {
         quickUnlockPrivateApi.accountPassword = 'foo';
 
         passwordElement.value = 'foo';
         element.submitPassword_();
 
+        assertEquals(1, fakeUma.getHistogramValue(
+            LockScreenProgress.ENTER_PASSWORD_CORRECTLY));
         assertTrue(!!element.setModes);
       });
 
@@ -198,6 +207,7 @@ cr.define('settings_people_page_quick_unlock', function() {
           value: true
         }];
         fakeSettings = new settings.FakeSettingsPrivate(fakePrefs);
+        fakeUma = new settings.FakeQuickUnlockUma();
         setLockScreenPref(true);
         var prefElement = document.createElement('settings-prefs');
         prefElement.initialize(fakeSettings);
@@ -215,6 +225,7 @@ cr.define('settings_people_page_quick_unlock', function() {
           element.settingsPrivate_ = fakeSettings;
           element.quickUnlockPrivate_ = quickUnlockPrivateApi;
           element.prefs = prefElement.prefs;
+          element.writeUma_ = fakeUma.recordProgress.bind(fakeUma);
 
           document.body.appendChild(element);
           Polymer.dom.flush();
@@ -285,8 +296,11 @@ cr.define('settings_people_page_quick_unlock', function() {
         assertDeepEquals([], quickUnlockPrivateApi.activeModes);
       });
 
-      // Tapping the PIN configure button opens up the setup PIN dialog.
+      // Tapping the PIN configure button opens up the setup PIN dialog, and
+      // records a chose pin or password uma.
       test('TappingConfigureOpensSetupPin', function() {
+        assertEquals(0, fakeUma.getHistogramValue(
+            LockScreenProgress.CHOOSE_PIN_OR_PASSWORD));
         assertRadioButtonActive(passwordRadioButton);
 
         MockInteractions.tap(pinPasswordRadioButton);
@@ -296,6 +310,8 @@ cr.define('settings_people_page_quick_unlock', function() {
         MockInteractions.tap(configureButton);
         var setupPinDialog = getFromElement('#setupPin');
         assertTrue(setupPinDialog.$.dialog.open);
+        assertEquals(1, fakeUma.getHistogramValue(
+            LockScreenProgress.CHOOSE_PIN_OR_PASSWORD));
       });
     });
   }
@@ -317,11 +333,14 @@ cr.define('settings_people_page_quick_unlock', function() {
         PolymerTest.clearBody();
 
         quickUnlockPrivateApi = new settings.FakeQuickUnlockPrivate();
+        fakeUma = new settings.FakeQuickUnlockUma();
 
         // Create setup-pin element.
         element = document.createElement('settings-setup-pin-dialog');
+        element.quickUnlockPrivate_ = quickUnlockPrivateApi;
         element.setModes =
             quickUnlockPrivateApi.setModes.bind(quickUnlockPrivateApi, '');
+        element.writeUma_ = fakeUma.recordProgress.bind(fakeUma);
 
         document.body.appendChild(element);
         Polymer.dom.flush();
@@ -384,13 +403,30 @@ cr.define('settings_people_page_quick_unlock', function() {
         pinKeyboard.value = '11';
 
         assertTrue(isVisible(problemDiv));
-        assertHasClass(problemDiv, 'warning');
+        assertHasClass(problemDiv, 'error');
+        assertTrue(continueButton.disabled);
+      });
+
+      // If the PIN is too long an error problem is shown.
+      test('WarningShownForLongPins', function() {
+        // By default, there is no max length on pins.
+        quickUnlockPrivateApi.credentialRequirements.maxLength = 5;
+
+        // A pin of length five should be valid when max length is five.
+        pinKeyboard.value = '11111';
+        assertFalse(isVisible(problemDiv));
+        assertFalse(continueButton.disabled);
+
+        // A pin of length six should not be valid when max length is five.
+        pinKeyboard.value = '111111';
+        assertTrue(isVisible(problemDiv));
+        assertHasClass(problemDiv, 'error');
         assertTrue(continueButton.disabled);
       });
 
       // If the PIN is weak a warning problem is shown.
       test('WarningShownForWeakPins', function() {
-        pinKeyboard.value = '111111';
+        pinKeyboard.value = '1111';
 
         assertTrue(isVisible(problemDiv));
         assertHasClass(problemDiv, 'warning');
@@ -407,8 +443,9 @@ cr.define('settings_people_page_quick_unlock', function() {
         assertTrue(isVisible(problemDiv));
         assertHasClass(problemDiv, 'warning');
 
-        // Submitting a mistmatched PIN shows an error.
-        MockInteractions.tap(continueButton);
+        // Submitting a mistmatched PIN shows an error. Directly call the button
+        // event since a tap on the disabled button does nothing.
+        element.onPinSubmit_();
         assertHasClass(problemDiv, 'error');
 
         // Changing the PIN changes the error to a warning.
@@ -438,14 +475,24 @@ cr.define('settings_people_page_quick_unlock', function() {
       });
 
       // Completing the flow results in a call to the quick unlock private API.
+      // Check that uma stats are called as expected.
       test('SubmittingPinCallsQuickUnlockApi', function() {
         // Entering the same (even weak) pin twice calls the quick unlock API
         // and sets up a PIN.
+        assertEquals(0, fakeUma.getHistogramValue(
+            LockScreenProgress.ENTER_PIN));
+        assertEquals(0, fakeUma.getHistogramValue(
+            LockScreenProgress.CONFIRM_PIN));
         pinKeyboard.value = '1111';
         MockInteractions.tap(continueButton);
+        assertEquals(1, fakeUma.getHistogramValue(
+            LockScreenProgress.ENTER_PIN));
+
         pinKeyboard.value = '1111';
         MockInteractions.tap(continueButton);
 
+        assertEquals(1, fakeUma.getHistogramValue(
+            LockScreenProgress.CONFIRM_PIN));
         assertDeepEquals(['PIN'], quickUnlockPrivateApi.activeModes);
         assertDeepEquals(['1111'], quickUnlockPrivateApi.credentials);
       });

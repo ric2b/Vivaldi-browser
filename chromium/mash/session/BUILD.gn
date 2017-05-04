@@ -16,8 +16,9 @@ source_set("lib") {
 
   deps = [
     "//base",
-    "//mash/login/public/interfaces",
-    "//mash/session/public/interfaces",
+    "//content/public/common:service_names",
+    "//mash/common",
+    "//mash/quick_launch/public/interfaces:constants",
     "//mojo/common",
     "//mojo/public/cpp/bindings",
     "//services/service_manager/public/cpp",
@@ -25,9 +26,12 @@ source_set("lib") {
   ]
 
   data_deps = [
-    "//ash/mus",
     "//mash/quick_launch",
   ]
+
+  if (is_chromeos) {
+    data_deps += [ "//ash/mus" ]
+  }
 }
 
 service("session") {
@@ -40,7 +44,6 @@ service("session") {
   deps = [
     ":lib",
     "//base",
-    "//mash/session/public/interfaces",
     "//mojo/common",
     "//mojo/public/cpp/bindings",
     "//services/service_manager/public/cpp",

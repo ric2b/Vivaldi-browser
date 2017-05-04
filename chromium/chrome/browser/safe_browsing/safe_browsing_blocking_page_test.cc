@@ -43,12 +43,14 @@
 #include "components/security_interstitials/core/controller_client.h"
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "components/security_state/core/security_state.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/security_style_explanations.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_browser_thread.h"
@@ -57,6 +59,7 @@
 #include "net/cert/mock_cert_verifier.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
+#include "ui/base/l10n/l10n_util.h"
 
 using chrome_browser_interstitials::SecurityInterstitialIDNTest;
 using content::BrowserThread;
@@ -64,6 +67,7 @@ using content::InterstitialPage;
 using content::NavigationController;
 using content::RenderFrameHost;
 using content::WebContents;
+using security_interstitials::SafeBrowsingErrorUI;
 
 namespace safe_browsing {
 
@@ -209,9 +213,9 @@ class TestThreatDetailsFactory : public ThreatDetailsFactory {
   ~TestThreatDetailsFactory() override {}
 
   ThreatDetails* CreateThreatDetails(
-      SafeBrowsingUIManager* delegate,
+      BaseUIManager* delegate,
       WebContents* web_contents,
-      const SafeBrowsingUIManager::UnsafeResource& unsafe_resource) override {
+      const security_interstitials::UnsafeResource& unsafe_resource) override {
     details_ = new ThreatDetails(delegate, web_contents, unsafe_resource);
     return details_;
   }
@@ -225,14 +229,17 @@ class TestThreatDetailsFactory : public ThreatDetailsFactory {
 // A SafeBrowingBlockingPage class that lets us wait until it's hidden.
 class TestSafeBrowsingBlockingPage : public SafeBrowsingBlockingPage {
  public:
-  TestSafeBrowsingBlockingPage(SafeBrowsingUIManager* manager,
-                               WebContents* web_contents,
-                               const GURL& main_frame_url,
-                               const UnsafeResourceList& unsafe_resources)
+  TestSafeBrowsingBlockingPage(
+      BaseUIManager* manager,
+      WebContents* web_contents,
+      const GURL& main_frame_url,
+      const UnsafeResourceList& unsafe_resources,
+      const SafeBrowsingErrorUI::SBErrorDisplayOptions& display_options)
       : SafeBrowsingBlockingPage(manager,
                                  web_contents,
                                  main_frame_url,
-                                 unsafe_resources),
+                                 unsafe_resources,
+                                 display_options),
         wait_for_delete_(false) {
     // Don't wait the whole 3 seconds for the browser test.
     threat_details_proceed_delay_ms_ = 100;
@@ -270,13 +277,27 @@ class TestSafeBrowsingBlockingPageFactory
   ~TestSafeBrowsingBlockingPageFactory() override {}
 
   SafeBrowsingBlockingPage* CreateSafeBrowsingPage(
-      SafeBrowsingUIManager* delegate,
+      BaseUIManager* delegate,
       WebContents* web_contents,
       const GURL& main_frame_url,
       const SafeBrowsingBlockingPage::UnsafeResourceList& unsafe_resources)
       override {
+    PrefService* prefs =
+        Profile::FromBrowserContext(web_contents->GetBrowserContext())
+            ->GetPrefs();
+    bool is_extended_reporting_opt_in_allowed =
+        prefs->GetBoolean(prefs::kSafeBrowsingExtendedReportingOptInAllowed);
+    bool is_proceed_anyway_disabled =
+        prefs->GetBoolean(prefs::kSafeBrowsingProceedAnywayDisabled);
+    SafeBrowsingErrorUI::SBErrorDisplayOptions display_options(
+        BaseBlockingPage::IsMainPageLoadBlocked(unsafe_resources),
+        is_extended_reporting_opt_in_allowed,
+        web_contents->GetBrowserContext()->IsOffTheRecord(),
+        IsExtendedReportingEnabled(*prefs), IsScout(*prefs),
+        is_proceed_anyway_disabled);
     return new TestSafeBrowsingBlockingPage(delegate, web_contents,
-                                            main_frame_url, unsafe_resources);
+                                            main_frame_url, unsafe_resources,
+                                            display_options);
   }
 };
 
@@ -895,16 +916,6 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest, ProceedDisabled) {
             browser()->tab_strip_model()->GetActiveWebContents()->GetURL());
 }
 
-// Verifies that the reporting checkbox is hidden on non-HTTP pages.
-// TODO(mattm): Should also verify that no report is sent, but there isn't a
-// good way to do that in the current design.
-IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest, ReportingDisabled) {
-  SetExtendedReportingPref(browser()->profile()->GetPrefs(), true);
-
-  TestReportingDisabledAndDontProceed(
-      net::URLRequestMockHTTPJob::GetMockHttpsUrl(kEmptyPage));
-}
-
 // Verifies that the reporting checkbox is hidden when opt-in is
 // disabled by policy.
 IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
@@ -915,6 +926,46 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
 
   TestReportingDisabledAndDontProceed(
       net::URLRequestMockHTTPJob::GetMockUrl(kEmptyPage));
+}
+
+// Verifies that the reporting checkbox is still shown if the page is reloaded
+// while the interstitial is showing.
+IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
+                       ReloadWhileInterstitialShowing) {
+  // Start navigation to bad page (kEmptyPage), which will be blocked before it
+  // is committed.
+  const GURL url = SetupWarningAndNavigate();
+
+  // Checkbox should be showing.
+  EXPECT_EQ(VISIBLE, GetVisibility("extended-reporting-opt-in"));
+
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(tab);
+  // Security indicator should be showing.
+  ExpectSecurityIndicatorDowngrade(tab, 0u);
+
+  // Check navigation entry state.
+  const NavigationController& controller = tab->GetController();
+  ASSERT_TRUE(controller.GetVisibleEntry());
+  EXPECT_EQ(url, controller.GetVisibleEntry()->GetURL());
+  ASSERT_TRUE(controller.GetPendingEntry());
+  EXPECT_EQ(url, controller.GetPendingEntry()->GetURL());
+
+  // "Reload" the tab.
+  SetupWarningAndNavigate();
+
+  // Checkbox should be showing.
+  EXPECT_EQ(VISIBLE, GetVisibility("extended-reporting-opt-in"));
+
+  // TODO(crbug.com/666172): Security indicator should be showing.
+  // Call |ExpectSecurityIndicatorDowngrade(tab, 0u);| here once the bug is
+  // fixed.
+
+  // Check navigation entry state.
+  ASSERT_TRUE(controller.GetVisibleEntry());
+  EXPECT_EQ(url, controller.GetVisibleEntry()->GetURL());
+  ASSERT_TRUE(controller.GetPendingEntry());
+  EXPECT_EQ(url, controller.GetPendingEntry()->GetURL());
 }
 
 IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest, LearnMore) {
@@ -1076,21 +1127,27 @@ class SecurityStyleTestObserver : public content::WebContentsObserver {
  public:
   explicit SecurityStyleTestObserver(content::WebContents* web_contents)
       : content::WebContentsObserver(web_contents),
-        latest_security_style_(blink::WebSecurityStyleUnknown) {}
+        latest_security_style_(blink::WebSecurityStyleUnknown),
+        latest_security_style_explanations_() {}
 
   blink::WebSecurityStyle latest_security_style() const {
     return latest_security_style_;
   }
 
+  content::SecurityStyleExplanations latest_security_style_explanations()
+      const {
+    return latest_security_style_explanations_;
+  }
+
   // WebContentsObserver:
-  void SecurityStyleChanged(blink::WebSecurityStyle security_style,
-                            const content::SecurityStyleExplanations&
-                                security_style_explanations) override {
-    latest_security_style_ = security_style;
+  void DidChangeVisibleSecurityState() override {
+    latest_security_style_ = web_contents()->GetDelegate()->GetSecurityStyle(
+        web_contents(), &latest_security_style_explanations_);
   }
 
  private:
   blink::WebSecurityStyle latest_security_style_;
+  content::SecurityStyleExplanations latest_security_style_explanations_;
   DISALLOW_COPY_AND_ASSIGN(SecurityStyleTestObserver);
 };
 
@@ -1109,6 +1166,9 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
   ExpectSecurityIndicatorDowngrade(error_tab, 0u);
   EXPECT_EQ(blink::WebSecurityStyleAuthenticationBroken,
             observer.latest_security_style());
+  // Security style summary for Developer Tools should contain a warning.
+  EXPECT_EQ(l10n_util::GetStringUTF8(IDS_SAFEBROWSING_WARNING),
+            observer.latest_security_style_explanations().summary);
 
   // The security indicator should still be downgraded post-interstitial.
   EXPECT_TRUE(ClickAndWaitForDetach("proceed-link"));
@@ -1226,11 +1286,17 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
 // HTTPS (meaning that the SB state overrides the HTTPS state).
 IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
                        SecurityState_ValidHTTPS) {
-  // The security indicator should be downgraded while the interstitial shows.
-  SetupWarningAndNavigateToValidHTTPS();
   WebContents* error_tab = browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(error_tab);
+  SecurityStyleTestObserver observer(error_tab);
+
+  // The security indicator should be downgraded while the interstitial shows.
+  SetupWarningAndNavigateToValidHTTPS();
   ExpectSecurityIndicatorDowngrade(error_tab, 0u);
+
+  // Security style summary for Developer Tools should contain a warning.
+  EXPECT_EQ(l10n_util::GetStringUTF8(IDS_SAFEBROWSING_WARNING),
+            observer.latest_security_style_explanations().summary);
 
   // The security indicator should still be downgraded post-interstitial.
   EXPECT_TRUE(ClickAndWaitForDetach("proceed-link"));
@@ -1238,6 +1304,10 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
   WebContents* post_tab = browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(post_tab);
   ExpectSecurityIndicatorDowngrade(post_tab, 0u);
+
+  // Security style summary for Developer Tools should still contain a warning.
+  EXPECT_EQ(l10n_util::GetStringUTF8(IDS_SAFEBROWSING_WARNING),
+            observer.latest_security_style_explanations().summary);
 }
 
 // Test that the security indicator is still downgraded after two interstitials
@@ -1276,7 +1346,7 @@ class SafeBrowsingBlockingPageIDNTest
       public testing::WithParamInterface<testing::tuple<bool, SBThreatType>> {
  protected:
   // SecurityInterstitialIDNTest implementation
-  SecurityInterstitialPage* CreateInterstitial(
+  security_interstitials::SecurityInterstitialPage* CreateInterstitial(
       content::WebContents* contents,
       const GURL& request_url) const override {
     SafeBrowsingUIManager::CreateWhitelistForTesting(contents);
@@ -1290,7 +1360,7 @@ class SafeBrowsingBlockingPageIDNTest
     resource.is_subresource = is_subresource;
     resource.threat_type = testing::get<1>(GetParam());
     resource.web_contents_getter =
-        SafeBrowsingUIManager::UnsafeResource::GetWebContentsGetter(
+        security_interstitials::UnsafeResource::GetWebContentsGetter(
             contents->GetRenderProcessHost()->GetID(),
             contents->GetMainFrame()->GetRoutingID());
     resource.threat_source = safe_browsing::ThreatSource::LOCAL_PVER3;

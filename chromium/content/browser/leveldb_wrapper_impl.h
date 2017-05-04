@@ -30,21 +30,36 @@ namespace content {
 // 2) Enforces a max_size constraint.
 // 3) Informs observers when values scoped by prefix are modified.
 // 4) Throttles requests to avoid overwhelming the disk.
-class LevelDBWrapperImpl : public mojom::LevelDBWrapper {
+class CONTENT_EXPORT LevelDBWrapperImpl : public mojom::LevelDBWrapper {
  public:
+  using ValueMap = std::map<std::vector<uint8_t>, std::vector<uint8_t>>;
+  using ValueMapCallback = base::OnceCallback<void(std::unique_ptr<ValueMap>)>;
+
+  class CONTENT_EXPORT Delegate {
+   public:
+    virtual void OnNoBindings() = 0;
+    virtual std::vector<leveldb::mojom::BatchedOperationPtr>
+    PrepareToCommit() = 0;
+    virtual void DidCommit(leveldb::mojom::DatabaseError error) = 0;
+    // Called during loading if no data was found. Needs to call |callback|.
+    virtual void MigrateData(ValueMapCallback callback);
+  };
+
   // |no_bindings_callback| will be called when this object has no more
-  // bindings.
+  // bindings and all pending modifications have been processed.
   LevelDBWrapperImpl(leveldb::mojom::LevelDBDatabase* database,
                      const std::string& prefix,
                      size_t max_size,
                      base::TimeDelta default_commit_delay,
                      int max_bytes_per_hour,
                      int max_commits_per_hour,
-                     const base::Closure& no_bindings_callback);
+                     Delegate* delegate);
   ~LevelDBWrapperImpl() override;
 
   void Bind(mojom::LevelDBWrapperRequest request);
-  void AddObserver(mojom::LevelDBObserverPtr observer);
+
+  bool empty() const { return bytes_used_ == 0; }
+  size_t bytes_used() const { return bytes_used_; }
 
   // Commence aggressive flushing. This should be called early during startup,
   // before any localStorage writing. Currently scheduled writes will not be
@@ -52,11 +67,30 @@ class LevelDBWrapperImpl : public mojom::LevelDBWrapper {
   // aggressive flushing will commence.
   static void EnableAggressiveCommitDelay();
 
- private:
-  using ValueMap = std::map<std::vector<uint8_t>, std::vector<uint8_t>>;
-  using ChangedValueMap =
-      std::map<std::vector<uint8_t>, base::Optional<std::vector<uint8_t>>>;
+  // Commits any uncommitted data to the database as soon as possible. This
+  // usually means data will be committed immediately, but if we're currently
+  // waiting on the result of initializing our map the commit won't happen
+  // until the load has finished.
+  void ScheduleImmediateCommit();
 
+  // LevelDBWrapper:
+  void AddObserver(mojom::LevelDBObserverAssociatedPtrInfo observer) override;
+  void Put(const std::vector<uint8_t>& key,
+           const std::vector<uint8_t>& value,
+           const std::string& source,
+           const PutCallback& callback) override;
+  void Delete(const std::vector<uint8_t>& key,
+              const std::string& source,
+              const DeleteCallback& callback) override;
+  void DeleteAll(const std::string& source,
+                 const DeleteAllCallback& callback) override;
+  void Get(const std::vector<uint8_t>& key,
+           const GetCallback& callback) override;
+  void GetAll(
+      mojom::LevelDBWrapperGetAllCallbackAssociatedPtrInfo complete_callback,
+      const GetAllCallback& callback) override;
+
+ private:
   // Used to rate limit commits.
   class RateLimiter {
    public:
@@ -82,42 +116,28 @@ class LevelDBWrapperImpl : public mojom::LevelDBWrapper {
 
   struct CommitBatch {
     bool clear_all_first;
-    ChangedValueMap changed_values;
+    std::set<std::vector<uint8_t>> changed_keys;
 
     CommitBatch();
     ~CommitBatch();
-    size_t GetDataSize() const;
   };
-
-  // LevelDBWrapperImpl:
-  void Put(const std::vector<uint8_t>& key,
-           const std::vector<uint8_t>& value,
-           const std::string& source,
-           const PutCallback& callback) override;
-  void Delete(const std::vector<uint8_t>& key,
-              const std::string& source,
-              const DeleteCallback& callback) override;
-  void DeleteAll(const std::string& source,
-                 const DeleteAllCallback& callback) override;
-  void Get(const std::vector<uint8_t>& key,
-           const GetCallback& callback) override;
-  void GetAll(const std::string& source,
-              const GetAllCallback& callback) override;
 
   void OnConnectionError();
   void LoadMap(const base::Closure& completion_callback);
-  void OnLoadComplete(leveldb::mojom::DatabaseError status,
-                      std::vector<leveldb::mojom::KeyValuePtr> data);
+  void OnMapLoaded(leveldb::mojom::DatabaseError status,
+                   std::vector<leveldb::mojom::KeyValuePtr> data);
+  void OnGotMigrationData(std::unique_ptr<ValueMap> data);
+  void OnLoadComplete();
   void CreateCommitBatchIfNeeded();
   void StartCommitTimer();
   base::TimeDelta ComputeCommitDelay() const;
   void CommitChanges();
   void OnCommitComplete(leveldb::mojom::DatabaseError error);
 
-  std::string prefix_;
+  std::vector<uint8_t> prefix_;
   mojo::BindingSet<mojom::LevelDBWrapper> bindings_;
-  mojo::InterfacePtrSet<mojom::LevelDBObserver> observers_;
-  base::Closure no_bindings_callback_;
+  mojo::AssociatedInterfacePtrSet<mojom::LevelDBObserver> observers_;
+  Delegate* delegate_;
   leveldb::mojom::LevelDBDatabase* database_;
   std::unique_ptr<ValueMap> map_;
   std::vector<base::Closure> on_load_complete_tasks_;

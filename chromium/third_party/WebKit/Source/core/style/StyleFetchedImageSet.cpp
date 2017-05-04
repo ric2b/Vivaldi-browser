@@ -26,13 +26,13 @@
 #include "core/style/StyleFetchedImageSet.h"
 
 #include "core/css/CSSImageSetValue.h"
-#include "core/fetch/ImageResource.h"
 #include "core/layout/LayoutObject.h"
+#include "core/loader/resource/ImageResourceContent.h"
 #include "core/svg/graphics/SVGImageForContainer.h"
 
 namespace blink {
 
-StyleFetchedImageSet::StyleFetchedImageSet(ImageResource* image,
+StyleFetchedImageSet::StyleFetchedImageSet(ImageResourceContent* image,
                                            float imageScaleFactor,
                                            CSSImageSetValue* value,
                                            const KURL& url)
@@ -41,14 +41,13 @@ StyleFetchedImageSet::StyleFetchedImageSet(ImageResource* image,
       m_imageSetValue(value),
       m_url(url) {
   m_isImageResourceSet = true;
-  m_bestFitImage->addClient(this);
-  ThreadState::current()->registerPreFinalizer(this);
+  m_bestFitImage->addObserver(this);
 }
 
 StyleFetchedImageSet::~StyleFetchedImageSet() {}
 
 void StyleFetchedImageSet::dispose() {
-  m_bestFitImage->removeClient(this);
+  m_bestFitImage->removeObserver(this);
   m_bestFitImage = nullptr;
 }
 
@@ -56,7 +55,7 @@ WrappedImagePtr StyleFetchedImageSet::data() const {
   return m_bestFitImage.get();
 }
 
-ImageResource* StyleFetchedImageSet::cachedImage() const {
+ImageResourceContent* StyleFetchedImageSet::cachedImage() const {
   return m_bestFitImage.get();
 }
 
@@ -139,7 +138,6 @@ DEFINE_TRACE(StyleFetchedImageSet) {
   visitor->trace(m_bestFitImage);
   visitor->trace(m_imageSetValue);
   StyleImage::trace(visitor);
-  ResourceClient::trace(visitor);
 }
 
 }  // namespace blink

@@ -7,9 +7,9 @@ package org.chromium.chrome.browser.preferences.website;
 import android.annotation.TargetApi;
 import android.content.Intent;
 import android.os.Build;
+import android.support.test.filters.MediumTest;
+import android.support.test.filters.SmallTest;
 import android.support.v7.app.AlertDialog;
-import android.test.suitebuilder.annotation.MediumTest;
-import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -64,7 +64,7 @@ public class ManageSpaceActivityTest extends ChromeActivityTestCaseBase<ChromeAc
         return (ManageSpaceActivity) getInstrumentation().startActivitySync(intent);
     }
 
-    public void waitForClearButtonEnabled(final ManageSpaceActivity activity) throws Exception {
+    public void waitForClearButtonEnabled(final ManageSpaceActivity activity) {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
@@ -82,7 +82,7 @@ public class ManageSpaceActivityTest extends ChromeActivityTestCaseBase<ChromeAc
         };
     }
 
-    public void waitForDialogShowing(final ManageSpaceActivity activity) throws Exception {
+    public void waitForDialogShowing(final ManageSpaceActivity activity) {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {

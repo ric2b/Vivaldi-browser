@@ -23,13 +23,8 @@
 #include "net/url_request/url_request.h"
 #include "url/gurl.h"
 
-namespace base {
-class SingleThreadTaskRunner;
-}  // namespace base
-
 namespace net {
 class HttpRequestHeaders;
-class HttpResponseHeaders;
 class SSLCertRequestInfo;
 class SSLInfo;
 class UploadDataStream;
@@ -39,6 +34,7 @@ namespace cronet {
 
 class CronetURLRequestContextAdapter;
 class IOBufferWithByteBuffer;
+class TestUtil;
 
 bool CronetUrlRequestAdapterRegisterJni(JNIEnv* env);
 
@@ -122,9 +118,9 @@ class CronetURLRequestAdapter : public net::URLRequest::Delegate {
   void OnResponseStarted(net::URLRequest* request, int net_error) override;
   void OnReadCompleted(net::URLRequest* request, int bytes_read) override;
 
-  net::URLRequest* GetURLRequestForTesting();
-
  private:
+  friend class TestUtil;
+
   void StartOnNetworkThread();
   void GetStatusOnNetworkThread(
       const base::android::ScopedJavaGlobalRef<jobject>& jstatus_listener_ref)

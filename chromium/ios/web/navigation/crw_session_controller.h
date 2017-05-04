@@ -17,14 +17,14 @@
 namespace web {
 class NavigationManagerImpl;
 struct Referrer;
-struct SSLStatus;
 }
 
 // A CRWSessionController is similar to a NavigationController object in desktop
 // Chrome. It maintains information needed to save/restore a tab with its
 // complete session history. There is one of these for each tab.
-// TODO(stuartmorgan): Move under NavigationManager, and consider merging into
-// NavigationManager.
+// DEPRECATED, do not use this class and do not add any methods to it.
+// Use web::NavigationManager instead.
+// TODO(crbug.com/454984): Remove this class.
 @interface CRWSessionController : NSObject<NSCoding, NSCopying>
 
 @property(nonatomic, readonly, copy) NSString* tabId;
@@ -109,16 +109,6 @@ struct SSLStatus;
 // this controller.
 - (void)insertStateFromSessionController:(CRWSessionController*)otherController;
 
-// Copies history state from the given CRWSessionController and adds it to this
-// controller. If |replaceState|, replaces the state of this controller with
-// the state of |otherSession|, instead of appending.
-// DEPRECATED, use insertStateFromSessionController: instead.
-// TODO(crbug.com/664344): Remove this method.
-- (void)copyStateFromAndPrune:(CRWSessionController*)otherSession
-                 replaceState:(BOOL)replaceState;
-
-// Returns YES if there are entries to go with given delta.
-- (BOOL)canGoDelta:(int)delta;
 // Sets |currentNavigationIndex_| to the |index| if it's in the entries bounds.
 - (void)goToEntryAtIndex:(NSInteger)index;
 
@@ -135,9 +125,6 @@ struct SSLStatus;
 // whose index in |entries_| is greater than |currentNavigationIndex_|.
 - (NSArray*)forwardEntries;
 
-// Returns the URLs in the entries that are redirected to the current entry.
-- (std::vector<GURL>)currentRedirectedUrls;
-
 // Determines whether a navigation between |firstEntry| and |secondEntry| is a
 // same-document navigation.  Entries can be passed in any order.
 - (BOOL)isSameDocumentNavigationBetweenEntry:(CRWSessionEntry*)firstEntry
@@ -150,11 +137,6 @@ struct SSLStatus;
 // Set |useDesktopUserAgentForNextPendingEntry_| to YES if there is no pending
 // entry, otherwise set |useDesktopUserAgent| in the pending entry.
 - (void)useDesktopUserAgentForNextPendingEntry;
-
-// Returns the navigation index that differs from the current entry by the
-// specified |delta|, skipping redirect navigation items. The index returned is
-// not guaranteed to be valid.
-- (NSInteger)indexOfEntryForDelta:(int)delta;
 
 @end
 

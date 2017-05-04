@@ -22,12 +22,12 @@
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
-#include "components/offline_pages/background/request_coordinator.h"
-#include "components/offline_pages/client_namespace_constants.h"
-#include "components/offline_pages/client_policy_controller.h"
-#include "components/offline_pages/downloads/download_ui_item.h"
-#include "components/offline_pages/offline_page_feature.h"
-#include "components/offline_pages/offline_page_model.h"
+#include "components/offline_pages/core/background/request_coordinator.h"
+#include "components/offline_pages/core/client_namespace_constants.h"
+#include "components/offline_pages/core/client_policy_controller.h"
+#include "components/offline_pages/core/downloads/download_ui_item.h"
+#include "components/offline_pages/core/offline_page_feature.h"
+#include "components/offline_pages/core/offline_page_model.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/OfflinePageDownloadBridge_jni.h"
@@ -84,9 +84,13 @@ void SavePageIfNotNavigatedAway(const GURL& original_url,
     offline_pages::RequestCoordinator* request_coordinator =
         offline_pages::RequestCoordinatorFactory::GetForBrowserContext(
             web_contents->GetBrowserContext());
-    request_id = request_coordinator->SavePageLater(
-        url, client_id, true,
-        RequestCoordinator::RequestAvailability::DISABLED_FOR_OFFLINER);
+    if (request_coordinator) {
+      request_id = request_coordinator->SavePageLater(
+          url, client_id, true,
+          RequestCoordinator::RequestAvailability::DISABLED_FOR_OFFLINER);
+    } else {
+      DVLOG(1) << "SavePageIfNotNavigatedAway has no valid coordinator.";
+    }
   }
 
   // Pass request_id to the current tab's helper to attempt download right from
@@ -100,7 +104,10 @@ void SavePageIfNotNavigatedAway(const GURL& original_url,
       offline_pages::RequestCoordinator* request_coordinator =
           offline_pages::RequestCoordinatorFactory::GetForBrowserContext(
               web_contents->GetBrowserContext());
-      request_coordinator->EnableForOffliner(request_id, client_id);
+      if (request_coordinator)
+        request_coordinator->EnableForOffliner(request_id, client_id);
+      else
+        DVLOG(1) << "SavePageIfNotNavigatedAway has no valid coordinator.";
     }
     return;
   }

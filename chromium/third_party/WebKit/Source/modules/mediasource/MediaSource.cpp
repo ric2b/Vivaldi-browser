@@ -32,7 +32,6 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/events/Event.h"
 #include "core/events/GenericEventQueue.h"
@@ -43,10 +42,10 @@
 #include "core/html/track/VideoTrackList.h"
 #include "modules/mediasource/MediaSourceRegistry.h"
 #include "modules/mediasource/SourceBufferTrackBaseSupplement.h"
-#include "platform/ContentType.h"
-#include "platform/MIMETypeRegistry.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/network/mime/ContentType.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 #include "public/platform/WebMediaSource.h"
 #include "public/platform/WebSourceBuffer.h"
 #include "wtf/PtrUtil.h"
@@ -107,14 +106,11 @@ const AtomicString& MediaSource::endedKeyword() {
 }
 
 MediaSource* MediaSource::create(ExecutionContext* context) {
-  MediaSource* mediaSource = new MediaSource(context);
-  mediaSource->suspendIfNeeded();
-  return mediaSource;
+  return new MediaSource(context);
 }
 
 MediaSource::MediaSource(ExecutionContext* context)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : ContextLifecycleObserver(context),
       m_readyState(closedKeyword()),
       m_asyncEventQueue(GenericEventQueue::create(this)),
       m_attachedElement(nullptr),
@@ -133,7 +129,7 @@ MediaSource::~MediaSource() {
 }
 
 void MediaSource::logAndThrowDOMException(ExceptionState& exceptionState,
-                                          const ExceptionCode& error,
+                                          ExceptionCode error,
                                           const String& message) {
   BLINK_MSLOG << __func__ << " (error=" << error << ", message=" << message
               << ")";
@@ -324,7 +320,7 @@ const AtomicString& MediaSource::interfaceName() const {
 }
 
 ExecutionContext* MediaSource::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return ContextLifecycleObserver::getExecutionContext();
 }
 
 DEFINE_TRACE(MediaSource) {
@@ -334,7 +330,7 @@ DEFINE_TRACE(MediaSource) {
   visitor->trace(m_activeSourceBuffers);
   visitor->trace(m_liveSeekableRange);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 void MediaSource::setWebMediaSourceAndOpen(
@@ -469,7 +465,7 @@ TimeRanges* MediaSource::seekable() const {
 }
 
 void MediaSource::onTrackChanged(TrackBase* track) {
-  DCHECK(RuntimeEnabledFeatures::audioVideoTracksEnabled());
+  DCHECK(HTMLMediaElement::mediaTracksEnabledInternally());
   SourceBuffer* sourceBuffer =
       SourceBufferTrackBaseSupplement::sourceBuffer(*track);
   if (!sourceBuffer)
@@ -768,7 +764,7 @@ bool MediaSource::hasPendingActivity() const {
          m_asyncEventQueue->hasPendingEvents() || m_addedToRegistryCounter > 0;
 }
 
-void MediaSource::contextDestroyed() {
+void MediaSource::contextDestroyed(ExecutionContext*) {
   m_asyncEventQueue->close();
   if (!isClosed())
     setReadyState(closedKeyword());
@@ -783,7 +779,7 @@ std::unique_ptr<WebSourceBuffer> MediaSource::createWebSourceBuffer(
 
   switch (m_webMediaSource->addSourceBuffer(type, codecs, &webSourceBuffer)) {
     case WebMediaSource::AddStatusOk:
-      return wrapUnique(webSourceBuffer);
+      return WTF::wrapUnique(webSourceBuffer);
     case WebMediaSource::AddStatusNotSupported:
       DCHECK(!webSourceBuffer);
       // 2.2

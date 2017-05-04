@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -268,7 +269,10 @@ bool BlinkTestController::PrepareForLayoutTest(
   current_working_directory_ = current_working_directory;
   enable_pixel_dumping_ = enable_pixel_dumping;
   expected_pixel_hash_ = expected_pixel_hash;
-  test_url_ = test_url;
+  if (test_url.spec().find("/inspector-unit/") == std::string::npos)
+    test_url_ = test_url;
+  else
+    test_url_ = LayoutTestDevToolsFrontend::MapJSTestURL(test_url);
   did_send_initial_test_configuration_ = false;
   printer_->reset();
   frame_to_layout_dump_map_.clear();
@@ -279,10 +283,10 @@ bool BlinkTestController::PrepareForLayoutTest(
   ShellBrowserContext* browser_context =
       ShellContentBrowserClient::Get()->browser_context();
   is_compositing_test_ =
-      test_url.spec().find("compositing/") != std::string::npos;
+      test_url_.spec().find("compositing/") != std::string::npos;
   initial_size_ = Shell::GetShellDefaultSize();
   // The W3C SVG layout tests use a different size than the other layout tests.
-  if (test_url.spec().find("W3C-SVG-1.1") != std::string::npos)
+  if (test_url_.spec().find("W3C-SVG-1.1") != std::string::npos)
     initial_size_ = gfx::Size(kTestSVGWindowWidthDip, kTestSVGWindowHeightDip);
   if (!main_window_) {
     main_window_ = content::Shell::CreateNewWindow(
@@ -294,7 +298,7 @@ bool BlinkTestController::PrepareForLayoutTest(
     current_pid_ = base::kNullProcessId;
     default_prefs_ =
       main_window_->web_contents()->GetRenderViewHost()->GetWebkitPreferences();
-    main_window_->LoadURL(test_url);
+    main_window_->LoadURL(test_url_);
   } else {
 #if defined(OS_MACOSX)
     // Shell::SizeTo is not implemented on all platforms.
@@ -320,7 +324,7 @@ bool BlinkTestController::PrepareForLayoutTest(
     render_view_host->UpdateWebkitPreferences(default_prefs_);
     HandleNewRenderFrameHost(render_view_host->GetMainFrame());
 
-    NavigationController::LoadURLParams params(test_url);
+    NavigationController::LoadURLParams params(test_url_);
     params.transition_type = ui::PageTransitionFromInt(
         ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
     params.should_clear_history_list = true;
@@ -826,20 +830,18 @@ void BlinkTestController::OnCaptureSessionHistory() {
   std::vector<std::vector<PageState> > session_histories;
   std::vector<unsigned> current_entry_indexes;
 
-  RenderViewHost* render_view_host =
-      main_window_->web_contents()->GetRenderViewHost();
+  RenderFrameHost* render_frame_host =
+      main_window_->web_contents()->GetMainFrame();
 
-  for (std::vector<Shell*>::iterator window = Shell::windows().begin();
-       window != Shell::windows().end();
-       ++window) {
-    WebContents* web_contents = (*window)->web_contents();
+  for (auto* window : Shell::windows()) {
+    WebContents* web_contents = window->web_contents();
     // Only capture the history from windows in the same process as the main
     // window. During layout tests, we only use two processes when an
     // devtools window is open.
-    if (render_view_host->GetProcess() !=
-        web_contents->GetRenderViewHost()->GetProcess()) {
+    auto* process = web_contents->GetMainFrame()->GetProcess();
+    if (render_frame_host->GetProcess() != process)
       continue;
-    }
+
     routing_ids.push_back(web_contents->GetRenderViewHost()->GetRoutingID());
     current_entry_indexes.push_back(
         web_contents->GetController().GetCurrentEntryIndex());
@@ -857,6 +859,8 @@ void BlinkTestController::OnCaptureSessionHistory() {
     session_histories.push_back(history);
   }
 
+  RenderViewHost* render_view_host =
+      main_window_->web_contents()->GetRenderViewHost();
   Send(new ShellViewMsg_SessionHistory(render_view_host->GetRoutingID(),
                                        routing_ids,
                                        session_histories,
@@ -921,7 +925,7 @@ void BlinkTestController::OnGetBluetoothManualChooserEvents() {
     return;
   }
   Send(new ShellViewMsg_ReplyBluetoothManualChooserEvents(
-      main_window_->web_contents()->GetRoutingID(),
+      main_window_->web_contents()->GetRenderViewHost()->GetRoutingID(),
       bluetooth_chooser_factory_->GetAndResetEvents()));
 }
 

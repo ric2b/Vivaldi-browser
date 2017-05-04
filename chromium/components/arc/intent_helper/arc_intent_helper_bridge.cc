@@ -6,14 +6,15 @@
 
 #include <utility>
 
+#include "ash/common/new_window_controller.h"
 #include "ash/common/shell_delegate.h"
 #include "ash/common/wallpaper/wallpaper_controller.h"
 #include "ash/common/wm_shell.h"
-#include "ash/public/interfaces/new_window.mojom.h"
 #include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/memory/weak_ptr.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_service_manager.h"
 #include "components/arc/intent_helper/activity_icon_loader.h"
 #include "components/arc/intent_helper/link_handler_model_impl.h"
 #include "components/arc/intent_helper/local_activity_resolver.h"
@@ -21,6 +22,10 @@
 #include "url/gurl.h"
 
 namespace arc {
+
+// static
+const char ArcIntentHelperBridge::kArcServiceName[] =
+    "arc::ArcIntentHelperBridge";
 
 // static
 const char ArcIntentHelperBridge::kArcIntentHelperPackageName[] =
@@ -47,7 +52,7 @@ void ArcIntentHelperBridge::OnInstanceReady() {
   DCHECK(thread_checker_.CalledOnValidThread());
   ash::Shell::GetInstance()->set_link_handler_model_factory(this);
   auto* instance =
-      arc_bridge_service()->intent_helper()->GetInstanceForMethod("Init");
+      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service()->intent_helper(), Init);
   DCHECK(instance);
   instance->Init(binding_.CreateInterfacePtrAndBind());
 }
@@ -68,7 +73,7 @@ void ArcIntentHelperBridge::OnOpenDownloads() {
   // downloads by default, which is what we want.  However if it is open it will
   // simply be brought to the forgeground without forcibly being navigated to
   // downloads, which is probably not ideal.
-  ash::WmShell::Get()->new_window_client()->OpenFileManager();
+  ash::WmShell::Get()->new_window_controller()->OpenFileManager();
 }
 
 void ArcIntentHelperBridge::OnOpenUrl(const std::string& url) {
@@ -85,6 +90,14 @@ void ArcIntentHelperBridge::SetWallpaperDeprecated(
     const std::vector<uint8_t>& jpeg_data) {
   DCHECK(thread_checker_.CalledOnValidThread());
   LOG(ERROR) << "IntentHelper.SetWallpaper is deprecated";
+}
+
+void ArcIntentHelperBridge::AddObserver(ArcIntentHelperObserver* observer) {
+  observer_list_.AddObserver(observer);
+}
+
+void ArcIntentHelperBridge::RemoveObserver(ArcIntentHelperObserver* observer) {
+  observer_list_.RemoveObserver(observer);
 }
 
 std::unique_ptr<ash::LinkHandlerModel> ArcIntentHelperBridge::CreateModel(
@@ -117,14 +130,12 @@ ArcIntentHelperBridge::FilterOutIntentHelper(
 }
 
 // static
-mojom::IntentHelperInstance*
-ArcIntentHelperBridge::GetIntentHelperInstanceWithErrorCode(
-    const std::string& method_name_for_logging,
-    uint32_t min_instance_version,
-    GetResult* out_error_code) {
-  ArcBridgeService* bridge_service = ArcBridgeService::Get();
-  if (!bridge_service) {
-    if (!ArcBridgeService::GetEnabled(base::CommandLine::ForCurrentProcess())) {
+bool ArcIntentHelperBridge::IsIntentHelperAvailable(GetResult* out_error_code) {
+  auto* arc_service_manager = ArcServiceManager::Get();
+  if (!arc_service_manager) {
+    if (!ArcBridgeService::GetEnabled(base::CommandLine::ForCurrentProcess()) &&
+        !ArcBridgeService::GetKioskStarted(
+            base::CommandLine::ForCurrentProcess())) {
       VLOG(2) << "ARC bridge is not supported.";
       if (out_error_code)
         *out_error_code = GetResult::FAILED_ARC_NOT_SUPPORTED;
@@ -133,38 +144,28 @@ ArcIntentHelperBridge::GetIntentHelperInstanceWithErrorCode(
       if (out_error_code)
         *out_error_code = GetResult::FAILED_ARC_NOT_READY;
     }
-    return nullptr;
+    return false;
   }
 
-  if (!bridge_service->intent_helper()->has_instance()) {
+  auto* intent_helper_holder =
+      arc_service_manager->arc_bridge_service()->intent_helper();
+  if (!intent_helper_holder->has_instance()) {
     VLOG(2) << "ARC intent helper instance is not ready.";
     if (out_error_code)
       *out_error_code = GetResult::FAILED_ARC_NOT_READY;
-    return nullptr;
+    return false;
   }
 
-  auto* instance = bridge_service->intent_helper()->GetInstanceForMethod(
-      method_name_for_logging, min_instance_version);
-  if (!instance) {
-    if (out_error_code)
-      *out_error_code = GetResult::FAILED_ARC_NOT_SUPPORTED;
-    return nullptr;
-  }
-  return instance;
-}
-
-// static
-mojom::IntentHelperInstance* ArcIntentHelperBridge::GetIntentHelperInstance(
-    const std::string& method_name_for_logging,
-    uint32_t min_instance_version) {
-  return GetIntentHelperInstanceWithErrorCode(method_name_for_logging,
-                                              min_instance_version, nullptr);
+  return true;
 }
 
 void ArcIntentHelperBridge::OnIntentFiltersUpdated(
-    std::vector<mojom::IntentFilterPtr> filters) {
+    std::vector<IntentFilter> filters) {
   DCHECK(thread_checker_.CalledOnValidThread());
   activity_resolver_->UpdateIntentFilters(std::move(filters));
+
+  for (auto& observer : observer_list_)
+    observer.OnIntentFiltersUpdated();
 }
 
 }  // namespace arc

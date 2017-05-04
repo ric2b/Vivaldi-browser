@@ -411,6 +411,7 @@ class VIEWS_EXPORT HWNDMessageHandler :
     CR_MSG_WM_MOVE(OnMove)
     CR_MSG_WM_MOVING(OnMoving)
     CR_MSG_WM_NCCALCSIZE(OnNCCalcSize)
+    CR_MSG_WM_NCCREATE(OnNCCreate)
     CR_MSG_WM_NCHITTEST(OnNCHitTest)
     CR_MSG_WM_NCPAINT(OnNCPaint)
     CR_MSG_WM_NOTIFY(OnNotify)
@@ -422,6 +423,7 @@ class VIEWS_EXPORT HWNDMessageHandler :
     CR_MSG_WM_SIZE(OnSize)
     CR_MSG_WM_SYSCOMMAND(OnSysCommand)
     CR_MSG_WM_THEMECHANGED(OnThemeChanged)
+    CR_MSG_WM_TIMECHANGE(OnTimeChange)
     CR_MSG_WM_WINDOWPOSCHANGED(OnWindowPosChanged)
     CR_MSG_WM_WINDOWPOSCHANGING(OnWindowPosChanging)
   CR_END_MSG_MAP()
@@ -462,6 +464,7 @@ class VIEWS_EXPORT HWNDMessageHandler :
   void OnMoving(UINT param, const RECT* new_bounds);
   LRESULT OnNCActivate(UINT message, WPARAM w_param, LPARAM l_param);
   LRESULT OnNCCalcSize(BOOL mode, LPARAM l_param);
+  LRESULT OnNCCreate(LPCREATESTRUCT lpCreateStruct);
   LRESULT OnNCHitTest(const gfx::Point& point);
   void OnNCPaint(HRGN rgn);
   LRESULT OnNCUAHDrawCaption(UINT message, WPARAM w_param, LPARAM l_param);
@@ -478,6 +481,7 @@ class VIEWS_EXPORT HWNDMessageHandler :
   void OnSize(UINT param, const gfx::Size& size);
   void OnSysCommand(UINT notification_code, const gfx::Point& point);
   void OnThemeChanged();
+  void OnTimeChange();
   LRESULT OnTouchEvent(UINT message, WPARAM w_param, LPARAM l_param);
   void OnWindowPosChanging(WINDOWPOS* window_pos);
   void OnWindowPosChanged(WINDOWPOS* window_pos);
@@ -576,6 +580,13 @@ class VIEWS_EXPORT HWNDMessageHandler :
 
   // The current DPI.
   int dpi_;
+
+  // Whether EnableNonClientDpiScaling was called successfully with this window.
+  // This flag exists because EnableNonClientDpiScaling must be called during
+  // WM_NCCREATE and EnableChildWindowDpiMessage is called after window
+  // creation. We don't want to call both, so this helps us determine if a call
+  // to EnableChildWindowDpiMessage is necessary.
+  bool called_enable_non_client_dpi_scaling_;
 
   // Event handling ------------------------------------------------------------
 

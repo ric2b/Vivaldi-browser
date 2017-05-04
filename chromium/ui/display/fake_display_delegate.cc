@@ -4,8 +4,6 @@
 
 #include "ui/display/fake_display_delegate.h"
 
-#include <inttypes.h>
-
 #include <string>
 #include <utility>
 
@@ -15,8 +13,10 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
+#include "base/time/time.h"
 #include "ui/display/display.h"
 #include "ui/display/display_switches.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/display/types/native_display_observer.h"
 #include "ui/display/util/display_util.h"
 
@@ -30,6 +30,9 @@ const uint16_t kReservedManufacturerID = 1 << 15;
 // A random product name hash.
 const uint32_t kProductCodeHash = base::Hash("Very Generic Display");
 
+// Delay for Configure() in milliseconds.
+constexpr int64_t kConfigureDisplayDelayMs = 200;
+
 }  // namespace
 
 FakeDisplayDelegate::FakeDisplayDelegate() {}
@@ -41,7 +44,7 @@ int64_t FakeDisplayDelegate::AddDisplay(const gfx::Size& display_size) {
 
   if (next_display_id_ == 0xFF) {
     LOG(ERROR) << "Exceeded display id limit";
-    return Display::kInvalidDisplayID;
+    return kInvalidDisplayId;
   }
 
   int64_t id = GenerateDisplayID(kReservedManufacturerID, kProductCodeHash,
@@ -49,13 +52,11 @@ int64_t FakeDisplayDelegate::AddDisplay(const gfx::Size& display_size) {
 
   FakeDisplaySnapshot::Builder builder;
   builder.SetId(id).SetNativeMode(display_size);
-  builder.SetName(base::StringPrintf("Fake Display %" PRId64, id));
 
-  return AddDisplay(builder.Build()) ? id : Display::kInvalidDisplayID;
+  return AddDisplay(builder.Build()) ? id : kInvalidDisplayId;
 }
 
-bool FakeDisplayDelegate::AddDisplay(
-    std::unique_ptr<ui::DisplaySnapshot> display) {
+bool FakeDisplayDelegate::AddDisplay(std::unique_ptr<DisplaySnapshot> display) {
   DCHECK(display);
 
   int64_t display_id = display->display_id();
@@ -112,12 +113,12 @@ void FakeDisplayDelegate::GrabServer() {}
 void FakeDisplayDelegate::UngrabServer() {}
 
 void FakeDisplayDelegate::TakeDisplayControl(
-    const ui::DisplayControlCallback& callback) {
+    const DisplayControlCallback& callback) {
   callback.Run(false);
 }
 
 void FakeDisplayDelegate::RelinquishDisplayControl(
-    const ui::DisplayControlCallback& callback) {
+    const DisplayControlCallback& callback) {
   callback.Run(false);
 }
 
@@ -127,76 +128,90 @@ void FakeDisplayDelegate::SetBackgroundColor(uint32_t color_argb) {}
 
 void FakeDisplayDelegate::ForceDPMSOn() {}
 
-void FakeDisplayDelegate::GetDisplays(const ui::GetDisplaysCallback& callback) {
-  std::vector<ui::DisplaySnapshot*> displays;
+void FakeDisplayDelegate::GetDisplays(const GetDisplaysCallback& callback) {
+  std::vector<DisplaySnapshot*> displays;
   for (auto& display : displays_)
     displays.push_back(display.get());
   callback.Run(displays);
 }
 
-void FakeDisplayDelegate::AddMode(const ui::DisplaySnapshot& output,
-                                  const ui::DisplayMode* mode) {}
+void FakeDisplayDelegate::AddMode(const DisplaySnapshot& output,
+                                  const DisplayMode* mode) {}
 
-void FakeDisplayDelegate::Configure(const ui::DisplaySnapshot& output,
-                                    const ui::DisplayMode* mode,
+void FakeDisplayDelegate::Configure(const DisplaySnapshot& output,
+                                    const DisplayMode* mode,
                                     const gfx::Point& origin,
-                                    const ui::ConfigureCallback& callback) {
-  // Check the display mode is appropriate for the display snapshot.
-  for (const auto& existing_mode : output.modes()) {
-    if (existing_mode.get() == mode) {
-      callback.Run(true);
-      return;
+                                    const ConfigureCallback& callback) {
+  bool configure_success = false;
+
+  if (!mode) {
+    // This is a request to turn off the display.
+    configure_success = true;
+  } else {
+    // Check that |mode| is appropriate for the display snapshot.
+    for (const auto& existing_mode : output.modes()) {
+      if (existing_mode.get() == mode) {
+        configure_success = true;
+        break;
+      }
     }
   }
 
-  callback.Run(false);
+  configure_callbacks_.push(base::Bind(callback, configure_success));
+
+  // Start the timer if it's not already running. If there are multiple queued
+  // configuration requests then ConfigureDone() will handle starting the
+  // next request.
+  if (!configure_timer_.IsRunning()) {
+    configure_timer_.Start(
+        FROM_HERE, base::TimeDelta::FromMilliseconds(kConfigureDisplayDelayMs),
+        this, &FakeDisplayDelegate::ConfigureDone);
+  }
 }
 
 void FakeDisplayDelegate::CreateFrameBuffer(const gfx::Size& size) {}
 
-void FakeDisplayDelegate::GetHDCPState(
-    const ui::DisplaySnapshot& output,
-    const ui::GetHDCPStateCallback& callback) {
-  callback.Run(false, ui::HDCP_STATE_UNDESIRED);
+void FakeDisplayDelegate::GetHDCPState(const DisplaySnapshot& output,
+                                       const GetHDCPStateCallback& callback) {
+  callback.Run(false, HDCP_STATE_UNDESIRED);
 }
 
-void FakeDisplayDelegate::SetHDCPState(
-    const ui::DisplaySnapshot& output,
-    ui::HDCPState state,
-    const ui::SetHDCPStateCallback& callback) {
+void FakeDisplayDelegate::SetHDCPState(const DisplaySnapshot& output,
+                                       HDCPState state,
+                                       const SetHDCPStateCallback& callback) {
   callback.Run(false);
 }
 
-std::vector<ui::ColorCalibrationProfile>
+std::vector<ColorCalibrationProfile>
 FakeDisplayDelegate::GetAvailableColorCalibrationProfiles(
-    const ui::DisplaySnapshot& output) {
-  return std::vector<ui::ColorCalibrationProfile>();
+    const DisplaySnapshot& output) {
+  return std::vector<ColorCalibrationProfile>();
 }
 
 bool FakeDisplayDelegate::SetColorCalibrationProfile(
-    const ui::DisplaySnapshot& output,
-    ui::ColorCalibrationProfile new_profile) {
+    const DisplaySnapshot& output,
+    ColorCalibrationProfile new_profile) {
   return false;
 }
 
 bool FakeDisplayDelegate::SetColorCorrection(
-    const ui::DisplaySnapshot& output,
-    const std::vector<ui::GammaRampRGBEntry>& degamma_lut,
-    const std::vector<ui::GammaRampRGBEntry>& gamma_lut,
+    const DisplaySnapshot& output,
+    const std::vector<GammaRampRGBEntry>& degamma_lut,
+    const std::vector<GammaRampRGBEntry>& gamma_lut,
     const std::vector<float>& correction_matrix) {
   return false;
 }
 
-void FakeDisplayDelegate::AddObserver(ui::NativeDisplayObserver* observer) {
+void FakeDisplayDelegate::AddObserver(NativeDisplayObserver* observer) {
   observers_.AddObserver(observer);
 }
 
-void FakeDisplayDelegate::RemoveObserver(ui::NativeDisplayObserver* observer) {
+void FakeDisplayDelegate::RemoveObserver(NativeDisplayObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
 FakeDisplayController* FakeDisplayDelegate::GetFakeDisplayController() {
-  return static_cast<FakeDisplayController*>(this);
+  return this;
 }
 
 bool FakeDisplayDelegate::InitializeFromSpecString(const std::string& str) {
@@ -209,7 +224,7 @@ bool FakeDisplayDelegate::InitializeFromSpecString(const std::string& str) {
            str, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
     int64_t id = GenerateDisplayID(kReservedManufacturerID, kProductCodeHash,
                                    next_display_id_);
-    std::unique_ptr<ui::DisplaySnapshot> snapshot =
+    std::unique_ptr<DisplaySnapshot> snapshot =
         FakeDisplaySnapshot::CreateFromSpec(id, part);
     if (snapshot) {
       AddDisplay(std::move(snapshot));
@@ -227,8 +242,21 @@ void FakeDisplayDelegate::OnConfigurationChanged() {
   if (!initialized_)
     return;
 
-  for (ui::NativeDisplayObserver& observer : observers_)
+  for (NativeDisplayObserver& observer : observers_)
     observer.OnConfigurationChanged();
+}
+
+void FakeDisplayDelegate::ConfigureDone() {
+  DCHECK(!configure_callbacks_.empty());
+  configure_callbacks_.front().Run();
+  configure_callbacks_.pop();
+
+  // If there are more configuration requests waiting then restart the timer.
+  if (!configure_callbacks_.empty()) {
+    configure_timer_.Start(
+        FROM_HERE, base::TimeDelta::FromMilliseconds(kConfigureDisplayDelayMs),
+        this, &FakeDisplayDelegate::ConfigureDone);
+  }
 }
 
 }  // namespace display

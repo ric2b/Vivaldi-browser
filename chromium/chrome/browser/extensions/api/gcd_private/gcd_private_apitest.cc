@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "base/command_line.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/extensions/api/gcd_private/gcd_private_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/local_discovery/test_service_discovery_client.h"
@@ -114,6 +115,7 @@ class GcdPrivateAPITest : public ExtensionApiTest {
 class GcdPrivateWithMdnsAPITest : public GcdPrivateAPITest {
  public:
   void SetUpOnMainThread() override {
+    GcdPrivateAPITest::SetUpOnMainThread();
     test_service_discovery_client_ =
         new local_discovery::TestServiceDiscoveryClient();
     test_service_discovery_client_->Start();
@@ -121,7 +123,7 @@ class GcdPrivateWithMdnsAPITest : public GcdPrivateAPITest {
 
   void TearDownOnMainThread() override {
     test_service_discovery_client_ = nullptr;
-    ExtensionApiTest::TearDownOnMainThread();
+    GcdPrivateAPITest::TearDownOnMainThread();
   }
 
  protected:

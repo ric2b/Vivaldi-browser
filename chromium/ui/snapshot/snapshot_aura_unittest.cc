@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/test/test_simple_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkPixelRef.h"
 #include "ui/aura/test/aura_test_helper.h"
 #include "ui/aura/test/test_screen.h"
 #include "ui/aura/test/test_window_delegate.h"
@@ -97,12 +98,15 @@ class SnapshotAuraTest : public testing::Test {
     // The ContextFactory must exist before any Compositors are created.
     // Snapshot test tests real drawing and readback, so needs pixel output.
     bool enable_pixel_output = true;
-    ui::ContextFactory* context_factory =
-        ui::InitializeContextFactoryForTests(enable_pixel_output);
+    ui::ContextFactory* context_factory = nullptr;
+    ui::ContextFactoryPrivate* context_factory_private = nullptr;
+
+    ui::InitializeContextFactoryForTests(enable_pixel_output, &context_factory,
+                                         &context_factory_private);
 
     helper_.reset(
         new aura::test::AuraTestHelper(base::MessageLoopForUI::current()));
-    helper_->SetUp(context_factory);
+    helper_->SetUp(context_factory, context_factory_private);
     new ::wm::DefaultActivationClient(helper_->root_window());
   }
 

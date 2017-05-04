@@ -18,10 +18,7 @@ class SkPaint;
 
 namespace blink {
 
-class FloatPoint;
 class FloatRect;
-class FloatSize;
-class GraphicsContext;
 class ImageObserver;
 
 // A generated placeholder image that shows a translucent gray rectangle.
@@ -36,22 +33,15 @@ class PLATFORM_EXPORT PlaceholderImage final : public Image {
 
   IntSize size() const override { return m_size; }
 
-  sk_sp<SkImage> imageForCurrentFrame() override;
+  sk_sp<SkImage> imageForCurrentFrame(const ColorBehavior&) override;
 
   void draw(SkCanvas*,
             const SkPaint&,
             const FloatRect& destRect,
             const FloatRect& srcRect,
             RespectImageOrientationEnum,
-            ImageClampingMode) override;
-
-  void drawPattern(GraphicsContext&,
-                   const FloatRect& srcRect,
-                   const FloatSize& scale,
-                   const FloatPoint& phase,
-                   SkBlendMode,
-                   const FloatRect& destRect,
-                   const FloatSize& repeatSpacing) override;
+            ImageClampingMode,
+            const ColorBehavior&) override;
 
   void destroyDecodedData() override;
 

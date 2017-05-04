@@ -113,6 +113,8 @@ target(link_target_type, "base") {
     "channel_mixing_matrix.h",
     "container_names.cc",
     "container_names.h",
+    "content_decryption_module.cc",
+    "content_decryption_module.h",
     "data_buffer.cc",
     "data_buffer.h",
     "data_source.cc",
@@ -157,8 +159,6 @@ target(link_target_type, "base") {
     "media_client.h",
     "media_content_type.cc",
     "media_content_type.h",
-    "media_keys.cc",
-    "media_keys.h",
     "media_log.cc",
     "media_log.h",
     "media_log_event.h",
@@ -273,12 +273,14 @@ target(link_target_type, "base") {
   defines = []
   public_deps = [
     "//ppapi/features",
+    "//ui/gfx:color_space",
   ]
   deps = [
     "//base/third_party/dynamic_annotations:dynamic_annotations",
     "//gpu",
     "//media:media_features",
     "//media:shared_memory_support",
+    "//ppapi/features",
     "//skia",
     "//third_party/libyuv",
     "//ui/events:events_base",
@@ -350,23 +352,6 @@ target(link_target_type, "base") {
       "keyboard_event_counter.cc",
       "keyboard_event_counter.h",
     ]
-  }
-
-  if (system_proprietary_codecs) {
-    sources += [
-      "pipeline_stats.cc",
-      "pipeline_stats.h",
-      "platform_mime_util.h",
-    ]
-    if (is_mac) {
-      sources += [ "platform_mime_util_mac.mm" ]
-    }
-    if (is_win) {
-      sources += [ "platform_mime_util_win.cc" ]
-      deps += [ 
-        "//media/base/win:win",
-      ]
-    }
   }
 }
 

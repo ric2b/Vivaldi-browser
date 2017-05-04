@@ -80,7 +80,7 @@ class CORE_EXPORT StyleResolverState {
   void setStyle(PassRefPtr<ComputedStyle>);
   const ComputedStyle* style() const { return m_style.get(); }
   ComputedStyle* style() { return m_style.get(); }
-  PassRefPtr<ComputedStyle> takeStyle() { return m_style.release(); }
+  PassRefPtr<ComputedStyle> takeStyle() { return std::move(m_style); }
 
   ComputedStyle& mutableStyleRef() const { return *m_style; }
   const ComputedStyle& styleRef() const { return mutableStyleRef(); }
@@ -99,6 +99,20 @@ class CORE_EXPORT StyleResolverState {
   }
 
   CSSAnimationUpdate& animationUpdate() { return m_animationUpdate; }
+
+  bool isAnimationInterpolationMapReady() const {
+    return m_isAnimationInterpolationMapReady;
+  }
+  void setIsAnimationInterpolationMapReady() {
+    m_isAnimationInterpolationMapReady = true;
+  }
+
+  bool isAnimatingCustomProperties() const {
+    return m_isAnimatingCustomProperties;
+  }
+  void setIsAnimatingCustomProperties(bool value) {
+    m_isAnimatingCustomProperties = value;
+  }
 
   void setParentStyle(PassRefPtr<ComputedStyle> parentStyle) {
     m_parentStyle = parentStyle;
@@ -168,9 +182,12 @@ class CORE_EXPORT StyleResolverState {
     if (m_style->setEffectiveZoom(f))
       m_fontBuilder.didChangeEffectiveZoom();
   }
-  void setWritingMode(WritingMode writingMode) {
-    if (m_style->setWritingMode(writingMode))
-      m_fontBuilder.didChangeWritingMode();
+  void setWritingMode(WritingMode newWritingMode) {
+    if (m_style->getWritingMode() == newWritingMode) {
+      return;
+    }
+    m_style->setWritingMode(newWritingMode);
+    m_fontBuilder.didChangeWritingMode();
   }
   void setTextOrientation(TextOrientation textOrientation) {
     if (m_style->setTextOrientation(textOrientation))
@@ -201,6 +218,8 @@ class CORE_EXPORT StyleResolverState {
   RefPtr<ComputedStyle> m_parentStyle;
 
   CSSAnimationUpdate m_animationUpdate;
+  bool m_isAnimationInterpolationMapReady;
+  bool m_isAnimatingCustomProperties;
 
   bool m_applyPropertyToRegularStyle;
   bool m_applyPropertyToVisitedLinkStyle;

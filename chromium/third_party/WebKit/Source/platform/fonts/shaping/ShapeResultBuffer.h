@@ -14,6 +14,7 @@ namespace blink {
 
 struct CharacterRange;
 class GlyphBuffer;
+struct GlyphData;
 class TextRun;
 
 class ShapeResultBuffer {
@@ -25,7 +26,7 @@ class ShapeResultBuffer {
 
   void appendResult(PassRefPtr<const ShapeResult> result) {
     m_hasVerticalOffsets |= result->hasVerticalOffsets();
-    m_results.append(result);
+    m_results.push_back(result);
   }
 
   bool hasVerticalOffsets() const { return m_hasVerticalOffsets; }
@@ -50,11 +51,12 @@ class ShapeResultBuffer {
                                                    float totalWidth) const;
 
  private:
-  float fillFastHorizontalGlyphBuffer(GlyphBuffer*, TextDirection) const;
+  float fillFastHorizontalGlyphBuffer(GlyphBuffer*, const TextRun&) const;
 
   template <TextDirection>
   static float fillGlyphBufferForRun(GlyphBuffer*,
                                      const ShapeResult::RunInfo*,
+                                     const TextRun&,
                                      float initialAdvance,
                                      unsigned from,
                                      unsigned to,

@@ -97,7 +97,7 @@ void InputEventFilter::DidStopFlinging(int routing_id) {
 
 void InputEventFilter::DispatchNonBlockingEventToMainThread(
     int routing_id,
-    ui::ScopedWebInputEvent event,
+    blink::WebScopedInputEvent event,
     const ui::LatencyInfo& latency_info) {
   DCHECK(target_task_runner_->BelongsToCurrentThread());
   RouteQueueMap::iterator iter = route_queues_.find(routing_id);
@@ -108,9 +108,11 @@ void InputEventFilter::DispatchNonBlockingEventToMainThread(
   }
 }
 
-void InputEventFilter::NotifyInputEventHandled(int routing_id,
-                                               blink::WebInputEvent::Type type,
-                                               InputEventAckState ack_result) {
+void InputEventFilter::NotifyInputEventHandled(
+    int routing_id,
+    blink::WebInputEvent::Type type,
+    blink::WebInputEventResult result,
+    InputEventAckState ack_result) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   scoped_refptr<MainThreadEventQueue> queue;
   {
@@ -121,7 +123,7 @@ void InputEventFilter::NotifyInputEventHandled(int routing_id,
     queue = iter->second;
   }
 
-  queue->EventHandled(type, ack_result);
+  queue->EventHandled(type, result, ack_result);
 }
 
 void InputEventFilter::ProcessRafAlignedInput(int routing_id) {
@@ -210,7 +212,7 @@ void InputEventFilter::ForwardToHandler(const IPC::Message& message,
   InputMsg_HandleInputEvent::Param params;
   if (!InputMsg_HandleInputEvent::Read(&message, &params))
     return;
-  ui::ScopedWebInputEvent event =
+  blink::WebScopedInputEvent event =
       ui::WebInputEventTraits::Clone(*std::get<0>(params));
   ui::LatencyInfo latency_info = std::get<1>(params);
   InputEventDispatchType dispatch_type = std::get<2>(params);
@@ -220,7 +222,7 @@ void InputEventFilter::ForwardToHandler(const IPC::Message& message,
          dispatch_type == DISPATCH_TYPE_NON_BLOCKING);
 
   if (!received_time.is_null())
-    event->timeStampSeconds = ui::EventTimeStampToSeconds(received_time);
+    event->setTimeStampSeconds(ui::EventTimeStampToSeconds(received_time));
 
   input_handler_manager_->HandleInputEvent(
       routing_id, std::move(event), latency_info,
@@ -232,13 +234,13 @@ void InputEventFilter::DidForwardToHandlerAndOverscroll(
     int routing_id,
     InputEventDispatchType dispatch_type,
     InputEventAckState ack_state,
-    ui::ScopedWebInputEvent event,
+    blink::WebScopedInputEvent event,
     const ui::LatencyInfo& latency_info,
     std::unique_ptr<DidOverscrollParams> overscroll_params) {
   bool send_ack = dispatch_type == DISPATCH_TYPE_BLOCKING;
   uint32_t unique_touch_event_id =
       ui::WebInputEventTraits::GetUniqueTouchEventId(*event);
-  WebInputEvent::Type type = event->type;
+  WebInputEvent::Type type = event->type();
 
   if (ack_state == INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING ||
       ack_state == INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING_DUE_TO_FLING ||

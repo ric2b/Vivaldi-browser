@@ -9,19 +9,18 @@
 
 #include "ash/mus/window_manager_application.h"
 #include "base/macros.h"
-#include "services/ui/public/cpp/tests/test_window_tree_client_setup.h"
+#include "ui/aura/test/mus/test_window_tree_client_setup.h"
+
+namespace aura {
+class WindowTreeClientPrivate;
+}
 
 namespace base {
 class MessageLoop;
 class SequencedWorkerPoolOwner;
 }
 
-namespace gfx {
-class Rect;
-}
-
 namespace ui {
-class Window;
 class WindowTreeClientPrivate;
 }
 
@@ -30,9 +29,10 @@ class ViewsDelegate;
 }
 
 namespace ash {
-namespace mus {
 
 class RootWindowController;
+
+namespace mus {
 
 // WMTestHelper is responsible for configuring a WindowTreeClient that
 // does not talk to mus.
@@ -74,9 +74,9 @@ class WmTestHelper {
 
   std::unique_ptr<base::MessageLoop> message_loop_;
   std::unique_ptr<views::ViewsDelegate> views_delegate_;
-  ui::TestWindowTreeClientSetup window_tree_client_setup_;
+  aura::TestWindowTreeClientSetup window_tree_client_setup_;
   std::unique_ptr<WindowManagerApplication> window_manager_app_;
-  std::unique_ptr<ui::WindowTreeClientPrivate> window_tree_client_private_;
+  std::unique_ptr<aura::WindowTreeClientPrivate> window_tree_client_private_;
 
   // Id for the next Display created by CreateRootWindowController().
   int64_t next_display_id_ = 1;

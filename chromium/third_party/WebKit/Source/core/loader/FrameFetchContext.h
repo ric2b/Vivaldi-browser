@@ -33,26 +33,32 @@
 
 #include "core/CoreExport.h"
 #include "core/fetch/FetchContext.h"
+#include "core/fetch/FetchRequest.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/loader/LinkLoader.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceRequest.h"
+#include "wtf/Forward.h"
 
 namespace blink {
 
+class ClientHintsPreferences;
 class Document;
 class DocumentLoader;
+class FrameLoaderClient;
 class LocalFrame;
 class ResourceError;
 class ResourceResponse;
-class ResourceRequest;
 
 class CORE_EXPORT FrameFetchContext final : public FetchContext {
  public:
-  static ResourceFetcher* createContextAndFetcher(DocumentLoader* loader,
-                                                  Document* document) {
-    return ResourceFetcher::create(new FrameFetchContext(loader, document));
+  static ResourceFetcher* createFetcherFromDocumentLoader(
+      DocumentLoader* loader) {
+    return ResourceFetcher::create(new FrameFetchContext(loader, nullptr));
+  }
+  static ResourceFetcher* createFetcherFromDocument(Document* document) {
+    return ResourceFetcher::create(new FrameFetchContext(nullptr, document));
   }
 
   static void provideDocumentToContext(FetchContext& context,
@@ -93,8 +99,9 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
                                   Resource*) override;
   void dispatchDidReceiveData(unsigned long identifier,
                               const char* data,
-                              int dataLength,
-                              int encodedDataLength) override;
+                              int dataLength) override;
+  void dispatchDidReceiveEncodedData(unsigned long identifier,
+                                     int encodedDataLength) override;
   void dispatchDidDownloadData(unsigned long identifier,
                                int dataLength,
                                int encodedDataLength) override;
@@ -103,26 +110,31 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
                                 int64_t encodedDataLength) override;
   void dispatchDidFail(unsigned long identifier,
                        const ResourceError&,
+                       int64_t encodedDataLength,
                        bool isInternalRequest) override;
 
   bool shouldLoadNewResource(Resource::Type) const override;
   void willStartLoadingResource(unsigned long identifier,
                                 ResourceRequest&,
-                                Resource::Type) override;
+                                Resource::Type,
+                                const AtomicString& fetchInitiatorName,
+                                bool forPreload) override;
   void didLoadResource(Resource*) override;
 
   void addResourceTiming(const ResourceTimingInfo&) override;
   bool allowImage(bool imagesEnabled, const KURL&) const override;
-  bool canRequest(Resource::Type,
-                  const ResourceRequest&,
-                  const KURL&,
-                  const ResourceLoaderOptions&,
-                  bool forPreload,
-                  FetchRequest::OriginRestriction) const override;
-  bool allowResponse(Resource::Type,
-                     const ResourceRequest&,
-                     const KURL&,
-                     const ResourceLoaderOptions&) const override;
+  ResourceRequestBlockedReason canRequest(
+      Resource::Type,
+      const ResourceRequest&,
+      const KURL&,
+      const ResourceLoaderOptions&,
+      bool forPreload,
+      FetchRequest::OriginRestriction) const override;
+  ResourceRequestBlockedReason allowResponse(
+      Resource::Type,
+      const ResourceRequest&,
+      const KURL&,
+      const ResourceLoaderOptions&) const override;
 
   bool isControlledByServiceWorker() const override;
   int64_t serviceWorkerID() const override;
@@ -136,29 +148,37 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
   void addConsoleMessage(const String&,
                          LogMessageType = LogErrorMessage) const override;
   SecurityOrigin* getSecurityOrigin() const override;
-  void modifyRequestForCSP(ResourceRequest&) override;
-  void addClientHintsIfNecessary(FetchRequest&) override;
-  void addCSPHeaderIfNecessary(Resource::Type, FetchRequest&) override;
-  void populateRequestData(ResourceRequest&) override;
+
+  void populateResourceRequest(Resource::Type,
+                               const ClientHintsPreferences&,
+                               const FetchRequest::ResourceWidth&,
+                               ResourceRequest&) override;
+  void setFirstPartyCookieAndRequestorOrigin(ResourceRequest&) override;
+
+  // Exposed for testing.
+  void modifyRequestForCSP(ResourceRequest&);
+  void addClientHintsIfNecessary(const ClientHintsPreferences&,
+                                 const FetchRequest::ResourceWidth&,
+                                 ResourceRequest&);
 
   MHTMLArchive* archive() const override;
 
   ResourceLoadPriority modifyPriorityForExperiments(
       ResourceLoadPriority) override;
 
-  void countClientHintsDPR() override;
-  void countClientHintsResourceWidth() override;
-  void countClientHintsViewportWidth() override;
-
-  WebTaskRunner* loadingTaskRunner() const override;
+  RefPtr<WebTaskRunner> loadingTaskRunner() const override;
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  explicit FrameFetchContext(DocumentLoader*, Document*);
+  FrameFetchContext(DocumentLoader*, Document*);
   inline DocumentLoader* masterDocumentLoader() const;
 
-  LocalFrame* frame() const;  // Can be null
+  LocalFrame* frameOfImportsController() const;
+  LocalFrame* frame() const;
+
+  FrameLoaderClient* frameLoaderClient() const;
+
   void printAccessDeniedMessage(const KURL&) const;
   ResourceRequestBlockedReason canRequestInternal(
       Resource::Type,
@@ -177,6 +197,8 @@ class CORE_EXPORT FrameFetchContext final : public FetchContext {
                                           WebURLRequest::RequestContext,
                                           Resource*,
                                           LinkLoader::CanLoadResources);
+
+  void addCSPHeaderIfNecessary(Resource::Type, ResourceRequest&);
 
   // FIXME: Oilpan: Ideally this should just be a traced Member but that will
   // currently leak because ComputedStyle and its data are not on the heap.

@@ -19,6 +19,7 @@
 
 #include "modules/vibration/NavigatorVibration.h"
 
+#include "bindings/core/v8/ConditionalFeatures.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
@@ -28,6 +29,7 @@
 #include "modules/vibration/VibrationController.h"
 #include "platform/Histogram.h"
 #include "platform/UserGestureIndicator.h"
+#include "public/platform/site_engagement.mojom-blink.h"
 
 namespace blink {
 
@@ -56,7 +58,7 @@ const char* NavigatorVibration::supplementName() {
 // static
 bool NavigatorVibration::vibrate(Navigator& navigator, unsigned time) {
   VibrationPattern pattern;
-  pattern.append(time);
+  pattern.push_back(time);
   return NavigatorVibration::vibrate(navigator, pattern);
 }
 
@@ -77,12 +79,22 @@ bool NavigatorVibration::vibrate(Navigator& navigator,
   if (!frame->page()->isPageVisible())
     return false;
 
-  if (frame->isCrossOriginSubframe()) {
-    // TODO(binlu): Once FeaturePolicy is ready, exploring using it to
-    // remove the API instead of having it return false.
-    frame->localDOMWindow()->printErrorMessage(
-        "A call of navigator.vibrate will be no-op inside cross-origin "
-        "iframes: https://www.chromestatus.com/feature/5682658461876224.");
+  // TODO(lunalu): When FeaturePolicy is ready, take out the check for the
+  // runtime flag. Please pay attention to the user gesture code below.
+  if (RuntimeEnabledFeatures::featurePolicyEnabled() &&
+      !isFeatureEnabledInFrame(blink::kVibrateFeature, frame)) {
+    frame->domWindow()->printErrorMessage(
+        "Navigator.vibrate() is not enabled in feature policy for this "
+        "frame.");
+    return false;
+  }
+
+  if (!RuntimeEnabledFeatures::featurePolicyEnabled() &&
+      frame->isCrossOriginSubframe() && !frame->hasReceivedUserGesture()) {
+    frame->domWindow()->printErrorMessage(
+        "Blocked call to navigator.vibrate inside a cross-origin iframe "
+        "because the frame has never been activated by the user: "
+        "https://www.chromestatus.com/feature/5682658461876224.");
     return false;
   }
 
@@ -117,6 +129,27 @@ void NavigatorVibration::collectHistogramMetrics(const LocalFrame& frame) {
   DEFINE_STATIC_LOCAL(EnumerationHistogram, NavigatorVibrateHistogram,
                       ("Vibration.Context", NavigatorVibrationType::EnumMax));
   NavigatorVibrateHistogram.count(type);
+
+  switch (frame.document()->getEngagementLevel()) {
+    case mojom::blink::EngagementLevel::NONE:
+      UseCounter::count(&frame, UseCounter::NavigatorVibrateEngagementNone);
+      break;
+    case mojom::blink::EngagementLevel::MINIMAL:
+      UseCounter::count(&frame, UseCounter::NavigatorVibrateEngagementMinimal);
+      break;
+    case mojom::blink::EngagementLevel::LOW:
+      UseCounter::count(&frame, UseCounter::NavigatorVibrateEngagementLow);
+      break;
+    case mojom::blink::EngagementLevel::MEDIUM:
+      UseCounter::count(&frame, UseCounter::NavigatorVibrateEngagementMedium);
+      break;
+    case mojom::blink::EngagementLevel::HIGH:
+      UseCounter::count(&frame, UseCounter::NavigatorVibrateEngagementHigh);
+      break;
+    case mojom::blink::EngagementLevel::MAX:
+      UseCounter::count(&frame, UseCounter::NavigatorVibrateEngagementMax);
+      break;
+  }
 }
 
 VibrationController* NavigatorVibration::controller(const LocalFrame& frame) {
@@ -126,7 +159,7 @@ VibrationController* NavigatorVibration::controller(const LocalFrame& frame) {
   return m_controller.get();
 }
 
-void NavigatorVibration::contextDestroyed() {
+void NavigatorVibration::contextDestroyed(ExecutionContext*) {
   if (m_controller) {
     m_controller->cancel();
     m_controller = nullptr;

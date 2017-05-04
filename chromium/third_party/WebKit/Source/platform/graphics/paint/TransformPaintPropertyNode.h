@@ -7,10 +7,13 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/geometry/FloatPoint3D.h"
+#include "platform/graphics/CompositingReasons.h"
+#include "platform/graphics/CompositorElementId.h"
 #include "platform/transforms/TransformationMatrix.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
+#include "wtf/text/WTFString.h"
 
 #include <iosfwd>
 
@@ -24,6 +27,8 @@ namespace blink {
 class PLATFORM_EXPORT TransformPaintPropertyNode
     : public RefCounted<TransformPaintPropertyNode> {
  public:
+  // This node is really a sentinel, and does not represent a real transform
+  // space.
   static TransformPaintPropertyNode* root();
 
   static PassRefPtr<TransformPaintPropertyNode> create(
@@ -31,24 +36,31 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
       const TransformationMatrix& matrix,
       const FloatPoint3D& origin,
       bool flattensInheritedTransform = false,
-      unsigned renderingContextID = 0) {
+      unsigned renderingContextId = 0,
+      CompositingReasons directCompositingReasons = CompositingReasonNone,
+      const CompositorElementId& compositorElementId = CompositorElementId()) {
     return adoptRef(new TransformPaintPropertyNode(
-        matrix, origin, std::move(parent), flattensInheritedTransform,
-        renderingContextID));
+        std::move(parent), matrix, origin, flattensInheritedTransform,
+        renderingContextId, directCompositingReasons, compositorElementId));
   }
 
-  void update(PassRefPtr<const TransformPaintPropertyNode> parent,
-              const TransformationMatrix& matrix,
-              const FloatPoint3D& origin,
-              bool flattensInheritedTransform = false,
-              unsigned renderingContextID = 0) {
+  void update(
+      PassRefPtr<const TransformPaintPropertyNode> parent,
+      const TransformationMatrix& matrix,
+      const FloatPoint3D& origin,
+      bool flattensInheritedTransform = false,
+      unsigned renderingContextId = 0,
+      CompositingReasons directCompositingReasons = CompositingReasonNone,
+      CompositorElementId compositorElementId = CompositorElementId()) {
     DCHECK(!isRoot());
     DCHECK(parent != this);
     m_parent = parent;
     m_matrix = matrix;
     m_origin = origin;
     m_flattensInheritedTransform = flattensInheritedTransform;
-    m_renderingContextID = renderingContextID;
+    m_renderingContextId = renderingContextId;
+    m_directCompositingReasons = directCompositingReasons;
+    m_compositorElementId = compositorElementId;
   }
 
   const TransformationMatrix& matrix() const { return m_matrix; }
@@ -66,48 +78,67 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
     return m_flattensInheritedTransform;
   }
 
+  bool hasDirectCompositingReasons() const {
+    return m_directCompositingReasons != CompositingReasonNone;
+  }
+
+  const CompositorElementId& compositorElementId() const {
+    return m_compositorElementId;
+  }
+
   // Content whose transform nodes have a common rendering context ID are 3D
   // sorted. If this is 0, content will not be 3D sorted.
-  unsigned renderingContextID() const { return m_renderingContextID; }
-  bool hasRenderingContext() const { return m_renderingContextID; }
+  unsigned renderingContextId() const { return m_renderingContextId; }
+  bool hasRenderingContext() const { return m_renderingContextId; }
 
 #if DCHECK_IS_ON()
   // The clone function is used by FindPropertiesNeedingUpdate.h for recording
   // a transform node before it has been updated, to later detect changes.
   PassRefPtr<TransformPaintPropertyNode> clone() const {
-    return adoptRef(new TransformPaintPropertyNode(m_matrix, m_origin, m_parent,
-                                                   m_flattensInheritedTransform,
-                                                   m_renderingContextID));
+    return adoptRef(new TransformPaintPropertyNode(
+        m_parent, m_matrix, m_origin, m_flattensInheritedTransform,
+        m_renderingContextId, m_directCompositingReasons,
+        m_compositorElementId));
   }
 
   // The equality operator is used by FindPropertiesNeedingUpdate.h for checking
   // if a transform node has changed.
   bool operator==(const TransformPaintPropertyNode& o) const {
-    return m_matrix == o.m_matrix && m_origin == o.m_origin &&
-           m_parent == o.m_parent &&
+    return m_parent == o.m_parent && m_matrix == o.m_matrix &&
+           m_origin == o.m_origin &&
            m_flattensInheritedTransform == o.m_flattensInheritedTransform &&
-           m_renderingContextID == o.m_renderingContextID;
+           m_renderingContextId == o.m_renderingContextId &&
+           m_directCompositingReasons == o.m_directCompositingReasons &&
+           m_compositorElementId == o.m_compositorElementId;
   }
 #endif
 
+  String toString() const;
+
  private:
   TransformPaintPropertyNode(
+      PassRefPtr<const TransformPaintPropertyNode> parent,
       const TransformationMatrix& matrix,
       const FloatPoint3D& origin,
-      PassRefPtr<const TransformPaintPropertyNode> parent,
       bool flattensInheritedTransform,
-      unsigned renderingContextID)
-      : m_matrix(matrix),
+      unsigned renderingContextId,
+      CompositingReasons directCompositingReasons,
+      CompositorElementId compositorElementId)
+      : m_parent(parent),
+        m_matrix(matrix),
         m_origin(origin),
-        m_parent(parent),
         m_flattensInheritedTransform(flattensInheritedTransform),
-        m_renderingContextID(renderingContextID) {}
+        m_renderingContextId(renderingContextId),
+        m_directCompositingReasons(directCompositingReasons),
+        m_compositorElementId(compositorElementId) {}
 
+  RefPtr<const TransformPaintPropertyNode> m_parent;
   TransformationMatrix m_matrix;
   FloatPoint3D m_origin;
-  RefPtr<const TransformPaintPropertyNode> m_parent;
   bool m_flattensInheritedTransform;
-  unsigned m_renderingContextID;
+  unsigned m_renderingContextId;
+  CompositingReasons m_directCompositingReasons;
+  CompositorElementId m_compositorElementId;
 };
 
 // Redeclared here to avoid ODR issues.

@@ -32,6 +32,7 @@ import org.chromium.base.annotations.JNINamespace;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -258,21 +259,23 @@ public class VideoCaptureCamera2 extends VideoCapture {
     private CameraDevice mCameraDevice;
     private CameraCaptureSession mPreviewSession;
     private CaptureRequest mPreviewRequest;
-    private Handler mMainHandler = null;
+    private Handler mMainHandler;
+    private ImageReader mImageReader = null;
 
+    private Range<Integer> mAeFpsRange;
     private CameraState mCameraState = CameraState.STOPPED;
     private final float mMaxZoom;
     private Rect mCropRect = new Rect();
-    private int mPhotoWidth = 0;
-    private int mPhotoHeight = 0;
+    private int mPhotoWidth;
+    private int mPhotoHeight;
     private int mFocusMode = AndroidMeteringMode.CONTINUOUS;
     private int mExposureMode = AndroidMeteringMode.CONTINUOUS;
     private MeteringRectangle mAreaOfInterest;
-    private int mExposureCompensation = 0;
+    private int mExposureCompensation;
     private int mWhiteBalanceMode = AndroidMeteringMode.CONTINUOUS;
     private int mColorTemperature = -1;
-    private int mIso = 0;
-    private boolean mRedEyeReduction = false;
+    private int mIso;
+    private boolean mRedEyeReduction;
     private int mFillLightMode = AndroidFillLightMode.OFF;
 
     // Service function to grab CameraCharacteristics and handle exceptions.
@@ -299,13 +302,13 @@ public class VideoCaptureCamera2 extends VideoCapture {
 
         // Create an ImageReader and plug a thread looper into it to have
         // readback take place on its own thread.
-        final ImageReader imageReader = ImageReader.newInstance(mCaptureFormat.getWidth(),
+        mImageReader = ImageReader.newInstance(mCaptureFormat.getWidth(),
                 mCaptureFormat.getHeight(), mCaptureFormat.getPixelFormat(), 2 /* maxImages */);
         HandlerThread thread = new HandlerThread("CameraPreview");
         thread.start();
         final Handler backgroundHandler = new Handler(thread.getLooper());
         final CrImageReaderListener imageReaderListener = new CrImageReaderListener();
-        imageReader.setOnImageAvailableListener(imageReaderListener, backgroundHandler);
+        mImageReader.setOnImageAvailableListener(imageReaderListener, backgroundHandler);
 
         // The Preview template specifically means "high frame rate is given
         // priority over the highest-quality post-processing".
@@ -322,7 +325,7 @@ public class VideoCaptureCamera2 extends VideoCapture {
             return false;
         }
         // Construct an ImageReader Surface and plug it into our CaptureRequest.Builder.
-        previewRequestBuilder.addTarget(imageReader.getSurface());
+        previewRequestBuilder.addTarget(mImageReader.getSurface());
 
         // A series of configuration options in the PreviewBuilder
         previewRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
@@ -336,7 +339,7 @@ public class VideoCaptureCamera2 extends VideoCapture {
 
         List<Surface> surfaceList = new ArrayList<Surface>(1);
         // TODO(mcasas): release this Surface when not needed, https://crbug.com/643884.
-        surfaceList.add(imageReader.getSurface());
+        surfaceList.add(mImageReader.getSurface());
 
         mPreviewRequest = previewRequestBuilder.build();
         final CrPreviewSessionListener captureSessionListener =
@@ -375,6 +378,7 @@ public class VideoCaptureCamera2 extends VideoCapture {
             requestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF);
         } else {
             requestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON);
+            requestBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, mAeFpsRange);
         }
         switch (mFillLightMode) {
             case AndroidFillLightMode.OFF:
@@ -598,8 +602,28 @@ public class VideoCaptureCamera2 extends VideoCapture {
             Log.e(TAG, "No supported resolutions.");
             return false;
         }
-        Log.d(TAG, "allocate: matched (%d x %d)", closestSupportedSize.getWidth(),
-                closestSupportedSize.getHeight());
+        final List<Range<Integer>> fpsRanges = Arrays.asList(cameraCharacteristics.get(
+                CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES));
+        if (fpsRanges.isEmpty()) {
+            Log.e(TAG, "No supported framerate ranges.");
+            return false;
+        }
+        final List<FramerateRange> framerateRanges =
+                new ArrayList<FramerateRange>(fpsRanges.size());
+        // On some legacy implementations FPS values are multiplied by 1000. Multiply by 1000
+        // everywhere for consistency. Set fpsUnitFactor to 1 if fps ranges are already multiplied
+        // by 1000.
+        final int fpsUnitFactor = fpsRanges.get(0).getUpper() > 1000 ? 1 : 1000;
+        for (Range<Integer> range : fpsRanges) {
+            framerateRanges.add(new FramerateRange(
+                    range.getLower() * fpsUnitFactor, range.getUpper() * fpsUnitFactor));
+        }
+        final FramerateRange aeFramerateRange =
+                getClosestFramerateRange(framerateRanges, frameRate * 1000);
+        mAeFpsRange = new Range<Integer>(
+                aeFramerateRange.min / fpsUnitFactor, aeFramerateRange.max / fpsUnitFactor);
+        Log.d(TAG, "allocate: matched (%d x %d) @[%d - %d]", closestSupportedSize.getWidth(),
+                closestSupportedSize.getHeight(), mAeFpsRange.getLower(), mAeFpsRange.getUpper());
 
         // |mCaptureFormat| is also used to configure the ImageReader.
         mCaptureFormat = new VideoCaptureFormat(closestSupportedSize.getWidth(),

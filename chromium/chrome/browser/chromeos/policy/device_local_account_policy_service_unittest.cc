@@ -797,7 +797,7 @@ DeviceLocalAccountPolicyProviderTest::DeviceLocalAccountPolicyProviderTest() {
   provider_ = DeviceLocalAccountPolicyProvider::Create(
       GenerateDeviceLocalAccountUserId(kAccount1,
                                        DeviceLocalAccount::TYPE_PUBLIC_SESSION),
-      service_.get());
+      service_.get(), false /*force_immediate_load*/);
 }
 
 void DeviceLocalAccountPolicyProviderTest::SetUp() {
@@ -824,6 +824,9 @@ void DeviceLocalAccountPolicyProviderTest::SetUp() {
       key::kFullscreenAllowed, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
       POLICY_SOURCE_PUBLIC_SESSION_OVERRIDE,
       base::MakeUnique<base::FundamentalValue>(false), nullptr);
+
+  // Policy defaults (for policies not set by admin).
+  SetEnterpriseUsersDefaults(&expected_policy_map_);
 }
 
 void DeviceLocalAccountPolicyProviderTest::TearDown() {
@@ -869,6 +872,16 @@ TEST_F(DeviceLocalAccountPolicyProviderTest, Policy) {
   expected_policy_bundle.Get(PolicyNamespace(
       POLICY_DOMAIN_CHROME, std::string())).CopyFrom(expected_policy_map_);
   EXPECT_TRUE(expected_policy_bundle.Equals(provider_->policies()));
+
+  // Make sure the Dinosaur game is disabled by default. This ensures the
+  // default policies have been set in Public Sessions.
+  bool allow_dinosaur_game = true;
+  auto policy_value =
+      provider_->policies()
+          .Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
+          .GetValue(key::kAllowDinosaurEasterEgg);
+  EXPECT_TRUE(policy_value && policy_value->GetAsBoolean(&allow_dinosaur_game));
+  EXPECT_FALSE(allow_dinosaur_game);
 
   // Policy change should be reported.
   EXPECT_CALL(provider_observer_, OnUpdatePolicy(provider_.get()))
@@ -974,6 +987,54 @@ TEST_F(DeviceLocalAccountPolicyProviderTest, RefreshPolicies) {
   request_job->SendResponse(DM_STATUS_SUCCESS, response);
   FlushDeviceSettings();
   Mock::VerifyAndClearExpectations(&provider_observer_);
+}
+
+class DeviceLocalAccountPolicyProviderLoadImmediateTest
+    : public DeviceLocalAccountPolicyServiceTestBase {
+ protected:
+  DeviceLocalAccountPolicyProviderLoadImmediateTest();
+
+  void SetUp() override;
+  void TearDown() override;
+
+  std::unique_ptr<DeviceLocalAccountPolicyProvider> provider_;
+  MockDeviceLocalAccountPolicyServiceObserver service_observer_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DeviceLocalAccountPolicyProviderLoadImmediateTest);
+};
+
+DeviceLocalAccountPolicyProviderLoadImmediateTest::
+    DeviceLocalAccountPolicyProviderLoadImmediateTest() {
+  CreatePolicyService();
+}
+
+void DeviceLocalAccountPolicyProviderLoadImmediateTest::SetUp() {
+  service_->AddObserver(&service_observer_);
+  DeviceLocalAccountPolicyServiceTestBase::SetUp();
+}
+
+void DeviceLocalAccountPolicyProviderLoadImmediateTest::TearDown() {
+  service_->RemoveObserver(&service_observer_);
+  provider_->Shutdown();
+  provider_.reset();
+  DeviceLocalAccountPolicyServiceTestBase::TearDown();
+}
+
+TEST_F(DeviceLocalAccountPolicyProviderLoadImmediateTest, Initialization) {
+  InstallDeviceLocalAccountPolicy(kAccount1);
+  AddDeviceLocalAccountToPolicy(kAccount1);
+  EXPECT_CALL(service_observer_, OnPolicyUpdated(account_1_user_id_))
+      .Times(AtLeast(2));
+  EXPECT_CALL(service_observer_, OnDeviceLocalAccountsChanged());
+  InstallDevicePolicy();
+
+  provider_ = DeviceLocalAccountPolicyProvider::Create(
+      GenerateDeviceLocalAccountUserId(kAccount1,
+                                       DeviceLocalAccount::TYPE_PUBLIC_SESSION),
+      service_.get(), true /*force_immediate_load*/);
+
+  EXPECT_TRUE(provider_->IsInitializationComplete(POLICY_DOMAIN_CHROME));
 }
 
 }  // namespace policy

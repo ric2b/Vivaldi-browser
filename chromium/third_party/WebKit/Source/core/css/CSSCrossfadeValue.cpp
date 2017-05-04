@@ -59,8 +59,8 @@ static bool subimageKnownToBeOpaque(CSSValue* value,
   return false;
 }
 
-static ImageResource* cachedImageForCSSValue(CSSValue* value,
-                                             const Document& document) {
+static ImageResourceContent* cachedImageForCSSValue(CSSValue* value,
+                                                    const Document& document) {
   if (!value)
     return nullptr;
 
@@ -87,7 +87,7 @@ static ImageResource* cachedImageForCSSValue(CSSValue* value,
 
 static Image* renderableImageForCSSValue(CSSValue* value,
                                          const LayoutObject& layoutObject) {
-  ImageResource* cachedImage =
+  ImageResourceContent* cachedImage =
       cachedImageForCSSValue(value, layoutObject.document());
 
   if (!cachedImage || cachedImage->errorOccurred() ||
@@ -114,7 +114,6 @@ CSSCrossfadeValue::CSSCrossfadeValue(CSSValue* fromValue,
       m_cachedFromImage(nullptr),
       m_cachedToImage(nullptr),
       m_crossfadeSubimageObserver(this) {
-  ThreadState::current()->registerPreFinalizer(this);
 }
 
 CSSCrossfadeValue::~CSSCrossfadeValue() {}
@@ -199,8 +198,8 @@ bool CSSCrossfadeValue::knownToBeOpaque(
 }
 
 void CSSCrossfadeValue::loadSubimages(const Document& document) {
-  ImageResource* oldCachedFromImage = m_cachedFromImage;
-  ImageResource* oldCachedToImage = m_cachedToImage;
+  ImageResourceContent* oldCachedFromImage = m_cachedFromImage;
+  ImageResourceContent* oldCachedToImage = m_cachedToImage;
 
   m_cachedFromImage = cachedImageForCSSValue(m_fromValue.get(), document);
   m_cachedToImage = cachedImageForCSSValue(m_toValue.get(), document);
@@ -266,7 +265,7 @@ bool CSSCrossfadeValue::willRenderImage() const {
 }
 
 void CSSCrossfadeValue::CrossfadeSubimageObserverProxy::imageChanged(
-    ImageResource*,
+    ImageResourceContent*,
     const IntRect* rect) {
   if (m_ready)
     m_ownerValue->crossfadeChanged(*rect);

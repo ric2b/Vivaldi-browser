@@ -24,25 +24,26 @@
 #define HTMLObjectElement_h
 
 #include "core/CoreExport.h"
-#include "core/html/FormAssociatedElement.h"
+#include "core/html/FormAssociated.h"
 #include "core/html/HTMLPlugInElement.h"
+#include "core/html/ListedElement.h"
 
 namespace blink {
 
 class HTMLFormElement;
 
-// Inheritance of FormAssociatedElement was used for NPAPI form association, but
+// Inheritance of ListedElement was used for NPAPI form association, but
 // is still kept here so that legacy APIs such as form attribute can keep
 // working according to the spec.  See:
 // https://html.spec.whatwg.org/multipage/embedded-content.html#the-object-element
 class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
-                                            public FormAssociatedElement {
+                                            public ListedElement,
+                                            public FormAssociated {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(HTMLObjectElement);
 
  public:
   static HTMLObjectElement* create(Document&,
-                                   HTMLFormElement*,
                                    bool createdByParser);
   ~HTMLObjectElement() override;
   DECLARE_VIRTUAL_TRACE();
@@ -76,12 +77,13 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
 
   bool willUseFallbackContentAtLayout() const;
 
- private:
-  HTMLObjectElement(Document&, HTMLFormElement*, bool createdByParser);
+  FormAssociated* toFormAssociatedOrNull() override { return this; };
+  void associateWith(HTMLFormElement*) override;
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+ private:
+  HTMLObjectElement(Document&, bool createdByParser);
+
+  void parseAttribute(const AttributeModificationParams&) override;
   bool isPresentationAttribute(const QualifiedName&) const override;
   void collectStyleForPresentationAttribute(const QualifiedName&,
                                             const AtomicString&,
@@ -127,19 +129,19 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
 // Intentionally left unimplemented, template specialization needs to be
 // provided for specific return types.
 template <typename T>
-inline const T& toElement(const FormAssociatedElement&);
+inline const T& toElement(const ListedElement&);
 template <typename T>
-inline const T* toElement(const FormAssociatedElement*);
+inline const T* toElement(const ListedElement*);
 
-// Make toHTMLObjectElement() accept a FormAssociatedElement as input instead of
+// Make toHTMLObjectElement() accept a ListedElement as input instead of
 // a Node.
 template <>
 inline const HTMLObjectElement* toElement<HTMLObjectElement>(
-    const FormAssociatedElement* element) {
+    const ListedElement* element) {
   SECURITY_DCHECK(!element || !element->isFormControlElement());
   const HTMLObjectElement* objectElement =
       static_cast<const HTMLObjectElement*>(element);
-  // We need to assert after the cast because FormAssociatedElement doesn't
+  // We need to assert after the cast because ListedElement doesn't
   // have hasTagName.
   SECURITY_DCHECK(!objectElement ||
                   objectElement->hasTagName(HTMLNames::objectTag));
@@ -148,11 +150,11 @@ inline const HTMLObjectElement* toElement<HTMLObjectElement>(
 
 template <>
 inline const HTMLObjectElement& toElement<HTMLObjectElement>(
-    const FormAssociatedElement& element) {
+    const ListedElement& element) {
   SECURITY_DCHECK(!element.isFormControlElement());
   const HTMLObjectElement& objectElement =
       static_cast<const HTMLObjectElement&>(element);
-  // We need to assert after the cast because FormAssociatedElement doesn't
+  // We need to assert after the cast because ListedElement doesn't
   // have hasTagName.
   SECURITY_DCHECK(objectElement.hasTagName(HTMLNames::objectTag));
   return objectElement;

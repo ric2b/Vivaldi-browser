@@ -16,7 +16,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "ui/aura/window.h"
@@ -35,10 +34,8 @@
 #if defined(OS_CHROMEOS)
 #include "ui/base/ime/chromeos/ime_keymap.h"
 #elif defined(OS_WIN)
-#include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_codes_win.h"
 #elif defined(OS_LINUX)
-#include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #endif
 
@@ -351,6 +348,10 @@ void InputMethodEngineBase::Reset() {
   observer_->OnReset(active_component_id_);
 }
 
+void InputMethodEngineBase::MaybeSwitchEngine() {
+  observer_->OnRequestEngineSwitch();
+}
+
 bool InputMethodEngineBase::IsInterestedInKeyEvent() const {
   return observer_->IsInterestedInKeyEvent();
 }
@@ -360,6 +361,11 @@ void InputMethodEngineBase::ProcessKeyEvent(const ui::KeyEvent& key_event,
   // Make true that we don't handle IME API calling of setComposition and
   // commitText while the extension is handling key event.
   handling_key_event_ = true;
+
+  if (key_event.IsCommandDown()) {
+    callback.Run(false);
+    return;
+  }
 
   KeyboardEvent ext_event;
   GetExtensionKeyboardEventFromKeyEvent(key_event, &ext_event);

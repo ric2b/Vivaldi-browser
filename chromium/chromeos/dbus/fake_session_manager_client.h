@@ -45,6 +45,7 @@ class FakeSessionManagerClient : public SessionManagerClient {
   void NotifyLockScreenDismissed() override;
   void RetrieveActiveSessions(const ActiveSessionsCallback& callback) override;
   void RetrieveDevicePolicy(const RetrievePolicyCallback& callback) override;
+  std::string BlockingRetrieveDevicePolicy() override;
   void RetrievePolicyForUser(const cryptohome::Identification& cryptohome_id,
                              const RetrievePolicyCallback& callback) override;
   std::string BlockingRetrievePolicyForUser(
@@ -52,6 +53,8 @@ class FakeSessionManagerClient : public SessionManagerClient {
   void RetrieveDeviceLocalAccountPolicy(
       const std::string& account_id,
       const RetrievePolicyCallback& callback) override;
+  std::string BlockingRetrieveDeviceLocalAccountPolicy(
+      const std::string& account_id) override;
   void StoreDevicePolicy(const std::string& policy_blob,
                          const StorePolicyCallback& callback) override;
   void StorePolicyForUser(const cryptohome::Identification& cryptohome_id,
@@ -71,6 +74,9 @@ class FakeSessionManagerClient : public SessionManagerClient {
                         const StartArcInstanceCallback& callback) override;
   void StopArcInstance(const ArcCallback& callback) override;
   void PrioritizeArcInstance(const ArcCallback& callback) override;
+  void SetArcCpuRestriction(
+      login_manager::ContainerCpuRestrictionState restriction_state,
+      const ArcCallback& callback) override;
   void EmitArcBooted() override;
   void GetArcStartTime(const GetArcStartTimeCallback& callback) override;
   void RemoveArcData(const cryptohome::Identification& cryptohome_id,

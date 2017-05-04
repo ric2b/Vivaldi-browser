@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="fil">
+<translation id="1152921474424827756">Mag-access ng <ph name="BEGIN_LINK" />naka-cache na kopya<ph name="END_LINK" /> ng <ph name="URL" /></translation>
+<translation id="1158211211994409885">Pinutol ng <ph name="HOST_NAME" /> ang koneksyon nang hindi inaasahan.</translation>
+<translation id="1375198122581997741">Tungkol sa Bersyon</translation>
+<translation id="139305205187523129">Hindi nagpadala ng anumang data ang <ph name="HOST_NAME" />.</translation>
+<translation id="1506687042165942984">Magpakita ng naka-save (ibigsabihin alam na hindi napapanahon) na kopya ng page na ito.</translation>
+<translation id="1559528461873125649">Walang naturang file o direktoryo</translation>
+<translation id="1710259589646384581">OS</translation>
+<translation id="1838667051080421715">Tinitingnan mo ang pinagmumulan ng isang web page.</translation>
+<translation id="194030505837763158">Pumunta sa <ph name="LINK" /></translation>
+<translation id="2030481566774242610">Ang ibig mo bang sabihin ay <ph name="LINK" />?</translation>
+<translation id="2089090684895656482">Mas kaunti</translation>
+<translation id="2166378884831602661">Hindi makakapagbigay ng secure na koneksyon ang site na ito</translation>
+<translation id="2292556288342944218">Naka-block ang iyong access sa Internet</translation>
+<translation id="255002559098805027">Nagpadala ng di-wastong tugon ang <ph name="HOST_NAME" />.</translation>
+<translation id="2609632851001447353">Mga Pagkakaiba-iba</translation>
+<translation id="2650446666397867134">Tinanggihan ang access sa file</translation>
+<translation id="2705137772291741111">Hindi mabasa ang naka-save (naka-cache) na kopya ng site na ito.</translation>
+<translation id="2784949926578158345">Na-reset ang koneksyon.</translation>
+<translation id="284702764277384724">Mukhang peke ang certificate ng server sa <ph name="HOST_NAME" />.</translation>
+<translation id="2909946352844186028">May nakitang pagbabago sa network.</translation>
+<translation id="3005723025932146533">Ipakita ang naka-save na kopya</translation>
+<translation id="3109728660330352905">Wala kang pahintulot na tingnan ang page na ito.</translation>
+<translation id="3176929007561373547">Tingnan ang mga setting ng iyong proxy o makipag-ugnayan sa iyong network
+      administrator upang matiyak na gumagana ang proxy server. Kung sa palagay mo
+      ay hindi ka dapat gumagamit ng proxy server:
+      <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673">Hindi makakonekta sa <ph name="HOST_NAME" /> sa kasalukuyan.</translation>
+<translation id="3447661539832366887">Na-off ng may-ari ng device na ito ang larong dinosaur.</translation>
+<translation id="3586931643579894722">Magtago ng mga detalye</translation>
+<translation id="3630155396527302611">Kung nakalista na ito bilang isang programang pinapahintulutang i-access ang network, subukang
+      alisin ito mula sa listahan at muli itong idagdag.</translation>
+<translation id="3658742229777143148">Rebisyon</translation>
+<translation id="382518646247711829">Kung gumagamit ka ng proxy server...</translation>
+<translation id="3973234410852337861">Naka-block ang <ph name="HOST_NAME" /></translation>
+<translation id="4021036232240155012">Ang DNS ay ang serbisyo sa network na nagta-translate ng pangalan ng isang website sa Internet address nito.</translation>
+<translation id="4432688616882109544">Hindi tinanggap ng <ph name="HOST_NAME" /> ang iyong certificate sa pag-log in o maaaring walang ibinigay.</translation>
+<translation id="4522570452068850558">Mga Detalye</translation>
+<translation id="4670097147947922288">Isang page ng extension ang iyong tinitingnan.</translation>
+<translation id="4708268264240856090">Naputol ang iyong koneksyon</translation>
+<translation id="4744603770635761495">Naipapatupad na Path</translation>
+<translation id="4764776831041365478">Ang webpage sa <ph name="URL" /> ay maaaring pansamantalang hindi gumagana o maaaring permanente itong inilipat sa isang bagong web address.</translation>
+<translation id="5023310440958281426">Suriin ang mga patakaran ng iyong administrator</translation>
+<translation id="5115563688576182185">(64-bit)</translation>
+<translation id="5431657950005405462">Hindi nakita ang iyong file</translation>
+<translation id="5452270690849572955">Hindi makita ang <ph name="HOST_NAME" /> page na ito</translation>
+<translation id="5492298309214877701">Ang URL ng site na ito sa intranet ng kumpanya, organisasyon o paaralan ay kapareho ng URL ng isang external na website.
+    <ph name="LINE_BREAK" />
+    Subukang makipag-ugnayan sa iyong system administrator.</translation>
+<translation id="5510766032865166053">Maaaring inilipat o na-delete ito.</translation>
+<translation id="5556459405103347317">I-reload</translation>
+<translation id="5617949217645503996">Masyadong maraming beses kang na-redirect ng <ph name="HOST_NAME" />.</translation>
+<translation id="5675650730144413517">Hindi gumagana ang page na ito</translation>
+<translation id="5869405914158311789">Hindi makakonekta sa site na ito</translation>
+<translation id="5990559369517809815">Na-block ng isang extension ang mga kahilingan sa server.</translation>
+<translation id="6042308850641462728">Higit pa</translation>
+<translation id="6146055958333702838">Tingnan ang anumang mga kable at i-reboot ang anumang mga router, modem o iba
+    pang mga network device na maaaring ginagamit mo.</translation>
+<translation id="6165508094623778733">Matuto nang higit pa</translation>
+<translation id="6203231073485539293">Suriin ang iyong koneksyon sa Internet</translation>
+<translation id="6305205051461490394">Hindi makakonekta sa <ph name="URL" />.</translation>
+<translation id="6321917430147971392">Suriin ang iyong mga setting ng DNS</translation>
+<translation id="6328639280570009161">Subukang i-disable ang paghula ng network</translation>
+<translation id="6433595998831338502">Tumangging kumonekta ang <ph name="HOST_NAME" />.</translation>
+<translation id="6711464428925977395">May problema sa proxy server, o mali ang address.</translation>
+<translation id="6830600606572693159">Kasalukuyang hindi available ang webpage sa <ph name="URL" />.  Maaaring overloaded ito o hindi pinagana para sa maintenance.</translation>
+<translation id="6897140037006041989">User Agent</translation>
+<translation id="7210863904660874423">Hindi sumusunod ang <ph name="HOST_NAME" /> sa mga pamantayan sa seguridad.</translation>
+<translation id="7269802741830436641">Ang webpage na ito ay may loop na pag-redirect</translation>
+<translation id="7353601530677266744">Command Line</translation>
+<translation id="7419106976560586862">Path ng Profile</translation>
+<translation id="7518003948725431193">Walang webpage na nahanap para sa web address:<ph name="URL" /></translation>
+<translation id="7549584377607005141">Kinakailangan ng webpage na ito ng data na inilagay mo dati upang maipakita nang maayos. Maipapadala mong muli ang data na ito, ngunit kapag ginawa mo iyon, mauulit ang anumang pagkilos na isinagawa dati ng pahinang ito.</translation>
+<translation id="759889825892636187">Sa kasalukuyan, hindi magagawa ng <ph name="HOST_NAME" /> ang kahilingang ito.</translation>
+<translation id="7716424297397655342">Hindi maaaring i-load ang site na ito mula sa cache</translation>
+<translation id="7758069387465995638">Maaaring na-block ng firewall o antivirus software ang koneksyon.</translation>
+<translation id="778579833039460630">Walang data na natanggap</translation>
+<translation id="7951415247503192394">(32-bit)</translation>
+<translation id="8134994873729925007">Hindi makita ang <ph name="BEGIN_ABBR" />DNS address<ph name="END_ABBR" /> ng server ng <ph name="HOST_NAME" />.</translation>
+<translation id="8142868475871995937">Bisitahin ang &lt;strong&gt;vivaldi://policy&lt;/strong&gt; upang makita ang listahan ng mga naka-blacklist na URL at iba pang mga patakaran na ipinapatupad ng iyong system administrator.</translation>
+<translation id="8149426793427495338">Nag-sleep ang iyong computer.</translation>
+<translation id="8150722005171944719">Hindi nababasa ang file sa <ph name="URL" />. Maaaring ito ay naalis, nalipat, o maaaring pinipigilan ng mga pagpapahintulot ng file ang access.</translation>
+<translation id="8225771182978767009">Pinili ng taong nag-set up ng computer na ito na i-block ang site na ito.</translation>
+<translation id="8289355894181816810">Makipag-ugnay sa administrator ng iyong network kung hindi ka sigurado kung ano ang ibig sabihin nito.</translation>
+<translation id="8332188693563227489">Tinanggihan ang access sa <ph name="HOST_NAME" /></translation>
+<translation id="8498891568109133222">Masyadong matagal bago nakatugon ang <ph name="HOST_NAME" />.</translation>
+<translation id="8740359287975076522">Hindi makita ang &lt;abbr id="dnsDefinition"&gt;DNS address&lt;/abbr&gt; ng <ph name="HOST_NAME" />. Dina-diagnose ang problema.</translation>
+<translation id="9183425211371246419">Gumagamit ng hindi sinusuportahang protocol ang <ph name="HOST_NAME" />.</translation>
+<translation id="933612690413056017">Walang koneksyon sa Internet</translation>
+<translation id="969892804517981540">Official Build</translation>
+<translation id="988159990683914416">Bumuo ang Developer</translation>
+</translationbundle>

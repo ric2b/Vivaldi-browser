@@ -37,13 +37,11 @@ namespace blink {
 class SecurityOrigin;
 
 PublicURLManager* PublicURLManager::create(ExecutionContext* context) {
-  PublicURLManager* publicURLManager = new PublicURLManager(context);
-  publicURLManager->suspendIfNeeded();
-  return publicURLManager;
+  return new PublicURLManager(context);
 }
 
 PublicURLManager::PublicURLManager(ExecutionContext* context)
-    : ActiveDOMObject(context), m_isStopped(false) {}
+    : ContextLifecycleObserver(context), m_isStopped(false) {}
 
 String PublicURLManager::registerURL(ExecutionContext* context,
                                      URLRegistrable* registrable,
@@ -84,16 +82,16 @@ void PublicURLManager::revoke(const String& uuid) {
         KURL url(ParsedURLString, registeredUrl.key);
         getExecutionContext()->removeURLFromMemoryCache(url);
         registry->unregisterURL(url);
-        urlsToRemove.append(registeredUrl.key);
+        urlsToRemove.push_back(registeredUrl.key);
       }
     }
-    for (unsigned j = 0; j < urlsToRemove.size(); j++)
-      registeredURLs.remove(urlsToRemove[j]);
+    for (const auto& url : urlsToRemove)
+      registeredURLs.remove(url);
     urlsToRemove.clear();
   }
 }
 
-void PublicURLManager::contextDestroyed() {
+void PublicURLManager::contextDestroyed(ExecutionContext*) {
   if (m_isStopped)
     return;
 
@@ -107,7 +105,7 @@ void PublicURLManager::contextDestroyed() {
 }
 
 DEFINE_TRACE(PublicURLManager) {
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 }  // namespace blink

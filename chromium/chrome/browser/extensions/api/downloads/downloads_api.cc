@@ -83,6 +83,9 @@
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/gfx/image/image_skia.h"
 
+#include "app/vivaldi_apptools.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
+
 using content::BrowserContext;
 using content::BrowserThread;
 using content::DownloadItem;
@@ -442,6 +445,8 @@ DownloadItem* GetDownload(content::BrowserContext* context,
   return download_item;
 }
 
+// Corresponds to |DownloadFunctions| enumeration in histograms.xml. Please
+// keep these in sync.
 enum DownloadsFunctionName {
   DOWNLOADS_FUNCTION_DOWNLOAD = 0,
   DOWNLOADS_FUNCTION_SEARCH = 1,
@@ -1245,9 +1250,28 @@ void DownloadsRemoveFileFunction::Done(bool success) {
   SendResponse(error_.empty());
 }
 
-DownloadsAcceptDangerFunction::DownloadsAcceptDangerFunction() {}
+/*static*/
+DownloadsAcceptDangerFunction::DownloadRequestsSet*
+    DownloadsAcceptDangerFunction::s_current_accept_download_requests_ =
+        nullptr;
 
-DownloadsAcceptDangerFunction::~DownloadsAcceptDangerFunction() {}
+DownloadsAcceptDangerFunction::DownloadsAcceptDangerFunction() {
+  if (!s_current_accept_download_requests_) {
+    s_current_accept_download_requests_ = new DownloadRequestsSet();
+  }
+}
+
+DownloadsAcceptDangerFunction::~DownloadsAcceptDangerFunction() {
+  if (download_id_ != -1) {
+    s_current_accept_download_requests_->erase(
+        s_current_accept_download_requests_->find(download_id_));
+  }
+  if (s_current_accept_download_requests_->empty()) {
+    delete s_current_accept_download_requests_;
+    s_current_accept_download_requests_ = nullptr;
+  }
+
+}
 
 DownloadsAcceptDangerFunction::OnPromptCreatedCallback*
     DownloadsAcceptDangerFunction::on_prompt_created_ = NULL;
@@ -1263,6 +1287,7 @@ bool DownloadsAcceptDangerFunction::RunAsync() {
 void DownloadsAcceptDangerFunction::PromptOrWait(int download_id, int retries) {
   DownloadItem* download_item =
       GetDownload(browser_context(), include_incognito(), download_id);
+
   content::WebContents* web_contents = dispatcher()->GetVisibleWebContents();
   if (InvalidId(download_item, &error_) ||
       Fault(download_item->GetState() != DownloadItem::IN_PROGRESS,
@@ -1285,6 +1310,20 @@ void DownloadsAcceptDangerFunction::PromptOrWait(int download_id, int retries) {
     SendResponse(false);
     return;
   }
+
+  if (vivaldi::IsVivaldiRunning()) {
+    auto it = s_current_accept_download_requests_->find(download_id);
+    if (it != s_current_accept_download_requests_->end()) {
+      // Cancel multiple calls for the same download.
+      SendResponse(false);
+      // Make sure the download id is not removed from the shared set.
+      download_id_ = -1;
+      return;
+    }
+    s_current_accept_download_requests_->insert(download_id);
+    download_id_ = download_id;
+  }
+
   RecordApiFunctions(DOWNLOADS_FUNCTION_ACCEPT_DANGER);
   // DownloadDangerPrompt displays a modal dialog using native widgets that the
   // user must either accept or cancel. It cannot be scripted.

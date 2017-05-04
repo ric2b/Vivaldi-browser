@@ -169,17 +169,16 @@ void ToolbarActionsModel::OnExtensionActionUpdated(
   }
 }
 
-ScopedVector<ToolbarActionViewController> ToolbarActionsModel::CreateActions(
-    Browser* browser,
-    ToolbarActionsBar* bar) {
+std::vector<std::unique_ptr<ToolbarActionViewController>>
+ToolbarActionsModel::CreateActions(Browser* browser, ToolbarActionsBar* bar) {
   DCHECK(browser);
   DCHECK(bar);
-  ScopedVector<ToolbarActionViewController> action_list;
+  std::vector<std::unique_ptr<ToolbarActionViewController>> action_list;
 
   // toolbar_items() might not equate to toolbar_items_ in the case where a
   // subset is highlighted.
   for (const ToolbarItem& item : toolbar_items())
-    action_list.push_back(CreateActionForItem(browser, bar, item).release());
+    action_list.push_back(CreateActionForItem(browser, bar, item));
 
   return action_list;
 }
@@ -430,7 +429,8 @@ void ToolbarActionsModel::AddItem(const ToolbarItem& item) {
       // nondeterministic, we can't just assume the main bar will have the
       // extension and look it up.
       size_t main_index = main_model->FindNewPositionFromLastKnownGood(item);
-      bool visible = main_index < main_model->visible_icon_count();
+      bool visible =
+          is_new_extension || main_index < main_model->visible_icon_count();
       // We may need to adjust the visible count if the incognito bar isn't
       // showing all icons and this one is visible, or if it is showing all
       // icons and this is hidden.

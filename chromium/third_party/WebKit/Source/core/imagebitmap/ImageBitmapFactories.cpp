@@ -42,6 +42,7 @@
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
+#include "core/offscreencanvas/OffscreenCanvas.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/CrossThreadFunctional.h"
@@ -93,6 +94,8 @@ static inline ImageBitmapSource* toImageBitmapSourceInternal(
     return value.getAsImageData();
   if (value.isImageBitmap())
     return value.getAsImageBitmap();
+  if (value.isOffscreenCanvas())
+    return value.getAsOffscreenCanvas();
   ASSERT_NOT_REACHED();
   return nullptr;
 }
@@ -257,20 +260,20 @@ void ImageBitmapFactories::ImageBitmapLoader::scheduleAsyncImageBitmapDecoding(
       BackgroundTaskRunner::TaskSizeShortRunningTask;
   if (arrayBuffer->byteLength() >= longTaskByteLengthThreshold)
     taskSize = BackgroundTaskRunner::TaskSizeLongRunningTask;
-  WebTaskRunner* taskRunner =
+  RefPtr<WebTaskRunner> taskRunner =
       Platform::current()->currentThread()->getWebTaskRunner();
   BackgroundTaskRunner::postOnBackgroundThread(
       BLINK_FROM_HERE,
       crossThreadBind(
           &ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread,
-          wrapCrossThreadPersistent(this), crossThreadUnretained(taskRunner),
+          wrapCrossThreadPersistent(this), std::move(taskRunner),
           wrapCrossThreadPersistent(arrayBuffer), m_options.premultiplyAlpha(),
           m_options.colorSpaceConversion()),
       taskSize);
 }
 
 void ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread(
-    WebTaskRunner* taskRunner,
+    RefPtr<WebTaskRunner> taskRunner,
     DOMArrayBuffer* arrayBuffer,
     const String& premultiplyAlphaOption,
     const String& colorSpaceConversionOption) {
@@ -279,13 +282,15 @@ void ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread(
   ImageDecoder::AlphaOption alphaOp = ImageDecoder::AlphaPremultiplied;
   if (premultiplyAlphaOption == "none")
     alphaOp = ImageDecoder::AlphaNotPremultiplied;
-  ImageDecoder::ColorSpaceOption colorSpaceOp = ImageDecoder::ColorSpaceApplied;
+  bool ignoreColorSpace = false;
   if (colorSpaceConversionOption == "none")
-    colorSpaceOp = ImageDecoder::ColorSpaceIgnored;
+    ignoreColorSpace = true;
   std::unique_ptr<ImageDecoder> decoder(ImageDecoder::create(
       SegmentReader::createFromSkData(SkData::MakeWithoutCopy(
           arrayBuffer->data(), arrayBuffer->byteLength())),
-      true, alphaOp, colorSpaceOp));
+      true, alphaOp,
+      ignoreColorSpace ? ColorBehavior::ignore()
+                       : ColorBehavior::transformToGlobalTarget()));
   sk_sp<SkImage> frame;
   if (decoder) {
     frame = ImageBitmap::getSkImageFromDecoder(std::move(decoder));

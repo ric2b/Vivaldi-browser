@@ -71,6 +71,23 @@
   DISABLE(RenderViewImplTest, RendererNavigationStartTransmittedToBrowser)
   DISABLE(SRTFetcherTest, ReporterLogging_EnabledNoRecentLogging)
   DISABLE(SpdySessionTest, MetricsCollectionOnPushStreams)
+  DISABLE(RenderThreadImplDiscardableMemoryBrowserTest, LockDiscardableMemory)
+  DISABLE_MULTI(WebRtcMediaRecorderTest, PeerConnection)
+  DISABLE_MULTI(WebRtcMediaRecorderTest, ResumeAndDataAvailable)
+  DISABLE_MULTI(WebRtcMediaRecorderTest, StartAndDataAvailable)
+  DISABLE(WebRtcMediaRecorderTest, TwoChannelAudioRecording)
+  DISABLE(SBNavigationObserverTest, TestCleanUpStaleNavigationEvents)
+  DISABLE(SBNavigationObserverTest, TestCleanUpStaleIPAddresses)
+  DISABLE(SBNavigationObserverTest, TestCleanUpStaleUserGestures)
+  DISABLE(SBNavigationObserverTest, TestNavigationEventList)
+  DISABLE(SBNavigationObserverTest,TestRecordHostToIpMapping)
+  DISABLE(SBNavigationObserverBrowserTest,
+          PPAPIDownloadWithUserGestureOnHostingFrame)
+  DISABLE(TemplateURLServiceTest, LastModifiedTimeUpdate)
+  DISABLE(UploadProgressTrackerTest, TimePassed)
+  DISABLE(SRTFetcherTest, ReporterLogging_EnabledFirstRun)
+  DISABLE(AutofillProfileComparatorTest, MergeAddressesMostUniqueTokens)
+  DISABLE(NetworkMetricsProviderTest, EffectiveConnectionType)
 
   // Fails on tester, works on dev PC; assume it is the timing issue
   DISABLE(NotificationPermissionContextTest, TestDenyInIncognitoAfterDelay)

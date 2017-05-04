@@ -66,8 +66,8 @@ class SkiaImageDecoder final : public SkImageDeserializer {
     RefPtr<SegmentReader> segmentReader =
         SegmentReader::createFromSkData(SkData::MakeWithoutCopy(data, length));
     std::unique_ptr<ImageDecoder> imageDecoder = ImageDecoder::create(
-        segmentReader.release(), true, ImageDecoder::AlphaPremultiplied,
-        ImageDecoder::ColorSpaceIgnored);
+        std::move(segmentReader), true, ImageDecoder::AlphaPremultiplied,
+        ColorBehavior::ignore());
     if (!imageDecoder)
       return nullptr;
 
@@ -96,7 +96,7 @@ PassRefPtr<PictureSnapshot> PictureSnapshot::load(
     FloatRect cullRect(picture->cullRect());
     cullRect.moveBy(tileStream->layerOffset);
     unionRect.unite(cullRect);
-    pictures.append(std::move(picture));
+    pictures.push_back(std::move(picture));
   }
   if (tiles.size() == 1)
     return adoptRef(new PictureSnapshot(std::move(pictures[0])));
@@ -142,7 +142,7 @@ std::unique_ptr<Vector<char>> PictureSnapshot::replay(unsigned fromStep,
     canvas.resetStepCount();
     m_picture->playback(&canvas, &canvas);
   }
-  std::unique_ptr<Vector<char>> base64Data = makeUnique<Vector<char>>();
+  std::unique_ptr<Vector<char>> base64Data = WTF::makeUnique<Vector<char>>();
   Vector<char> encodedImage;
 
   sk_sp<SkImage> image = SkImage::MakeFromBitmap(bitmap);
@@ -167,7 +167,7 @@ std::unique_ptr<PictureSnapshot::Timings> PictureSnapshot::profile(
     double minDuration,
     const FloatRect* clipRect) const {
   std::unique_ptr<PictureSnapshot::Timings> timings =
-      makeUnique<PictureSnapshot::Timings>();
+      WTF::makeUnique<PictureSnapshot::Timings>();
   timings->reserveCapacity(minRepeatCount);
   const SkIRect bounds = m_picture->cullRect().roundOut();
   SkBitmap bitmap;
@@ -178,8 +178,8 @@ std::unique_ptr<PictureSnapshot::Timings> PictureSnapshot::profile(
   double now = WTF::monotonicallyIncreasingTime();
   double stopTime = now + minDuration;
   for (unsigned step = 0; step < minRepeatCount || now < stopTime; ++step) {
-    timings->append(Vector<double>());
-    Vector<double>* currentTimings = &timings->last();
+    timings->push_back(Vector<double>());
+    Vector<double>* currentTimings = &timings->back();
     if (timings->size() > 1)
       currentTimings->reserveCapacity(timings->begin()->size());
     ProfilingCanvas canvas(bitmap);

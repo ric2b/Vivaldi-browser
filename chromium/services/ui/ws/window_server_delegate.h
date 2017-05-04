@@ -17,14 +17,12 @@
 namespace ui {
 
 namespace mojom {
-class WindowManagerFactory;
 class WindowTree;
 }
 
 namespace ws {
 
 class Display;
-class ServerWindow;
 class WindowServer;
 class WindowTree;
 class WindowTreeBinding;
@@ -45,10 +43,6 @@ class WindowServerDelegate {
   virtual void OnNoMoreDisplays() = 0;
 
   virtual bool IsTestConfig() const = 0;
-
-  // Called when touchscreen coordinate transforms should be updated. For
-  // example when displays or touch input devices are added/removed.
-  virtual void UpdateTouchTransforms() = 0;
 
   // Creates a WindowTreeBinding. Default implementation returns null, which
   // creates DefaultBinding.

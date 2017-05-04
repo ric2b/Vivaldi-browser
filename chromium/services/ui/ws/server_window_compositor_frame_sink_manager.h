@@ -5,19 +5,13 @@
 #ifndef SERVICES_UI_WS_SERVER_WINDOW_COMPOSITOR_FRAME_SINK_MANAGER_H_
 #define SERVICES_UI_WS_SERVER_WINDOW_COMPOSITOR_FRAME_SINK_MANAGER_H_
 
-#include <map>
-
 #include "base/macros.h"
 #include "cc/ipc/compositor_frame.mojom.h"
+#include "cc/ipc/display_compositor.mojom.h"
 #include "cc/output/context_provider.h"
 #include "cc/surfaces/surface_id.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
-#include "services/ui/surfaces/surfaces_context_provider.h"
-
-namespace gpu {
-class GpuMemoryBufferManager;
-}
 
 namespace ui {
 namespace ws {
@@ -33,32 +27,29 @@ struct CompositorFrameSinkData {
 
   CompositorFrameSinkData& operator=(CompositorFrameSinkData&& other);
 
-  cc::SurfaceId latest_submitted_surface_id;
-  gfx::Size latest_submitted_frame_size;
+  cc::SurfaceInfo latest_submitted_surface_info;
   cc::mojom::MojoCompositorFrameSinkPrivatePtr compositor_frame_sink;
   cc::mojom::MojoCompositorFrameSinkPrivateRequest
       pending_compositor_frame_sink_request;
+  cc::FrameSinkId frame_sink_id;
 };
 
 // ServerWindowCompositorFrameSinkManager tracks the surfaces associated with a
 // ServerWindow.
-// TODO(fsamuel): Delete this once window decorations are managed in the window
-// manager.
 class ServerWindowCompositorFrameSinkManager {
  public:
   explicit ServerWindowCompositorFrameSinkManager(ServerWindow* window);
   ~ServerWindowCompositorFrameSinkManager();
 
-  // Returns true if the CompositorFrameSinks from this manager should be drawn.
-  bool ShouldDraw();
-
   // Creates a new CompositorFrameSink of the specified type, replacing the
   // existing one of the specified type.
-  void CreateCompositorFrameSink(
-      mojom::CompositorFrameSinkType compositor_frame_sink_type,
+  void CreateDisplayCompositorFrameSink(
       gfx::AcceleratedWidget widget,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      scoped_refptr<SurfacesContextProvider> context_provider,
+      cc::mojom::MojoCompositorFrameSinkRequest request,
+      cc::mojom::MojoCompositorFrameSinkClientPtr client,
+      cc::mojom::DisplayPrivateRequest display_private_request);
+
+  void CreateOffscreenCompositorFrameSink(
       cc::mojom::MojoCompositorFrameSinkRequest request,
       cc::mojom::MojoCompositorFrameSinkClientPtr client);
 
@@ -69,46 +60,32 @@ class ServerWindowCompositorFrameSinkManager {
   // that has a CompositorFrameSink of the same type. This method returns
   // the FrameSinkId that is the first composited ancestor of the ServerWindow
   // assocaited with the provided |frame_sink_id|.
-  void AddChildFrameSinkId(
-      mojom::CompositorFrameSinkType compositor_frame_sink_type,
-      const cc::FrameSinkId& frame_sink_id);
-  void RemoveChildFrameSinkId(
-      mojom::CompositorFrameSinkType compositor_frame_sink_type,
-      const cc::FrameSinkId& frame_sink_id);
+  void AddChildFrameSinkId(const cc::FrameSinkId& frame_sink_id);
+  void RemoveChildFrameSinkId(const cc::FrameSinkId& frame_sink_id);
 
   ServerWindow* window() { return window_; }
 
-  bool HasCompositorFrameSinkOfType(mojom::CompositorFrameSinkType type) const;
-  bool HasAnyCompositorFrameSink() const;
+  bool HasCompositorFrameSink() const;
 
-  gfx::Size GetLatestFrameSize(mojom::CompositorFrameSinkType type) const;
-  cc::SurfaceId GetLatestSurfaceId(mojom::CompositorFrameSinkType type) const;
-  void SetLatestSurfaceInfo(mojom::CompositorFrameSinkType type,
-                            const cc::SurfaceId& surface_id,
-                            const gfx::Size& frame_size);
+  gfx::Size GetLatestFrameSize() const;
+  cc::SurfaceId GetLatestSurfaceId() const;
+  void SetLatestSurfaceInfo(const cc::SurfaceInfo& surface_info);
+
+  void OnRootChanged(ServerWindow* old_root, ServerWindow* new_root);
 
  private:
   friend class ServerWindowCompositorFrameSinkManagerTestApi;
   friend class ServerWindowCompositorFrameSink;
 
-  // Returns true if a CompositorFrameSink of |type| has been set and has
-  // received a frame that is greater than the size of the window.
-  bool IsCompositorFrameSinkReadyAndNonEmpty(
-      mojom::CompositorFrameSinkType type) const;
+  void CreateCompositorFrameSinkInternal(
+      gfx::AcceleratedWidget widget,
+      cc::mojom::MojoCompositorFrameSinkRequest request,
+      cc::mojom::MojoCompositorFrameSinkClientPtr client,
+      cc::mojom::DisplayPrivateRequest display_private_request);
 
   ServerWindow* window_;
 
-  using TypeToCompositorFrameSinkMap =
-      std::map<mojom::CompositorFrameSinkType, CompositorFrameSinkData>;
-
-  TypeToCompositorFrameSinkMap type_to_compositor_frame_sink_map_;
-
-  // While true the window is not drawn. This is initially true if the window
-  // has the property |kWaitForUnderlay_Property|. This is set to false once
-  // the underlay and default surface have been set *and* their size is at
-  // least that of the window. Ideally we would wait for sizes to match, but
-  // the underlay is not necessarily as big as the window.
-  bool waiting_for_initial_frames_;
+  std::unique_ptr<CompositorFrameSinkData> frame_sink_data_;
 
   DISALLOW_COPY_AND_ASSIGN(ServerWindowCompositorFrameSinkManager);
 };

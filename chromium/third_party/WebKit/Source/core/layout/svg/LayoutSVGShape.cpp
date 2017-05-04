@@ -72,17 +72,16 @@ LayoutSVGShape::~LayoutSVGShape() {}
 
 void LayoutSVGShape::createPath() {
   if (!m_path)
-    m_path = makeUnique<Path>();
+    m_path = WTF::makeUnique<Path>();
   *m_path = toSVGGeometryElement(element())->asPath();
   if (m_rareData.get())
     m_rareData->m_cachedNonScalingStrokePath.clear();
 }
 
 float LayoutSVGShape::dashScaleFactor() const {
-  if (!isSVGPathElement(element()) ||
-      !styleRef().svgStyle().strokeDashArray()->size())
+  if (!styleRef().svgStyle().strokeDashArray()->size())
     return 1;
-  return toSVGPathElement(*element()).pathLengthScaleFactor();
+  return toSVGGeometryElement(*element()).pathLengthScaleFactor();
 }
 
 void LayoutSVGShape::updateShapeFromElement() {
@@ -164,9 +163,9 @@ bool LayoutSVGShape::strokeContains(const FloatPoint& point,
 
 void LayoutSVGShape::updateLocalTransform() {
   SVGGraphicsElement* graphicsElement = toSVGGraphicsElement(element());
-  if (graphicsElement->hasAnimatedLocalTransform()) {
-    m_localTransform.setTransform(
-        graphicsElement->calculateAnimatedLocalTransform());
+  if (graphicsElement->hasTransform(SVGElement::IncludeMotionTransform)) {
+    m_localTransform.setTransform(graphicsElement->calculateTransform(
+        SVGElement::IncludeMotionTransform));
   } else {
     m_localTransform = AffineTransform();
   }
@@ -247,7 +246,7 @@ void LayoutSVGShape::paint(const PaintInfo& paintInfo,
 void LayoutSVGShape::addOutlineRects(Vector<LayoutRect>& rects,
                                      const LayoutPoint&,
                                      IncludeBlockVisualOverflowOrNot) const {
-  rects.append(LayoutRect(visualRectInLocalSVGCoordinates()));
+  rects.push_back(LayoutRect(visualRectInLocalSVGCoordinates()));
 }
 
 bool LayoutSVGShape::nodeAtFloatPoint(HitTestResult& result,
@@ -279,7 +278,7 @@ bool LayoutSVGShape::nodeAtFloatPoint(HitTestResult& result,
 bool LayoutSVGShape::nodeAtFloatPointInternal(const HitTestRequest& request,
                                               const FloatPoint& localPoint,
                                               PointerEventsHitRules hitRules) {
-  bool isVisible = (style()->visibility() == EVisibility::Visible);
+  bool isVisible = (style()->visibility() == EVisibility::kVisible);
   if (isVisible || !hitRules.requireVisible) {
     const SVGComputedStyle& svgStyle = style()->svgStyle();
     WindRule fillRule = svgStyle.fillRule();
@@ -333,7 +332,7 @@ float LayoutSVGShape::strokeWidth() const {
 
 LayoutSVGShapeRareData& LayoutSVGShape::ensureRareData() const {
   if (!m_rareData)
-    m_rareData = makeUnique<LayoutSVGShapeRareData>();
+    m_rareData = WTF::makeUnique<LayoutSVGShapeRareData>();
   return *m_rareData.get();
 }
 

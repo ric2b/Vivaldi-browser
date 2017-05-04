@@ -23,7 +23,6 @@
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "base/version.h"
-#include "base/win/windows_version.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/chrome_paths.h"
@@ -32,6 +31,10 @@
 #include "components/update_client/update_query_params.h"
 #include "components/update_client/utils.h"
 #include "content/public/browser/browser_thread.h"
+
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
+#endif
 
 using content::BrowserThread;
 using update_client::CrxComponent;
@@ -133,7 +136,7 @@ base::DictionaryValue* ReadJSONManifest(const base::FilePath& manifest_path) {
   std::unique_ptr<base::Value> root = deserializer.Deserialize(NULL, &error);
   if (!root.get())
     return NULL;
-  if (!root->IsType(base::Value::TYPE_DICTIONARY))
+  if (!root->IsType(base::Value::Type::DICTIONARY))
     return NULL;
   return static_cast<base::DictionaryValue*>(root.release());
 }

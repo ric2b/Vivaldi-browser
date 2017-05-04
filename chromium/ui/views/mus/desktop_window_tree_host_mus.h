@@ -11,30 +11,59 @@
 #include "base/macros.h"
 #include "ui/aura/env_observer.h"
 #include "ui/aura/mus/window_tree_host_mus.h"
+#include "ui/views/mus/mus_client_observer.h"
 #include "ui/views/mus/mus_export.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_observer.h"
+
+namespace wm {
+class CursorManager;
+}
 
 namespace views {
 
 class VIEWS_MUS_EXPORT DesktopWindowTreeHostMus
     : public DesktopWindowTreeHost,
+      public MusClientObserver,
+      public WidgetObserver,
       public aura::WindowTreeHostMus,
       public aura::EnvObserver {
  public:
   DesktopWindowTreeHostMus(
       internal::NativeWidgetDelegate* native_widget_delegate,
       DesktopNativeWidgetAura* desktop_native_widget_aura,
-      const Widget::InitParams& init_params);
+      const std::map<std::string, std::vector<uint8_t>>* mus_properties);
   ~DesktopWindowTreeHostMus() override;
+
+  // Called when the window was deleted on the server.
+  void ServerDestroyedWindow() { CloseNow(); }
+
+  // Controls whether the client area is automatically updated as necessary.
+  void set_auto_update_client_area(bool value) {
+    auto_update_client_area_ = value;
+  }
 
  private:
   bool IsDocked() const;
+
+  void SendClientAreaToServer();
+  void SendHitTestMaskToServer();
+
+  // Helper function to get the scale factor.
+  float GetScaleFactor() const;
+
+  void SetBoundsInDIP(const gfx::Rect& bounds_in_dip);
+
+  // Returns true if the client area should be set on this.
+  bool ShouldSendClientAreaToServer() const;
 
   // DesktopWindowTreeHost:
   void Init(aura::Window* content_window,
             const Widget::InitParams& params) override;
   void OnNativeWidgetCreated(const Widget::InitParams& params) override;
+  void OnNativeWidgetActivationChanged(bool active) override;
+  void OnWidgetInitDone() override;
   std::unique_ptr<corewm::Tooltip> CreateTooltip() override;
   std::unique_ptr<aura::client::DragDropClient> CreateDragDropClient(
       DesktopNativeCursorManager* cursor_manager) override;
@@ -77,6 +106,7 @@ class VIEWS_MUS_EXPORT DesktopWindowTreeHostMus
       Widget::MoveLoopEscapeBehavior escape_behavior) override;
   void EndMoveLoop() override;
   void SetVisibilityChangedAnimationsEnabled(bool value) override;
+  NonClientFrameView* CreateNonClientFrameView() override;
   bool ShouldUseNativeFrame() const override;
   bool ShouldWindowContentsBeTransparent() const override;
   void FrameTypeChanged() override;
@@ -87,15 +117,22 @@ class VIEWS_MUS_EXPORT DesktopWindowTreeHostMus
                       const gfx::ImageSkia& app_icon) override;
   void InitModalType(ui::ModalType modal_type) override;
   void FlashFrame(bool flash_frame) override;
-  void OnRootViewLayout() override;
   bool IsAnimatingClosed() const override;
   bool IsTranslucentWindowOpacitySupported() const override;
   void SizeConstraintsChanged() override;
+  bool ShouldUpdateWindowTransparency() const override;
+  bool ShouldUseDesktopNativeCursorManager() const override;
+
+  // MusClientObserver:
+  void OnWindowManagerFrameValuesChanged() override;
+
+  // WidgetObserver:
+  void OnWidgetActivationChanged(Widget* widget, bool active) override;
 
   // WindowTreeHostMus:
   void ShowImpl() override;
   void HideImpl() override;
-  void SetBounds(const gfx::Rect& bounds_in_pixels) override;
+  void SetBoundsInPixels(const gfx::Rect& bounds_in_pixels) override;
 
   // aura::EnvObserver:
   void OnWindowInitialized(aura::Window* window) override;
@@ -116,6 +153,10 @@ class VIEWS_MUS_EXPORT DesktopWindowTreeHostMus
   std::set<DesktopWindowTreeHostMus*> children_;
 
   bool is_active_ = false;
+
+  std::unique_ptr<wm::CursorManager> cursor_manager_;
+
+  bool auto_update_client_area_ = true;
 
   // Used so that Close() isn't immediate.
   base::WeakPtrFactory<DesktopWindowTreeHostMus> close_widget_factory_;

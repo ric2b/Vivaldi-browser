@@ -46,6 +46,7 @@
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/MessagePort.h"
 #include "core/frame/Deprecation.h"
+#include "core/frame/FrameOwner.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalDOMWindow.h"
@@ -65,10 +66,10 @@
 namespace blink {
 
 void V8Window::eventAttributeGetterCustom(
-    const v8::PropertyCallbackInfo<v8::Value>& info) {
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
   LocalDOMWindow* impl = toLocalDOMWindow(V8Window::toImpl(info.Holder()));
-  ExceptionState exceptionState(ExceptionState::GetterContext, "event",
-                                "Window", info.Holder(), info.GetIsolate());
+  ExceptionState exceptionState(
+      info.GetIsolate(), ExceptionState::GetterContext, "Window", "event");
   if (!BindingSecurity::shouldAllowAccessTo(currentDOMWindow(info.GetIsolate()),
                                             impl, exceptionState)) {
     return;
@@ -92,10 +93,10 @@ void V8Window::eventAttributeGetterCustom(
 
 void V8Window::eventAttributeSetterCustom(
     v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
   LocalDOMWindow* impl = toLocalDOMWindow(V8Window::toImpl(info.Holder()));
-  ExceptionState exceptionState(ExceptionState::SetterContext, "event",
-                                "Window", info.Holder(), info.GetIsolate());
+  ExceptionState exceptionState(
+      info.GetIsolate(), ExceptionState::SetterContext, "Window", "event");
   if (!BindingSecurity::shouldAllowAccessTo(currentDOMWindow(info.GetIsolate()),
                                             impl, exceptionState)) {
     return;
@@ -115,7 +116,7 @@ void V8Window::eventAttributeSetterCustom(
 }
 
 void V8Window::frameElementAttributeGetterCustom(
-    const v8::PropertyCallbackInfo<v8::Value>& info) {
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
   LocalDOMWindow* impl = toLocalDOMWindow(V8Window::toImpl(info.Holder()));
 
   if (!BindingSecurity::shouldAllowAccessTo(
@@ -129,10 +130,10 @@ void V8Window::frameElementAttributeGetterCustom(
   // the frame it's in, rather than its own frame.
   // So, use its containing document as the creation context when wrapping.
   v8::Local<v8::Value> creationContext =
-      toV8(&impl->frameElement()->document(), info.Holder(), info.GetIsolate());
+      ToV8(&impl->frameElement()->document(), info.Holder(), info.GetIsolate());
   RELEASE_ASSERT(!creationContext.IsEmpty());
   v8::Local<v8::Value> wrapper =
-      toV8(impl->frameElement(), v8::Local<v8::Object>::Cast(creationContext),
+      ToV8(impl->frameElement(), v8::Local<v8::Object>::Cast(creationContext),
            info.GetIsolate());
   v8SetReturnValue(info, wrapper);
 }
@@ -142,8 +143,10 @@ void V8Window::openerAttributeSetterCustom(
     const v8::PropertyCallbackInfo<void>& info) {
   v8::Isolate* isolate = info.GetIsolate();
   DOMWindow* impl = V8Window::toImpl(info.Holder());
-  ExceptionState exceptionState(ExceptionState::SetterContext, "opener",
-                                "Window", info.Holder(), isolate);
+  // TODO(dcheng): Investigate removing this, since opener is not really a
+  // cross-origin property (so it shouldn't be accessible to begin with)
+  ExceptionState exceptionState(isolate, ExceptionState::SetterContext,
+                                "Window", "opener");
   if (!BindingSecurity::shouldAllowAccessTo(currentDOMWindow(info.GetIsolate()),
                                             impl, exceptionState)) {
     return;
@@ -175,8 +178,9 @@ void V8Window::openerAttributeSetterCustom(
 
 void V8Window::postMessageMethodCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  ExceptionState exceptionState(ExceptionState::ExecutionContext, "postMessage",
-                                "Window", info.Holder(), info.GetIsolate());
+  ExceptionState exceptionState(info.GetIsolate(),
+                                ExceptionState::ExecutionContext, "Window",
+                                "postMessage");
   if (UNLIKELY(info.Length() < 2)) {
     exceptionState.throwTypeError(
         ExceptionMessages::notEnoughArguments(2, info.Length()));
@@ -193,8 +197,7 @@ void V8Window::postMessageMethodCustom(
   LocalDOMWindow* source = currentDOMWindow(info.GetIsolate());
 
   ASSERT(window);
-  UseCounter::countIfNotPrivateScript(info.GetIsolate(), window->frame(),
-                                      UseCounter::WindowPostMessage);
+  UseCounter::count(window->frame(), UseCounter::WindowPostMessage);
 
   // If called directly by WebCore we don't have a calling context.
   if (!source) {
@@ -235,8 +238,8 @@ void V8Window::postMessageMethodCustom(
 void V8Window::openMethodCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   DOMWindow* impl = V8Window::toImpl(info.Holder());
-  ExceptionState exceptionState(ExceptionState::ExecutionContext, "open",
-                                "Window", info.Holder(), info.GetIsolate());
+  ExceptionState exceptionState(
+      info.GetIsolate(), ExceptionState::ExecutionContext, "Window", "open");
   if (!BindingSecurity::shouldAllowAccessTo(currentDOMWindow(info.GetIsolate()),
                                             impl, exceptionState)) {
     return;
@@ -279,31 +282,46 @@ void V8Window::namedPropertyGetterCustom(
   if (!frame)
     return;
 
-  // Note that the spec doesn't allow any cross-origin named access to the
-  // window object. However, UAs have traditionally allowed named access to
-  // named child browsing contexts, even across origins. So first, search child
-  // frames for a frame with a matching name.
+  // Note that named access on WindowProxy is allowed in the cross-origin case.
+  // 7.4.5 [[GetOwnProperty]] (P), step 6.
+  // https://html.spec.whatwg.org/multipage/browsers.html#windowproxy-getownproperty
+  //
+  // 7.3.3 Named access on the Window object
+  // The document-tree child browsing context name property set
+  // https://html.spec.whatwg.org/multipage/browsers.html#document-tree-child-browsing-context-name-property-set
   Frame* child = frame->tree().scopedChild(name);
   if (child) {
+    // step 3. Remove each browsing context from childBrowsingContexts whose
+    // active document's origin is not same origin with activeDocument's origin
+    // and whose browsing context name does not match the name of its browsing
+    // context container's name content attribute value.
+    if (BindingSecurity::shouldAllowNamedAccessTo(window, child->domWindow()) ||
+        name == child->owner()->browsingContextContainerName()) {
+      v8SetReturnValueFast(info, child->domWindow(), window);
+      return;
+    }
+
+    // In addition to the above spec'ed case, we return the child window
+    // regardless of step 3 due to crbug.com/701489 for the time being.
+    // TODO(yukishiino): Makes iframe.name update the browsing context name
+    // appropriately and makes the new name available in the named access on
+    // window.  Then, removes the following two lines.
     v8SetReturnValueFast(info, child->domWindow(), window);
     return;
   }
 
-  // If the frame is remote, the caller will never be able to access further
+  // This is a cross-origin interceptor. Check that the caller has access to the
   // named results.
-  if (!frame->isLocalFrame())
+  if (!BindingSecurity::shouldAllowAccessTo(
+          currentDOMWindow(info.GetIsolate()), window,
+          BindingSecurity::ErrorReportOption::DoNotReport)) {
+    BindingSecurity::failedAccessCheckFor(info.GetIsolate(), frame);
     return;
+  }
 
   // Search named items in the document.
   Document* doc = toLocalFrame(frame)->document();
   if (!doc || !doc->isHTMLDocument())
-    return;
-
-  // This is an AllCanRead interceptor.  Check that the caller has access to the
-  // named results.
-  if (!BindingSecurity::shouldAllowAccessTo(
-          currentDOMWindow(info.GetIsolate()), window,
-          BindingSecurity::ErrorReportOption::DoNotReport))
     return;
 
   bool hasNamedItem = toHTMLDocument(doc)->hasNamedItem(name);

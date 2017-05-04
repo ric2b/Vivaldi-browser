@@ -26,6 +26,7 @@
 #ifndef ArrayBuffer_h
 #define ArrayBuffer_h
 
+#include "wtf/Assertions.h"
 #include "wtf/HashSet.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
@@ -62,6 +63,10 @@ class WTF_EXPORT ArrayBuffer : public RefCounted<ArrayBuffer> {
 
   inline void* data();
   inline const void* data() const;
+  inline void* dataShared();
+  inline const void* dataShared() const;
+  inline void* dataMaybeShared();
+  inline const void* dataMaybeShared() const;
   inline unsigned byteLength() const;
 
   // Creates a new ArrayBuffer object with copy of bytes in this object
@@ -106,7 +111,7 @@ class WTF_EXPORT ArrayBuffer : public RefCounted<ArrayBuffer> {
 };
 
 int ArrayBuffer::clampValue(int x, int left, int right) {
-  ASSERT(left <= right);
+  DCHECK_LE(left, right);
   if (x < left)
     x = left;
   if (right < x)
@@ -123,22 +128,23 @@ PassRefPtr<ArrayBuffer> ArrayBuffer::create(unsigned numElements,
 PassRefPtr<ArrayBuffer> ArrayBuffer::create(ArrayBuffer* other) {
   // TODO(binji): support creating a SharedArrayBuffer by copying another
   // ArrayBuffer?
-  ASSERT(!other->isShared());
+  DCHECK(!other->isShared());
   return ArrayBuffer::create(other->data(), other->byteLength());
 }
 
 PassRefPtr<ArrayBuffer> ArrayBuffer::create(const void* source,
                                             unsigned byteLength) {
   ArrayBufferContents contents(byteLength, 1, ArrayBufferContents::NotShared,
-                               ArrayBufferContents::ZeroInitialize);
-  RELEASE_ASSERT(contents.data());
+                               ArrayBufferContents::DontInitialize);
+  if (UNLIKELY(!contents.data()))
+    OOM_CRASH();
   RefPtr<ArrayBuffer> buffer = adoptRef(new ArrayBuffer(contents));
   memcpy(buffer->data(), source, byteLength);
   return buffer.release();
 }
 
 PassRefPtr<ArrayBuffer> ArrayBuffer::create(ArrayBufferContents& contents) {
-  RELEASE_ASSERT(contents.data());
+  RELEASE_ASSERT(contents.dataMaybeShared());
   return adoptRef(new ArrayBuffer(contents));
 }
 
@@ -185,10 +191,10 @@ PassRefPtr<ArrayBuffer> ArrayBuffer::createShared(unsigned numElements,
 PassRefPtr<ArrayBuffer> ArrayBuffer::createShared(const void* source,
                                                   unsigned byteLength) {
   ArrayBufferContents contents(byteLength, 1, ArrayBufferContents::Shared,
-                               ArrayBufferContents::ZeroInitialize);
-  RELEASE_ASSERT(contents.data());
+                               ArrayBufferContents::DontInitialize);
+  RELEASE_ASSERT(contents.dataShared());
   RefPtr<ArrayBuffer> buffer = adoptRef(new ArrayBuffer(contents));
-  memcpy(buffer->data(), source, byteLength);
+  memcpy(buffer->dataShared(), source, byteLength);
   return buffer.release();
 }
 
@@ -198,7 +204,7 @@ PassRefPtr<ArrayBuffer> ArrayBuffer::createShared(
     ArrayBufferContents::InitializationPolicy policy) {
   ArrayBufferContents contents(numElements, elementByteSize,
                                ArrayBufferContents::Shared, policy);
-  RELEASE_ASSERT(contents.data());
+  RELEASE_ASSERT(contents.dataShared());
   return adoptRef(new ArrayBuffer(contents));
 }
 
@@ -216,6 +222,22 @@ void* ArrayBuffer::data() {
 
 const void* ArrayBuffer::data() const {
   return m_contents.data();
+}
+
+void* ArrayBuffer::dataShared() {
+  return m_contents.dataShared();
+}
+
+const void* ArrayBuffer::dataShared() const {
+  return m_contents.dataShared();
+}
+
+void* ArrayBuffer::dataMaybeShared() {
+  return m_contents.dataMaybeShared();
+}
+
+const void* ArrayBuffer::dataMaybeShared() const {
+  return m_contents.dataMaybeShared();
 }
 
 unsigned ArrayBuffer::byteLength() const {

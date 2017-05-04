@@ -212,6 +212,11 @@ void EnsureCryptohomeMigratedToGaiaId(
     scoped_refptr<CryptohomeAuthenticator> resolver,
     bool ephemeral,
     bool create_if_nonexistent) {
+  if (attempt->user_context.GetAccountId().GetAccountType() ==
+      AccountType::ACTIVE_DIRECTORY) {
+    cryptohome::SetGaiaIdMigrationStatusDone(
+        attempt->user_context.GetAccountId());
+  }
   const bool is_gaiaid_migration_started = switches::IsGaiaIdMigrationStarted();
   if (!is_gaiaid_migration_started) {
     UMACryptohomeMigrationToGaiaId(CryptohomeMigrationToGaiaId::NOT_STARTED);
@@ -220,12 +225,12 @@ void EnsureCryptohomeMigratedToGaiaId(
   }
   const bool already_migrated = cryptohome::GetGaiaIdMigrationStatus(
       attempt->user_context.GetAccountId());
-  const bool has_gaia_id =
-      !attempt->user_context.GetAccountId().GetGaiaId().empty();
+  const bool has_account_key =
+      attempt->user_context.GetAccountId().HasAccountIdKey();
 
   bool need_migration = false;
   if (!create_if_nonexistent && !already_migrated) {
-    if (has_gaia_id) {
+    if (has_account_key) {
       need_migration = true;
     } else {
       LOG(WARNING) << "Account '"
@@ -248,7 +253,7 @@ void EnsureCryptohomeMigratedToGaiaId(
                    create_if_nonexistent));
     return;
   }
-  if (!already_migrated && has_gaia_id) {
+  if (!already_migrated && has_account_key) {
     // Mark new users migrated.
     cryptohome::SetGaiaIdMigrationStatusDone(
         attempt->user_context.GetAccountId());
@@ -501,7 +506,9 @@ void CryptohomeAuthenticator::AuthenticateToLogin(
 
 void CryptohomeAuthenticator::CompleteLogin(content::BrowserContext* context,
                                             const UserContext& user_context) {
-  DCHECK_EQ(user_manager::USER_TYPE_REGULAR, user_context.GetUserType());
+  DCHECK(user_context.GetUserType() == user_manager::USER_TYPE_REGULAR ||
+         user_context.GetUserType() ==
+             user_manager::USER_TYPE_ACTIVE_DIRECTORY);
   authentication_context_ = context;
   current_state_.reset(new AuthAttemptState(user_context,
                                             true,   // unlock

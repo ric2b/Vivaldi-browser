@@ -58,9 +58,25 @@ public class CustomTabIntentDataProvider {
     public static final String EXTRA_IS_MEDIA_VIEWER =
             "org.chromium.chrome.browser.customtabs.IS_MEDIA_VIEWER";
 
+    /** URL that should be loaded in place of the URL passed along in the data. */
+    public static final String EXTRA_MEDIA_VIEWER_URL =
+            "org.chromium.chrome.browser.customtabs.MEDIA_VIEWER_URL";
+
+    /** Indicates that the Custom Tab should style itself as an info page. */
+    public static final String EXTRA_IS_INFO_PAGE =
+            "org.chromium.chrome.browser.customtabs.IS_INFO_PAGE";
+
     /** Extra that defines the initial background color (RGB color stored as an integer). */
     public static final String EXTRA_INITIAL_BACKGROUND_COLOR =
             "org.chromium.chrome.browser.customtabs.EXTRA_INITIAL_BACKGROUND_COLOR";
+
+    /** Extra that enables the client to disable the star button in menu. */
+    public static final String EXTRA_DISABLE_STAR_BUTTON =
+            "org.chromium.chrome.browser.customtabs.EXTRA_DISABLE_STAR_BUTTON";
+
+    /** Extra that enables the client to disable the download button in menu. */
+    public static final String EXTRA_DISABLE_DOWNLOAD_BUTTON =
+            "org.chromium.chrome.browser.customtabs.EXTRA_DISABLE_DOWNLOAD_BUTTON";
 
     //TODO(yusufo): Move this to CustomTabsIntent.
     /** Signals custom tabs to favor sending initial urls to external handler apps if possible. */
@@ -81,7 +97,11 @@ public class CustomTabIntentDataProvider {
     private final Intent mKeepAliveServiceIntent;
     private final int mTitleVisibilityState;
     private final boolean mIsMediaViewer;
+    private final String mMediaViewerUrl;
+    private final boolean mIsInfoPage;
     private final int mInitialBackgroundColor;
+    private final boolean mDisableStar;
+    private final boolean mDisableDownload;
 
     private int mToolbarColor;
     private int mBottomBarColor;
@@ -108,7 +128,7 @@ public class CustomTabIntentDataProvider {
     public CustomTabIntentDataProvider(Intent intent, Context context) {
         if (intent == null) assert false;
         mSession = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
-        mIsTrustedIntent = IntentHandler.isIntentChromeOrFirstParty(intent, context);
+        mIsTrustedIntent = IntentHandler.isIntentChromeOrFirstParty(intent);
 
         retrieveCustomButtons(intent, context);
         retrieveToolbarColor(intent, context);
@@ -163,6 +183,13 @@ public class CustomTabIntentDataProvider {
                 CustomTabsIntent.EXTRA_REMOTEVIEWS_PENDINGINTENT);
         mIsMediaViewer = mIsTrustedIntent
                 && IntentUtils.safeGetBooleanExtra(intent, EXTRA_IS_MEDIA_VIEWER, false);
+        mMediaViewerUrl = mIsMediaViewer
+                ? IntentUtils.safeGetStringExtra(intent, EXTRA_MEDIA_VIEWER_URL) : null;
+        mIsInfoPage = mIsTrustedIntent
+                && IntentUtils.safeGetBooleanExtra(intent, EXTRA_IS_INFO_PAGE, false);
+        mDisableStar = IntentUtils.safeGetBooleanExtra(intent, EXTRA_DISABLE_STAR_BUTTON, false);
+        mDisableDownload = IntentUtils.safeGetBooleanExtra(intent, EXTRA_DISABLE_DOWNLOAD_BUTTON,
+                false);
     }
 
     /**
@@ -464,10 +491,39 @@ public class CustomTabIntentDataProvider {
     }
 
     /**
+     * @return See {@link #EXTRA_MEDIA_VIEWER_URL}.
+     */
+    String getMediaViewerUrl() {
+        return mMediaViewerUrl;
+    }
+
+    /**
+     * @return If the Custom Tab is an info page.
+     * See {@link #EXTRA_IS_INFO_PAGE}.
+     */
+    boolean isInfoPage() {
+        return mIsInfoPage;
+    }
+
+    /**
      * See {@link #EXTRA_INITIAL_BACKGROUND_COLOR}.
      * @return The color if it was specified in the Intent, Color.TRANSPARENT otherwise.
      */
     int getInitialBackgroundColor() {
         return mInitialBackgroundColor;
+    }
+
+    /**
+     * @return Whether there should be a star button in the menu.
+     */
+    boolean shouldShowStarButton() {
+        return !mDisableStar;
+    }
+
+    /**
+     * @return Whether there should be a download button in the menu.
+     */
+    boolean shouldShowDownloadButton() {
+        return !mDisableDownload;
     }
 }

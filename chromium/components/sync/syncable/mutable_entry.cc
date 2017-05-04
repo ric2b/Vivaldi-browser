@@ -65,6 +65,7 @@ MutableEntry::MutableEntry(WriteTransaction* trans,
   Init(trans, model_type, Id(), name);
   // We need to have a valid position ready before we can index the item.
   DCHECK_NE(BOOKMARKS, model_type);
+  DCHECK_NE(NOTES, model_type);
   DCHECK(!ShouldMaintainPosition());
 
   bool result = trans->directory()->InsertEntry(trans, kernel_);
@@ -84,6 +85,12 @@ MutableEntry::MutableEntry(WriteTransaction* trans,
     std::string unique_tag = GenerateSyncableBookmarkHash(
         trans->directory()->cache_guid(), GetId().GetServerId());
     kernel_->put(UNIQUE_BOOKMARK_TAG, unique_tag);
+    kernel_->put(UNIQUE_POSITION, UniquePosition::InitialPosition(unique_tag));
+  } else if (model_type == NOTES) {
+    // Base the tag off of our cache-guid and local "c-" style ID.
+    std::string unique_tag = GenerateSyncableNotesHash(
+        trans->directory()->cache_guid(), GetId().GetServerId());
+    kernel_->put(UNIQUE_NOTES_TAG, unique_tag);
     kernel_->put(UNIQUE_POSITION, UniquePosition::InitialPosition(unique_tag));
   } else {
     DCHECK(!ShouldMaintainPosition());

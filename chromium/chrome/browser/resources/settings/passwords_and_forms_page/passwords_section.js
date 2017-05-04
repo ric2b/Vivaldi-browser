@@ -39,14 +39,6 @@ Polymer({
     },
 
     /**
-     * Whether passwords can be shown or not.
-     * @type {boolean}
-     */
-    showPasswords: {
-      type: Boolean,
-    },
-
-    /**
      * An array of sites to display.
      * @type {!Array<!chrome.passwordsPrivate.ExceptionPair>}
      */
@@ -55,6 +47,11 @@ Polymer({
       value: function() { return []; },
     },
 
+    /** @override */
+    subpageRoute: {
+      type: Object,
+      value: settings.Route.MANAGE_PASSWORDS,
+    },
 
     /**
      * The model for any password related action menus or dialogs.
@@ -87,9 +84,11 @@ Polymer({
 
   /**
    * Shows the edit password dialog.
+   * @param {!Event} e
    * @private
    */
-  onMenuEditPasswordTap_: function() {
+  onMenuEditPasswordTap_: function(e) {
+    e.preventDefault();
     /** @type {CrActionMenuElement} */(this.$.menu).close();
     this.showPasswordEditDialog_ = true;
   },

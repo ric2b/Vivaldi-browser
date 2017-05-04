@@ -37,7 +37,8 @@ class MockRendererScheduler : public RendererScheduler {
   MOCK_METHOD0(DidCommitFrameToCompositor, void());
   MOCK_METHOD2(DidHandleInputEventOnCompositorThread,
                void(const WebInputEvent&, InputEventState));
-  MOCK_METHOD1(DidHandleInputEventOnMainThread, void(const WebInputEvent&));
+  MOCK_METHOD2(DidHandleInputEventOnMainThread,
+               void(const WebInputEvent&, WebInputEventResult));
   MOCK_METHOD0(DidAnimateForInputOnCompositorThread, void());
   MOCK_METHOD0(OnRendererBackgrounded, void());
   MOCK_METHOD0(OnRendererForegrounded, void());
@@ -58,6 +59,7 @@ class MockRendererScheduler : public RendererScheduler {
   MOCK_METHOD1(SetTimerQueueSuspensionWhenBackgroundedEnabled, void(bool));
   MOCK_METHOD1(SetTopLevelBlameContext, void(base::trace_event::BlameContext*));
   MOCK_METHOD1(SetRAILModeObserver, void(RAILModeObserver*));
+  MOCK_METHOD0(MainThreadSeemsUnresponsive, bool());
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockRendererScheduler);

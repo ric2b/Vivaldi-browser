@@ -27,6 +27,7 @@
 #ifndef LocalDOMWindow_h
 #define LocalDOMWindow_h
 
+#include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
 #include "core/events/EventTarget.h"
 #include "core/frame/DOMWindow.h"
@@ -41,13 +42,10 @@ namespace blink {
 
 class CustomElementRegistry;
 class DOMWindowEventQueue;
-class DOMWindowProperty;
 class DocumentInit;
-class EventListener;
 class EventQueue;
 class FrameConsole;
 class MessageEvent;
-class Page;
 class PostMessageTimer;
 class SecurityOrigin;
 class SourceLocation;
@@ -83,7 +81,10 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   ~LocalDOMWindow() override;
 
+  LocalFrame* frame() const { return toLocalFrame(DOMWindow::frame()); }
+
   DECLARE_VIRTUAL_TRACE();
+  DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
   Document* installNewDocument(const String& mimeType,
                                const DocumentInit&,
@@ -95,7 +96,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   LocalDOMWindow* toLocalDOMWindow() override;
 
   // DOMWindow overrides:
-  LocalFrame* frame() const override;
   Screen* screen() const override;
   History* history() const override;
   BarProp* locationbar() const override;
@@ -170,9 +170,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   CustomElementRegistry* customElements(ScriptState*) const override;
   CustomElementRegistry* customElements() const;
   CustomElementRegistry* maybeCustomElements() const;
-
-  void registerProperty(DOMWindowProperty*);
-  void unregisterProperty(DOMWindowProperty*);
 
   void registerEventListenerObserver(EventListenerObserver*);
 
@@ -260,14 +257,11 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   void willDetachFrameHost();
 
-  Member<LocalFrame> m_frame;
   Member<Document> m_document;
   Member<DOMVisualViewport> m_visualViewport;
-  Timer<LocalDOMWindow> m_unusedPreloadsTimer;
+  TaskRunnerTimer<LocalDOMWindow> m_unusedPreloadsTimer;
 
   bool m_shouldPrintWhenFinishedLoading;
-
-  HeapHashSet<WeakMember<DOMWindowProperty>> m_properties;
 
   mutable Member<Screen> m_screen;
   mutable Member<History> m_history;
@@ -279,7 +273,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   mutable Member<BarProp> m_toolbar;
   mutable Member<Navigator> m_navigator;
   mutable Member<StyleMedia> m_media;
-  mutable Member<CustomElementRegistry> m_customElements;
+  mutable TraceWrapperMember<CustomElementRegistry> m_customElements;
 
   String m_status;
   String m_defaultStatus;

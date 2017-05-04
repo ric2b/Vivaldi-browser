@@ -38,6 +38,7 @@
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "ppapi/features/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -68,10 +69,11 @@ class DeadlockCheckerObserver {
       : provider_(provider),
       notification_received_(false) {
     pref_change_registrar_.Init(prefs);
+    WebsiteSettingsRegistry* registry = WebsiteSettingsRegistry::GetInstance();
     for (const auto& pair : provider_->content_settings_prefs_) {
       const ContentSettingsPref* pref = pair.second.get();
       pref_change_registrar_.Add(
-          pref->pref_name_,
+          registry->Get(pair.first)->pref_name(),
           base::Bind(
               &DeadlockCheckerObserver::OnContentSettingsPatternPairsChanged,
               base::Unretained(this), base::Unretained(pref)));
@@ -337,7 +339,7 @@ TEST_F(PrefProviderTest, Patterns) {
   pref_content_settings_provider.ShutdownOnUIThread();
 }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 TEST_F(PrefProviderTest, ResourceIdentifier) {
   TestingProfile testing_profile;
   PrefProvider pref_content_settings_provider(testing_profile.GetPrefs(),
@@ -518,7 +520,7 @@ TEST_F(PrefProviderTest, ClearAllContentSettingsRules) {
   provider.SetWebsiteSetting(pattern, wildcard,
                              CONTENT_SETTINGS_TYPE_GEOLOCATION,
                              ResourceIdentifier(), value->DeepCopy());
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   // Non-empty pattern, plugins, non-empty resource identifier.
   provider.SetWebsiteSetting(pattern, wildcard, CONTENT_SETTINGS_TYPE_PLUGINS,
                              res_id, value->DeepCopy());
@@ -538,7 +540,7 @@ TEST_F(PrefProviderTest, ClearAllContentSettingsRules) {
 
   provider.ClearAllContentSettingsRules(CONTENT_SETTINGS_TYPE_JAVASCRIPT);
   provider.ClearAllContentSettingsRules(CONTENT_SETTINGS_TYPE_GEOLOCATION);
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   provider.ClearAllContentSettingsRules(CONTENT_SETTINGS_TYPE_PLUGINS);
 #endif
 
@@ -547,7 +549,7 @@ TEST_F(PrefProviderTest, ClearAllContentSettingsRules) {
   const char* empty_prefs[] = {
     registry->Get(CONTENT_SETTINGS_TYPE_JAVASCRIPT)->pref_name().c_str(),
     registry->Get(CONTENT_SETTINGS_TYPE_GEOLOCATION)->pref_name().c_str(),
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
     registry->Get(CONTENT_SETTINGS_TYPE_PLUGINS)->pref_name().c_str(),
 #endif
   };

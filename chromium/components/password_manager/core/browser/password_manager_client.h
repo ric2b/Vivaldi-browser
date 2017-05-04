@@ -24,7 +24,6 @@ namespace password_manager {
 class LogManager;
 class PasswordFormManager;
 class PasswordManager;
-class PasswordManagerDriver;
 class PasswordStore;
 
 enum PasswordSyncState {
@@ -184,6 +183,9 @@ class PasswordManagerClient {
 
   // Returns the main frame URL.
   virtual const GURL& GetMainFrameURL() const;
+
+  // Returns true if the main frame URL has a secure origin.
+  virtual bool IsMainFrameSecure() const;
 
   virtual const GURL& GetLastCommittedEntryURL() const = 0;
 

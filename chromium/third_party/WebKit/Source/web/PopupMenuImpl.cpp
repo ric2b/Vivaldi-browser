@@ -10,6 +10,7 @@
 #include "core/dom/ExecutionContextTask.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/StyleEngine.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/ScopedEventQueue.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -73,13 +74,13 @@ const char* fontStyleToString(FontStyle style) {
 
 const char* textTransformToString(ETextTransform transform) {
   switch (transform) {
-    case CAPITALIZE:
+    case ETextTransform::kCapitalize:
       return "capitalize";
-    case UPPERCASE:
+    case ETextTransform::kUppercase:
       return "uppercase";
-    case LOWERCASE:
+    case ETextTransform::kLowercase:
       return "lowercase";
-    case TTNONE:
+    case ETextTransform::kNone:
       return "none";
   }
   NOTREACHED();
@@ -176,7 +177,7 @@ class PopupMenuImpl::ItemIterationContext {
     addProperty("textTransform",
                 String(textTransformToString(baseStyle().textTransform())),
                 m_buffer);
-    addProperty("fontSize", baseFont().specifiedSize(), m_buffer);
+    addProperty("fontSize", baseFont().computedPixelSize(), m_buffer);
     addProperty("fontStyle", String(fontStyleToString(baseFont().style())),
                 m_buffer);
     addProperty("fontVariant",
@@ -291,14 +292,14 @@ void PopupMenuImpl::writeDocument(SharedBuffer* data) {
   PagePopupClient::addString("],\n", data);
 
   addProperty("anchorRectInScreen", anchorRectInScreen, data);
-  float zoom = zoomFactor();
   float scaleFactor = m_chromeClient->windowToViewportScalar(1.f);
-  addProperty("zoomFactor", zoom / scaleFactor, data);
+  addProperty("zoomFactor", 1, data);
+  addProperty("scaleFactor", scaleFactor, data);
   bool isRTL = !ownerStyle->isLeftToRightDirection();
   addProperty("isRTL", isRTL, data);
   addProperty("paddingStart",
-              isRTL ? ownerElement.clientPaddingRight().toDouble() / zoom
-                    : ownerElement.clientPaddingLeft().toDouble() / zoom,
+              isRTL ? ownerElement.clientPaddingRight().toDouble()
+                    : ownerElement.clientPaddingLeft().toDouble(),
               data);
   PagePopupClient::addString("};\n", data);
   data->append(Platform::current()->loadResource("pickerCommon.js"));
@@ -314,15 +315,18 @@ void PopupMenuImpl::addElementStyle(ItemIterationContext& context,
   // TODO(tkent): We generate unnecessary "style: {\n},\n" even if no
   // additional style.
   PagePopupClient::addString("style: {\n", data);
-  if (style->visibility() == EVisibility::Hidden)
+  if (style->visibility() == EVisibility::kHidden)
     addProperty("visibility", String("hidden"), data);
   if (style->display() == EDisplay::None)
     addProperty("display", String("none"), data);
   const ComputedStyle& baseStyle = context.baseStyle();
-  if (baseStyle.direction() != style->direction())
-    addProperty("direction", String(style->direction() == RTL ? "rtl" : "ltr"),
-                data);
-  if (isOverride(style->unicodeBidi()))
+  if (baseStyle.direction() != style->direction()) {
+    addProperty(
+        "direction",
+        String(style->direction() == TextDirection::kRtl ? "rtl" : "ltr"),
+        data);
+  }
+  if (isOverride(style->getUnicodeBidi()))
     addProperty("unicodeBidi", String("bidi-override"), data);
   Color foregroundColor = style->visitedDependentColor(CSSPropertyColor);
   if (baseStyle.visitedDependentColor(CSSPropertyColor) != foregroundColor)
@@ -337,8 +341,7 @@ void PopupMenuImpl::addElementStyle(ItemIterationContext& context,
   if (baseFont.computedPixelSize() != fontDescription.computedPixelSize()) {
     // We don't use FontDescription::specifiedSize() because this element
     // might have its own zoom level.
-    addProperty("fontSize", fontDescription.computedSize() / zoomFactor(),
-                data);
+    addProperty("fontSize", fontDescription.computedPixelSize(), data);
   }
   // Our UA stylesheet has font-weight:normal for OPTION.
   if (FontWeightNormal != fontDescription.weight())
@@ -499,7 +502,7 @@ void PopupMenuImpl::updateFromElement(UpdateReason) {
     return;
   m_needsUpdate = true;
   ownerElement().document().postTask(
-      BLINK_FROM_HERE,
+      TaskType::UserInteraction, BLINK_FROM_HERE,
       createSameThreadTask(&PopupMenuImpl::update, wrapPersistent(this)));
 }
 

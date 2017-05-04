@@ -4,20 +4,11 @@
 
 #include "net/quic/test_tools/quic_received_packet_manager_peer.h"
 
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_received_packet_manager.h"
 
 namespace net {
 namespace test {
-
-// static
-void QuicReceivedPacketManagerPeer::SetCumulativeEntropyUpTo(
-    QuicReceivedPacketManager* received_packet_manager,
-    QuicPacketNumber peer_least_unacked,
-    QuicPacketEntropyHash entropy_hash) {
-  received_packet_manager->entropy_tracker_.SetCumulativeEntropyUpTo(
-      peer_least_unacked, entropy_hash);
-}
 
 // static
 bool QuicReceivedPacketManagerPeer::DontWaitForPacketsBefore(

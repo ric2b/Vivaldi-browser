@@ -45,6 +45,7 @@ ChromeNativeAppWindowViewsAura::GetRestorableState(
     case ui::SHOW_STATE_DEFAULT:
     case ui::SHOW_STATE_MINIMIZED:
     case ui::SHOW_STATE_INACTIVE:
+    // TODO(afakhry): Remove Docked Windows in M58.
     case ui::SHOW_STATE_DOCKED:
     case ui::SHOW_STATE_END:
       return ui::SHOW_STATE_NORMAL;
@@ -104,6 +105,7 @@ ui::WindowShowState ChromeNativeAppWindowViewsAura::GetRestoredState() const {
     return ui::SHOW_STATE_FULLSCREEN;
   }
 
+  // TODO(afakhry): Remove in M58.
   if (widget()->GetNativeWindow()->GetProperty(
           aura::client::kShowStateKey) == ui::SHOW_STATE_DOCKED ||
       widget()->GetNativeWindow()->GetProperty(

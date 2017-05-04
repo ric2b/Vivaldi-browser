@@ -7,13 +7,21 @@
 #include <algorithm>
 #include <vector>
 
-#include "ash/mus/bridge/wm_window_mus_test_api.h"
-#include "ash/mus/root_window_controller.h"
+#include "ash/common/session/session_controller.h"
+#include "ash/common/wm_shell.h"
 #include "ash/mus/test/wm_test_helper.h"
+#include "ash/mus/top_level_window_factory.h"
 #include "ash/mus/window_manager.h"
 #include "ash/mus/window_manager_application.h"
+#include "ash/public/cpp/session_types.h"
+#include "ash/public/interfaces/session_controller.mojom.h"
+#include "ash/test/wm_window_test_api.h"
+#include "base/memory/ptr_util.h"
 #include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/cpp/window_tree_client.h"
+#include "ui/aura/mus/property_converter.h"
+#include "ui/aura/mus/window_tree_client.h"
+#include "ui/aura/window.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/display.h"
 
 namespace ash {
@@ -68,99 +76,136 @@ void WmTestBase::UpdateDisplay(const std::string& display_spec) {
   test_helper_->UpdateDisplay(display_spec);
 }
 
-ui::Window* WmTestBase::GetPrimaryRootWindow() {
+aura::Window* WmTestBase::GetPrimaryRootWindow() {
   std::vector<RootWindowController*> roots =
       test_helper_->GetRootsOrderedByDisplayId();
   DCHECK(!roots.empty());
-  return roots[0]->root();
+  return roots[0]->GetRootWindow();
 }
 
-ui::Window* WmTestBase::GetSecondaryRootWindow() {
+aura::Window* WmTestBase::GetSecondaryRootWindow() {
   std::vector<RootWindowController*> roots =
       test_helper_->GetRootsOrderedByDisplayId();
-  return roots.size() < 2 ? nullptr : roots[1]->root();
+  return roots.size() < 2 ? nullptr : roots[1]->GetRootWindow();
 }
 
 display::Display WmTestBase::GetPrimaryDisplay() {
   std::vector<RootWindowController*> roots =
       test_helper_->GetRootsOrderedByDisplayId();
   DCHECK(!roots.empty());
-  return roots[0]->display();
+  return roots[0]->GetWindow()->GetDisplayNearestWindow();
 }
 
 display::Display WmTestBase::GetSecondaryDisplay() {
   std::vector<RootWindowController*> roots =
       test_helper_->GetRootsOrderedByDisplayId();
-  return roots.size() < 2 ? display::Display() : roots[1]->display();
+  return roots.size() < 2 ? display::Display()
+                          : roots[1]->GetWindow()->GetDisplayNearestWindow();
 }
 
-ui::Window* WmTestBase::CreateTestWindow(const gfx::Rect& bounds) {
+aura::Window* WmTestBase::CreateTestWindow(const gfx::Rect& bounds) {
   return CreateTestWindow(bounds, ui::wm::WINDOW_TYPE_NORMAL);
 }
 
-ui::Window* WmTestBase::CreateTestWindow(const gfx::Rect& bounds,
-                                         ui::wm::WindowType window_type) {
+aura::Window* WmTestBase::CreateTestWindow(const gfx::Rect& bounds,
+                                           ui::wm::WindowType window_type) {
   std::map<std::string, std::vector<uint8_t>> properties;
-  properties[ui::mojom::WindowManager::kWindowType_Property] =
-      mojo::ConvertTo<std::vector<uint8_t>>(
-          static_cast<int32_t>(MusWindowTypeFromWmWindowType(window_type)));
   if (!bounds.IsEmpty()) {
-    properties[ui::mojom::WindowManager::kInitialBounds_Property] =
+    properties[ui::mojom::WindowManager::kBounds_InitProperty] =
         mojo::ConvertTo<std::vector<uint8_t>>(bounds);
   }
+
   properties[ui::mojom::WindowManager::kResizeBehavior_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(
-          ui::mojom::kResizeBehaviorCanResize |
-          ui::mojom::kResizeBehaviorCanMaximize |
-          ui::mojom::kResizeBehaviorCanMinimize);
+          static_cast<aura::PropertyConverter::PrimitiveType>(
+              ui::mojom::kResizeBehaviorCanResize |
+              ui::mojom::kResizeBehaviorCanMaximize |
+              ui::mojom::kResizeBehaviorCanMinimize));
 
-  ui::Window* window = test_helper_->GetRootsOrderedByDisplayId()[0]
-                           ->window_manager()
-                           ->NewTopLevelWindow(&properties);
-  window->SetVisible(true);
-  // Most tests expect a minimum size of 0x0.
-  WmWindowMusTestApi(WmWindowMus::Get(window)).set_use_empty_minimum_size(true);
+  const ui::mojom::WindowType mus_window_type =
+      MusWindowTypeFromWmWindowType(window_type);
+  WindowManager* window_manager =
+      test_helper_->window_manager_app()->window_manager();
+  aura::Window* window = CreateAndParentTopLevelWindow(
+      window_manager, mus_window_type, &properties);
+  window->Show();
   return window;
 }
 
-ui::Window* WmTestBase::CreateFullscreenTestWindow() {
+aura::Window* WmTestBase::CreateFullscreenTestWindow(int64_t display_id) {
   std::map<std::string, std::vector<uint8_t>> properties;
   properties[ui::mojom::WindowManager::kShowState_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(
-          static_cast<int32_t>(ui::mojom::ShowState::FULLSCREEN));
-  ui::Window* window = test_helper_->GetRootsOrderedByDisplayId()[0]
-                           ->window_manager()
-                           ->NewTopLevelWindow(&properties);
-  window->SetVisible(true);
+          static_cast<aura::PropertyConverter::PrimitiveType>(
+              ui::mojom::ShowState::FULLSCREEN));
+  if (display_id != display::kInvalidDisplayId) {
+    properties[ui::mojom::WindowManager::kDisplayId_InitProperty] =
+        mojo::ConvertTo<std::vector<uint8_t>>(display_id);
+  }
+  WindowManager* window_manager =
+      test_helper_->window_manager_app()->window_manager();
+  aura::Window* window = CreateAndParentTopLevelWindow(
+      window_manager, ui::mojom::WindowType::WINDOW, &properties);
+  window->Show();
   return window;
 }
 
-ui::Window* WmTestBase::CreateChildTestWindow(ui::Window* parent,
-                                              const gfx::Rect& bounds) {
+aura::Window* WmTestBase::CreateChildTestWindow(aura::Window* parent,
+                                                const gfx::Rect& bounds) {
   std::map<std::string, std::vector<uint8_t>> properties;
-  properties[ui::mojom::WindowManager::kWindowType_Property] =
-      mojo::ConvertTo<std::vector<uint8_t>>(static_cast<int32_t>(
-          MusWindowTypeFromWmWindowType(ui::wm::WINDOW_TYPE_NORMAL)));
-  ui::Window* window = test_helper_->GetRootsOrderedByDisplayId()[0]
-                           ->root()
-                           ->window_tree()
-                           ->NewWindow(&properties);
+  aura::Window* window = new aura::Window(nullptr);
+  window->Init(ui::LAYER_TEXTURED);
   window->SetBounds(bounds);
-  window->SetVisible(true);
+  window->Show();
   parent->AddChild(window);
   return window;
 }
 
 void WmTestBase::SetUp() {
   setup_called_ = true;
+  // Disable animations during tests.
+  zero_duration_mode_ = base::MakeUnique<ui::ScopedAnimationDurationScaleMode>(
+      ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
+  // Most tests expect a minimum size of 0x0.
+  minimum_size_lock_ =
+      base::MakeUnique<WmWindowTestApi::GlobalMinimumSizeLock>();
   test_helper_.reset(new WmTestHelper);
   test_helper_->Init();
+
+  // Most tests assume the user is logged in (and hence the shelf is created).
+  SimulateUserLogin();
 }
 
 void WmTestBase::TearDown() {
   teardown_called_ = true;
   test_helper_.reset();
+  minimum_size_lock_.reset();
+  zero_duration_mode_.reset();
 }
+
+void WmTestBase::SimulateUserLogin() {
+  SessionController* session_controller = WmShell::Get()->session_controller();
+
+  // Simulate the first user logging in.
+  mojom::UserSessionPtr session = mojom::UserSession::New();
+  session->session_id = 1;
+  session->type = user_manager::USER_TYPE_REGULAR;
+  const std::string email("ash.user@example.com");
+  session->account_id = AccountId::FromUserEmail(email);
+  session->display_name = "Ash User";
+  session->display_email = email;
+  session_controller->UpdateUserSession(std::move(session));
+
+  // Simulate the user session becoming active.
+  mojom::SessionInfoPtr info = mojom::SessionInfo::New();
+  info->max_users = 10;
+  info->can_lock_screen = true;
+  info->should_lock_screen_automatically = false;
+  info->add_user_session_policy = AddUserSessionPolicy::ALLOWED;
+  info->state = session_manager::SessionState::ACTIVE;
+  session_controller->SetSessionInfo(std::move(info));
+}
+
 
 }  // namespace mus
 }  // namespace ash

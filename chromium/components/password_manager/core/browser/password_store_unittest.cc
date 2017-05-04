@@ -136,7 +136,7 @@ TEST_F(PasswordStoreTest, IgnoreOldWwwGoogleLogins) {
   };
 
   // Build the forms vector and add the forms to the store.
-  ScopedVector<PasswordForm> all_forms;
+  std::vector<std::unique_ptr<PasswordForm>> all_forms;
   for (size_t i = 0; i < arraysize(form_data); ++i) {
     all_forms.push_back(CreatePasswordFormFromDataForTesting(form_data[i]));
     store->AddLogin(*all_forms.back());
@@ -398,7 +398,7 @@ TEST_F(PasswordStoreTest, GetLoginsWithoutAffiliations) {
   MockAffiliatedMatchHelper* mock_helper = new MockAffiliatedMatchHelper;
   store->SetAffiliatedMatchHelper(base::WrapUnique(mock_helper));
 
-  ScopedVector<PasswordForm> all_credentials;
+  std::vector<std::unique_ptr<PasswordForm>> all_credentials;
   for (size_t i = 0; i < arraysize(kTestCredentials); ++i) {
     all_credentials.push_back(
         CreatePasswordFormFromDataForTesting(kTestCredentials[i]));
@@ -480,8 +480,7 @@ TEST_F(PasswordStoreTest, GetLoginsWithAffiliations) {
        "", "", L"", L"", L"",
        L"username_value_4",
        L"", true, 1},
-      // Federated credential for this second Android application; this should
-      // not be returned.
+      // Federated credential for this second Android application.
       {PasswordForm::SCHEME_HTML,
        kTestAndroidRealm2,
        "", "", L"", L"", L"",
@@ -504,7 +503,7 @@ TEST_F(PasswordStoreTest, GetLoginsWithAffiliations) {
   MockAffiliatedMatchHelper* mock_helper = new MockAffiliatedMatchHelper;
   store->SetAffiliatedMatchHelper(base::WrapUnique(mock_helper));
 
-  ScopedVector<PasswordForm> all_credentials;
+  std::vector<std::unique_ptr<PasswordForm>> all_credentials;
   for (size_t i = 0; i < arraysize(kTestCredentials); ++i) {
     all_credentials.push_back(
         CreatePasswordFormFromDataForTesting(kTestCredentials[i]));
@@ -527,6 +526,8 @@ TEST_F(PasswordStoreTest, GetLoginsWithAffiliations) {
       base::MakeUnique<PasswordForm>(*all_credentials[3]));
   expected_results.push_back(
       base::MakeUnique<PasswordForm>(*all_credentials[5]));
+  expected_results.push_back(
+      base::MakeUnique<PasswordForm>(*all_credentials[6]));
 
   for (const auto& result : expected_results) {
     if (result->signon_realm != observed_form.signon_realm &&
@@ -686,7 +687,7 @@ TEST_F(PasswordStoreTest, MAYBE_UpdatePasswordsStoredForAffiliatedWebsites) {
                                         base::Closure());
 
       // Set up the initial test data set.
-      ScopedVector<PasswordForm> all_credentials;
+      std::vector<std::unique_ptr<PasswordForm>> all_credentials;
       for (size_t i = 0; i < arraysize(kTestCredentials); ++i) {
         all_credentials.push_back(
             CreatePasswordFormFromDataForTesting(kTestCredentials[i]));
@@ -794,7 +795,7 @@ TEST_F(PasswordStoreTest, GetLoginsWithAffiliatedRealms) {
     store->RemoveLoginsCreatedBetween(base::Time(), base::Time::Max(),
                                       base::Closure());
 
-    ScopedVector<PasswordForm> all_credentials;
+    std::vector<std::unique_ptr<PasswordForm>> all_credentials;
     for (size_t i = 0; i < arraysize(kTestCredentials); ++i) {
       all_credentials.push_back(
           CreatePasswordFormFromDataForTesting(kTestCredentials[i]));
@@ -838,5 +839,57 @@ TEST_F(PasswordStoreTest, GetLoginsWithAffiliatedRealms) {
     base::RunLoop().RunUntilIdle();
   }
 }
+
+#if !defined(OS_MACOSX)
+// TODO(crbug.com/668155): Enable this test after fixing issues with
+// initialization PasswordStore with MockKeyChain in tests on MacOS.
+TEST_F(PasswordStoreTest, CheckPasswordReuse) {
+  static constexpr PasswordFormData kTestCredentials[] = {
+      {PasswordForm::SCHEME_HTML, "https://www.google.com",
+       "https://www.google.com", "", L"", L"", L"", L"", L"password", true, 1},
+      {PasswordForm::SCHEME_HTML, "https://facebook.com",
+       "https://facebook.com", "", L"", L"", L"", L"", L"topsecret", true, 1}};
+
+  scoped_refptr<PasswordStoreDefault> store(new PasswordStoreDefault(
+      base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get(),
+      base::MakeUnique<LoginDatabase>(test_login_db_file_path())));
+  store->Init(syncer::SyncableService::StartSyncFlare());
+
+  for (const auto& test_credentials : kTestCredentials) {
+    auto credentials = CreatePasswordFormFromDataForTesting(test_credentials);
+    store->AddLogin(*credentials);
+    base::RunLoop().RunUntilIdle();
+  }
+
+  static constexpr struct {
+    const wchar_t* input;
+    const char* domain;
+    const wchar_t* reused_password;  // Set to nullptr if no reuse is expected.
+    const char* reuse_domain;
+  } kReuseTestData[] = {
+      {L"12345password", "https://evil.com", L"password", "google.com"},
+      {L"1234567890", "https://evil.com", nullptr, nullptr},
+      {L"topsecret", "https://m.facebook.com", nullptr, nullptr},
+  };
+
+  for (const auto& test_data : kReuseTestData) {
+    MockPasswordReuseDetectorConsumer mock_consumer;
+    if (test_data.reused_password) {
+      EXPECT_CALL(mock_consumer,
+                  OnReuseFound(base::WideToUTF16(test_data.reused_password),
+                               std::string(test_data.reuse_domain), 2, 1));
+    } else {
+      EXPECT_CALL(mock_consumer, OnReuseFound(_, _, _, _)).Times(0);
+    }
+
+    store->CheckReuse(base::WideToUTF16(test_data.input), test_data.domain,
+                      &mock_consumer);
+    base::RunLoop().RunUntilIdle();
+  }
+
+  store->ShutdownOnUIThread();
+  base::RunLoop().RunUntilIdle();
+}
+#endif
 
 }  // namespace password_manager

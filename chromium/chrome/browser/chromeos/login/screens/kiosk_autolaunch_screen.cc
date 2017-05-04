@@ -14,7 +14,8 @@ namespace chromeos {
 KioskAutolaunchScreen::KioskAutolaunchScreen(
     BaseScreenDelegate* base_screen_delegate,
     KioskAutolaunchScreenActor* actor)
-    : BaseScreen(base_screen_delegate), actor_(actor) {
+    : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_KIOSK_AUTOLAUNCH),
+      actor_(actor) {
   DCHECK(actor_);
   if (actor_)
     actor_->SetDelegate(this);
@@ -28,10 +29,6 @@ KioskAutolaunchScreen::~KioskAutolaunchScreen() {
 void KioskAutolaunchScreen::Show() {
   if (actor_)
     actor_->Show();
-}
-
-std::string KioskAutolaunchScreen::GetName() const {
-  return WizardController::kKioskAutolaunchScreenName;
 }
 
 void KioskAutolaunchScreen::OnExit(bool confirmed) {

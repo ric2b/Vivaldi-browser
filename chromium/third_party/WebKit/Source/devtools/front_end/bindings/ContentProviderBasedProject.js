@@ -38,11 +38,13 @@ Bindings.ContentProviderBasedProject = class extends Workspace.ProjectStore {
    * @param {string} id
    * @param {!Workspace.projectTypes} type
    * @param {string} displayName
+   * @param {boolean} isServiceProject
    */
-  constructor(workspace, id, type, displayName) {
+  constructor(workspace, id, type, displayName, isServiceProject) {
     super(workspace, id, type, displayName);
     /** @type {!Object.<string, !Common.ContentProvider>} */
     this._contentProviders = {};
+    this._isServiceProject = isServiceProject;
     workspace.addProject(this);
   }
 
@@ -54,6 +56,14 @@ Bindings.ContentProviderBasedProject = class extends Workspace.ProjectStore {
   requestFileContent(uiSourceCode, callback) {
     var contentProvider = this._contentProviders[uiSourceCode.url()];
     contentProvider.requestContent().then(callback);
+  }
+
+  /**
+   * @override
+   * @return {boolean}
+   */
+  isServiceProject() {
+    return this._isServiceProject;
   }
 
   /**
@@ -81,6 +91,20 @@ Bindings.ContentProviderBasedProject = class extends Workspace.ProjectStore {
    */
   setFileContent(uiSourceCode, newContent, callback) {
     callback(null);
+  }
+
+  /**
+   * @override
+   * @param {!Workspace.UISourceCode} uiSourceCode
+   * @return {string}
+   */
+  fullDisplayName(uiSourceCode) {
+    var parentPath = uiSourceCode.parentURL().replace(/^(?:https?|file)\:\/\//, '');
+    try {
+      parentPath = decodeURI(parentPath);
+    } catch (e) {
+    }
+    return parentPath + '/' + uiSourceCode.displayName(true);
   }
 
   /**

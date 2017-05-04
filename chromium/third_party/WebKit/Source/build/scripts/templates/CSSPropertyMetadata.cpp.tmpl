@@ -58,12 +58,8 @@ void CSSPropertyMetadata::filterEnabledCSSPropertiesIntoVector(
   for (unsigned i = 0; i < propertyCount; i++) {
     CSSPropertyID property = properties[i];
     if (isEnabledProperty(property))
-      outVector.append(property);
+      outVector.push_back(property);
   }
-}
-
-bool CSSPropertyMetadata::isDescriptorOnly(CSSPropertyID property) {
-    return property >= {{descriptors[0].property_id}} && property <= {{descriptors[-1].property_id}};
 }
 
 } // namespace blink

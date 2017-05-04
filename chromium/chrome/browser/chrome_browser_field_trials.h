@@ -5,17 +5,15 @@
 #ifndef CHROME_BROWSER_CHROME_BROWSER_FIELD_TRIALS_H_
 #define CHROME_BROWSER_CHROME_BROWSER_FIELD_TRIALS_H_
 
-#include "base/command_line.h"
 #include "base/macros.h"
 
 namespace base {
 class FeatureList;
-class Time;
 }
 
 class ChromeBrowserFieldTrials {
  public:
-  explicit ChromeBrowserFieldTrials(const base::CommandLine& command_line);
+  ChromeBrowserFieldTrials();
   ~ChromeBrowserFieldTrials();
 
   void SetupFieldTrials();
@@ -33,8 +31,6 @@ class ChromeBrowserFieldTrials {
   // Instantiates dynamic trials by querying their state, to ensure they get
   // reported as used.
   void InstantiateDynamicTrials();
-
-  const base::CommandLine& parsed_command_line_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserFieldTrials);
 };

@@ -10,6 +10,7 @@
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -190,11 +191,6 @@ void ChromeKeyboardUI::RenderViewCreated(
 }
 
 void ChromeKeyboardUI::ShowKeyboardContainer(aura::Window* container) {
-  // TODO(bshe): Implement logic to decide which root window should display
-  // virtual keyboard. http://crbug.com/303429
-  if (container->GetRootWindow() != ash::Shell::GetPrimaryRootWindow())
-    NOTIMPLEMENTED();
-
   KeyboardUIContent::ShowKeyboardContainer(container);
 }
 

@@ -7,7 +7,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/shelf_layout_manager.h"
@@ -22,8 +21,8 @@
 #include "ash/common/wm/wm_screen_util.h"
 #include "ash/common/wm/workspace/workspace_window_resizer.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
@@ -36,7 +35,7 @@
 #include "base/run_loop.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_base_types.h"
-#include "ui/display/manager/display_layout.h"
+#include "ui/display/display_layout.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -629,13 +628,7 @@ TEST_F(WorkspaceLayoutManagerSoloTest, FocusDuringUnminimize) {
 }
 
 // Tests maximized window size during root window resize.
-#if defined(OS_WIN) && !defined(USE_ASH)
-// TODO(msw): Broken on Windows. http://crbug.com/584038
-#define MAYBE_MaximizeRootWindowResize DISABLED_MaximizeRootWindowResize
-#else
-#define MAYBE_MaximizeRootWindowResize MaximizeRootWindowResize
-#endif
-TEST_F(WorkspaceLayoutManagerSoloTest, MAYBE_MaximizeRootWindowResize) {
+TEST_F(WorkspaceLayoutManagerSoloTest, MaximizeRootWindowResize) {
   gfx::Rect bounds(100, 100, 200, 200);
   std::unique_ptr<WindowOwner> window_owner(CreateTestWindow(bounds));
   WmWindow* window = window_owner->window();

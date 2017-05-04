@@ -40,11 +40,22 @@ class ImmediateLoadObserver : WebContentsObserver {
   }
   ~ImmediateLoadObserver() override {}
 
+  // TODO: remove this method when PlzNavigate is turned on by default.
   void DidStartNavigationToPendingEntry(const GURL& url,
                                         ReloadType reload_type) override {
-    // Simulate immediate web page load.
-    contents_->TestSetIsLoading(false);
-    Observe(nullptr);
+    if (!IsBrowserSideNavigationEnabled()) {
+      // Simulate immediate web page load.
+      contents_->TestSetIsLoading(false);
+      Observe(nullptr);
+    }
+  }
+
+  void DidStartNavigation(NavigationHandle* navigation_handlee) override {
+    if (IsBrowserSideNavigationEnabled()) {
+      // Simulate immediate web page load.
+      contents_->TestSetIsLoading(false);
+      Observe(nullptr);
+    }
   }
 
  private:
@@ -125,8 +136,7 @@ class OverscrollNavigationOverlayTest : public RenderViewHostImplTestHarness {
   }
 
   void ReceivePaintUpdate() {
-    ViewHostMsg_DidFirstVisuallyNonEmptyPaint msg(
-        main_test_rfh()->GetRoutingID());
+    ViewHostMsg_DidFirstVisuallyNonEmptyPaint msg(test_rvh()->GetRoutingID());
     RenderViewHostTester::TestOnMessageReceived(test_rvh(), msg);
   }
 

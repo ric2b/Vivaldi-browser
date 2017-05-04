@@ -46,17 +46,11 @@ void LayoutSVGContainer::layout() {
   ASSERT(needsLayout());
   LayoutAnalyzer::Scope analyzer(*this);
 
-  // Allow LayoutSVGViewportContainer to update its viewport.
-  calcViewport();
-
-  // Allow LayoutSVGTransformableContainer to update its transform.
+  // Update the local transform in subclasses.
   SVGTransformChange transformChange = calculateLocalTransform();
   m_didScreenScaleFactorChange =
       transformChange == SVGTransformChange::Full ||
       SVGLayoutSupport::screenScaleFactorChanged(parent());
-
-  // LayoutSVGViewportContainer needs to set the 'layout size changed' flag.
-  determineIfLayoutSizeChanged();
 
   // When hasRelativeLengths() is false, no descendants have relative lengths
   // (hence no one is interested in viewport size changes).
@@ -117,18 +111,23 @@ void LayoutSVGContainer::styleDidChange(StyleDifference diff,
   bool hadIsolation =
       oldStyle && !isSVGHiddenContainer() &&
       SVGLayoutSupport::willIsolateBlendingDescendantsForStyle(*oldStyle);
-  bool isolationChanged =
-      hadIsolation ==
-      !SVGLayoutSupport::willIsolateBlendingDescendantsForObject(this);
+
+  bool willIsolateBlendingDescendants =
+      SVGLayoutSupport::willIsolateBlendingDescendantsForObject(this);
+
+  bool isolationChanged = hadIsolation != willIsolateBlendingDescendants;
+
+  if (isolationChanged)
+    setNeedsPaintPropertyUpdate();
 
   if (!parent() || !isolationChanged)
     return;
 
-  if (hasNonIsolatedBlendingDescendants())
+  if (hasNonIsolatedBlendingDescendants()) {
     parent()->descendantIsolationRequirementsChanged(
-        SVGLayoutSupport::willIsolateBlendingDescendantsForObject(this)
-            ? DescendantIsolationNeedsUpdate
-            : DescendantIsolationRequired);
+        willIsolateBlendingDescendants ? DescendantIsolationNeedsUpdate
+                                       : DescendantIsolationRequired);
+  }
 }
 
 bool LayoutSVGContainer::hasNonIsolatedBlendingDescendants() const {
@@ -153,8 +152,11 @@ void LayoutSVGContainer::descendantIsolationRequirementsChanged(
       m_hasNonIsolatedBlendingDescendantsDirty = true;
       break;
   }
-  if (SVGLayoutSupport::willIsolateBlendingDescendantsForObject(this))
+  if (SVGLayoutSupport::willIsolateBlendingDescendantsForObject(this)) {
+    if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled())
+      setNeedsPaintPropertyUpdate();
     return;
+  }
   if (parent())
     parent()->descendantIsolationRequirementsChanged(state);
 }
@@ -168,7 +170,7 @@ void LayoutSVGContainer::addOutlineRects(
     Vector<LayoutRect>& rects,
     const LayoutPoint&,
     IncludeBlockVisualOverflowOrNot) const {
-  rects.append(LayoutRect(visualRectInLocalSVGCoordinates()));
+  rects.push_back(LayoutRect(visualRectInLocalSVGCoordinates()));
 }
 
 void LayoutSVGContainer::updateCachedBoundaries() {
@@ -182,10 +184,6 @@ void LayoutSVGContainer::updateCachedBoundaries() {
 bool LayoutSVGContainer::nodeAtFloatPoint(HitTestResult& result,
                                           const FloatPoint& pointInParent,
                                           HitTestAction hitTestAction) {
-  // Give LayoutSVGViewportContainer a chance to apply its viewport clip
-  if (!pointIsInsideViewportClip(pointInParent))
-    return false;
-
   FloatPoint localPoint;
   if (!SVGLayoutSupport::transformToUserSpaceAndCheckClipping(
           *this, localToSVGParentTransform(), pointInParent, localPoint))
@@ -204,7 +202,7 @@ bool LayoutSVGContainer::nodeAtFloatPoint(HitTestResult& result,
 
   // pointer-events: bounding-box makes it possible for containers to be direct
   // targets.
-  if (style()->pointerEvents() == PE_BOUNDINGBOX) {
+  if (style()->pointerEvents() == EPointerEvents::kBoundingBox) {
     // Check for a valid bounding box because it will be invalid for empty
     // containers.
     if (isObjectBoundingBoxValid() &&

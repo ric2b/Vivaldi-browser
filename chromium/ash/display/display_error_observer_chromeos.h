@@ -9,22 +9,22 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
-#include "ui/display/chromeos/display_configurator.h"
+#include "ui/display/manager/chromeos/display_configurator.h"
 
 namespace ash {
 
 // The class to observe the output failures and shows the error dialog when
 // necessary.
 class ASH_EXPORT DisplayErrorObserver
-    : public ui::DisplayConfigurator::Observer {
+    : public display::DisplayConfigurator::Observer {
  public:
   DisplayErrorObserver();
   ~DisplayErrorObserver() override;
 
-  // ui::DisplayConfigurator::Observer overrides:
+  // display::DisplayConfigurator::Observer overrides:
   void OnDisplayModeChangeFailed(
-      const ui::DisplayConfigurator::DisplayStateList& displays,
-      ui::MultipleDisplayState failed_new_state) override;
+      const display::DisplayConfigurator::DisplayStateList& displays,
+      display::MultipleDisplayState failed_new_state) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(DisplayErrorObserver);

@@ -10,11 +10,7 @@ class {{export_attribute}} {{struct.name}} {
 
 {#--- Constants #}
 {%- for constant in struct.constants %}
-{%-   if constant.kind|is_integral_kind %}
-  static const {{constant.kind|cpp_pod_type}} {{constant.name}} = {{constant|constant_value}};
-{%-   else %}
-  static const {{constant.kind|cpp_pod_type}} {{constant.name}};
-{%-   endif %}
+  static {{constant|format_constant_declaration(nested=True)}};
 {%- endfor %}
 
   static {{struct.name}}Ptr New();
@@ -50,8 +46,8 @@ class {{export_attribute}} {{struct.name}} {
   size_t Hash(size_t seed) const;
 {%- endif %}
 
-{%- set serialization_result_type = "mojo::WTFArray<uint8_t>"
-        if for_blink else "mojo::Array<uint8_t>" %}
+{%- set serialization_result_type = "WTF::Vector<uint8_t>"
+        if for_blink else "std::vector<uint8_t>" %}
 
   template <typename UserType>
   static {{serialization_result_type}} Serialize(UserType* input) {

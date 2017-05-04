@@ -32,7 +32,7 @@ class InheritedLengthChecker : public InterpolationType::ConversionChecker {
  public:
   static std::unique_ptr<InheritedLengthChecker> create(CSSPropertyID property,
                                                         const Length& length) {
-    return wrapUnique(new InheritedLengthChecker(property, length));
+    return WTF::wrapUnique(new InheritedLengthChecker(property, length));
   }
 
  private:
@@ -77,7 +77,7 @@ InterpolationValue CSSLengthInterpolationType::maybeConvertInherit(
   if (!LengthPropertyFunctions::getLength(cssProperty(), *state.parentStyle(),
                                           inheritedLength))
     return nullptr;
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedLengthChecker::create(cssProperty(), inheritedLength));
   return LengthInterpolationFunctions::maybeConvertLength(
       inheritedLength, effectiveZoom(*state.parentStyle()));
@@ -107,14 +107,15 @@ PairwiseInterpolationValue CSSLengthInterpolationType::maybeMergeSingles(
                                                     std::move(end));
 }
 
-InterpolationValue CSSLengthInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
+InterpolationValue
+CSSLengthInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const StyleResolverState& state) const {
   Length underlyingLength;
-  if (!LengthPropertyFunctions::getLength(
-          cssProperty(), *environment.state().style(), underlyingLength))
+  if (!LengthPropertyFunctions::getLength(cssProperty(), *state.style(),
+                                          underlyingLength))
     return nullptr;
   return LengthInterpolationFunctions::maybeConvertLength(
-      underlyingLength, effectiveZoom(*environment.state().style()));
+      underlyingLength, effectiveZoom(*state.style()));
 }
 
 void CSSLengthInterpolationType::composite(
@@ -129,11 +130,10 @@ void CSSLengthInterpolationType::composite(
       value.nonInterpolableValue.get());
 }
 
-void CSSLengthInterpolationType::apply(
+void CSSLengthInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue* nonInterpolableValue,
-    InterpolationEnvironment& environment) const {
-  StyleResolverState& state = environment.state();
+    StyleResolverState& state) const {
   ComputedStyle& style = *state.style();
   float zoom = effectiveZoom(style);
   Length length = LengthInterpolationFunctions::createLength(

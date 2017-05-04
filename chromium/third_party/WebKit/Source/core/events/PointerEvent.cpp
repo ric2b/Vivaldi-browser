@@ -18,6 +18,8 @@ PointerEvent::PointerEvent(const AtomicString& type,
       m_pressure(0),
       m_tiltX(0),
       m_tiltY(0),
+      m_tangentialPressure(0),
+      m_twist(0),
       m_isPrimary(false) {
   if (initializer.hasPointerId())
     m_pointerId = initializer.pointerId();
@@ -31,10 +33,18 @@ PointerEvent::PointerEvent(const AtomicString& type,
     m_tiltX = initializer.tiltX();
   if (initializer.hasTiltY())
     m_tiltY = initializer.tiltY();
+  if (initializer.hasTangentialPressure())
+    m_tangentialPressure = initializer.tangentialPressure();
+  if (initializer.hasTwist())
+    m_twist = initializer.twist();
   if (initializer.hasPointerType())
     m_pointerType = initializer.pointerType();
   if (initializer.hasIsPrimary())
     m_isPrimary = initializer.isPrimary();
+  if (initializer.hasCoalescedEvents()) {
+    for (auto coalescedEvent : initializer.coalescedEvents())
+      m_coalescedEvents.push_back(coalescedEvent);
+  }
 }
 
 bool PointerEvent::isMouseEvent() const {
@@ -49,7 +59,12 @@ EventDispatchMediator* PointerEvent::createMediator() {
   return PointerEventDispatchMediator::create(this);
 }
 
+HeapVector<Member<PointerEvent>> PointerEvent::getCoalescedEvents() const {
+  return m_coalescedEvents;
+}
+
 DEFINE_TRACE(PointerEvent) {
+  visitor->trace(m_coalescedEvents);
   MouseEvent::trace(visitor);
 }
 

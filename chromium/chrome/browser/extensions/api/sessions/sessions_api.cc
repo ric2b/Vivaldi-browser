@@ -13,7 +13,6 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/extensions/api/sessions/session_id.h"
@@ -284,6 +283,8 @@ std::unique_ptr<windows::Window> SessionsGetDevicesFunction::CreateWindowModel(
   windows::WindowState state = windows::WINDOW_STATE_NONE;
   switch (window.show_state) {
     case ui::SHOW_STATE_NORMAL:
+
+    // TODO(afakhry): Remove Docked Windows in M58.
     case ui::SHOW_STATE_DOCKED:
       state = windows::WINDOW_STATE_NORMAL;
       break;

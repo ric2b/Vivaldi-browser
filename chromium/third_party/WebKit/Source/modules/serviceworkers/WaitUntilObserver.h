@@ -5,7 +5,6 @@
 #ifndef WaitUntilObserver_h
 #define WaitUntilObserver_h
 
-#include "core/dom/ContextLifecycleObserver.h"
 #include "modules/ModulesExport.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
 #include "platform/Timer.h"
@@ -21,10 +20,7 @@ class ScriptValue;
 
 // Created for each ExtendableEvent instance.
 class MODULES_EXPORT WaitUntilObserver final
-    : public GarbageCollectedFinalized<WaitUntilObserver>,
-      public ContextLifecycleObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(WaitUntilObserver);
-
+    : public GarbageCollectedFinalized<WaitUntilObserver> {
  public:
   enum EventType {
     Activate,
@@ -33,6 +29,7 @@ class MODULES_EXPORT WaitUntilObserver final
     Message,
     NotificationClick,
     NotificationClose,
+    PaymentRequest,
     Push,
     Sync
   };
@@ -67,13 +64,14 @@ class MODULES_EXPORT WaitUntilObserver final
 
   void consumeWindowInteraction(TimerBase*);
 
+  Member<ExecutionContext> m_executionContext;
   EventType m_type;
   int m_eventID;
   int m_pendingActivity = 0;
   bool m_hasError = false;
   bool m_eventDispatched = false;
   double m_eventDispatchTime = 0;
-  Timer<WaitUntilObserver> m_consumeWindowInteractionTimer;
+  TaskRunnerTimer<WaitUntilObserver> m_consumeWindowInteractionTimer;
 };
 
 }  // namespace blink

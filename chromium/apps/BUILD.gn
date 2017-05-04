@@ -27,8 +27,6 @@ static_library("apps") {
       "app_restore_service_factory.h",
       "browser_context_keyed_service_factories.cc",
       "browser_context_keyed_service_factories.h",
-      "custom_launcher_page_contents.cc",
-      "custom_launcher_page_contents.h",
       "launcher.cc",
       "launcher.h",
       "metrics_names.h",
@@ -70,4 +68,16 @@ static_library("apps") {
 
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "test/app_window_waiter.cc",
+    "test/app_window_waiter.h",
+  ]
+
+  public_deps = [
+    "//content/public/browser",
+  ]
 }

@@ -41,6 +41,7 @@
 <translation id="1938872420421548906">Shift+Alt</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
+<translation id="2122028596993374965"><ph name="TAB_NAME" />ஐ <ph name="RECEIVER_NAME" />க்கு அனுப்புவதை நிறுத்து</translation>
 <translation id="2127372758936585790">குறைந்த சக்திகொண்ட சார்ஜர்</translation>
 <translation id="2204305834655267233">பிணைய தகவல்</translation>
 <translation id="2208323208084708176">ஒன்றிணைந்த டெஸ்க்டாப் பயன்முறை</translation>
@@ -54,10 +55,8 @@
 <translation id="2429753432712299108">புளூடூத் சாதனம் "<ph name="DEVICE_NAME" />", இணைப்பதற்கான அனுமதியை விரும்புகிறது. ஏற்றுக்கொள்வதற்கு முன்னர், இந்தக் கடவுச்சொல் அந்தச் சாதனத்தில் காண்பிக்கப்பட்டது என்பதை உறுதிப்படுத்தவும்: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">ஒரு பிழை ஏற்பட்டது</translation>
 <translation id="2509468283778169019">CAPS LOCK இயக்கத்தில்</translation>
-<translation id="252373100621549798">அறியாதது</translation>
 <translation id="2532589005999780174">அதிக ஒளி மாறுபாட்டுப் பயன்முறை</translation>
 <translation id="2562916301614567480">தனிப்பட்ட நெட்வொர்க்</translation>
-<translation id="2661637000095600270">ஆதரிக்கும் தெளிவுகள் கிடைக்காததால் காட்சிகளைப் பிரதிபலிக்க முடியவில்லை. அதற்குப் பதிலாக நீட்டிக்கப்பட்ட டெஸ்க்டாப்பிற்குச் சென்றது. கருத்து அறிக்கையை அனுப்ப, கிளிக் செய்யவும்.</translation>
 <translation id="2692809339924654275"><ph name="BLUETOOTH" />: இணைக்கிறது...</translation>
 <translation id="2700058918926273959"><ph name="SESSION_TIME_REMAINING" /> இல் அமர்வு முடிந்துவிடும். வெளியேற்றப்படுவீர்கள்.</translation>
 <translation id="2727977024730340865">குறைந்த சக்தியிலான சார்ஜர் செருகப்பட்டுள்ளது. பேட்டரி சார்ஜிங் நம்பகமானதாக இல்லாமல் இருக்கலாம்.</translation>
@@ -114,7 +113,6 @@
 <translation id="3846575436967432996">நெட்வொர்க் தகவல் எதுவும் இல்லை</translation>
 <translation id="3866182280516392520">IPv6 முகவரி</translation>
 <translation id="3891340733213178823">வெளியேற Ctrl+Shift+Q ஐ இருமுறை அழுத்தவும்.</translation>
-<translation id="3892641579809465218">இணையக் காட்சி</translation>
 <translation id="3893630138897523026">ChromeVox (பேச்சுவடிவ கருத்து)</translation>
 <translation id="3899995891769452915">குரல் உள்ளீடு</translation>
 <translation id="3901991538546252627"><ph name="NAME" /> க்கு இணைக்கிறது</translation>
@@ -153,6 +151,7 @@
 <translation id="5238774010593222950">மற்றொரு கணக்கில் உள்நுழைய முடியாது.</translation>
 <translation id="532063867737390965">இந்த நெட்வொர்க் அமைப்பு நிர்வாகியால் முடக்கப்பட்டுள்ளது.</translation>
 <translation id="5331975486040154427">USB-C சாதனம் (இடது பக்கம் பின்னே இருக்கும் போர்ட்)</translation>
+<translation id="5431825016875453137">OpenVPN / L2TP</translation>
 <translation id="544691375626129091">எல்லா பயனர்களும் ஏற்கனவே இந்த அமர்வில் சேர்க்கப்பட்டுள்ளனர்.</translation>
 <translation id="5507786745520522457">மொபைல் தரவை அமை</translation>
 <translation id="5543001071567407895">SMS</translation>
@@ -177,6 +176,7 @@
 <translation id="5978382165065462689">தொலைநிலை உதவி மூலம் உங்கள் திரையின் கட்டுப்பாட்டைப் பகிர்கிறது.</translation>
 <translation id="5980301590375426705">விருந்தினரிலிருந்து வெளியேறவும்</translation>
 <translation id="6041154455840261787">உயர் ஒளி மாறுபாட்டுப் பயன்முறை இயக்கப்பட்டது. அதை முடக்க, தேடு+ஷிஃப்ட்+H விசைகளை அழுத்தவும்.</translation>
+<translation id="6043212731627905357">இந்த மானிட்டர் உங்கள் <ph name="DEVICE_TYPE" /> உடன் செயல்படவில்லை (இந்த மானிட்டர் ஆதரிக்கப்படவில்லை).</translation>
 <translation id="6043994281159824495">இப்போது வெளியேறு</translation>
 <translation id="6047696787498798094">நீங்கள் வேறொரு பயனருக்கு மாறும்போது, திரைப் பகிர்வு நிறுத்தப்படும். தொடர விருப்பமா?</translation>
 <translation id="6062360702481658777"><ph name="LOGOUT_TIME_LEFT" /> இல் தானாகவே வெளியேற்றப்படுவீர்கள்.</translation>
@@ -185,7 +185,6 @@
 <translation id="6144938890088808325">Chromebookகளை இன்னும் சிறப்பானதாக்க உதவவும்</translation>
 <translation id="615957422585914272">ஆன்-ஸ்கிரீன் விசைப்பலகையைக் காட்டு</translation>
 <translation id="6165508094623778733">மேலும் அறிக</translation>
-<translation id="6203030746557259519">விர்ச்சுவல் காட்சி</translation>
 <translation id="6248847161401822652">வெளியேற Control Shift Q ஐ இருமுறை அழுத்தவும்.</translation>
 <translation id="6267036997247669271"><ph name="NAME" />: செயல்படுத்துகிறது...</translation>
 <translation id="6297287540776456956">பகுதியைத் தேர்ந்தெடுக்க, ஸ்டைஸைப் பயன்படுத்தவும்</translation>
@@ -208,6 +207,7 @@
 <translation id="6700713906295497288">IME மெனு பொத்தான்</translation>
 <translation id="6713285437468012787">புளூடூத் சாதனம் "<ph name="DEVICE_NAME" />" ஆனது இணைக்கப்பட்டது மற்றும் இப்போது எல்லா பயனர்களுக்கும் கிடைக்கக்கூடியதாக உள்ளது. அமைப்புகளைப் பயன்படுத்தி இந்த இணைத்தலை நீங்கள் அகற்றலாம்.</translation>
 <translation id="6785414152754474415">பேட்டரி <ph name="PERCENTAGE" />% நிரம்பியது, மேலும் சார்ஜ் ஆகிறது.</translation>
+<translation id="6803622936009808957">ஆதரிக்கும் தெளிவுகள் கிடைக்காததால் காட்சிகளைப் பிரதிபலிக்க முடியவில்லை. பதிலாக நீட்டிக்கப்பட்ட டெஸ்க்டாப்பிற்குச் சென்றது.</translation>
 <translation id="683971173229319003">Search+L</translation>
 <translation id="6857811139397017780"><ph name="NETWORKSERVICE" /> ஐ செயல்படுத்து</translation>
 <translation id="6911468394164995108">மற்றொன்றில் சேர்...</translation>
@@ -253,13 +253,14 @@
 <translation id="8000066093800657092">நெட்வொர்க் இல்லை</translation>
 <translation id="8054466585765276473">பேட்டரி நேரத்தைக் கணக்கிடுகிறது.</translation>
 <translation id="8077816382010018681">QU அம்சத்தின் அறிவிப்புத் தலைப்பு இங்கே</translation>
+<translation id="8098591350844501178"><ph name="RECEIVER_NAME" />க்குத் திரையை அனுப்புவதை நிறுத்து</translation>
 <translation id="8103386449138765447">SMS செய்திகள்: <ph name="MESSAGE_COUNT" /></translation>
 <translation id="8132793192354020517"><ph name="NAME" /> உடன் இணைக்கப்பட்டது</translation>
+<translation id="8180896103888046100">தெரியாத ரிசீவருக்கு அனுப்புவதை நிறுத்து</translation>
 <translation id="8185286464235484130">சில கேள்விகளுக்குப் பதிலளிப்பதன் மூலம் நாங்கள் எவ்வாறு செயல்படுகிறோம் என்பதை எங்களுக்குத் தெரிவிக்கவும்.</translation>
 <translation id="8190698733819146287">மொழிகள் மற்றும்  உள்ளீடைத் தனிப்பயனாக்கு...</translation>
 <translation id="8206859287963243715">செல்லுலர்</translation>
 <translation id="8308637677604853869">முந்தைய மெனு</translation>
-<translation id="8356164830168736643"><ph name="WINDOW_TITLE" />ஐ மூடு</translation>
 <translation id="8428213095426709021">அமைப்புகள்</translation>
 <translation id="8454013096329229812">வைஃபை இயக்கத்தில் உள்ளது.</translation>
 <translation id="8484916590211895857"><ph name="NAME" />: மீண்டும் இணைக்கிறது...</translation>
@@ -275,7 +276,6 @@
 <translation id="8878886163241303700">திரையை விரிவாக்குகிறது</translation>
 <translation id="8938800817013097409">USB-C சாதனம் (பின்பக்கம் உள்ள வலது போர்ட்)</translation>
 <translation id="8940956008527784070">பேட்டரி குறைவு (<ph name="PERCENTAGE" />%)</translation>
-<translation id="9008540565042607572">அன்புள்ள மானிட்டரே, இது வேலை செய்யவில்லை. (அந்த மானிட்டர் ஆதரிக்கப்படவில்லை. கருத்து அறிக்கையை அனுப்ப, கிளிக் செய்யவும்.)</translation>
 <translation id="9074739597929991885">புளூடூத்</translation>
 <translation id="9080206825613744995">மைக்ரோஃபோன் பயன்பாட்டில் உள்ளது.</translation>
 <translation id="9089416786594320554">உள்ளீட்டு முறைகள்</translation>
@@ -285,5 +285,6 @@
 <translation id="923686485342484400">வெளியேற Control Shift Q ஐ இருமுறை அழுத்தவும்.</translation>
 <translation id="938582441709398163">விசைப்பலகை மேல்தோற்றம்</translation>
 <translation id="939252827960237676">ஸ்கிரீன் ஷாட்டை சேமிப்பதில் தோல்வி</translation>
+<translation id="945522503751344254">பின்னூட்டம் அனுப்புக</translation>
 <translation id="952992212772159698">செயலாக்கப்படவில்லை</translation>
 </translationbundle>

@@ -19,6 +19,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper_delegate.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
+#include "ppapi/features/features.h"
 
 #include "base/command_line.h"
 #include "browser/vivaldi_browser_finder.h"
@@ -30,6 +31,7 @@
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 
 #include "chrome/browser/extensions/api/tab_capture/tab_capture_registry.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/extension_constants.h"
 
 using content::BrowserPluginGuestDelegate;
@@ -216,7 +218,7 @@ WebViewPermissionHelper* WebViewPermissionHelper::FromWebContents(
   return web_view_guest->web_view_permission_helper_.get();
 }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 bool WebViewPermissionHelper::OnMessageReceived(
     const IPC::Message& message,
     content::RenderFrameHost* render_frame_host) {
@@ -227,7 +229,7 @@ bool WebViewPermissionHelper::OnMessageReceived(
 bool WebViewPermissionHelper::OnMessageReceived(const IPC::Message& message) {
   return web_view_permission_helper_delegate_->OnMessageReceived(message);
 }
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 void WebViewPermissionHelper::RequestMediaAccessPermission(
     content::WebContents* source,
@@ -271,9 +273,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
       extensions::VivaldiAppHelper::FromWebContents(web_view_guest()->
         embedder_web_contents());
   if (helper) do {
-    Browser* browser = vivaldi::FindBrowserWithWebContents(web_contents());
-    DCHECK(browser);
-    Profile* profile = browser->profile();
+    Profile* profile = Profile::FromBrowserContext(source->GetBrowserContext());
 
     ContentSetting audio_setting = CONTENT_SETTING_DEFAULT;
     ContentSetting camera_setting = CONTENT_SETTING_DEFAULT;

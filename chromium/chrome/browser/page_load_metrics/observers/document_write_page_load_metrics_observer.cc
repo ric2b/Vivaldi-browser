@@ -67,13 +67,14 @@ const char kBackgroundDocWriteBlockParseBlockedOnScriptLoadDocumentWrite[] =
 const char kBackgroundHistogramDocWriteBlockParseDuration[] =
     "PageLoad.Clients.DocWrite.Block.ParseTiming.ParseDuration.Background";
 
+const char kHistogramDocWriteBlockCount[] =
+    "PageLoad.Clients.DocWrite.Block.Count";
 const char kHistogramDocWriteBlockReloadCount[] =
     "PageLoad.Clients.DocWrite.Block.ReloadCount";
+const char kHistogramDocWriteBlockLoadingBehavior[] =
+    "PageLoad.Clients.DocWrite.Block.DocumentWriteLoadingBehavior";
 
 }  // namespace internal
-
-DocumentWritePageLoadMetricsObserver::DocumentWritePageLoadMetricsObserver()
-    : doc_write_block_reload_observed_(false) {}
 
 void DocumentWritePageLoadMetricsObserver::OnFirstContentfulPaint(
     const page_load_metrics::PageLoadTiming& timing,
@@ -114,6 +115,13 @@ void DocumentWritePageLoadMetricsObserver::OnParseStop(
   }
 }
 
+void LogLoadingBehaviorMetrics(
+ DocumentWritePageLoadMetricsObserver::DocumentWriteLoadingBehavior behavior) {
+  UMA_HISTOGRAM_ENUMERATION(internal::kHistogramDocWriteBlockLoadingBehavior,
+                            behavior,
+                  DocumentWritePageLoadMetricsObserver::LOADING_BEHAVIOR_MAX);
+}
+
 void DocumentWritePageLoadMetricsObserver::OnLoadingBehaviorObserved(
     const page_load_metrics::PageLoadExtraInfo& info) {
   if ((info.metadata.behavior_flags &
@@ -124,7 +132,22 @@ void DocumentWritePageLoadMetricsObserver::OnLoadingBehaviorObserved(
         !(info.metadata.behavior_flags &
           blink::WebLoadingBehaviorFlag::WebLoadingBehaviorDocumentWriteBlock));
     UMA_HISTOGRAM_COUNTS(internal::kHistogramDocWriteBlockReloadCount, 1);
+    LogLoadingBehaviorMetrics(LOADING_BEHAVIOR_RELOAD);
     doc_write_block_reload_observed_ = true;
+  }
+  if ((info.metadata.behavior_flags &
+       blink::WebLoadingBehaviorFlag::WebLoadingBehaviorDocumentWriteBlock) &&
+      !doc_write_block_observed_) {
+    UMA_HISTOGRAM_BOOLEAN(internal::kHistogramDocWriteBlockCount, true);
+    LogLoadingBehaviorMetrics(LOADING_BEHAVIOR_BLOCK);
+    doc_write_block_observed_ = true;
+  }
+  if ((info.metadata.behavior_flags &
+       blink::WebLoadingBehaviorFlag::
+           WebLoadingBehaviorDocumentWriteBlockDifferentScheme) &&
+      !doc_write_same_site_diff_scheme_) {
+    LogLoadingBehaviorMetrics(LOADING_BEHAVIOR_SAME_SITE_DIFF_SCHEME);
+    doc_write_same_site_diff_scheme_ = true;
   }
 }
 

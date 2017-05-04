@@ -15,14 +15,17 @@
     <color name="dark_action_bar_color">#263238</color>
     <color name="descriptive_text_color">#646464</color>
     <color name="error_text_color">#c53929</color>
+    <color name="google_blue_200">#90caf9</color>
     <color name="google_blue_700">#3367d6</color>
     <color name="google_blue_grey_500">#607D8B</color>
     <color name="google_red_700">#c53929</color>
     <color name="google_green_700">#0b8043</color>
     <color name="google_grey_100">#f5f5f5</color>
     <color name="google_grey_300">#e0e0e0</color>
+    <color name="google_grey_400">#bdbdbd</color>
     <color name="google_grey_500">#9E9E9E</color>
     <color name="google_grey_600">#757575</color>
+    <color name="google_grey_700">#616161</color>
     <color name="toolbar_shadow_color">#1d000000</color>
     <color name="toolbar_light_tint">#A3000000</color>
     <color name="light_grey">#ccc</color>
@@ -103,8 +106,8 @@
     <color name="ntp_list_header_text">#333</color>
     <color name="ntp_list_header_subtext">#969696</color>
     <color name="ntp_list_header_subtext_active">#7cadff</color>
-    <color name="snippets_thumnail_placeholder_bg">#f2f2f2</color>
-    <color name="snippets_thumnail_placeholder_fg">#757575</color>
+    <color name="snippets_thumbnail_placeholder_bg">#f2f2f2</color>
+    <color name="snippets_thumbnail_placeholder_fg">#757575</color>
     <color name="snippets_publisher_name_color">#646464</color>
     <color name="snippets_text_color">#646464</color>
     <color name="snippets_list_header_text_color">#646464</color>
@@ -122,6 +125,7 @@
     <!-- Progress Bar colors -->
     <color name="progress_bar_foreground">@color/light_active_color</color>
     <color name="progress_bar_foreground_white">@android:color/white</color>
+    <color name="progress_bar_secondary">@color/google_grey_600</color>
     <color name="progress_bar_background">#3d4386f7</color>
     <color name="progress_bar_background_white">#4d000000</color>
 
@@ -195,7 +199,6 @@
 
     <!-- Other colors -->
     <color name="selectable_list_item_highlight_color">#804281f4</color>
-    <color name="material_progressbar_bg">#dbdbdb</color>
     <color name="media_viewer_bg">#000000</color>
     <color name="image_viewer_bg">#0e0e0e</color>
 

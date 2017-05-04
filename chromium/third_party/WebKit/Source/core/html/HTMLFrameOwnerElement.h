@@ -44,11 +44,10 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
  public:
   ~HTMLFrameOwnerElement() override;
 
-  Frame* contentFrame() const { return m_contentFrame; }
   DOMWindow* contentWindow() const;
   Document* contentDocument() const;
 
-  void disconnectContentFrame();
+  virtual void disconnectContentFrame();
 
   // Most subclasses use LayoutPart (either LayoutEmbeddedObject or
   // LayoutIFrame) except for HTMLObjectElement and HTMLEmbedElement which may
@@ -76,12 +75,16 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   };
 
   // FrameOwner overrides:
-  void setContentFrame(Frame&) override;
-  void clearContentFrame() override;
-  void dispatchLoad() override;
-  SandboxFlags getSandboxFlags() const override { return m_sandboxFlags; }
+  Frame* contentFrame() const final { return m_contentFrame; }
+  void setContentFrame(Frame&) final;
+  void clearContentFrame() final;
+  void dispatchLoad() final;
+  SandboxFlags getSandboxFlags() const final { return m_sandboxFlags; }
   bool canRenderFallbackContent() const override { return false; }
   void renderFallbackContent() override {}
+  AtomicString browsingContextContainerName() const override {
+    return getAttribute(HTMLNames::nameAttr);
+  }
   ScrollbarMode scrollingMode() const override { return ScrollbarAuto; }
   int marginWidth() const override { return -1; }
   int marginHeight() const override { return -1; }
@@ -106,8 +109,8 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
  private:
   // Intentionally private to prevent redundant checks when the type is
   // already HTMLFrameOwnerElement.
-  bool isLocal() const override { return true; }
-  bool isRemote() const override { return false; }
+  bool isLocal() const final { return true; }
+  bool isRemote() const final { return false; }
 
   bool isFrameOwnerElement() const final { return true; }
 
@@ -148,7 +151,12 @@ class SubframeLoadingDisabler {
   }
 
  private:
-  using SubtreeRootSet = HeapHashCountedSet<Member<Node>>;
+  // The use of UntracedMember<Node>  is safe as all SubtreeRootSet
+  // references are on the stack and reachable in case a conservative
+  // GC hits.
+  // TODO(sof): go back to HeapHashSet<> once crbug.com/684551 has been
+  // resolved.
+  using SubtreeRootSet = HashCountedSet<UntracedMember<Node>>;
 
   CORE_EXPORT static SubtreeRootSet& disabledSubtreeRoots();
 

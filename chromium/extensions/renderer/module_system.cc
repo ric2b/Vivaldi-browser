@@ -21,6 +21,7 @@
 #include "extensions/renderer/safe_builtins.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
+#include "extensions/renderer/source_map.h"
 #include "extensions/renderer/v8_helpers.h"
 #include "gin/modules/module_registry.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
@@ -284,15 +285,6 @@ v8::Local<v8::Value> ModuleSystem::RequireForJsInner(
 
 v8::Local<v8::Value> ModuleSystem::CallModuleMethod(
     const std::string& module_name,
-    const std::string& method_name) {
-  v8::EscapableHandleScope handle_scope(GetIsolate());
-  v8::Local<v8::Value> no_args;
-  return handle_scope.Escape(
-      CallModuleMethod(module_name, method_name, 0, &no_args));
-}
-
-v8::Local<v8::Value> ModuleSystem::CallModuleMethod(
-    const std::string& module_name,
     const std::string& method_name,
     int argc,
     v8::Local<v8::Value> argv[]) {
@@ -331,20 +323,32 @@ void ModuleSystem::CallModuleMethodSafe(const std::string& module_name,
                                         const std::string& method_name) {
   v8::HandleScope handle_scope(GetIsolate());
   v8::Local<v8::Value> no_args;
-  CallModuleMethodSafe(module_name, method_name, 0, &no_args);
+  CallModuleMethodSafe(module_name, method_name, 0, &no_args,
+                       ScriptInjectionCallback::CompleteCallback());
 }
 
 void ModuleSystem::CallModuleMethodSafe(
     const std::string& module_name,
     const std::string& method_name,
     std::vector<v8::Local<v8::Value>>* args) {
-  CallModuleMethodSafe(module_name, method_name, args->size(), args->data());
+  CallModuleMethodSafe(module_name, method_name, args->size(), args->data(),
+                       ScriptInjectionCallback::CompleteCallback());
 }
 
 void ModuleSystem::CallModuleMethodSafe(const std::string& module_name,
                                         const std::string& method_name,
                                         int argc,
                                         v8::Local<v8::Value> argv[]) {
+  CallModuleMethodSafe(module_name, method_name, argc, argv,
+                       ScriptInjectionCallback::CompleteCallback());
+}
+
+void ModuleSystem::CallModuleMethodSafe(
+    const std::string& module_name,
+    const std::string& method_name,
+    int argc,
+    v8::Local<v8::Value> argv[],
+    const ScriptInjectionCallback::CompleteCallback& callback) {
   TRACE_EVENT2("v8", "v8.callModuleMethodSafe", "module_name", module_name,
                "method_name", method_name);
 
@@ -362,7 +366,7 @@ void ModuleSystem::CallModuleMethodSafe(const std::string& module_name,
   {
     v8::TryCatch try_catch(GetIsolate());
     try_catch.SetCaptureMessage(true);
-    context_->SafeCallFunction(function, argc, argv);
+    context_->SafeCallFunction(function, argc, argv, callback);
     if (try_catch.HasCaught())
       HandleException(try_catch);
   }
@@ -538,19 +542,21 @@ void ModuleSystem::SetNativeLazyField(v8::Local<v8::Object> object,
                &ModuleSystem::NativeLazyFieldGetter);
 }
 
+void ModuleSystem::OnNativeBindingCreated(
+    const std::string& api_name,
+    v8::Local<v8::Value> api_bridge_value) {
+  v8::HandleScope scope(GetIsolate());
+  if (source_map_->Contains(api_name)) {
+    NativesEnabledScope enabled(this);
+    LoadModuleWithNativeAPIBridge(api_name, api_bridge_value);
+  }
+}
+
 v8::Local<v8::Value> ModuleSystem::RunString(v8::Local<v8::String> code,
                                              v8::Local<v8::String> name) {
   return context_->RunScript(
       name, code, base::Bind(&ExceptionHandler::HandleUncaughtException,
                              base::Unretained(exception_handler_.get())));
-}
-
-v8::Local<v8::Value> ModuleSystem::GetSource(const std::string& module_name) {
-  v8::EscapableHandleScope handle_scope(GetIsolate());
-  if (!source_map_->Contains(module_name))
-    return v8::Undefined(GetIsolate());
-  return handle_scope.Escape(
-      v8::Local<v8::Value>(source_map_->GetSource(GetIsolate(), module_name)));
 }
 
 void ModuleSystem::RequireNative(
@@ -626,7 +632,7 @@ v8::Local<v8::String> ModuleSystem::WrapSource(v8::Local<v8::String> source) {
   v8::Local<v8::String> left = ToV8StringUnsafe(
       GetIsolate(),
       "(function(define, require, requireNative, requireAsync, exports, "
-      "console, privates,"
+      "console, privates, apiBridge,"
       "$Array, $Function, $JSON, $Object, $RegExp, $String, $Error) {"
       "'use strict';");
   v8::Local<v8::String> right = ToV8StringUnsafe(GetIsolate(), "\n})");
@@ -664,17 +670,24 @@ void ModuleSystem::Private(const v8::FunctionCallbackInfo<v8::Value>& args) {
 }
 
 v8::Local<v8::Value> ModuleSystem::LoadModule(const std::string& module_name) {
+  return LoadModuleWithNativeAPIBridge(module_name,
+                                       v8::Undefined(GetIsolate()));
+}
+
+v8::Local<v8::Value> ModuleSystem::LoadModuleWithNativeAPIBridge(
+    const std::string& module_name,
+    v8::Local<v8::Value> api_bridge) {
   v8::EscapableHandleScope handle_scope(GetIsolate());
   v8::Local<v8::Context> v8_context = context()->v8_context();
   v8::Context::Scope context_scope(v8_context);
 
-  v8::Local<v8::Value> source(GetSource(module_name));
-  if (source.IsEmpty() || source->IsUndefined()) {
+  v8::Local<v8::String> source =
+      source_map_->GetSource(GetIsolate(), module_name);
+  if (source.IsEmpty()) {
     Fatal(context_, "No source for require(" + module_name + ")");
     return v8::Undefined(GetIsolate());
   }
-  v8::Local<v8::String> wrapped_source(
-      WrapSource(v8::Local<v8::String>::Cast(source)));
+  v8::Local<v8::String> wrapped_source(WrapSource(source));
   v8::Local<v8::String> v8_module_name;
   if (!ToV8String(GetIsolate(), module_name.c_str(), &v8_module_name)) {
     NOTREACHED() << "module_name is too long";
@@ -733,6 +746,7 @@ v8::Local<v8::Value> ModuleSystem::LoadModule(const std::string& module_name) {
       console::AsV8Object(GetIsolate()),
       GetPropertyUnsafe(v8_context, natives, "privates",
                         v8::NewStringType::kInternalized),
+      api_bridge,  // exposed as apiBridge.
       // Each safe builtin. Keep in order with the arguments in WrapSource.
       context_->safe_builtins()->GetArray(),
       context_->safe_builtins()->GetFunction(),

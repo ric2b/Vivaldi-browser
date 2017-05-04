@@ -57,9 +57,6 @@ class DefaultBrowserInfoBarDelegate : public ConfirmInfoBarDelegate {
   Type GetInfoBarType() const override;
   infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   gfx::VectorIconId GetVectorIconId() const override;
-#if defined(OS_WIN)
-  gfx::Image GetIcon() const override;
-#endif  // defined(OS_WIN)
   bool ShouldExpire(const NavigationDetails& details) const override;
   void InfoBarDismissed() override;
   base::string16 GetMessageText() const override;

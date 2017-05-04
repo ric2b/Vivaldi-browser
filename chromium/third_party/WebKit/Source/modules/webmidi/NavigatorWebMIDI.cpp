@@ -42,12 +42,11 @@
 
 namespace blink {
 
-NavigatorWebMIDI::NavigatorWebMIDI(LocalFrame* frame)
-    : DOMWindowProperty(frame) {}
+NavigatorWebMIDI::NavigatorWebMIDI(Navigator& navigator)
+    : Supplement<Navigator>(navigator) {}
 
 DEFINE_TRACE(NavigatorWebMIDI) {
   Supplement<Navigator>::trace(visitor);
-  DOMWindowProperty::trace(visitor);
 }
 
 const char* NavigatorWebMIDI::supplementName() {
@@ -58,7 +57,7 @@ NavigatorWebMIDI& NavigatorWebMIDI::from(Navigator& navigator) {
   NavigatorWebMIDI* supplement = static_cast<NavigatorWebMIDI*>(
       Supplement<Navigator>::from(navigator, supplementName()));
   if (!supplement) {
-    supplement = new NavigatorWebMIDI(navigator.frame());
+    supplement = new NavigatorWebMIDI(navigator);
     provideTo(navigator, supplementName(), supplement);
   }
   return *supplement;
@@ -73,14 +72,15 @@ ScriptPromise NavigatorWebMIDI::requestMIDIAccess(ScriptState* scriptState,
 
 ScriptPromise NavigatorWebMIDI::requestMIDIAccess(ScriptState* scriptState,
                                                   const MIDIOptions& options) {
-  if (!frame() || frame()->document()->activeDOMObjectsAreStopped()) {
+  if (!scriptState->contextIsValid()) {
     return ScriptPromise::rejectWithDOMException(
         scriptState,
         DOMException::create(AbortError, "The frame is not working."));
   }
 
-  UseCounter::countCrossOriginIframe(*frame()->document(),
-                                     UseCounter::RequestMIDIAccessIframe);
+  UseCounter::countCrossOriginIframe(
+      *toDocument(scriptState->getExecutionContext()),
+      UseCounter::RequestMIDIAccessIframe);
   return MIDIAccessInitializer::start(scriptState, options);
 }
 

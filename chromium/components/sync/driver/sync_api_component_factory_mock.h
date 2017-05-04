@@ -19,8 +19,6 @@ namespace syncer {
 class AssociatorInterface;
 class ChangeProcessor;
 class DataTypeEncryptionHandler;
-class DataTypeStatusTable;
-class SyncClient;
 
 class SyncApiComponentFactoryMock : public SyncApiComponentFactory {
  public:
@@ -31,17 +29,18 @@ class SyncApiComponentFactoryMock : public SyncApiComponentFactory {
 
   MOCK_METHOD2(RegisterDataTypes,
                void(SyncService* sync_service, const RegisterDataTypesMethod&));
-  MOCK_METHOD5(CreateDataTypeManager,
-               DataTypeManager*(const WeakHandle<DataTypeDebugInfoListener>&,
+  MOCK_METHOD6(CreateDataTypeManager,
+               DataTypeManager*(ModelTypeSet initial_types,
+                                const WeakHandle<DataTypeDebugInfoListener>&,
                                 const DataTypeController::TypeMap*,
                                 const DataTypeEncryptionHandler*,
-                                SyncBackendHost*,
+                                ModelTypeConfigurer*,
                                 DataTypeManagerObserver* observer));
-  MOCK_METHOD4(CreateSyncBackendHost,
-               SyncBackendHost*(const std::string& name,
-                                invalidation::InvalidationService* invalidator,
-                                const base::WeakPtr<SyncPrefs>& sync_prefs,
-                                const base::FilePath& sync_folder));
+  MOCK_METHOD4(CreateSyncEngine,
+               SyncEngine*(const std::string& name,
+                           invalidation::InvalidationService* invalidator,
+                           const base::WeakPtr<SyncPrefs>& sync_prefs,
+                           const base::FilePath& sync_folder));
 
   std::unique_ptr<LocalDeviceInfoProvider> CreateLocalDeviceInfoProvider()
       override;
@@ -55,6 +54,10 @@ class SyncApiComponentFactoryMock : public SyncApiComponentFactory {
       ModelType model_type,
       AttachmentService::Delegate* delegate) override;
   SyncComponents CreateBookmarkSyncComponents(
+      SyncService* sync_service,
+      std::unique_ptr<DataTypeErrorHandler> error_handler) override;
+
+  SyncComponents CreateNotesSyncComponents(
       SyncService* sync_service,
       std::unique_ptr<DataTypeErrorHandler> error_handler) override;
 

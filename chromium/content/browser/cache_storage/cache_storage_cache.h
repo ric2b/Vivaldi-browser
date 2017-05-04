@@ -33,9 +33,11 @@ class QuotaManagerProxy;
 }
 
 namespace content {
+class CacheMetadata;
 class CacheStorage;
 class CacheStorageBlobToDiskCache;
 class CacheStorageCacheHandle;
+class CacheStorageCacheObserver;
 class CacheStorageScheduler;
 class TestCacheStorageCache;
 
@@ -81,7 +83,8 @@ class CONTENT_EXPORT CacheStorageCache {
       const base::FilePath& path,
       scoped_refptr<net::URLRequestContextGetter> request_context_getter,
       scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
-      base::WeakPtr<storage::BlobStorageContext> blob_context);
+      base::WeakPtr<storage::BlobStorageContext> blob_context,
+      int64_t cache_size);
 
   // Returns ERROR_TYPE_NOT_FOUND if not found.
   void Match(std::unique_ptr<ServiceWorkerFetchRequest> request,
@@ -156,6 +159,13 @@ class CONTENT_EXPORT CacheStorageCache {
 
   std::string cache_name() const { return cache_name_; }
 
+  int64_t cache_size() const { return cache_size_; }
+
+  // Set the one observer that will be notified of changes to this cache.
+  // Note: Either the observer must have a lifetime longer than this instance
+  // or call SetObserver(nullptr) to stop receiving notification of changes.
+  void SetObserver(CacheStorageCacheObserver* observer);
+
   base::WeakPtr<CacheStorageCache> AsWeakPtr();
 
  private:
@@ -185,7 +195,7 @@ class CONTENT_EXPORT CacheStorageCache {
   using Entries = std::vector<disk_cache::Entry*>;
   using ScopedBackendPtr = std::unique_ptr<disk_cache::Backend>;
   using BlobToDiskCacheIDMap =
-      IDMap<CacheStorageBlobToDiskCache, IDMapOwnPointer>;
+      IDMap<std::unique_ptr<CacheStorageBlobToDiskCache>>;
   using OpenAllEntriesCallback =
       base::Callback<void(std::unique_ptr<OpenAllEntriesContext>,
                           CacheStorageError)>;
@@ -197,7 +207,8 @@ class CONTENT_EXPORT CacheStorageCache {
       CacheStorage* cache_storage,
       scoped_refptr<net::URLRequestContextGetter> request_context_getter,
       scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
-      base::WeakPtr<storage::BlobStorageContext> blob_context);
+      base::WeakPtr<storage::BlobStorageContext> blob_context,
+      int64_t cache_size);
 
   // Returns all entries in this cache.
   void OpenAllEntries(const OpenAllEntriesCallback& callback);
@@ -314,8 +325,9 @@ class CONTENT_EXPORT CacheStorageCache {
   // Asynchronously calculates the current cache size, notifies the quota
   // manager of any change from the last report, and sets cache_size_ to the new
   // size.
-  void UpdateCacheSize();
+  void UpdateCacheSize(const base::Closure& callback);
   void UpdateCacheSizeGotSize(std::unique_ptr<CacheStorageCacheHandle>,
+                              const base::Closure& callback,
                               int current_cache_size);
 
   // Returns ERROR_NOT_FOUND if not found. Otherwise deletes and returns OK.
@@ -387,8 +399,9 @@ class CONTENT_EXPORT CacheStorageCache {
   BackendState backend_state_ = BACKEND_UNINITIALIZED;
   std::unique_ptr<CacheStorageScheduler> scheduler_;
   bool initializing_ = false;
-  int64_t cache_size_ = 0;
+  int64_t cache_size_;
   size_t max_query_size_bytes_;
+  CacheStorageCacheObserver* cache_observer_;
 
   // Owns the elements of the list
   BlobToDiskCacheIDMap active_blob_to_disk_cache_writers_;

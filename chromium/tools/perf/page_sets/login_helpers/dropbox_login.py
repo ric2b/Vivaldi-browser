@@ -34,10 +34,11 @@ def LoginAccount(action_runner, credential,
   login_button_selector = '.login-form .login-button'
   action_runner.WaitForJavaScriptCondition('''
       (function() {
-        var loginButton = document.querySelector("%s");
+        var loginButton = document.querySelector({{ selector }});
         if (!loginButton)
           return false;
         return !loginButton.disabled;
-      })();''' % login_button_selector)
+      })();''',
+      selector=login_button_selector)
   action_runner.ClickElement(selector=login_button_selector)
   action_runner.WaitForNavigate()

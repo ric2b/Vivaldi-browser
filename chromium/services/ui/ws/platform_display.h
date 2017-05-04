@@ -13,13 +13,10 @@
 #include "base/strings/string16.h"
 #include "services/ui/display/viewport_metrics.h"
 #include "services/ui/public/interfaces/cursor.mojom.h"
+#include "ui/gfx/native_widget_types.h"
 
 namespace gfx {
 class Rect;
-}
-
-namespace gpu {
-class GpuChannelHost;
 }
 
 namespace ui {
@@ -28,6 +25,7 @@ struct TextInputState;
 
 namespace ws {
 
+class FrameGenerator;
 class PlatformDisplayDelegate;
 class PlatformDisplayFactory;
 struct PlatformDisplayInitParams;
@@ -66,12 +64,11 @@ class PlatformDisplay {
 
   virtual const display::ViewportMetrics& GetViewportMetrics() const = 0;
 
-  virtual bool IsPrimaryDisplay() const = 0;
+  // Returns the AcceleratedWidget associated with the Display. It can return
+  // kNullAcceleratedWidget if the accelerated widget is not available yet.
+  virtual gfx::AcceleratedWidget GetAcceleratedWidget() const = 0;
 
-  // Notifies the PlatformDisplay that a connection to the gpu has been
-  // established.
-  virtual void OnGpuChannelEstablished(
-      scoped_refptr<gpu::GpuChannelHost> gpu_channel) = 0;
+  virtual FrameGenerator* GetFrameGenerator() = 0;
 
   // Overrides factory for testing. Default (NULL) value indicates regular
   // (non-test) environment.

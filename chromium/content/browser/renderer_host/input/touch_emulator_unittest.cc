@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "content/browser/renderer_host/input/touch_emulator_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
 #include "ui/events/blink/web_input_event_traits.h"
 
 using blink::WebGestureEvent;
@@ -55,19 +56,19 @@ class TouchEmulatorTest : public testing::Test,
 
   void ForwardEmulatedGestureEvent(
       const blink::WebGestureEvent& event) override {
-    forwarded_events_.push_back(event.type);
+    forwarded_events_.push_back(event.type());
   }
 
   void ForwardEmulatedTouchEvent(const blink::WebTouchEvent& event) override {
-    forwarded_events_.push_back(event.type);
+    forwarded_events_.push_back(event.type());
     EXPECT_EQ(1U, event.touchesLength);
     EXPECT_EQ(last_mouse_x_, event.touches[0].position.x);
     EXPECT_EQ(last_mouse_y_, event.touches[0].position.y);
     const int all_buttons = WebInputEvent::LeftButtonDown |
         WebInputEvent::MiddleButtonDown | WebInputEvent::RightButtonDown;
-    EXPECT_EQ(0, event.modifiers & all_buttons);
+    EXPECT_EQ(0, event.modifiers() & all_buttons);
     WebInputEvent::DispatchType expected_dispatch_type =
-        event.type == WebInputEvent::TouchCancel
+        event.type() == WebInputEvent::TouchCancel
             ? WebInputEvent::EventNonBlocking
             : WebInputEvent::Blocking;
     EXPECT_EQ(expected_dispatch_type, event.dispatchType);
@@ -77,7 +78,9 @@ class TouchEmulatorTest : public testing::Test,
     }
   }
 
-  void SetCursor(const WebCursor& cursor) override {}
+  void SetCursor(const WebCursor& cursor) override {
+    cursor_ = cursor;
+  }
 
   void ShowContextMenuAtPoint(const gfx::Point& point) override {}
 
@@ -112,10 +115,7 @@ class TouchEmulatorTest : public testing::Test,
   }
 
   void SendKeyboardEvent(WebInputEvent::Type type) {
-    WebKeyboardEvent event;
-    event.timeStampSeconds = GetNextEventTimeSeconds();
-    event.type = type;
-    event.modifiers = modifiers();
+    WebKeyboardEvent event(type, modifiers(), GetNextEventTimeSeconds());
     emulator()->HandleKeyboardEvent(event);
   }
 
@@ -132,12 +132,9 @@ class TouchEmulatorTest : public testing::Test,
   }
 
   void SendMouseEvent(WebInputEvent::Type type, int  x, int y) {
-    WebMouseEvent event;
-    event.timeStampSeconds = GetNextEventTimeSeconds();
-    event.type = type;
+    WebMouseEvent event(type, modifiers(), GetNextEventTimeSeconds());
     event.button = mouse_pressed_ ? WebMouseEvent::Button::Left :
         WebMouseEvent::Button::NoButton;
-    event.modifiers = modifiers();
     last_mouse_x_ = x;
     last_mouse_y_ = y;
     event.x = event.windowX = event.globalX = x;
@@ -146,9 +143,8 @@ class TouchEmulatorTest : public testing::Test,
   }
 
   bool SendMouseWheelEvent() {
-    WebMouseWheelEvent event;
-    event.type = WebInputEvent::MouseWheel;
-    event.timeStampSeconds = GetNextEventTimeSeconds();
+    WebMouseWheelEvent event(WebInputEvent::MouseWheel, modifiers(),
+                             GetNextEventTimeSeconds());
     // Return whether mouse wheel is forwarded.
     return !emulator()->HandleMouseWheelEvent(event);
   }
@@ -196,9 +192,7 @@ class TouchEmulatorTest : public testing::Test,
 
   WebTouchEvent MakeTouchEvent(WebInputEvent::Type type,
       WebTouchPoint::State state, int x, int y) {
-    WebTouchEvent event;
-    event.type = type;
-    event.timeStampSeconds = GetNextEventTimeSeconds();
+    WebTouchEvent event(type, modifiers(), GetNextEventTimeSeconds());
     event.touchesLength = 1;
     event.touches[0].id = 0;
     event.touches[0].state = state;
@@ -241,6 +235,12 @@ class TouchEmulatorTest : public testing::Test,
 
   void DisableSynchronousTouchAck() { ack_touches_synchronously_ = false; }
 
+  float GetCursorScaleFactor() {
+    WebCursor::CursorInfo info;
+    cursor_.GetCursorInfo(&info);
+    return info.image_scale_factor;
+  }
+
  private:
   std::unique_ptr<TouchEmulator> emulator_;
   std::vector<WebInputEvent::Type> forwarded_events_;
@@ -253,6 +253,7 @@ class TouchEmulatorTest : public testing::Test,
   int last_mouse_y_;
   std::vector<WebTouchEvent> touch_events_to_ack_;
   base::MessageLoopForUI message_loop_;
+  WebCursor cursor_;
 };
 
 
@@ -567,6 +568,27 @@ TEST_F(TouchEmulatorTest, CancelAfterDisableDoesNotCrash) {
 
 TEST_F(TouchEmulatorTest, ConstructorWithHighDeviceScaleDoesNotCrash) {
   TouchEmulator(this, 4.0f);
+}
+
+TEST_F(TouchEmulatorTest, CursorScaleFactor) {
+  EXPECT_EQ(1.0f, GetCursorScaleFactor());
+  emulator()->SetDeviceScaleFactor(3.0f);
+  EXPECT_EQ(2.0f, GetCursorScaleFactor());
+  emulator()->SetDeviceScaleFactor(1.33f);
+  EXPECT_EQ(1.0f, GetCursorScaleFactor());
+  emulator()->Disable();
+  EXPECT_EQ(1.0f, GetCursorScaleFactor());
+  emulator()->SetDeviceScaleFactor(3.0f);
+  EXPECT_EQ(1.0f, GetCursorScaleFactor());
+  emulator()->Enable(ui::GestureProviderConfigType::GENERIC_MOBILE);
+  EXPECT_EQ(2.0f, GetCursorScaleFactor());
+  emulator()->SetDeviceScaleFactor(1.0f);
+  EXPECT_EQ(1.0f, GetCursorScaleFactor());
+
+  TouchEmulator another(this, 4.0f);
+  EXPECT_EQ(1.0f, GetCursorScaleFactor());
+  another.Enable(ui::GestureProviderConfigType::GENERIC_MOBILE);
+  EXPECT_EQ(2.0f, GetCursorScaleFactor());
 }
 
 }  // namespace content

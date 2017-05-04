@@ -11,7 +11,7 @@ Polymer({
     count: {
       type: Number,
       value: 0,
-      observer: 'changeToolbarView_'
+      observer: 'changeToolbarView_',
     },
 
     // True if 1 or more history items are selected. When this value changes
@@ -19,7 +19,7 @@ Polymer({
     itemsSelected_: {
       type: Boolean,
       value: false,
-      reflectToAttribute: true
+      reflectToAttribute: true,
     },
 
     // The most recent term entered in the search field. Updated incrementally
@@ -34,16 +34,13 @@ Polymer({
     // toolbar.
     spinnerActive: {
       type: Boolean,
-      value: false
+      value: false,
     },
 
     hasDrawer: {
       type: Boolean,
-      observer: 'hasDrawerChanged_',
       reflectToAttribute: true,
     },
-
-    showSyncNotice: Boolean,
 
     // Whether domain-grouped history is enabled.
     isGroupedMode: {
@@ -54,10 +51,18 @@ Polymer({
     // The period to search over. Matches BrowsingHistoryHandler::Range.
     groupedRange: {
       type: Number,
-      value: 0,
       reflectToAttribute: true,
-      notify: true
+      notify: true,
     },
+
+    groupedOffset: {
+      type: Number,
+      notify: true,
+    },
+
+    querying: Boolean,
+
+    hasMoreResults: Boolean,
 
     // The start time of the query range.
     queryStartTime: String,
@@ -68,6 +73,8 @@ Polymer({
     // Whether to show the menu promo (a tooltip that points at the menu button
     // in narrow mode).
     showMenuPromo: Boolean,
+
+    showSyncNotice: Boolean,
   },
 
   /** @return {CrToolbarSearchFieldElement} */
@@ -92,6 +99,7 @@ Polymer({
   /**
    * When changing the search term externally, update the search field to
    * reflect the new search term.
+   * @private
    */
   searchTermChanged_: function() {
     if (this.searchField.getValue() != this.searchTerm) {
@@ -118,10 +126,12 @@ Polymer({
       dropdown.open();
   },
 
+  /** @private */
   onClearSelectionTap_: function() {
     this.fire('unselect-all');
   },
 
+  /** @private */
   onDeleteTap_: function() {
     this.fire('delete-selected');
   },
@@ -134,18 +144,41 @@ Polymer({
     return loadTimeData.getBoolean('allowDeletingHistory');
   },
 
+  /** @private */
   numberOfItemsSelected_: function(count) {
     return count > 0 ? loadTimeData.getStringF('itemsSelected', count) : '';
   },
 
+  /** @private */
   getHistoryInterval_: function(queryStartTime, queryEndTime) {
     // TODO(calamity): Fix the format of these dates.
     return loadTimeData.getStringF(
-      'historyInterval', queryStartTime, queryEndTime);
+        'historyInterval', queryStartTime, queryEndTime);
   },
 
   /** @private */
-  hasDrawerChanged_: function() {
-    this.updateStyles();
+  onTodayTap_: function() {
+    if (!this.querying)
+      this.groupedOffset = 0;
+  },
+
+  /** @private */
+  onPrevTap_: function() {
+    if (!this.querying)
+      this.groupedOffset = this.groupedOffset + 1;
+  },
+
+  /** @private */
+  onNextTap_: function() {
+    if (!this.querying)
+      this.groupedOffset = this.groupedOffset - 1;
+  },
+
+  /**
+   * @private
+   * @return {boolean}
+   */
+  isToday_: function() {
+    return this.groupedOffset == 0;
   },
 });

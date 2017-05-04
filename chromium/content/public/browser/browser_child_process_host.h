@@ -58,10 +58,10 @@ class CONTENT_EXPORT BrowserChildProcessHost : public IPC::Sender {
   ~BrowserChildProcessHost() override {}
 
   // Derived classes call this to launch the child process asynchronously.
-  // Takes ownership of |cmd_line| and |delegate|.
-  virtual void Launch(SandboxedProcessLauncherDelegate* delegate,
-                      base::CommandLine* cmd_line,
-                      bool terminate_on_shutdown) = 0;
+  virtual void Launch(
+      std::unique_ptr<SandboxedProcessLauncherDelegate> delegate,
+      std::unique_ptr<base::CommandLine> cmd_line,
+      bool terminate_on_shutdown) = 0;
 
   virtual const ChildProcessData& GetData() const = 0;
 
@@ -91,6 +91,9 @@ class CONTENT_EXPORT BrowserChildProcessHost : public IPC::Sender {
   // they need to call this method so that the process handle is associated with
   // this object.
   virtual void SetHandle(base::ProcessHandle handle) = 0;
+
+  // Returns the child message pipe token for the service request.
+  virtual std::string GetServiceRequestChannelToken() = 0;
 
 #if defined(OS_MACOSX)
   // Returns a PortProvider used to get the task port for child processes.

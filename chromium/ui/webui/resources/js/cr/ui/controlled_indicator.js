@@ -63,7 +63,9 @@ cr.define('cr.ui', function() {
      * implementation does not set any strings.
      * @return {Object}
      */
-    getDefaultStrings: function() { return {}; },
+    getDefaultStrings: function() {
+      return {};
+    },
 
     /**
      * Returns the text shown in the bubble.
@@ -117,10 +119,7 @@ cr.define('cr.ui', function() {
    *                        modified (Chrome OS only).
    * - unset:               The value is controlled by the user alone.
    */
-  cr.defineProperty(ControlledIndicator, 'controlledBy',
-                    cr.PropertyKind.ATTR);
+  cr.defineProperty(ControlledIndicator, 'controlledBy', cr.PropertyKind.ATTR);
 
-  return {
-    ControlledIndicator: ControlledIndicator
-  };
+  return {ControlledIndicator: ControlledIndicator};
 });

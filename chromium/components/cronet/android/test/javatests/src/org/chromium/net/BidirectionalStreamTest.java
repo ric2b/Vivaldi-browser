@@ -7,7 +7,7 @@ package org.chromium.net;
 import static org.chromium.base.CollectionUtil.newHashSet;
 
 import android.os.ConditionVariable;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
@@ -87,11 +87,11 @@ public class BidirectionalStreamTest extends CronetTestBase {
         }
         UrlResponseInfoImpl urlResponseInfo = new UrlResponseInfoImpl(
                 Arrays.asList(urls), statusCode, message, headersList, false, "h2", null);
-        urlResponseInfo.setReceivedBytesCount(receivedBytes);
+        urlResponseInfo.setReceivedByteCount(receivedBytes);
         return urlResponseInfo;
     }
 
-    private void runSimpleGetWithExpectedReceivedBytesCount(int expectedReceivedBytes)
+    private void runSimpleGetWithExpectedReceivedByteCount(int expectedReceivedBytes)
             throws Exception {
         String url = Http2TestServer.getEchoMethodUrl();
         TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
@@ -122,13 +122,13 @@ public class BidirectionalStreamTest extends CronetTestBase {
     @Feature({"Cronet"})
     public void testBuilderCheck() throws Exception {
         if (testingJavaImpl()) {
-            testBuilderCheckJavaImpl();
+            runBuilderCheckJavaImpl();
         } else {
-            testBuilderCheckNativeImpl();
+            runBuilderCheckNativeImpl();
         }
     }
 
-    private void testBuilderCheckNativeImpl() throws Exception {
+    private void runBuilderCheckNativeImpl() throws Exception {
         TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
         try {
             mTestFramework.mCronetEngine.newBidirectionalStreamBuilder(
@@ -175,7 +175,7 @@ public class BidirectionalStreamTest extends CronetTestBase {
         }
     }
 
-    private void testBuilderCheckJavaImpl() {
+    private void runBuilderCheckJavaImpl() {
         try {
             TestBidirectionalStreamCallback callback = new TestBidirectionalStreamCallback();
             mTestFramework.mCronetEngine.newBidirectionalStreamBuilder(
@@ -203,7 +203,7 @@ public class BidirectionalStreamTest extends CronetTestBase {
         assertTrue(stream.isDone());
         assertContains("Exception in BidirectionalStream: net::ERR_DISALLOWED_URL_SCHEME",
                 callback.mError.getMessage());
-        assertEquals(-301, callback.mError.getCronetInternalErrorCode());
+        assertEquals(-301, ((NetworkException) callback.mError).getCronetInternalErrorCode());
     }
 
     @SmallTest
@@ -212,7 +212,7 @@ public class BidirectionalStreamTest extends CronetTestBase {
     public void testSimpleGet() throws Exception {
         // Since this is the first request on the connection, the expected received bytes count
         // must account for an HPACK dynamic table size update.
-        runSimpleGetWithExpectedReceivedBytesCount(31);
+        runSimpleGetWithExpectedReceivedByteCount(31);
     }
 
     @SmallTest
@@ -1124,7 +1124,7 @@ public class BidirectionalStreamTest extends CronetTestBase {
         // The expected received bytes count is lower than it would be for the first request on the
         // connection, because the server includes an HPACK dynamic table size update only in the
         // first response HEADERS frame.
-        runSimpleGetWithExpectedReceivedBytesCount(27);
+        runSimpleGetWithExpectedReceivedByteCount(27);
     }
 
     @SmallTest
@@ -1213,8 +1213,8 @@ public class BidirectionalStreamTest extends CronetTestBase {
             // connect timing metrics.
             MetricsTestUtil.checkTimingMetrics(metrics, startTime, endTime);
             MetricsTestUtil.checkHasConnectTiming(metrics, startTime, endTime, true);
-            assertTrue(metrics.getSentBytesCount() > 0);
-            assertTrue(metrics.getReceivedBytesCount() > 0);
+            assertTrue(metrics.getSentByteCount() > 0);
+            assertTrue(metrics.getReceivedByteCount() > 0);
         } else if (failureStep == ResponseStep.ON_STREAM_READY) {
             assertNotNull(metrics.getRequestStart());
             MetricsTestUtil.assertAfter(metrics.getRequestStart(), startTime);

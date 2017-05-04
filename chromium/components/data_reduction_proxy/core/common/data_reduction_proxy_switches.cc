@@ -7,10 +7,6 @@
 namespace data_reduction_proxy {
 namespace switches {
 
-// Clear data savings on Chrome startup.
-const char kClearDataReductionProxyDataSavings[] =
-    "clear-data-reduction-proxy-data-savings";
-
 // The origin of the data reduction proxy.
 const char kDataReductionProxy[]         = "spdy-proxy-auth-origin";
 
@@ -58,11 +54,6 @@ const char kDataReductionProxySecureProxyCheckURL[] =
 // Disables server experiments that may be enabled through field trial.
 const char kDataReductionProxyServerExperimentsDisabled[] =
     "data-reduction-proxy-server-experiments-disabled";
-
-// Starts the secure Data Reduction Proxy in the disabled state until the secure
-// proxy check succeeds.
-const char kDataReductionProxyStartSecureDisabled[] =
-    "data-reduction-proxy-secure-proxy-disabled";
 
 // Sets a URL to fetch to warm up the data reduction proxy on startup and
 // network changes.

@@ -22,6 +22,7 @@
 #include "device/gamepad/gamepad_data_fetcher.h"
 #include "device/gamepad/gamepad_data_fetcher_manager.h"
 #include "device/gamepad/gamepad_user_gesture.h"
+#include "mojo/public/cpp/system/platform_handle.h"
 
 using blink::WebGamepad;
 using blink::WebGamepads;
@@ -39,20 +40,18 @@ GamepadProvider::ClosureAndThread::ClosureAndThread(
 GamepadProvider::ClosureAndThread::~ClosureAndThread() {}
 
 GamepadProvider::GamepadProvider(
-    std::unique_ptr<GamepadSharedBuffer> buffer,
     GamepadConnectionChangeClient* connection_change_client)
     : is_paused_(true),
       have_scheduled_do_poll_(false),
       devices_changed_(true),
       ever_had_user_gesture_(false),
       sanitize_(true),
-      gamepad_shared_buffer_(std::move(buffer)),
+      gamepad_shared_buffer_(new GamepadSharedBuffer()),
       connection_change_client_(connection_change_client) {
   Initialize(std::unique_ptr<GamepadDataFetcher>());
 }
 
 GamepadProvider::GamepadProvider(
-    std::unique_ptr<GamepadSharedBuffer> buffer,
     GamepadConnectionChangeClient* connection_change_client,
     std::unique_ptr<GamepadDataFetcher> fetcher)
     : is_paused_(true),
@@ -60,7 +59,7 @@ GamepadProvider::GamepadProvider(
       devices_changed_(true),
       ever_had_user_gesture_(false),
       sanitize_(true),
-      gamepad_shared_buffer_(std::move(buffer)),
+      gamepad_shared_buffer_(new GamepadSharedBuffer()),
       connection_change_client_(connection_change_client) {
   Initialize(std::move(fetcher));
 }
@@ -92,6 +91,15 @@ base::SharedMemoryHandle GamepadProvider::GetSharedMemoryHandleForProcess(
   gamepad_shared_buffer_->shared_memory()->ShareToProcess(process,
                                                           &renderer_handle);
   return renderer_handle;
+}
+
+mojo::ScopedSharedBufferHandle GamepadProvider::GetSharedBufferHandle() {
+  // TODO(heke): Use mojo::SharedBuffer rather than base::SharedMemory in
+  // GamepadSharedBuffer. See crbug.com/670655 for details
+  base::SharedMemoryHandle handle = base::SharedMemory::DuplicateHandle(
+      gamepad_shared_buffer_->shared_memory()->handle());
+  return mojo::WrapSharedMemoryHandle(handle, sizeof(GamepadHardwareBuffer),
+                                      true /* read_only */);
 }
 
 void GamepadProvider::GetCurrentGamepadData(WebGamepads* data) {
@@ -255,15 +263,12 @@ void GamepadProvider::DoPoll() {
     base::AutoLock lock(shared_memory_lock_);
 
     // Acquire the SeqLock. There is only ever one writer to this data.
-    // See gamepad_hardware_buffer.h.
+    // See gamepad_shared_buffer.h.
     gamepad_shared_buffer_->WriteBegin();
-    buffer->length = 0;
     for (unsigned i = 0; i < WebGamepads::itemsLengthCap; ++i) {
       PadState& state = pad_states_.get()[i];
       // Must run through the map+sanitize here or CheckForUserGesture may fail.
       MapAndSanitizeGamepadData(&state, &buffer->items[i], sanitize_);
-      if (state.active_state)
-        buffer->length++;
     }
     gamepad_shared_buffer_->WriteEnd();
   }

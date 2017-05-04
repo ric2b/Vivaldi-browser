@@ -32,7 +32,6 @@ struct HttpRequestInfo;
 class HttpRequestHeaders;
 class HttpResponseInfo;
 class IOBuffer;
-class IOBufferWithSize;
 class SSLCertRequestInfo;
 class SSLInfo;
 class UploadDataStream;
@@ -194,9 +193,6 @@ class NET_EXPORT_PRIVATE HttpStreamParser {
 
   // Examine the parsed headers to try to determine the response body size.
   void CalculateResponseBodySize();
-
-  // Uploads statistics about status line compliance with RFC 7230.
-  void ValidateStatusLine(const std::string& status_line);
 
   // Check if buffers used to send the request are empty.
   bool SendRequestBuffersEmpty();

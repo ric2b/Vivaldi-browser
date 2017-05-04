@@ -10,10 +10,10 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
 #include "storage/browser/storage_browser_export.h"
 #include "storage/common/blob_storage/blob_storage_constants.h"
@@ -21,9 +21,7 @@
 class GURL;
 
 namespace storage {
-class BlobDataHandle;
 class BlobEntry;
-class ShareableBlobDataItem;
 
 // This class stores the blob data in the various states of construction, as
 // well as URL mappings to blob uuids.
@@ -72,12 +70,9 @@ class STORAGE_EXPORT BlobStorageRegistry {
 
  private:
   friend class ViewBlobInternalsJob;
-  using BlobMap =
-      base::ScopedPtrHashMap<std::string, std::unique_ptr<BlobEntry>>;
-  using URLMap = std::map<GURL, std::string>;
 
-  BlobMap blob_map_;
-  URLMap url_to_uuid_;
+  std::unordered_map<std::string, std::unique_ptr<BlobEntry>> blob_map_;
+  std::map<GURL, std::string> url_to_uuid_;
 
   DISALLOW_COPY_AND_ASSIGN(BlobStorageRegistry);
 };

@@ -5,6 +5,7 @@
 #include "cc/trees/layer_tree_impl.h"
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "cc/layers/heads_up_display_layer_impl.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/geometry_test_utils.h"
@@ -79,26 +80,28 @@ class LayerTreeImplTest : public testing::Test {
       gfx::Transform translate_z;
       translate_z.Translate3d(0, 0, root_depth);
       root->test_properties()->transform = translate_z;
+      root->test_properties()->sorting_context_id = root_sorting_context;
       root->SetBounds(bounds);
       root->SetDrawsContent(true);
-      root->Set3dSortingContextId(root_sorting_context);
     }
     {
       gfx::Transform translate_z;
       translate_z.Translate3d(0, 0, left_child_depth);
       left_child->test_properties()->transform = translate_z;
+      left_child->test_properties()->sorting_context_id =
+          left_child_sorting_context;
       left_child->SetBounds(bounds);
       left_child->SetDrawsContent(true);
-      left_child->Set3dSortingContextId(left_child_sorting_context);
       left_child->test_properties()->should_flatten_transform = false;
     }
     {
       gfx::Transform translate_z;
       translate_z.Translate3d(0, 0, right_child_depth);
       right_child->test_properties()->transform = translate_z;
+      right_child->test_properties()->sorting_context_id =
+          right_child_sorting_context;
       right_child->SetBounds(bounds);
       right_child->SetDrawsContent(true);
-      right_child->Set3dSortingContextId(right_child_sorting_context);
     }
 
     root->test_properties()->AddChild(std::move(left_child));
@@ -940,7 +943,7 @@ TEST_F(LayerTreeImplTest, HitTestingForMultipleLayersAtVaryingDepths) {
   root->SetBounds(gfx::Size(100, 100));
   root->SetDrawsContent(true);
   root->test_properties()->should_flatten_transform = false;
-  root->Set3dSortingContextId(1);
+  root->test_properties()->sorting_context_id = 1;
   {
     // child 1 and child2 are initialized to overlap between x=50 and x=60.
     // grand_child is set to overlap both child1 and child2 between y=50 and
@@ -959,7 +962,7 @@ TEST_F(LayerTreeImplTest, HitTestingForMultipleLayersAtVaryingDepths) {
     child1->SetBounds(gfx::Size(50, 50));
     child1->SetDrawsContent(true);
     child1->test_properties()->should_flatten_transform = false;
-    child1->Set3dSortingContextId(1);
+    child1->test_properties()->sorting_context_id = 1;
 
     child2->SetPosition(gfx::PointF(50.f, 10.f));
     child2->SetBounds(gfx::Size(50, 50));
@@ -968,7 +971,7 @@ TEST_F(LayerTreeImplTest, HitTestingForMultipleLayersAtVaryingDepths) {
     child2->test_properties()->transform = translate_z;
     child2->SetDrawsContent(true);
     child2->test_properties()->should_flatten_transform = false;
-    child2->Set3dSortingContextId(1);
+    child2->test_properties()->sorting_context_id = 1;
 
     // Remember that grand_child is positioned with respect to its parent (i.e.
     // child1).  In screen space, the intended position is (10, 50), with size
@@ -2313,7 +2316,8 @@ class PersistentSwapPromise
   ~PersistentSwapPromise() override = default;
 
   void DidActivate() override {}
-  MOCK_METHOD1(DidSwap, void(CompositorFrameMetadata* metadata));
+  MOCK_METHOD1(WillSwap, void(CompositorFrameMetadata* metadata));
+  MOCK_METHOD0(DidSwap, void());
 
   DidNotSwapAction DidNotSwap(DidNotSwapReason reason) override {
     return DidNotSwapAction::KEEP_ACTIVE;
@@ -2331,7 +2335,8 @@ class NotPersistentSwapPromise
   ~NotPersistentSwapPromise() override = default;
 
   void DidActivate() override {}
-  void DidSwap(CompositorFrameMetadata* metadata) override {}
+  void WillSwap(CompositorFrameMetadata* metadata) override {}
+  void DidSwap() override {}
 
   DidNotSwapAction DidNotSwap(DidNotSwapReason reason) override {
     return DidNotSwapAction::BREAK_PROMISE;
@@ -2368,7 +2373,7 @@ TEST_F(LayerTreeImplTest, PersistentSwapPromisesAreKeptAlive) {
   for (size_t i = 0; i < persistent_promises.size(); ++i) {
     SCOPED_TRACE(testing::Message() << "While checking case #" << i);
     ASSERT_TRUE(persistent_promises[i]);
-    EXPECT_CALL(*persistent_promises[i], DidSwap(testing::_));
+    EXPECT_CALL(*persistent_promises[i], WillSwap(testing::_));
   }
   host_impl().active_tree()->FinishSwapPromises(nullptr);
 }

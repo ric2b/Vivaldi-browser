@@ -21,11 +21,10 @@
 // OnUnauthenticatedPublicHeader
 // OnUnauthenticatedHeader: { connection_id: 13845207862000976235,
 // connection_id_length:8, packet_number_length:1, multipath_flag: 0,
-// reset_flag: 0, version_flag: 0, entropy_flag: 0, entropy hash: 0, path_id: ,
-// packet_number: 4}
+// reset_flag: 0, version_flag: 0, path_id: , packet_number: 4}
 // OnDecryptedPacket
 // OnPacketHeader
-// OnAckFrame:  entropy_hash: 2 largest_observed: 1 ack_delay_time: 3000
+// OnAckFrame:  largest_observed: 1 ack_delay_time: 3000
 // missing_packets: [  ] is_truncated: 0 received_packets: [ 1 at 466016  ]
 // OnStopWaitingFrame
 // OnConnectionCloseFrame: error_code { 61 } error_details { Unencrypted stream
@@ -37,10 +36,10 @@
 #include <string>
 
 #include "base/command_line.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "net/quic/core/quic_framer.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_text_utils.h"
 
 using std::cerr;
 using std::string;
@@ -66,7 +65,7 @@ class QuicPacketPrinter : public QuicFramerVisitorInterface {
   explicit QuicPacketPrinter(QuicFramer* framer) : framer_(framer) {}
 
   void OnError(QuicFramer* framer) override {
-    cerr << "OnError: " << QuicUtils::ErrorToString(framer->error())
+    cerr << "OnError: " << QuicErrorCodeToString(framer->error())
          << " detail: " << framer->detailed_error() << "\n";
   }
   bool OnProtocolVersionMismatch(QuicVersion received_version) override {
@@ -104,7 +103,7 @@ class QuicPacketPrinter : public QuicFramerVisitorInterface {
   bool OnStreamFrame(const QuicStreamFrame& frame) override {
     cerr << "OnStreamFrame: " << frame;
     cerr << "         data: { "
-         << QuicUtils::HexEncode(frame.data_buffer, frame.data_length)
+         << QuicTextUtils::HexEncode(frame.data_buffer, frame.data_length)
          << " }\n";
     return true;
   }
@@ -182,7 +181,7 @@ int main(int argc, char* argv[]) {
          << " Usage: " << args[0] << " client|server <hex>\n";
     return 1;
   }
-  string hex = net::QuicUtils::HexDecode(ArgToString(args[1]));
+  string hex = net::QuicTextUtils::HexDecode(argv[2]);
   net::QuicVersionVector versions = net::AllSupportedVersions();
   // Fake a time since we're not actually generating acks.
   net::QuicTime start(net::QuicTime::Zero());

@@ -9,6 +9,7 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/simple_thread.h"
@@ -19,10 +20,17 @@
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/ui/common/switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/aura/mus/window_tree_host_mus.h"
+#include "ui/aura/test/env_test_helper.h"
 #include "ui/aura/window.h"
-#include "ui/views/mus/window_manager_connection.h"
+#include "ui/gl/gl_switches.h"
+#include "ui/views/mus/desktop_window_tree_host_mus.h"
+#include "ui/views/mus/mus_client.h"
+#include "ui/views/mus/test_utils.h"
 #include "ui/views/test/platform_test_helper.h"
+#include "ui/views/test/views_test_helper_aura.h"
 #include "ui/views/views_delegate.h"
+#include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 
 namespace views {
 namespace {
@@ -52,19 +60,30 @@ class PlatformTestHelperMus : public PlatformTestHelper {
  public:
   PlatformTestHelperMus(service_manager::Connector* connector,
                         const service_manager::Identity& identity) {
-    // It is necessary to recreate the WindowManagerConnection for each test,
+    aura::test::EnvTestHelper().SetWindowTreeClient(nullptr);
+    // It is necessary to recreate the MusClient for each test,
     // since a new MessageLoop is created for each test.
-    connection_ = WindowManagerConnection::Create(connector, identity);
+    mus_client_ = test::MusClientTestApi::Create(connector, identity);
   }
-  ~PlatformTestHelperMus() override {}
+  ~PlatformTestHelperMus() override {
+    aura::test::EnvTestHelper().SetWindowTreeClient(nullptr);
+  }
 
   // PlatformTestHelper:
+  void OnTestHelperCreated(ViewsTestHelper* helper) override {
+    static_cast<ViewsTestHelperAura*>(helper)->EnableMusWithWindowTreeClient(
+        mus_client_->window_tree_client());
+  }
   void SimulateNativeDestroy(Widget* widget) override {
-    delete widget->GetNativeView();
+    aura::WindowTreeHostMus* window_tree_host =
+        static_cast<aura::WindowTreeHostMus*>(
+            widget->GetNativeView()->GetHost());
+    static_cast<aura::WindowTreeClientDelegate*>(mus_client_.get())
+        ->OnEmbedRootDestroyed(window_tree_host);
   }
 
  private:
-  std::unique_ptr<WindowManagerConnection> connection_;
+  std::unique_ptr<MusClient> mus_client_;
 
   DISALLOW_COPY_AND_ASSIGN(PlatformTestHelperMus);
 };
@@ -132,10 +151,9 @@ class ServiceManagerConnection {
     background_service_manager_ =
         base::MakeUnique<service_manager::BackgroundServiceManager>();
     background_service_manager_->Init(nullptr);
-    context_ =
-        base::MakeUnique<service_manager::ServiceContext>(
-            base::MakeUnique<DefaultService>(),
-            background_service_manager_->CreateServiceRequest(GetTestName()));
+    context_ = base::MakeUnique<service_manager::ServiceContext>(
+        base::MakeUnique<DefaultService>(),
+        background_service_manager_->CreateServiceRequest(GetTestName()));
 
     // ui/views/mus requires a WindowManager running, so launch test_wm.
     service_manager::Connector* connector = context_->connector();
@@ -181,6 +199,8 @@ void ViewsMusTestSuite::Initialize() {
   // command line flag to avoid making blocking calls to other processes for
   // setup for tests (e.g. to unlock the screen in the window manager).
   EnsureCommandLineSwitch(ui::switches::kUseTestConfig);
+
+  EnsureCommandLineSwitch(switches::kOverrideUseGLWithOSMesaForTests);
 
   ViewsTestSuite::Initialize();
   service_manager_connections_ = base::MakeUnique<ServiceManagerConnection>();

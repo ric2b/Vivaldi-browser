@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("infobars") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "confirm_infobar_controller+protected.h",
     "confirm_infobar_controller.h",
@@ -23,7 +24,8 @@ source_set("infobars") {
   deps = [
     "//base",
     "//components/translate/core/browser",
-    "//ios/public/provider/chrome/browser",
+    "//ios/chrome/browser/ui/infobars",
+    "//ios/chrome/common",
     "//ios/web",
     "//ui/base",
     "//ui/gfx",

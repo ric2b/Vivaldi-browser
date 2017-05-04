@@ -4,7 +4,10 @@
 
 package org.chromium.chrome.browser.offlinepages.evaluation;
 
+import android.os.AsyncTask;
+
 import org.chromium.base.Callback;
+import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
@@ -14,8 +17,17 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageItem;
 import org.chromium.chrome.browser.offlinepages.SavePageRequest;
 import org.chromium.chrome.browser.profiles.Profile;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+
+import java.text.SimpleDateFormat;
+
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Class used for offline page evaluation testing tools.
@@ -54,6 +66,25 @@ public class OfflinePageEvaluationBridge {
     }
 
     /**
+     * Class used for writing logs to external log file asynchronously to prevent violating strict
+     * mode during test.
+     */
+    private class LogTask extends AsyncTask<String, Void, Void> {
+        @Override
+        protected Void doInBackground(String... strings) {
+            try {
+                synchronized (mLogOutput) {
+                    mLogOutput.write(strings[0]);
+                    mLogOutput.flush();
+                }
+            } catch (IOException e) {
+                Log.e(TAG, e.getMessage(), e);
+            }
+            return null;
+        }
+    }
+
+    /**
      * Get the instance of the evaluation bridge.
      * @param profile The profile used to get bridge.
      * @param useEvaluationScheduler True if using the evaluation scheduler instead of the
@@ -65,10 +96,13 @@ public class OfflinePageEvaluationBridge {
         return nativeGetBridgeForProfile(profile, useEvaluationScheduler);
     }
 
+    private static final String TAG = "OPEvalBridge";
     private long mNativeOfflinePageEvaluationBridge;
     private boolean mIsOfflinePageModelLoaded;
     private ObserverList<OfflinePageEvaluationObserver> mObservers =
             new ObserverList<OfflinePageEvaluationObserver>();
+
+    private OutputStreamWriter mLogOutput;
 
     /**
      * Creates an offline page evalutaion bridge for a given profile.
@@ -152,11 +186,37 @@ public class OfflinePageEvaluationBridge {
         nativeRemoveRequestsFromQueue(mNativeOfflinePageEvaluationBridge, ids, callback);
     }
 
+    public void setLogOutputFile(File outputFile) throws IOException {
+        // This open file operation shouldn't happen on UI thread.
+        assert !ThreadUtils.runningOnUiThread();
+        mLogOutput = new FileWriter(outputFile);
+    }
+
     /**
      * @return True if the offline page model has fully loaded.
      */
     public boolean isOfflinePageModelLoaded() {
         return mIsOfflinePageModelLoaded;
+    }
+
+    @CalledByNative
+    public void log(String sourceTag, String message) {
+        Date date = new Date(System.currentTimeMillis());
+        SimpleDateFormat formatter =
+                new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.getDefault());
+        String logString = formatter.format(date) + ": " + sourceTag + " | " + message
+                + System.getProperty("line.separator");
+        LogTask logTask = new LogTask();
+        Log.d(TAG, logString);
+        logTask.executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, logString);
+    }
+
+    public void closeLog() {
+        try {
+            mLogOutput.close();
+        } catch (IOException e) {
+            Log.e(TAG, e.getMessage(), e);
+        }
     }
 
     @CalledByNative

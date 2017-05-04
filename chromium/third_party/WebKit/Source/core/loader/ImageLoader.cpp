@@ -30,6 +30,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/IncrementLoadEventDelayCount.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
 #include "core/events/EventSender.h"
 #include "core/fetch/FetchRequest.h"
@@ -91,7 +92,7 @@ class ImageLoader::Task {
   static std::unique_ptr<Task> create(ImageLoader* loader,
                                       UpdateFromElementBehavior updateBehavior,
                                       ReferrerPolicy referrerPolicy) {
-    return makeUnique<Task>(loader, updateBehavior, referrerPolicy);
+    return WTF::makeUnique<Task>(loader, updateBehavior, referrerPolicy);
   }
 
   Task(ImageLoader* loader,
@@ -108,7 +109,7 @@ class ImageLoader::Task {
     v8::HandleScope scope(isolate);
     // If we're invoked from C++ without a V8 context on the stack, we should
     // run the microtask in the context of the element's document's main world.
-    if (ScriptState::hasCurrentScriptState(isolate)) {
+    if (!isolate->GetCurrentContext().IsEmpty()) {
       m_scriptState = ScriptState::current(isolate);
     } else {
       m_scriptState =
@@ -155,7 +156,10 @@ class ImageLoader::Task {
 
 ImageLoader::ImageLoader(Element* element)
     : m_element(element),
-      m_derefElementTimer(this, &ImageLoader::timerFired),
+      m_derefElementTimer(TaskRunnerHelper::get(TaskType::Networking,
+                                                element->document().frame()),
+                          this,
+                          &ImageLoader::timerFired),
       m_hasPendingLoadEvent(false),
       m_hasPendingErrorEvent(false),
       m_imageComplete(true),
@@ -163,7 +167,6 @@ ImageLoader::ImageLoader(Element* element)
       m_elementIsProtected(false),
       m_suppressErrorEvents(false) {
   RESOURCE_LOADING_DVLOG(1) << "new ImageLoader " << this;
-  ThreadState::current()->registerPreFinalizer(this);
 }
 
 ImageLoader::~ImageLoader() {}
@@ -182,10 +185,11 @@ void ImageLoader::dispose() {
 
 DEFINE_TRACE(ImageLoader) {
   visitor->trace(m_image);
+  visitor->trace(m_imageResourceForImageDocument);
   visitor->trace(m_element);
 }
 
-void ImageLoader::setImage(ImageResource* newImage) {
+void ImageLoader::setImage(ImageResourceContent* newImage) {
   setImageWithoutConsideringPendingLoadEvent(newImage);
 
   // Only consider updating the protection ref-count of the Element immediately
@@ -195,9 +199,9 @@ void ImageLoader::setImage(ImageResource* newImage) {
 }
 
 void ImageLoader::setImageWithoutConsideringPendingLoadEvent(
-    ImageResource* newImage) {
+    ImageResourceContent* newImage) {
   DCHECK(m_failedLoadURL.isEmpty());
-  ImageResource* oldImage = m_image.get();
+  ImageResourceContent* oldImage = m_image.get();
   if (newImage != oldImage) {
     m_image = newImage;
     if (m_hasPendingLoadEvent) {
@@ -261,7 +265,8 @@ inline void ImageLoader::enqueueImageLoadingMicroTask(
   std::unique_ptr<Task> task =
       Task::create(this, updateBehavior, referrerPolicy);
   m_pendingTask = task->createWeakPtr();
-  Microtask::enqueueMicrotask(WTF::bind(&Task::run, passed(std::move(task))));
+  Microtask::enqueueMicrotask(
+      WTF::bind(&Task::run, WTF::passed(std::move(task))));
   m_loadDelayCounter =
       IncrementLoadEventDelayCount::create(m_element->document());
 }
@@ -288,7 +293,7 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior,
     return;
 
   AtomicString imageSourceURL = m_element->imageSourceURL();
-  ImageResource* newImage = nullptr;
+  ImageResourceContent* newImage = nullptr;
   if (!url.isNull()) {
     // Unlike raw <img>, we block mixed content inside of <picture> or
     // <img srcset>.
@@ -297,7 +302,7 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior,
     ResourceRequest resourceRequest(url);
     if (updateBehavior == UpdateForcedReload) {
       resourceRequest.setCachePolicy(WebCachePolicy::BypassingCache);
-      resourceRequest.setLoFiState(WebURLRequest::LoFiOff);
+      resourceRequest.setPreviewsState(WebURLRequest::PreviewsNoTransform);
     }
 
     if (referrerPolicy != ReferrerPolicyDefault) {
@@ -314,11 +319,11 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior,
                      document.clientHintsPreferences());
 
     if (updateBehavior != UpdateForcedReload && document.settings() &&
-        document.settings()->fetchImagePlaceholders()) {
+        document.settings()->getFetchImagePlaceholders()) {
       request.setAllowImagePlaceholder();
     }
 
-    newImage = ImageResource::fetch(request, document.fetcher());
+    newImage = ImageResourceContent::fetch(request, document.fetcher());
 
     if (!newImage && !pageIsBeingDismissed(&document)) {
       crossSiteOrCSPViolationOccurred(imageSourceURL);
@@ -334,7 +339,7 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior,
     noImageResourceToLoad();
   }
 
-  ImageResource* oldImage = m_image.get();
+  ImageResourceContent* oldImage = m_image.get();
   if (updateBehavior == UpdateSizeChanged && m_element->layoutObject() &&
       m_element->layoutObject()->isImage() && newImage == oldImage) {
     toLayoutImage(m_element->layoutObject())->intrinsicSizeChanged();
@@ -397,9 +402,11 @@ void ImageLoader::updateFromElement(UpdateFromElementBehavior updateBehavior,
   // funneling the main resource bytes into m_image, so just create an
   // ImageResource to be populated later.
   if (m_loadingImageDocument && updateBehavior != UpdateForcedReload) {
-    setImage(
-        ImageResource::create(imageSourceToKURL(m_element->imageSourceURL())));
-    m_image->setStatus(Resource::Pending);
+    ImageResource* imageResource =
+        ImageResource::create(imageSourceToKURL(m_element->imageSourceURL()));
+    imageResource->setStatus(Resource::Pending);
+    m_imageResourceForImageDocument = imageResource;
+    setImage(imageResource->getContent());
     return;
   }
 
@@ -419,7 +426,7 @@ void ImageLoader::updateFromElement(UpdateFromElementBehavior updateBehavior,
   // Allow the idiom "img.src=''; img.src='.." to clear down the image before an
   // asynchronous load completes.
   if (imageSourceURL.isEmpty()) {
-    ImageResource* image = m_image.get();
+    ImageResourceContent* image = m_image.get();
     if (image) {
       image->removeObserver(this);
     }
@@ -463,11 +470,10 @@ bool ImageLoader::shouldLoadImmediately(const KURL& url) const {
     if (resource && !resource->errorOccurred())
       return true;
   }
-  return (isHTMLObjectElement(m_element) || isHTMLEmbedElement(m_element) ||
-          url.protocolIsData());
+  return (isHTMLObjectElement(m_element) || isHTMLEmbedElement(m_element));
 }
 
-void ImageLoader::imageNotifyFinished(ImageResource* resource) {
+void ImageLoader::imageNotifyFinished(ImageResourceContent* resource) {
   RESOURCE_LOADING_DVLOG(1)
       << "ImageLoader::imageNotifyFinished " << this
       << "; m_hasPendingLoadEvent=" << m_hasPendingLoadEvent;
@@ -510,14 +516,6 @@ void ImageLoader::imageNotifyFinished(ImageResource* resource) {
     updatedHasPendingEvent();
     return;
   }
-  if (resource->wasCanceled()) {
-    m_hasPendingLoadEvent = false;
-    // Only consider updating the protection ref-count of the Element
-    // immediately before returning from this function as doing so might result
-    // in the destruction of this ImageLoader.
-    updatedHasPendingEvent();
-    return;
-  }
   loadEventSender().dispatchEventSoon(this);
 }
 
@@ -551,7 +549,7 @@ void ImageLoader::updateLayoutObject() {
   // Only update the layoutObject if it doesn't have an image or if what we have
   // is a complete image.  This prevents flickering in the case where a dynamic
   // change is happening between two images.
-  ImageResource* cachedImage = imageResource->cachedImage();
+  ImageResourceContent* cachedImage = imageResource->cachedImage();
   if (m_image != cachedImage && (m_imageComplete || !cachedImage))
     imageResource->setImageResource(m_image.get());
 }
@@ -627,7 +625,7 @@ bool ImageLoader::getImageAnimationPolicy(ImageAnimationPolicy& policy) {
   if (!element()->document().settings())
     return false;
 
-  policy = element()->document().settings()->imageAnimationPolicy();
+  policy = element()->document().settings()->getImageAnimationPolicy();
   return true;
 }
 

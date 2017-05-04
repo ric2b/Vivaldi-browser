@@ -74,7 +74,8 @@ class CC_EXPORT LayerTreeHostInProcess : public LayerTreeHost {
     LayerTreeSettings const* settings = nullptr;
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner;
     ImageSerializationProcessor* image_serialization_processor = nullptr;
-    MutatorHost* mutator_host;
+    MutatorHost* mutator_host = nullptr;
+    scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner;
 
     InitParams();
     ~InitParams();
@@ -298,6 +299,9 @@ class CC_EXPORT LayerTreeHostInProcess : public LayerTreeHost {
   int id_;
   bool next_commit_forces_redraw_ = false;
   bool next_commit_forces_recalculate_raster_scales_ = false;
+  // Track when we're inside a main frame to see if compositor is being
+  // destroyed midway which causes a crash. crbug.com/654672
+  bool inside_main_frame_ = false;
 
   TaskGraphRunner* task_graph_runner_;
 
@@ -316,6 +320,8 @@ class CC_EXPORT LayerTreeHostInProcess : public LayerTreeHost {
   // TODO(khushalsagar): Investigate removing this after SPV2, since then we
   // should get these PropertyTrees directly from blink?
   std::unique_ptr<ReflectedMainFrameState> reflected_main_frame_state_;
+
+  scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerTreeHostInProcess);
 };

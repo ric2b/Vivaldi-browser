@@ -10,7 +10,7 @@ cr.define('chrome.SnippetsInternals', function() {
 
   function initialize() {
     $('submit-download').addEventListener('click', function(event) {
-      chrome.send('download', [$('hosts-input').value]);
+      chrome.send('download');
       event.preventDefault();
     });
 
@@ -30,6 +30,11 @@ cr.define('chrome.SnippetsInternals', function() {
 
     $('clear-classification').addEventListener('click', function(event) {
       chrome.send('clearClassification');
+      event.preventDefault();
+    });
+
+    $('background-fetch-button').addEventListener('click', function(event) {
+      chrome.send('fetchRemoteSuggestionsInTheBackground');
       event.preventDefault();
     });
 
@@ -108,6 +113,12 @@ cr.define('chrome.SnippetsInternals', function() {
     receiveProperty('avg-time-to-use', timeToUse);
   }
 
+  function receiveLastRemoteSuggestionsBackgroundFetchTime(
+      lastRemoteSuggestionsBackgroundFetchTime) {
+    receiveProperty('last-background-fetch-time-label',
+        lastRemoteSuggestionsBackgroundFetchTime);
+  }
+
   function downloadJson(json) {
     // Redirect the browser to download data in |json| as a file "snippets.json"
     // (Setting Content-Disposition: attachment via a data: URL is not possible;
@@ -157,6 +168,8 @@ cr.define('chrome.SnippetsInternals', function() {
     receiveContentSuggestions: receiveContentSuggestions,
     receiveJson: receiveJson,
     receiveClassification: receiveClassification,
+    receiveLastRemoteSuggestionsBackgroundFetchTime:
+        receiveLastRemoteSuggestionsBackgroundFetchTime,
   };
 });
 

@@ -15,6 +15,9 @@ struct WindowData {
   // Unique identifier of the window.
   uint32 window_id;
 
+  // Id of the transient parent, 0 if there isn't one.
+  uint32 transient_parent_id;
+
   gfx.mojom.Rect bounds;
 
   // Arbitrary key/value pairs. The interpretation of these is left to the
@@ -24,23 +27,6 @@ struct WindowData {
   // True if this window is visible. The window may not be drawn on screen (see
   // OnWindowParentDrawnStateChanged() for details).
   bool visible;
-};
-
-// Each Window has support for two surfaces. Generally the |DEFAULT| surface
-// is used. The |UNDERLAY| surface is useful if the owner of a window wants to
-// to Embed() another client and at the same time draw something under the
-// embedded apps representation.
-// TODO(fsamuel): Remove this once window decorations are no longer underlay
-// surfaces. http://crbug.com/647852.
-enum CompositorFrameSinkType {
-  // Only the owner of a window may obtain this surface.
-  // The window manager can change the offset of this by way of
-  // SetUnderlaySurfaceOffsetAndExtendedHitArea().
-  UNDERLAY,
-
-  // Only the embedded app may obtain this surface. If an app is not embedded
-  // in the Window than the owner may also render to this surface as well.
-  DEFAULT,
 };
 
 // The result of an input event sent to a client app.

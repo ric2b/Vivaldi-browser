@@ -38,6 +38,8 @@ class MockMediaSession : public content::MediaSession {
   MOCK_METHOD1(Resume, void(content::MediaSession::SuspendType));
   MOCK_METHOD1(Suspend, void(content::MediaSession::SuspendType));
   MOCK_METHOD1(Stop, void(content::MediaSession::SuspendType));
+  MOCK_METHOD0(StartDucking, void());
+  MOCK_METHOD0(StopDucking, void());
   MOCK_METHOD1(DidReceiveAction, void(blink::mojom::MediaSessionAction));
 
  private:
@@ -54,8 +56,7 @@ class CastMediaBlockerTest : public content::RenderViewHostTestHarness {
     content::RenderViewHostTestHarness::SetUp();
     media_session_ = base::MakeUnique<MockMediaSession>(
         content::MediaSession::Get(web_contents()));
-    media_blocker_ = base::MakeUnique<CastMediaBlocker>(media_session_.get(),
-                                                        web_contents());
+    media_blocker_ = base::MakeUnique<CastMediaBlocker>(media_session_.get());
 
     content::WebContentsTester::For(web_contents())
         ->NavigateAndCommit(GURL("https://www.youtube.com"));

@@ -2,30 +2,32 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_CRYPTO_NULL_ENCRYPTER_H_
-#define NET_QUIC_CRYPTO_NULL_ENCRYPTER_H_
+#ifndef NET_QUIC_CORE_CRYPTO_NULL_ENCRYPTER_H_
+#define NET_QUIC_CORE_CRYPTO_NULL_ENCRYPTER_H_
 
-#include <stddef.h>
+#include <cstddef>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "net/base/net_export.h"
 #include "net/quic/core/crypto/quic_encrypter.h"
+#include "net/quic/core/quic_types.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
 
 // A NullEncrypter is a QuicEncrypter used before a crypto negotiation
 // has occurred.  It does not actually encrypt the payload, but does
 // generate a MAC (fnv128) over both the payload and associated data.
-class NET_EXPORT_PRIVATE NullEncrypter : public QuicEncrypter {
+class QUIC_EXPORT_PRIVATE NullEncrypter : public QuicEncrypter {
  public:
-  NullEncrypter();
+  explicit NullEncrypter(Perspective perspective);
   ~NullEncrypter() override {}
 
   // QuicEncrypter implementation
   bool SetKey(base::StringPiece key) override;
   bool SetNoncePrefix(base::StringPiece nonce_prefix) override;
-  bool EncryptPacket(QuicPathId path_id,
+  bool EncryptPacket(QuicVersion version,
+                     QuicPathId path_id,
                      QuicPacketNumber packet_number,
                      base::StringPiece associated_data,
                      base::StringPiece plaintext,
@@ -42,9 +44,11 @@ class NET_EXPORT_PRIVATE NullEncrypter : public QuicEncrypter {
  private:
   size_t GetHashLength() const;
 
+  Perspective perspective_;
+
   DISALLOW_COPY_AND_ASSIGN(NullEncrypter);
 };
 
 }  // namespace net
 
-#endif  // NET_QUIC_CRYPTO_NULL_ENCRYPTER_H_
+#endif  // NET_QUIC_CORE_CRYPTO_NULL_ENCRYPTER_H_

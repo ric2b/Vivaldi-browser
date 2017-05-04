@@ -8,11 +8,8 @@
 
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "mojo/common/common_type_converters.h"
+#include "mojo/public/cpp/bindings/map.h"
 #include "services/ui/common/util.h"
-
-using mojo::Array;
-using mojo::String;
 
 namespace ui {
 
@@ -202,12 +199,11 @@ TestWindow WindowDataToTestWindow(const mojom::WindowDataPtr& data) {
   window.parent_id = data->parent_id;
   window.window_id = data->window_id;
   window.visible = data->visible;
-  window.properties =
-      data->properties.To<std::map<std::string, std::vector<uint8_t>>>();
+  window.properties = mojo::UnorderedMapToMap(data->properties);
   return window;
 }
 
-void WindowDatasToTestWindows(const Array<mojom::WindowDataPtr>& data,
+void WindowDatasToTestWindows(const std::vector<mojom::WindowDataPtr>& data,
                               std::vector<TestWindow>* test_windows) {
   for (size_t i = 0; i < data.size(); ++i)
     test_windows->push_back(WindowDataToTestWindow(data[i]));
@@ -302,7 +298,7 @@ void TestChangeTracker::OnWindowHierarchyChanged(
     Id window_id,
     Id old_parent_id,
     Id new_parent_id,
-    Array<mojom::WindowDataPtr> windows) {
+    std::vector<mojom::WindowDataPtr> windows) {
   Change change;
   change.type = CHANGE_TYPE_NODE_HIERARCHY_CHANGED;
   change.window_id = window_id;
@@ -375,17 +371,18 @@ void TestChangeTracker::OnPointerEventObserved(const ui::Event& event,
   AddChange(change);
 }
 
-void TestChangeTracker::OnWindowSharedPropertyChanged(Id window_id,
-                                                      String name,
-                                                      Array<uint8_t> data) {
+void TestChangeTracker::OnWindowSharedPropertyChanged(
+    Id window_id,
+    const std::string& name,
+    const base::Optional<std::vector<uint8_t>>& data) {
   Change change;
   change.type = CHANGE_TYPE_PROPERTY_CHANGED;
   change.window_id = window_id;
   change.property_key = name;
-  if (data.is_null())
+  if (!data)
     change.property_value = "NULL";
   else
-    change.property_value = data.To<std::string>();
+    change.property_value.assign(data->begin(), data->end());
   AddChange(change);
 }
 
@@ -427,15 +424,13 @@ void TestChangeTracker::OnTopLevelCreated(uint32_t change_id,
 
 void TestChangeTracker::OnWindowSurfaceChanged(
     Id window_id,
-    const cc::SurfaceId& surface_id,
-    const gfx::Size& frame_size,
-    float device_scale_factor) {
+    const cc::SurfaceInfo& surface_info) {
   Change change;
   change.type = CHANGE_TYPE_SURFACE_CHANGED;
   change.window_id = window_id;
-  change.surface_id = surface_id;
-  change.frame_size = frame_size;
-  change.device_scale_factor = device_scale_factor;
+  change.surface_id = surface_info.id();
+  change.frame_size = surface_info.size_in_pixels();
+  change.device_scale_factor = surface_info.device_scale_factor();
   AddChange(change);
 }
 

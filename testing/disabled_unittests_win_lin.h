@@ -6,18 +6,9 @@
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
 
-  // Proprietary media codec tests
-  DISABLE(WebRtcBrowserTest, RunsAudioVideoWebRTCCallInTwoTabsH264)
-
-  // Appears flaky on Win and Lin
-
-  // Failing media tests ever since proprietary media code was imported
-  DISABLE(MediaTest, VideoBearRotated270)
-  DISABLE(MediaTest, VideoBearRotated90)
-
   // Seems to have broken on the Windows and Linux testers
-  DISABLE(NavigatingExtensionPopupBrowserTest, DownloadViaPost)
+  //DISABLE(NavigatingExtensionPopupBrowserTest, DownloadViaPost)
 
   // Broke in 55
-  DISABLE(PageLoadMetricsBrowserTest, IgnoreDownloads)
+  //DISABLE(PageLoadMetricsBrowserTest, IgnoreDownloads)
 

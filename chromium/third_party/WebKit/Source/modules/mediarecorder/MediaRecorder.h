@@ -6,7 +6,7 @@
 #define MediaRecorder_h
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/events/EventTarget.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
@@ -23,10 +23,11 @@ class Blob;
 class BlobData;
 class ExceptionState;
 
-class MODULES_EXPORT MediaRecorder final : public EventTargetWithInlineData,
-                                           public WebMediaRecorderHandlerClient,
-                                           public ActiveScriptWrappable,
-                                           public ActiveDOMObject {
+class MODULES_EXPORT MediaRecorder final
+    : public EventTargetWithInlineData,
+      public WebMediaRecorderHandlerClient,
+      public ActiveScriptWrappable<MediaRecorder>,
+      public SuspendableObject {
   USING_GARBAGE_COLLECTED_MIXIN(MediaRecorder);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -46,10 +47,6 @@ class MODULES_EXPORT MediaRecorder final : public EventTargetWithInlineData,
   MediaStream* stream() const { return m_stream.get(); }
   const String& mimeType() const { return m_mimeType; }
   String state() const;
-  bool ignoreMutedMedia() const { return m_ignoreMutedMedia; }
-  void setIgnoreMutedMedia(bool ignoreMutedMedia) {
-    m_ignoreMutedMedia = ignoreMutedMedia;
-  }
   unsigned long videoBitsPerSecond() const { return m_videoBitsPerSecond; }
   unsigned long audioBitsPerSecond() const { return m_audioBitsPerSecond; }
 
@@ -73,16 +70,19 @@ class MODULES_EXPORT MediaRecorder final : public EventTargetWithInlineData,
   const AtomicString& interfaceName() const override;
   ExecutionContext* getExecutionContext() const override;
 
-  // ActiveDOMObject
+  // SuspendableObject
   void suspend() override;
   void resume() override;
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   // ScriptWrappable
   bool hasPendingActivity() const final { return !m_stopped; }
 
   // WebMediaRecorderHandlerClient
-  void writeData(const char* data, size_t length, bool lastInSlice) override;
+  void writeData(const char* data,
+                 size_t length,
+                 bool lastInSlice,
+                 double timecode) override;
   void onError(const WebString& message) override;
 
   DECLARE_VIRTUAL_TRACE();
@@ -93,7 +93,7 @@ class MODULES_EXPORT MediaRecorder final : public EventTargetWithInlineData,
                 const MediaRecorderOptions&,
                 ExceptionState&);
 
-  void createBlobEvent(Blob*);
+  void createBlobEvent(Blob*, double);
 
   void stopRecording();
   void scheduleDispatchEvent(Event*);
@@ -103,7 +103,6 @@ class MODULES_EXPORT MediaRecorder final : public EventTargetWithInlineData,
   size_t m_streamAmountOfTracks;
   String m_mimeType;
   bool m_stopped;
-  bool m_ignoreMutedMedia;
   int m_audioBitsPerSecond;
   int m_videoBitsPerSecond;
 

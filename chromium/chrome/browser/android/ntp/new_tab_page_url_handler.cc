@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/strings/string_util.h"
+#include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/common/url_constants.h"
 #include "url/gurl.h"
@@ -30,8 +31,18 @@ bool HandleAndroidNativePageURL(GURL* url,
       return true;
     }
 
-    if (url->host() == kChromeUIPhysicalWebHost) {
-      *url = GURL(kChromeUINativePhysicalWebURL);
+    // TODO(twellington): stop redirecting chrome://bookmarks to
+    // chrome-native://bookmarks when M57 is a distant memory.
+    // See http://crbug.com/654071.
+    if (base::FeatureList::IsEnabled(
+            chrome::android::kNativeAndroidHistoryManager) &&
+        url->host() == kChromeUIHistoryHost) {
+      *url = GURL(kChromeUINativeHistoryURL);
+      return true;
+    }
+
+    if (url->host() == kChromeUIPhysicalWebDiagnosticsHost) {
+      *url = GURL(kChromeUINativePhysicalWebDiagnosticsURL);
       return true;
     }
   }

@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <map>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -18,7 +19,7 @@
 #include "base/i18n/string_compare.h"
 #include "base/id_map.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
+#include "base/memory/ptr_util.h"
 #include "base/posix/safe_strerror.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -206,7 +207,7 @@ class CertIdMap {
   typedef std::map<net::X509Certificate*, int32_t> CertMap;
 
   // Creates an ID for cert and looks up the cert for an ID.
-  IDMap<net::X509Certificate>id_map_;
+  IDMap<net::X509Certificate*> id_map_;
 
   // Finds the ID for a cert.
   CertMap cert_map_;
@@ -833,13 +834,13 @@ void CertificateManagerHandler::ImportPersonalPasswordSelected(
   }
 
   if (use_hardware_backed_) {
-    module_ = certificate_manager_model_->cert_db()->GetPrivateModule();
+    slot_ = certificate_manager_model_->cert_db()->GetPrivateSlot();
   } else {
-    module_ = certificate_manager_model_->cert_db()->GetPublicModule();
+    slot_ = certificate_manager_model_->cert_db()->GetPublicSlot();
   }
 
   net::CryptoModuleList modules;
-  modules.push_back(module_);
+  modules.push_back(net::CryptoModule::CreateFromHandle(slot_.get()));
   chrome::UnlockSlotsIfNecessary(
       modules,
       chrome::kCryptoModulePasswordCertImport,
@@ -856,7 +857,7 @@ void CertificateManagerHandler::ImportPersonalSlotUnlocked() {
   // for Chrome OS when the "Import and Bind" option is chosen.
   bool is_extractable = !use_hardware_backed_;
   int result = certificate_manager_model_->ImportFromPKCS12(
-      module_.get(), file_data_, password_, is_extractable);
+      slot_.get(), file_data_, password_, is_extractable);
   ImportExportCleanup();
   web_ui()->CallJavascriptFunctionUnsafe("CertificateRestoreOverlay.dismiss");
   int string_id;
@@ -897,7 +898,7 @@ void CertificateManagerHandler::ImportExportCleanup() {
   file_data_.clear();
   use_hardware_backed_ = false;
   selected_cert_list_.clear();
-  module_ = NULL;
+  slot_.reset();
   tracker_.TryCancelAll();
 
   // There may be pending file dialogs, we need to tell them that we've gone
@@ -1192,14 +1193,18 @@ void CertificateManagerHandler::PopulateTree(
 
 void CertificateManagerHandler::ShowError(const std::string& title,
                                           const std::string& error) const {
-  ScopedVector<const base::Value> args;
-  args.push_back(new base::StringValue(title));
-  args.push_back(new base::StringValue(error));
-  args.push_back(new base::StringValue(l10n_util::GetStringUTF8(IDS_OK)));
-  args.push_back(base::Value::CreateNullValue().release());  // cancelTitle
-  args.push_back(base::Value::CreateNullValue().release());  // okCallback
-  args.push_back(base::Value::CreateNullValue().release());  // cancelCallback
-  web_ui()->CallJavascriptFunctionUnsafe("AlertOverlay.show", args.get());
+  auto title_value = base::MakeUnique<base::StringValue>(title);
+  auto error_value = base::MakeUnique<base::StringValue>(error);
+  auto ok_title_value =
+      base::MakeUnique<base::StringValue>(l10n_util::GetStringUTF8(IDS_OK));
+  auto cancel_title_value = base::Value::CreateNullValue();
+  auto ok_callback_value = base::Value::CreateNullValue();
+  auto cancel_callback_value = base::Value::CreateNullValue();
+  std::vector<const base::Value*> args = {
+      title_value.get(),       error_value.get(),
+      ok_title_value.get(),    cancel_title_value.get(),
+      ok_callback_value.get(), cancel_callback_value.get()};
+  web_ui()->CallJavascriptFunctionUnsafe("AlertOverlay.show", args);
 }
 
 void CertificateManagerHandler::ShowImportErrors(

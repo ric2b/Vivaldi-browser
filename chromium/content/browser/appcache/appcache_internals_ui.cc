@@ -287,8 +287,8 @@ void AppCacheInternalsUI::Proxy::OnResponseInfoLoaded(
     const int64_t kLimit = 100 * 1000;
     int64_t amount_to_read =
         std::min(kLimit, response_info->response_data_size());
-    scoped_refptr<net::IOBuffer> response_data(new net::IOBuffer(
-        base::CheckedNumeric<size_t>(amount_to_read).ValueOrDie()));
+    scoped_refptr<net::IOBuffer> response_data(
+        new net::IOBuffer(base::checked_cast<size_t>(amount_to_read)));
     std::unique_ptr<AppCacheResponseReader> reader(
         appcache_service_->storage()->CreateResponseReader(
             GURL(response_enquiry.manifest_url), response_enquiry.response_id));
@@ -351,7 +351,7 @@ AppCacheInternalsUI::AppCacheInternalsUI(WebUI* web_ui)
   source->AddResourcePath("appcache_internals.js", IDR_APPCACHE_INTERNALS_JS);
   source->AddResourcePath("appcache_internals.css", IDR_APPCACHE_INTERNALS_CSS);
   source->SetDefaultResource(IDR_APPCACHE_INTERNALS_HTML);
-  source->DisableI18nAndUseGzipForAllPaths();
+  source->UseGzip(std::unordered_set<std::string>());
 
   WebUIDataSource::Add(browser_context(), source);
 

@@ -35,8 +35,7 @@ class PrerenderTabHelper
   void DidStartProvisionalLoadForFrame(
       content::RenderFrameHost* render_frame_host,
       const GURL& validated_url,
-      bool is_error_page,
-      bool is_iframe_srcdoc) override;
+      bool is_error_page) override;
   void DidCommitProvisionalLoadForFrame(
       content::RenderFrameHost* render_frame_host,
       const GURL& validated_url,
@@ -49,8 +48,9 @@ class PrerenderTabHelper
   // Called when this prerendered WebContents has just been swapped in.
   void PrerenderSwappedIn();
 
-  // Called when a control prerender is resolved. Applies to the next load.
-  void WouldHavePrerenderedNextLoad(Origin origin);
+  base::TimeTicks swap_ticks() const { return swap_ticks_; }
+
+  Origin origin() const { return origin_; }
 
  private:
   explicit PrerenderTabHelper(content::WebContents* web_contents);
@@ -80,13 +80,6 @@ class PrerenderTabHelper
   // relevant prerender. Otherwise, ORIGIN_NONE.
   Origin origin_;
 
-  // True if the next load will be associated with a control prerender. This
-  // extra state is needed because control prerenders are resolved before the
-  // actual load begins. |next_load_origin_| gives the origin of the control
-  // prerender.
-  bool next_load_is_control_prerender_;
-  Origin next_load_origin_;
-
   // System time at which the current load was started for the purpose of
   // the perceived page load time (PPLT). If null, there is no current
   // load.
@@ -96,6 +89,10 @@ class PrerenderTabHelper
   // a applicable (in cases when a prerender that was still loading was
   // swapped in).
   base::TimeTicks actual_load_start_;
+
+  // Record the most recent swap time. This differs from |pplt_load_start_| in
+  // that it is not reset in various circumstances, like a load being stopped.
+  base::TimeTicks swap_ticks_;
 
   // Current URL being loaded.
   GURL url_;

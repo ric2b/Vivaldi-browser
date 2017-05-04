@@ -67,20 +67,11 @@ void FinalizeHandlerInitialization(
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
     scoped_refptr<ResourceRequestBodyImpl> body) {
-  if (skip_service_worker) {
-    // TODO(horo): Does this work properly for PlzNavigate?
-    if (ServiceWorkerUtils::IsMainResourceType(resource_type)) {
-      provider_host->SetDocumentUrl(net::SimplifyUrlForRequest(request->url()));
-      provider_host->SetTopmostFrameUrl(request->first_party_for_cookies());
-    }
-    return;
-  }
-
   std::unique_ptr<ServiceWorkerRequestHandler> handler(
       provider_host->CreateRequestHandler(
           request_mode, credentials_mode, redirect_mode, resource_type,
           request_context_type, frame_type, blob_storage_context->AsWeakPtr(),
-          body));
+          body, skip_service_worker));
   if (!handler)
     return;
 
@@ -99,7 +90,8 @@ void ServiceWorkerRequestHandler::InitializeForNavigation(
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
     bool is_parent_frame_secure,
-    scoped_refptr<ResourceRequestBodyImpl> body) {
+    scoped_refptr<ResourceRequestBodyImpl> body,
+    const base::Callback<WebContents*(void)>& web_contents_getter) {
   CHECK(IsBrowserSideNavigationEnabled());
 
   // Only create a handler when there is a ServiceWorkerNavigationHandlerCore
@@ -123,7 +115,7 @@ void ServiceWorkerRequestHandler::InitializeForNavigation(
   std::unique_ptr<ServiceWorkerProviderHost> provider_host =
       ServiceWorkerProviderHost::PreCreateNavigationHost(
           navigation_handle_core->context_wrapper()->context()->AsWeakPtr(),
-          is_parent_frame_secure);
+          is_parent_frame_secure, web_contents_getter);
 
   FinalizeHandlerInitialization(
       request, provider_host.get(), blob_storage_context, skip_service_worker,

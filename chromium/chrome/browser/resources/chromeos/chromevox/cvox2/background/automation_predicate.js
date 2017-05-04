@@ -57,7 +57,8 @@ AutomationPredicate.match = function(params) {
 };
 
 /** @type {AutomationPredicate.Unary} */
-AutomationPredicate.checkBox = AutomationPredicate.roles([Role.checkBox]);
+AutomationPredicate.checkBox =
+    AutomationPredicate.roles([Role.checkBox, Role.switch]);
 /** @type {AutomationPredicate.Unary} */
 AutomationPredicate.comboBox = AutomationPredicate.roles(
     [Role.comboBox, Role.popUpButton, Role.menuListPopup]);
@@ -223,6 +224,10 @@ AutomationPredicate.object = function(node) {
   if (node.parent && node.parent.state.editable)
     return false;
 
+  // Descend into large nodes.
+  if (node.name && node.name.length > constants.OBJECT_MAX_CHARCOUNT)
+    return false;
+
   return node.state.focusable ||
       (AutomationPredicate.leafOrStaticText(node) &&
        (/\S+/.test(node.name) ||
@@ -300,8 +305,11 @@ AutomationPredicate.container = function(node) {
  * @return {boolean}
  */
 AutomationPredicate.structuralContainer = AutomationPredicate.roles([
+    Role.alertDialog,
+    Role.dialog,
     Role.rootWebArea,
     Role.webView,
+    Role.window,
     Role.embeddedObject,
     Role.iframe,
     Role.iframePresentational]);
@@ -314,9 +322,17 @@ AutomationPredicate.structuralContainer = AutomationPredicate.roles([
  */
 AutomationPredicate.root = function(node) {
   switch (node.role) {
-    case Role.dialog:
     case Role.window:
       return true;
+    case Role.dialog:
+      // The below logic handles nested dialogs properly in the desktop tree
+      // like that found in a bubble view.
+      return node.root.role != Role.desktop ||
+          (!!node.parent &&
+           node.parent.role == Role.window &&
+           node.parent.children.every(function(child) {
+             return node.role == Role.window || node.role == Role.dialog;
+           }));
     case Role.toolbar:
       return node.root.role == Role.desktop;
     case Role.rootWebArea:
@@ -359,7 +375,9 @@ AutomationPredicate.shouldIgnoreNode = function(node) {
                                   Role.image,
                                   Role.staticText,
                                   Role.svgRoot,
-                                  Role.tableHeaderContainer])(node));
+                                  Role.tableHeaderContainer,
+                                  Role.unknown
+                                 ])(node));
 };
 
 /**

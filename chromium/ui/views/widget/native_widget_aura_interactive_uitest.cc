@@ -4,6 +4,7 @@
 
 #include "ui/views/widget/native_widget_aura.h"
 
+#include "base/memory/ptr_util.h"
 #include "ui/aura/window.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/test/native_widget_factory.h"
@@ -51,7 +52,7 @@ using NativeWidgetAuraTest = ViewsInteractiveUITestBase;
 TEST_F(NativeWidgetAuraTest, NonActiveWindowRequestImeFocus) {
   // TODO: test uses GetContext(), which is not applicable to aura-mus.
   // http://crbug.com/663809.
-  if (IsAuraMusClient())
+  if (IsMus())
     return;
 
   TestFocusRules* test_focus_rules = new TestFocusRules;

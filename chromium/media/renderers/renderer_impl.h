@@ -5,6 +5,7 @@
 #ifndef MEDIA_RENDERERS_RENDERER_IMPL_H_
 #define MEDIA_RENDERERS_RENDERER_IMPL_H_
 
+#include <list>
 #include <memory>
 #include <vector>
 
@@ -31,7 +32,6 @@ class SingleThreadTaskRunner;
 namespace media {
 
 class AudioRenderer;
-class DemuxerStream;
 class DemuxerStreamProvider;
 class TimeSource;
 class VideoRenderer;
@@ -60,10 +60,8 @@ class MEDIA_EXPORT RendererImpl : public Renderer {
   void SetPlaybackRate(double playback_rate) final;
   void SetVolume(float volume) final;
   base::TimeDelta GetMediaTime() final;
-  bool HasAudio() final;
-  bool HasVideo() final;
 
-  void RestartStreamPlayback(DemuxerStream* stream,
+  void OnStreamStatusChanged(DemuxerStream* stream,
                              bool enabled,
                              base::TimeDelta time);
 
@@ -149,6 +147,8 @@ class MEDIA_EXPORT RendererImpl : public Renderer {
   void OnVideoNaturalSizeChange(const gfx::Size& size);
   void OnVideoOpacityChange(bool opaque);
 
+  void OnStreamRestartCompleted();
+
   State state_;
 
   // Task runner used to execute pipeline tasks.
@@ -200,6 +200,7 @@ class MEDIA_EXPORT RendererImpl : public Renderer {
 
   bool restarting_audio_ = false;
   bool restarting_video_ = false;
+  std::list<base::Closure> pending_stream_status_notifications_;
 
   base::WeakPtr<RendererImpl> weak_this_;
   base::WeakPtrFactory<RendererImpl> weak_factory_;

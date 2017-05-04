@@ -8,33 +8,33 @@
 #include <memory>
 #include <string>
 
+#include "base/callback.h"
+#include "base/location.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/engine/activation_context.h"
-#include "components/sync/model/data_type_error_handler.h"
 #include "components/sync/model/entity_data.h"
-#include "components/sync/model/sync_error_factory.h"
+#include "components/sync/model/model_error.h"
 
 namespace syncer {
 
 class MetadataBatch;
 class MetadataChangeList;
 class ModelTypeSyncBridge;
-class SyncError;
 
-// Interface used by the ModelTypeSyncBridge to inform sync of local
-// changes.
-class ModelTypeChangeProcessor : public SyncErrorFactory {
+// Interface used by the ModelTypeSyncBridge to inform sync of local changes.
+class ModelTypeChangeProcessor {
  public:
-  typedef base::Callback<void(SyncError, std::unique_ptr<ActivationContext>)>
+  typedef base::Callback<void(std::unique_ptr<ActivationContext>)>
       StartCallback;
 
   // A factory function to make an implementation of ModelTypeChangeProcessor.
   static std::unique_ptr<ModelTypeChangeProcessor> Create(
+      const base::RepeatingClosure& dump_stack,
       ModelType type,
       ModelTypeSyncBridge* bridge);
 
   ModelTypeChangeProcessor();
-  ~ModelTypeChangeProcessor() override;
+  virtual ~ModelTypeChangeProcessor();
 
   // Inform the processor of a new or updated entity. The |entity_data| param
   // does not need to be fully set, but it should at least have specifics and
@@ -48,20 +48,22 @@ class ModelTypeChangeProcessor : public SyncErrorFactory {
   virtual void Delete(const std::string& storage_key,
                       MetadataChangeList* metadata_change_list) = 0;
 
-  // Accept the initial sync metadata loaded by the bridge. This should be
-  // called as soon as the metadata is available to the bridge.
-  virtual void OnMetadataLoaded(SyncError error,
-                                std::unique_ptr<MetadataBatch> batch) = 0;
+  // The bridge is expected to call this exactly once unless it encounters an
+  // error. Ideally ModelReadyToSync() is called as soon as possible during
+  // initialization, and must be called before invoking either Put() or
+  // Delete(). The bridge needs to be able to synchronously handle
+  // MergeSyncData() and ApplySyncChanges() after calling ModelReadyToSync(). If
+  // an error is encountered, calling ReportError() instead is sufficient.
+  virtual void ModelReadyToSync(std::unique_ptr<MetadataBatch> batch) = 0;
 
   // Indicates that sync wants to connect a sync worker to this processor. Once
   // the processor has metadata from the bridge, it will pass the info needed
   // for the worker into |callback|. |error_handler| is how the processor will
-  // inform sync of any unrecoverable errors after calling |callback|, and it is
-  // guaranteed to outlive the processor. StartCallback takes a SyncError and an
-  // ActivationContext; the context should be nullptr iff the error is set.
-  virtual void OnSyncStarting(
-      std::unique_ptr<DataTypeErrorHandler> error_handler,
-      const StartCallback& callback) = 0;
+  // inform sync of any unrecoverable errors, and is guaranteed to outlive the
+  // processor. If an error is encountered, |error_handler| should be called
+  // and |callback| should not.
+  virtual void OnSyncStarting(const ModelErrorHandler& error_handler,
+                              const StartCallback& callback) = 0;
 
   // Indicates that sync is being disabled permanently for this data type. All
   // metadata should be erased from storage.
@@ -69,8 +71,20 @@ class ModelTypeChangeProcessor : public SyncErrorFactory {
 
   // Returns a boolean representing whether the processor's metadata is
   // currently up to date and accurately tracking the model type's data. If
-  // false, calls to Put and Delete will no-op and can be omitted by bridge.
+  // false, and ModelReadyToSync() has already been called, then Put and Delete
+  // will no-op and can be omitted by bridge.
   virtual bool IsTrackingMetadata() = 0;
+
+  // Report an error in the model to sync. Should be called for any persistence
+  // or consistency error the bridge encounters outside of a method that allows
+  // returning a ModelError directly. Outstanding callbacks are not expected to
+  // be called after an error. This will result in sync being temporarily
+  // disabled for the model type (generally until the next restart).
+  virtual void ReportError(const ModelError& error) = 0;
+
+  // A convenience form of the above.
+  virtual void ReportError(const tracked_objects::Location& location,
+                           const std::string& message) = 0;
 };
 
 }  // namespace syncer

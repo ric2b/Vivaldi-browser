@@ -16,6 +16,11 @@
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 #include "ui/gfx/geometry/size_f.h"
 
+namespace blink {
+class WebMouseEvent;
+class WebMouseWheelEvent;
+}
+
 namespace content {
 
 // Emulates touch input with mouse and keyboard.
@@ -26,6 +31,9 @@ class CONTENT_EXPORT TouchEmulator : public ui::GestureProviderClient {
 
   void Enable(ui::GestureProviderConfigType config_type);
   void Disable();
+
+  // Call when device scale factor changes.
+  void SetDeviceScaleFactor(float device_scale_factor);
 
   // See GestureProvider::SetDoubleTapSupportForPageEnabled.
   void SetDoubleTapSupportForPageEnabled(bool enabled);
@@ -57,6 +65,7 @@ class CONTENT_EXPORT TouchEmulator : public ui::GestureProviderClient {
   // Returns cursor size in DIP.
   gfx::SizeF InitCursorFromResource(
       WebCursor* cursor, float scale, int resource_id);
+  bool InitCursors(float device_scale_factor, bool force);
   void ResetState();
   void UpdateCursor();
   bool UpdateShiftPressed(bool shift_pressed);
@@ -65,7 +74,9 @@ class CONTENT_EXPORT TouchEmulator : public ui::GestureProviderClient {
   bool InPinchGestureMode() const;
 
   void FillTouchEventAndPoint(const blink::WebMouseEvent& mouse_event);
-  void FillPinchEvent(const blink::WebInputEvent& event);
+  blink::WebGestureEvent GetPinchGestureEvent(
+      blink::WebInputEvent::Type type,
+      const blink::WebInputEvent& original_event);
 
   // The following methods generate and pass gesture events to the renderer.
   void PinchBegin(const blink::WebGestureEvent& event);
@@ -86,6 +97,7 @@ class CONTENT_EXPORT TouchEmulator : public ui::GestureProviderClient {
   ui::GestureProviderConfigType gesture_provider_config_type_;
   bool double_tap_enabled_;
 
+  bool use_2x_cursors_;
   // While emulation is on, default cursor is touch. Pressing shift changes
   // cursor to the pinch one.
   WebCursor pointer_cursor_;
@@ -109,7 +121,6 @@ class CONTENT_EXPORT TouchEmulator : public ui::GestureProviderClient {
   // did not send fling start in pinch mode.
   bool suppress_next_fling_cancel_;
 
-  blink::WebGestureEvent pinch_event_;
   // Point which does not move while pinch-zooming.
   gfx::Point pinch_anchor_;
   // The cumulative scale change from the start of pinch gesture.

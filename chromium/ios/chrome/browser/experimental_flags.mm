@@ -15,99 +15,74 @@
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_util.h"
+#include "base/strings/sys_string_conversions.h"
 #include "components/autofill/core/common/autofill_switches.h"
+#include "components/reading_list/core/reading_list_switches.h"
 #include "components/variations/variations_associated_data.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/web/public/web_view_creation_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
+
 NSString* const kEnableAlertOnBackgroundUpload =
     @"EnableAlertsOnBackgroundUpload";
+NSString* const kEnableNewClearBrowsingDataUI = @"EnableNewClearBrowsingDataUI";
+NSString* const kEnableStartupCrash = @"EnableStartupCrash";
 NSString* const kEnableViewCopyPasswords = @"EnableViewCopyPasswords";
+NSString* const kExternalAppPromptDisabled = @"ExternalAppPromptDisabled";
+NSString* const kFirstRunForceEnabled = @"FirstRunForceEnabled";
+NSString* const kForceResetContextualSearch = @"ForceResetContextualSearch";
+NSString* const kGaiaEnvironment = @"GAIAEnvironment";
 NSString* const kHeuristicsForPasswordGeneration =
     @"HeuristicsForPasswordGeneration";
-NSString* const kEnableNewClearBrowsingDataUI = @"EnableNewClearBrowsingDataUI";
 NSString* const kMDMIntegrationDisabled = @"MDMIntegrationDisabled";
-NSString* const kPendingIndexNavigationEnabled =
-    @"PendingIndexNavigationEnabled";
+NSString* const kOriginServerHost = @"AlternateOriginServerHost";
+NSString* const kPendingIndexNavigationDisabled =
+    @"PendingIndexNavigationDisabled";
+NSString* const kSafariVCSignInDisabled = @"SafariVCSignInDisabled";
+NSString* const kWhatsNewPromoStatus = @"WhatsNewPromoStatus";
+
+const base::Feature kIOSDownloadImageRenaming{
+    "IOSDownloadImageRenaming", base::FEATURE_DISABLED_BY_DEFAULT};
+
 }  // namespace
 
 namespace experimental_flags {
 
+bool AlwaysDisplayFirstRun() {
+  return
+      [[NSUserDefaults standardUserDefaults] boolForKey:kFirstRunForceEnabled];
+}
+
+GaiaEnvironment GetGaiaEnvironment() {
+  NSString* gaia_environment =
+      [[NSUserDefaults standardUserDefaults] objectForKey:kGaiaEnvironment];
+  if ([gaia_environment isEqualToString:@"Staging"])
+    return GAIA_ENVIRONMENT_STAGING;
+  if ([gaia_environment isEqualToString:@"Test"])
+    return GAIA_ENVIRONMENT_TEST;
+  return GAIA_ENVIRONMENT_PROD;
+}
+
+std::string GetOriginServerHost() {
+  NSString* alternateHost =
+      [[NSUserDefaults standardUserDefaults] stringForKey:kOriginServerHost];
+  return base::SysNSStringToUTF8(alternateHost);
+}
+
+WhatsNewPromoStatus GetWhatsNewPromoStatus() {
+  NSInteger status = [[NSUserDefaults standardUserDefaults]
+      integerForKey:kWhatsNewPromoStatus];
+  return static_cast<WhatsNewPromoStatus>(status);
+}
+
 bool IsAlertOnBackgroundUploadEnabled() {
   return [[NSUserDefaults standardUserDefaults]
       boolForKey:kEnableAlertOnBackgroundUpload];
-}
-
-bool IsLRUSnapshotCacheEnabled() {
-  // Check if the experimental flag is forced on or off.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kEnableLRUSnapshotCache)) {
-    return true;
-  } else if (command_line->HasSwitch(switches::kDisableLRUSnapshotCache)) {
-    return false;
-  }
-
-  // Check if the finch experiment is turned on.
-  std::string group_name =
-      base::FieldTrialList::FindFullName("IOSLRUSnapshotCache");
-  return base::StartsWith(group_name, "Enabled",
-                          base::CompareCase::INSENSITIVE_ASCII);
-}
-
-bool IsViewCopyPasswordsEnabled() {
-  NSString* viewCopyPasswordFlag = [[NSUserDefaults standardUserDefaults]
-      objectForKey:kEnableViewCopyPasswords];
-  if ([viewCopyPasswordFlag isEqualToString:@"Enabled"])
-    return true;
-  return false;
-}
-
-bool IsPasswordGenerationEnabled() {
-  // This call activates the field trial, if needed, so it must come before any
-  // early returns.
-  std::string group_name =
-      base::FieldTrialList::FindFullName("PasswordGeneration");
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kEnableIOSPasswordGeneration))
-    return true;
-  if (command_line->HasSwitch(switches::kDisableIOSPasswordGeneration))
-    return false;
-  return group_name != "Disabled";
-}
-
-bool UseOnlyLocalHeuristicsForPasswordGeneration() {
-  if ([[NSUserDefaults standardUserDefaults]
-          boolForKey:kHeuristicsForPasswordGeneration]) {
-    return true;
-  }
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  return command_line->HasSwitch(
-      autofill::switches::kLocalHeuristicsOnlyForPasswordGeneration);
-}
-
-bool IsTabSwitcherEnabled() {
-  // Check if the experimental flag is forced on or off.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kEnableTabSwitcher)) {
-    return true;
-  } else if (command_line->HasSwitch(switches::kDisableTabSwitcher)) {
-    return false;
-  }
-
-  // Check if the finch experiment is turned on.
-  std::string group_name = base::FieldTrialList::FindFullName("IOSTabSwitcher");
-  return base::StartsWith(group_name, "Enabled",
-                          base::CompareCase::INSENSITIVE_ASCII);
-}
-
-bool IsReadingListEnabled() {
-  // Check if the experimental flag is forced on or off.
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kEnableReadingList)) {
-    return true;
-  }
-  return false;
 }
 
 bool IsAllBookmarksEnabled() {
@@ -129,24 +104,75 @@ bool IsAllBookmarksEnabled() {
                           base::CompareCase::INSENSITIVE_ASCII);
 }
 
-bool IsPhysicalWebEnabled() {
+bool IsAutoReloadEnabled() {
+  std::string group_name = base::FieldTrialList::FindFullName("IOSAutoReload");
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kEnableIOSPhysicalWeb)) {
+  if (command_line->HasSwitch(switches::kEnableOfflineAutoReload))
     return true;
-  } else if (command_line->HasSwitch(switches::kDisableIOSPhysicalWeb)) {
+  if (command_line->HasSwitch(switches::kDisableOfflineAutoReload))
     return false;
-  }
-
-  // Check if the finch experiment is turned on
-  std::string group_name =
-      base::FieldTrialList::FindFullName("PhysicalWebEnabled");
   return base::StartsWith(group_name, "Enabled",
                           base::CompareCase::INSENSITIVE_ASCII);
 }
 
-bool IsQRCodeReaderEnabled() {
+bool IsCredentialManagementEnabled() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  return !command_line->HasSwitch(switches::kDisableQRScanner);
+  return command_line->HasSwitch(switches::kEnableCredentialManagerAPI);
+}
+
+bool IsDownloadRenamingEnabled() {
+  // Check if the experimental flag is forced on or off.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kEnableDownloadImageRenaming)) {
+    return true;
+  } else if (command_line->HasSwitch(switches::kDisableDownloadImageRenaming)) {
+    return false;
+  }
+
+  // Check if the finch experiment is turned on.
+  return base::FeatureList::IsEnabled(kIOSDownloadImageRenaming);
+}
+
+bool IsExternalApplicationPromptEnabled() {
+  return ![[NSUserDefaults standardUserDefaults]
+      boolForKey:kExternalAppPromptDisabled];
+}
+
+bool IsForceResetContextualSearchEnabled() {
+  return [[NSUserDefaults standardUserDefaults]
+      boolForKey:kForceResetContextualSearch];
+}
+
+bool IsLRUSnapshotCacheEnabled() {
+  // Check if the experimental flag is forced on or off.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kEnableLRUSnapshotCache)) {
+    return true;
+  } else if (command_line->HasSwitch(switches::kDisableLRUSnapshotCache)) {
+    return false;
+  }
+
+  // Check if the finch experiment is turned on.
+  std::string group_name =
+      base::FieldTrialList::FindFullName("IOSLRUSnapshotCache");
+  return base::StartsWith(group_name, "Enabled",
+                          base::CompareCase::INSENSITIVE_ASCII);
+}
+
+bool IsMDMIntegrationEnabled() {
+  return ![[NSUserDefaults standardUserDefaults]
+      boolForKey:kMDMIntegrationDisabled];
+}
+
+bool IsMemoryDebuggingEnabled() {
+// Always return true for Chromium builds, but check the user default for
+// official builds because memory debugging should never be enabled on stable.
+#if CHROMIUM_BUILD
+  return true;
+#else
+  return [[NSUserDefaults standardUserDefaults]
+      boolForKey:@"EnableMemoryDebugging"];
+#endif  // CHROMIUM_BUILD
 }
 
 bool IsNewClearBrowsingDataUIEnabled() {
@@ -155,6 +181,29 @@ bool IsNewClearBrowsingDataUIEnabled() {
   if ([countersFlag isEqualToString:@"Enabled"])
     return true;
   return false;
+}
+
+// Emergency switch for https://crbug.com/527084 in case of unforeseen UX
+// regressions.
+// Defaults to Enabled unless the Finch trial has explicitly disabled it.
+bool IsPageIconForDowngradedHTTPSEnabled() {
+  std::string group_name =
+      base::FieldTrialList::FindFullName("IOSPageIconForDowngradedHTTPS");
+  return !base::StartsWith(group_name, "Disabled",
+                           base::CompareCase::INSENSITIVE_ASCII);
+}
+
+bool IsPasswordGenerationEnabled() {
+  // This call activates the field trial, if needed, so it must come before any
+  // early returns.
+  std::string group_name =
+      base::FieldTrialList::FindFullName("PasswordGeneration");
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kEnableIOSPasswordGeneration))
+    return true;
+  if (command_line->HasSwitch(switches::kDisableIOSPasswordGeneration))
+    return false;
+  return group_name != "Disabled";
 }
 
 bool IsPaymentRequestEnabled() {
@@ -176,19 +225,83 @@ bool IsPaymentRequestEnabled() {
                           base::CompareCase::INSENSITIVE_ASCII);
 }
 
+bool IsPendingIndexNavigationEnabled() {
+  return ![[NSUserDefaults standardUserDefaults]
+      boolForKey:kPendingIndexNavigationDisabled];
+}
+
+bool IsPhysicalWebEnabled() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kEnableIOSPhysicalWeb)) {
+    return true;
+  } else if (command_line->HasSwitch(switches::kDisableIOSPhysicalWeb)) {
+    return false;
+  }
+
+  // Check if the finch experiment is turned on
+  std::string group_name =
+      base::FieldTrialList::FindFullName("PhysicalWebEnabled");
+  return base::StartsWith(group_name, "Enabled",
+                          base::CompareCase::INSENSITIVE_ASCII);
+}
+
+bool IsReaderModeEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableReaderModeToolbarIcon);
+}
+
+bool IsReadingListEnabled() {
+  return reading_list::switches::IsReadingListEnabled();
+}
+
+bool IsSafariVCSignInEnabled() {
+  return ![[NSUserDefaults standardUserDefaults]
+      boolForKey:kSafariVCSignInDisabled];
+}
+
 bool IsSpotlightActionsEnabled() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   return !command_line->HasSwitch(switches::kDisableSpotlightActions);
 }
 
-bool IsMDMIntegrationEnabled() {
-  return ![[NSUserDefaults standardUserDefaults]
-      boolForKey:kMDMIntegrationDisabled];
+bool IsStartupCrashEnabled() {
+  return [[NSUserDefaults standardUserDefaults] boolForKey:kEnableStartupCrash];
 }
 
-bool IsPendingIndexNavigationEnabled() {
-  return [[NSUserDefaults standardUserDefaults]
-      boolForKey:kPendingIndexNavigationEnabled];
+bool IsTabStripAutoScrollNewTabsEnabled() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  return !command_line->HasSwitch(switches::kDisableTabStripAutoScrollNewTabs);
+}
+
+bool IsTabSwitcherEnabled() {
+  // Check if the experimental flag is forced off.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kDisableTabSwitcher)) {
+    return false;
+  }
+
+  // Check if the finch experiment is turned off.
+  std::string group_name = base::FieldTrialList::FindFullName("IOSTabSwitcher");
+  return !base::StartsWith(group_name, "Disabled",
+                           base::CompareCase::INSENSITIVE_ASCII);
+}
+
+bool IsViewCopyPasswordsEnabled() {
+  NSString* viewCopyPasswordFlag = [[NSUserDefaults standardUserDefaults]
+      objectForKey:kEnableViewCopyPasswords];
+  if ([viewCopyPasswordFlag isEqualToString:@"Enabled"])
+    return true;
+  return false;
+}
+
+bool UseOnlyLocalHeuristicsForPasswordGeneration() {
+  if ([[NSUserDefaults standardUserDefaults]
+          boolForKey:kHeuristicsForPasswordGeneration]) {
+    return true;
+  }
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  return command_line->HasSwitch(
+      autofill::switches::kLocalHeuristicsOnlyForPasswordGeneration);
 }
 
 }  // namespace experimental_flags

@@ -75,12 +75,12 @@ bool FakeAudioRendererSink::CurrentThreadIsRenderingThread() {
 }
 
 bool FakeAudioRendererSink::Render(AudioBus* dest,
-                                   uint32_t frames_delayed,
+                                   base::TimeDelta delay,
                                    int* frames_written) {
   if (state_ != kPlaying)
     return false;
 
-  *frames_written = callback_->Render(dest, frames_delayed, 0);
+  *frames_written = callback_->Render(delay, base::TimeTicks::Now(), 0, dest);
   return true;
 }
 
@@ -101,8 +101,8 @@ void FakeAudioRendererSink::ChangeState(State new_state) {
     "kStopped"
   };
 
-  DVLOG(1) << __FUNCTION__ << " : "
-           << kStateNames[state_] << " -> " << kStateNames[new_state];
+  DVLOG(1) << __func__ << " : " << kStateNames[state_] << " -> "
+           << kStateNames[new_state];
   state_ = new_state;
 }
 

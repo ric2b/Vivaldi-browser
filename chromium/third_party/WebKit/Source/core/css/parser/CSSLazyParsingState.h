@@ -13,6 +13,7 @@
 
 namespace blink {
 
+class CSSLazyPropertyParserImpl;
 class CSSParserTokenRange;
 
 // This class helps lazy parsing by retaining necessary state. It should not
@@ -21,20 +22,42 @@ class CSSParserTokenRange;
 class CSSLazyParsingState
     : public GarbageCollectedFinalized<CSSLazyParsingState> {
  public:
-  CSSLazyParsingState(const CSSParserContext&,
+  CSSLazyParsingState(const CSSParserContext*,
                       Vector<String> escapedStrings,
                       const String& sheetText,
                       StyleSheetContents*);
 
-  const CSSParserContext& context();
+  // Helper method used to bump m_totalStyleRules.
+  CSSLazyPropertyParserImpl* createLazyParser(const CSSParserTokenRange& block);
+
+  const CSSParserContext* context();
+
+  void countRuleParsed();
 
   bool shouldLazilyParseProperties(const CSSSelectorList&,
-                                   const CSSParserTokenRange& block);
+                                   const CSSParserTokenRange& block) const;
 
-  DEFINE_INLINE_TRACE() { visitor->trace(m_owningContents); }
+  DECLARE_TRACE();
+
+  // Exposed for tests. This enum is used to back a histogram, so new values
+  // must be appended to the end, before UsageLastValue.
+  enum CSSRuleUsage {
+    UsageGe0 = 0,
+    UsageGt10 = 1,
+    UsageGt25 = 2,
+    UsageGt50 = 3,
+    UsageGt75 = 4,
+    UsageGt90 = 5,
+    UsageAll = 6,
+
+    // This value must be last.
+    UsageLastValue = 7
+  };
 
  private:
-  CSSParserContext m_context;
+  void recordUsageMetrics();
+
+  Member<const CSSParserContext> m_context;
   Vector<String> m_escapedStrings;
   // Also referenced on the css resource.
   String m_sheetText;
@@ -42,6 +65,23 @@ class CSSLazyParsingState
   // Weak to ensure lazy state will never cause the contents to live longer than
   // it should (we DCHECK this fact).
   WeakMember<StyleSheetContents> m_owningContents;
+
+  // Cache the document as a proxy for caching the UseCounter. Grabbing the
+  // UseCounter per every property parse is a bit more expensive.
+  WeakMember<Document> m_document;
+
+  // Used for calculating the % of rules that ended up being parsed.
+  int m_parsedStyleRules;
+  int m_totalStyleRules;
+
+  int m_styleRulesNeededForNextMilestone;
+
+  int m_usage;
+
+  // Whether or not use counting is enabled for parsing. This will usually be
+  // true, except for when stylesheets with @imports are removed from the page.
+  // See StyleRuleImport::setCSSStyleSheet.
+  const bool m_shouldUseCount;
 };
 
 }  // namespace blink

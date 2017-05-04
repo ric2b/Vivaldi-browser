@@ -30,7 +30,7 @@
 #define AudioScheduledSourceNode_h
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "modules/webaudio/AudioSourceNode.h"
+#include "modules/webaudio/AudioNode.h"
 
 namespace blink {
 
@@ -88,10 +88,15 @@ class AudioScheduledSourceHandler : public AudioHandler {
   //                         rendering.
   // nonSilentFramesToProcess : Number of frames rendering non-silence (will be
   //                            <= quantumFrameSize).
+  // startFrameOffset : The fractional frame offset from quantumFrameOffset
+  //                    and the actual starting time of the source. This is
+  //                    non-zero only when transitioning from the
+  //                    SCHEDULED_STATE to the PLAYING_STATE.
   void updateSchedulingInfo(size_t quantumFrameSize,
                             AudioBus* outputBus,
                             size_t& quantumFrameOffset,
-                            size_t& nonSilentFramesToProcess);
+                            size_t& nonSilentFramesToProcess,
+                            double& startFrameOffset);
 
   // Called when we have no more sound to play or the stop() time has been
   // reached. No onEnded event is called.
@@ -124,9 +129,11 @@ class AudioScheduledSourceHandler : public AudioHandler {
   int m_playbackState;
 };
 
-class AudioScheduledSourceNode : public AudioSourceNode,
-                                 public ActiveScriptWrappable {
+class AudioScheduledSourceNode
+    : public AudioNode,
+      public ActiveScriptWrappable<AudioScheduledSourceNode> {
   USING_GARBAGE_COLLECTED_MIXIN(AudioScheduledSourceNode);
+  DEFINE_WRAPPERTYPEINFO();
 
  public:
   void start(ExceptionState&);
@@ -140,7 +147,7 @@ class AudioScheduledSourceNode : public AudioSourceNode,
   // ScriptWrappable:
   bool hasPendingActivity() const final;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { AudioSourceNode::trace(visitor); }
+  DEFINE_INLINE_VIRTUAL_TRACE() { AudioNode::trace(visitor); }
 
  protected:
   explicit AudioScheduledSourceNode(BaseAudioContext&);

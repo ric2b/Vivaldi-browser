@@ -5,8 +5,8 @@
 package org.chromium.chrome.browser;
 
 import android.graphics.Rect;
+import android.support.test.filters.MediumTest;
 import android.test.MoreAsserts;
-import android.test.suitebuilder.annotation.MediumTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -70,11 +70,11 @@ public class OSKOverscrollTest extends ChromeActivityTestCaseBase<ChromeActivity
     }
 
     @Override
-    public void startMainActivity() throws InterruptedException {
+    public void startMainActivity() {
         // Don't launch activity automatically.
     }
 
-    private void waitForKeyboard() throws InterruptedException {
+    private void waitForKeyboard() {
         // Wait until the keyboard is showing.
         CriteriaHelper.pollUiThread(new Criteria("Keyboard was never shown.") {
             @Override

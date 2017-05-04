@@ -11,7 +11,6 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/threading/thread.h"
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_store.h"
@@ -112,8 +111,8 @@ class PasswordStoreMac : public password_manager::PasswordStore {
   void AddSiteStatsImpl(
       const password_manager::InteractionsStats& stats) override;
   void RemoveSiteStatsImpl(const GURL& origin_domain) override;
-  std::vector<std::unique_ptr<password_manager::InteractionsStats>>
-  GetSiteStatsImpl(const GURL& origin_domain) override;
+  std::vector<password_manager::InteractionsStats> GetSiteStatsImpl(
+      const GURL& origin_domain) override;
 
   // Adds the given form to the Keychain if it's something we want to store
   // there (i.e., not a blacklist entry or a federated login). Returns true if
@@ -128,16 +127,18 @@ class PasswordStoreMac : public password_manager::PasswordStore {
 
   // Removes the given forms from the database. After the call |forms| contains
   // only those forms which were successfully removed.
-  void RemoveDatabaseForms(ScopedVector<autofill::PasswordForm>* forms);
+  void RemoveDatabaseForms(
+      std::vector<std::unique_ptr<autofill::PasswordForm>>* forms);
 
   // Removes the given forms from the Keychain.
   void RemoveKeychainForms(
-      const std::vector<autofill::PasswordForm*>& forms);
+      const std::vector<std::unique_ptr<autofill::PasswordForm>>& forms);
 
   // Searches the database for forms without a corresponding entry in the
   // keychain. Removes those forms from the database, and adds them to
   // |orphaned_forms|.
-  void CleanOrphanedForms(ScopedVector<autofill::PasswordForm>* orphaned_forms);
+  void CleanOrphanedForms(
+      std::vector<std::unique_ptr<autofill::PasswordForm>>* orphaned_forms);
 
   std::unique_ptr<crypto::AppleKeychain> keychain_;
 

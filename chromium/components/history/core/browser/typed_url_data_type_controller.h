@@ -11,19 +11,13 @@
 #include "base/macros.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "components/sync/driver/non_ui_data_type_controller.h"
+#include "components/sync/driver/async_directory_type_controller.h"
 #include "components/sync/driver/sync_api_component_factory.h"
-
-namespace history {
-class HistoryBackend;
-}
 
 namespace browser_sync {
 
-class ControlTask;
-
 // A class that manages the startup and shutdown of typed_url sync.
-class TypedUrlDataTypeController : public syncer::NonUIDataTypeController {
+class TypedUrlDataTypeController : public syncer::AsyncDirectoryTypeController {
  public:
   // |dump_stack| is called when an unrecoverable error occurs.
   TypedUrlDataTypeController(const base::Closure& dump_stack,
@@ -31,14 +25,13 @@ class TypedUrlDataTypeController : public syncer::NonUIDataTypeController {
                              const char* history_disabled_pref_name);
   ~TypedUrlDataTypeController() override;
 
-  // NonUIDataTypeController implementation
-  syncer::ModelSafeGroup model_safe_group() const override;
+  // AsyncDirectoryTypeController implementation.
   bool ReadyForStart() const override;
 
  protected:
-  // NonUIDataTypeController interface.
-  bool PostTaskOnBackendThread(const tracked_objects::Location& from_here,
-                               const base::Closure& task) override;
+  // AsyncDirectoryTypeController implementation.
+  bool PostTaskOnModelThread(const tracked_objects::Location& from_here,
+                             const base::Closure& task) override;
 
  private:
   void OnSavingBrowserHistoryDisabledChanged();

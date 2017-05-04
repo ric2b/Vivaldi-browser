@@ -28,6 +28,7 @@
 #define SelectionController_h
 
 #include "core/CoreExport.h"
+#include "core/dom/SynchronousMutationObserver.h"
 #include "core/editing/TextGranularity.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/page/EventWithHitTestResults.h"
@@ -40,14 +41,16 @@ class HitTestResult;
 class LocalFrame;
 
 class CORE_EXPORT SelectionController final
-    : public GarbageCollectedFinalized<SelectionController> {
+    : public GarbageCollectedFinalized<SelectionController>,
+      public SynchronousMutationObserver {
   WTF_MAKE_NONCOPYABLE(SelectionController);
+  USING_GARBAGE_COLLECTED_MIXIN(SelectionController);
 
  public:
   static SelectionController* create(LocalFrame&);
+  virtual ~SelectionController();
   DECLARE_TRACE();
 
-  void documentDetached();
   void handleMousePressEvent(const MouseEventWithHitTestResults&);
   bool handleMousePressEventSingleClick(const MouseEventWithHitTestResults&);
   bool handleMousePressEventDoubleClick(const MouseEventWithHitTestResults&);
@@ -60,8 +63,9 @@ class CORE_EXPORT SelectionController final
   bool handleMouseReleaseEvent(const MouseEventWithHitTestResults&,
                                const LayoutPoint&);
   bool handlePasteGlobalSelection(const PlatformMouseEvent&);
-  bool handleGestureLongPress(const PlatformGestureEvent&,
-                              const HitTestResult&);
+  bool handleGestureLongPress(const WebGestureEvent&, const HitTestResult&);
+  void handleGestureTwoFingerTap(const GestureEventWithHitTestResults&);
+  void handleGestureLongTap(const GestureEventWithHitTestResults&);
 
   void updateSelectionForMouseDrag(Node*, const LayoutPoint&, const IntPoint&);
   void updateSelectionForMouseDrag(const HitTestResult&,
@@ -95,7 +99,8 @@ class CORE_EXPORT SelectionController final
 
   Document& document() const;
 
-  void selectClosestWordFromHitTestResult(const HitTestResult&,
+  // Returns |true| if a word was selected.
+  bool selectClosestWordFromHitTestResult(const HitTestResult&,
                                           AppendTrailingWhitespace,
                                           SelectInputEventType);
   void selectClosestMisspellingFromHitTestResult(const HitTestResult&,
@@ -108,12 +113,18 @@ class CORE_EXPORT SelectionController final
   void setNonDirectionalSelectionIfNeeded(const VisibleSelectionInFlatTree&,
                                           TextGranularity,
                                           EndPointsAdjustmentMode);
+  void setCaretAtHitTestResult(const HitTestResult&);
   bool updateSelectionForMouseDownDispatchingSelectStart(
       Node*,
       const VisibleSelectionInFlatTree&,
       TextGranularity);
 
   FrameSelection& selection() const;
+
+  // Implements |SynchronousMutationObserver|.
+  // TODO(yosin): We should relocate |m_originalBaseInFlatTree| when DOM tree
+  // changed.
+  void contextDestroyed(Document*) final;
 
   Member<LocalFrame> const m_frame;
   // TODO(yosin): We should use |PositionWIthAffinityInFlatTree| since we

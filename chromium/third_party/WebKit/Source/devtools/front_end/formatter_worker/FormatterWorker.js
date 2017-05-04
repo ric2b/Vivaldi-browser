@@ -78,8 +78,8 @@ self.onmessage = function(event) {
     case 'evaluatableJavaScriptSubstring':
       FormatterWorker.evaluatableJavaScriptSubstring(params.content);
       break;
-    case 'relaxedJSONParser':
-      FormatterWorker.relaxedJSONParser(params.content);
+    case 'parseJSONRelaxed':
+      FormatterWorker.parseJSONRelaxed(params.content);
       break;
     default:
       console.error('Unsupport method name: ' + method);
@@ -89,7 +89,7 @@ self.onmessage = function(event) {
 /**
  * @param {string} content
  */
-FormatterWorker.relaxedJSONParser = function(content) {
+FormatterWorker.parseJSONRelaxed = function(content) {
   postMessage(FormatterWorker.RelaxedJSONParser.parse(content));
 };
 
@@ -97,7 +97,7 @@ FormatterWorker.relaxedJSONParser = function(content) {
  * @param {string} content
  */
 FormatterWorker.evaluatableJavaScriptSubstring = function(content) {
-  var tokenizer = acorn.tokenizer(content, {ecmaVersion: 6});
+  var tokenizer = acorn.tokenizer(content, {ecmaVersion: 8});
   var result = '';
   try {
     var token = tokenizer.getToken();
@@ -139,7 +139,7 @@ FormatterWorker.evaluatableJavaScriptSubstring = function(content) {
  * @param {string} content
  */
 FormatterWorker.javaScriptIdentifiers = function(content) {
-  var root = acorn.parse(content, {ranges: false, ecmaVersion: 6});
+  var root = acorn.parse(content, {ranges: false, ecmaVersion: 8});
 
   /** @type {!Array<!ESTree.Node>} */
   var identifiers = [];
@@ -235,7 +235,7 @@ FormatterWorker.FormatterWorkerContentParser.prototype = {
    * @param {string} content
    * @return {!Object}
    */
-  parse: function(content) {}
+  parse(content) {}
 };
 
 /**

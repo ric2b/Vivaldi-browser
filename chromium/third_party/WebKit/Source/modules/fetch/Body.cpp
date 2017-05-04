@@ -93,7 +93,7 @@ class BodyJsonConsumer final : public BodyConsumerBase {
 
   void didFetchDataLoadedString(const String& string) override {
     if (!resolver()->getExecutionContext() ||
-        resolver()->getExecutionContext()->activeDOMObjectsAreStopped())
+        resolver()->getExecutionContext()->isContextDestroyed())
       return;
     ScriptState::Scope scope(resolver()->getScriptState());
     v8::Isolate* isolate = resolver()->getScriptState()->isolate();
@@ -217,16 +217,14 @@ bool Body::isBodyLocked() {
 }
 
 bool Body::hasPendingActivity() const {
-  if (!getExecutionContext() ||
-      getExecutionContext()->activeDOMObjectsAreStopped())
+  if (!getExecutionContext() || getExecutionContext()->isContextDestroyed())
     return false;
   if (!bodyBuffer())
     return false;
   return bodyBuffer()->hasPendingActivity();
 }
 
-Body::Body(ExecutionContext* context)
-    : ActiveScriptWrappable(this), ContextLifecycleObserver(context) {}
+Body::Body(ExecutionContext* context) : ContextClient(context) {}
 
 ScriptPromise Body::rejectInvalidConsumption(ScriptState* scriptState) {
   if (isBodyLocked() || bodyUsed())

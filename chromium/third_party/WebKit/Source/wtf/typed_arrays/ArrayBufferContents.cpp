@@ -26,8 +26,8 @@
 
 #include "wtf/typed_arrays/ArrayBufferContents.h"
 
+#include "base/allocator/partition_allocator/partition_alloc.h"
 #include "wtf/Assertions.h"
-#include "wtf/allocator/PartitionAlloc.h"
 #include "wtf/allocator/Partitions.h"
 #include <string.h>
 
@@ -42,7 +42,7 @@ ArrayBufferContents::AdjustAmountOfExternalAllocatedMemoryFunction
     ArrayBufferContents::s_adjustAmountOfExternalAllocatedMemoryFunction =
         defaultAdjustAmountOfExternalAllocatedMemoryFunction;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 ArrayBufferContents::AdjustAmountOfExternalAllocatedMemoryFunction
     ArrayBufferContents::
         s_lastUsedAdjustAmountOfExternalAllocatedMemoryFunction;
@@ -111,7 +111,7 @@ void ArrayBufferContents::allocateMemoryWithFlags(size_t size,
                                                   InitializationPolicy policy,
                                                   int flags,
                                                   void*& data) {
-  data = partitionAllocGenericFlags(
+  data = PartitionAllocGenericFlags(
       WTF::Partitions::bufferPartition(), flags, size,
       WTF_HEAP_PROFILER_TYPE_NAME(ArrayBufferContents));
   if (policy == ZeroInitialize && data)
@@ -127,7 +127,7 @@ void ArrayBufferContents::allocateMemory(size_t size,
 void ArrayBufferContents::allocateMemoryOrNull(size_t size,
                                                InitializationPolicy policy,
                                                void*& data) {
-  allocateMemoryWithFlags(size, policy, PartitionAllocReturnNull, data);
+  allocateMemoryWithFlags(size, policy, base::PartitionAllocReturnNull, data);
 }
 
 void ArrayBufferContents::freeMemory(void* data, size_t size) {

@@ -15,6 +15,15 @@ cr.exportPath('print_preview');
  */
 print_preview.PreviewSettings;
 
+/**
+ * @typedef {{
+ *   printerId: string,
+ *   success: boolean,
+ *   capabilities: Object,
+ * }}
+*/
+print_preview.PrinterSetupResponse;
+
 cr.define('print_preview', function() {
   'use strict';
 
@@ -232,6 +241,15 @@ cr.define('print_preview', function() {
     },
 
     /**
+     * Requests that Chrome peform printer setup for the given printer.
+     * @param {string} printerId
+     * @return {!Promise<!print_preview.PrinterSetupResponse>}
+     */
+    setupPrinter: function(printerId) {
+      return cr.sendWithPromise('setupPrinter', printerId);
+    },
+
+    /**
      * @param {!print_preview.Destination} destination Destination to print to.
      * @param {!print_preview.ticket_items.Color} color Color ticket item.
      * @return {number} Native layer color model.
@@ -288,6 +306,7 @@ cr.define('print_preview', function() {
         'generateDraftData': documentInfo.isModifiable,
         'fitToPageEnabled': printTicketStore.fitToPage.getValue(),
         'scaleFactor': printTicketStore.scaling.getValueAsNumber(),
+        'rasterizePDF': printTicketStore.rasterize.getValue(),
         // NOTE: Even though the following fields don't directly relate to the
         // preview, they still need to be included.
         'duplex': printTicketStore.duplex.getValue() ?
@@ -367,6 +386,7 @@ cr.define('print_preview', function() {
         'printWithCloudPrint': !destination.isLocal,
         'printWithPrivet': destination.isPrivet,
         'printWithExtension': destination.isExtension,
+        'rasterizePDF': printTicketStore.rasterize.getValue(),
         'scaleFactor': printTicketStore.scaling.getValueAsNumber(),
         'deviceName': destination.id,
         'isFirstRequest': false,

@@ -1,3 +1,5 @@
 include_rules = [
   "+content/public/child",
+  "+gin/public",
+  "+v8",
 ]

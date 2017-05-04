@@ -8,11 +8,16 @@
 #import <Foundation/Foundation.h>
 
 #import "base/ios/weak_nsobject.h"
-#include "ios/web/public/web_state/web_state_delegate.h"
+#import "ios/web/public/web_state/web_state_delegate.h"
 
 // Objective-C interface for web::WebStateDelegate.
 @protocol CRWWebStateDelegate<NSObject>
 @optional
+
+// Returns the WebState the URL is opened in, or nullptr if the URL wasn't
+// opened immediately.
+- (web::WebState*)webState:(web::WebState*)webState
+         openURLWithParams:(const web::WebState::OpenURLParams&)params;
 
 // Called when the page has made some progress loading. |progress| is a value
 // between 0.0 (nothing loaded) to 1.0 (page fully loaded).
@@ -30,6 +35,15 @@
 - (web::JavaScriptDialogPresenter*)javaScriptDialogPresenterForWebState:
     (web::WebState*)webState;
 
+// Called when a request receives an authentication challenge specified by
+// |protectionSpace|, and is unable to respond using cached credentials.
+// Clients must call |handler| even if they want to cancel authentication
+// (in which case |username| or |password| should be nil).
+- (void)webState:(web::WebState*)webState
+    didRequestHTTPAuthForProtectionSpace:(NSURLProtectionSpace*)protectionSpace
+                      proposedCredential:(NSURLCredential*)proposedCredential
+                       completionHandler:(void (^)(NSString* username,
+                                                   NSString* password))handler;
 @end
 
 namespace web {
@@ -41,11 +55,17 @@ class WebStateDelegateBridge : public web::WebStateDelegate {
   ~WebStateDelegateBridge() override;
 
   // web::WebStateDelegate methods.
+  WebState* OpenURLFromWebState(WebState*,
+                                const WebState::OpenURLParams&) override;
   void LoadProgressChanged(WebState* source, double progress) override;
   bool HandleContextMenu(WebState* source,
                          const ContextMenuParams& params) override;
   JavaScriptDialogPresenter* GetJavaScriptDialogPresenter(
       WebState* source) override;
+  void OnAuthRequired(WebState* source,
+                      NSURLProtectionSpace* protection_space,
+                      NSURLCredential* proposed_credential,
+                      const AuthCallback& callback) override;
 
  private:
   // CRWWebStateDelegate which receives forwarded calls.

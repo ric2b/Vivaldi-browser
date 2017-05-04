@@ -273,7 +273,6 @@ ExtensionFunction::ExtensionFunction()
       user_gesture_(false),
       bad_message_(false),
       histogram_value_(extensions::functions::UNKNOWN),
-      source_tab_id_(-1),
       source_context_type_(Feature::UNSPECIFIED_CONTEXT),
       source_process_id_(-1),
       did_respond_(false) {}
@@ -298,7 +297,8 @@ bool ExtensionFunction::HasPermission() {
 
   Feature::Availability availability =
       ExtensionAPI::GetSharedInstance()->IsAvailable(
-          name_, extension_.get(), source_context_type_, source_url());
+          name_, extension_.get(), source_context_type_, source_url(),
+          extensions::CheckAliasStatus::ALLOWED);
   return availability.is_available();
 }
 
@@ -430,7 +430,7 @@ bool ExtensionFunction::ShouldSkipQuotaLimiting() const {
 
 bool ExtensionFunction::HasOptionalArgument(size_t index) {
   base::Value* value;
-  return args_->Get(index, &value) && !value->IsType(base::Value::TYPE_NULL);
+  return args_->Get(index, &value) && !value->IsType(base::Value::Type::NONE);
 }
 
 void ExtensionFunction::SendResponseImpl(bool success) {

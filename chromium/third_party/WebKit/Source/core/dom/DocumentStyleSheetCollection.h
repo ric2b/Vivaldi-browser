@@ -49,8 +49,9 @@ class DocumentStyleSheetCollection final
     return new DocumentStyleSheetCollection(treeScope);
   }
 
-  void updateActiveStyleSheets(StyleEngine&, StyleResolverUpdateMode);
-  void collectStyleSheets(StyleEngine&, DocumentStyleSheetCollector&);
+  void updateActiveStyleSheets(StyleEngine& masterEngine);
+  void collectStyleSheets(StyleEngine& masterEngine,
+                          DocumentStyleSheetCollector&);
   void collectViewportRules(ViewportStyleResolver&);
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
@@ -60,7 +61,7 @@ class DocumentStyleSheetCollection final
  private:
   explicit DocumentStyleSheetCollection(TreeScope&);
 
-  void collectStyleSheetsFromCandidates(StyleEngine&,
+  void collectStyleSheetsFromCandidates(StyleEngine& masterEngine,
                                         DocumentStyleSheetCollector&);
 };
 

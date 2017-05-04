@@ -5,7 +5,6 @@
 package org.chromium.android_webview;
 
 import android.annotation.TargetApi;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.media.AudioManager;
 import android.net.Uri;
@@ -225,7 +224,7 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
                 modeFlags, acceptTypes, title, defaultFilename, capture);
 
         mContentsClient.showFileChooser(new ValueCallback<String[]>() {
-            boolean mCompleted = false;
+            boolean mCompleted;
             @Override
             public void onReceiveValue(String[] results) {
                 if (mCompleted) {
@@ -237,8 +236,8 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
                             processId, renderId, modeFlags, null, null);
                     return;
                 }
-                GetDisplayNameTask task = new GetDisplayNameTask(
-                        mContext.getContentResolver(), processId, renderId, modeFlags, results);
+                GetDisplayNameTask task =
+                        new GetDisplayNameTask(mContext, processId, renderId, modeFlags, results);
                 task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
             }
         }, params);
@@ -339,15 +338,15 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
         final int mRenderId;
         final int mModeFlags;
         final String[] mFilePaths;
-        final ContentResolver mContentResolver;
+        final Context mContext;
 
-        public GetDisplayNameTask(ContentResolver contentResolver, int processId, int renderId,
-                                  int modeFlags, String[] filePaths) {
+        public GetDisplayNameTask(
+                Context context, int processId, int renderId, int modeFlags, String[] filePaths) {
             mProcessId = processId;
             mRenderId = renderId;
             mModeFlags = modeFlags;
             mFilePaths = filePaths;
-            mContentResolver = contentResolver;
+            mContext = context;
         }
 
         @Override
@@ -369,10 +368,10 @@ class AwWebContentsDelegateAdapter extends AwWebContentsDelegate {
          * or an empty string otherwise.
          */
         private String resolveFileName(String filePath) {
-            if (mContentResolver == null || filePath == null) return "";
+            if (filePath == null) return "";
             Uri uri = Uri.parse(filePath);
             return ContentUriUtils.getDisplayName(
-                    uri, mContentResolver, MediaStore.MediaColumns.DISPLAY_NAME);
+                    uri, mContext, MediaStore.MediaColumns.DISPLAY_NAME);
         }
     }
 }

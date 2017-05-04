@@ -7,7 +7,6 @@
 #include "ash/accelerators/accelerator_controller_delegate_aura.h"
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/test/material_design_controller_test_api.h"
-#include "ash/common/test/test_new_window_client.h"
 #include "ash/common/test/test_session_state_delegate.h"
 #include "ash/common/test/test_system_tray_delegate.h"
 #include "ash/common/test/wm_shell_test_api.h"
@@ -84,8 +83,10 @@ void AshTestHelper::SetUp(bool start_session,
   ui::InitializeInputMethodForTesting();
 
   bool enable_pixel_output = false;
-  ui::ContextFactory* context_factory =
-      ui::InitializeContextFactoryForTests(enable_pixel_output);
+  ui::ContextFactory* context_factory = nullptr;
+  ui::ContextFactoryPrivate* context_factory_private = nullptr;
+  ui::InitializeContextFactoryForTests(enable_pixel_output, &context_factory,
+                                       &context_factory_private);
 
   // Creates Shell and hook with Desktop.
   if (!test_shell_delegate_)
@@ -132,6 +133,7 @@ void AshTestHelper::SetUp(bool start_session,
   ShellInitParams init_params;
   init_params.delegate = test_shell_delegate_;
   init_params.context_factory = context_factory;
+  init_params.context_factory_private = context_factory_private;
   init_params.blocking_pool = ash_test_environment_->GetBlockingPool();
   Shell::CreateInstance(init_params);
   aura::test::EnvTestHelper(aura::Env::GetInstance())
@@ -156,13 +158,15 @@ void AshTestHelper::SetUp(bool start_session,
   test_screenshot_delegate_ = new TestScreenshotDelegate();
   shell->accelerator_controller_delegate()->SetScreenshotDelegate(
       std::unique_ptr<ScreenshotDelegate>(test_screenshot_delegate_));
-
-  WmShellTestApi().SetNewWindowClient(base::MakeUnique<TestNewWindowClient>());
 }
 
 void AshTestHelper::TearDown() {
   // Tear down the shell.
   Shell::DeleteInstance();
+
+  // Suspend the tear down until all resources are returned via
+  // MojoCompositorFrameSinkClient::ReclaimResources()
+  RunAllPendingInMessageLoop();
   material_design_state_.reset();
   test::MaterialDesignControllerTestAPI::Uninitialize();
   ash_test_environment_->TearDown();
@@ -186,8 +190,6 @@ void AshTestHelper::TearDown() {
 #endif
 
   ui::TerminateContextFactoryForTests();
-
-  TestSystemTrayDelegate::SetSystemUpdateRequired(false);
 
   ui::ShutdownInputMethodForTesting();
   zero_duration_mode_.reset();

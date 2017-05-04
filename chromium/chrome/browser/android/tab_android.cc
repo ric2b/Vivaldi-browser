@@ -11,12 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
-#include "blimp/client/public/blimp_client_context.h"
-#include "blimp/client/public/contents/blimp_contents.h"
-#include "blimp/client/public/contents/blimp_contents_view.h"
-#include "blimp/client/public/contents/blimp_navigation_controller.h"
 #include "cc/layers/layer.h"
-#include "chrome/browser/android/blimp/blimp_client_context_factory.h"
 #include "chrome/browser/android/compositor/tab_content_manager.h"
 #include "chrome/browser/android/metrics/uma_utils.h"
 #include "chrome/browser/android/offline_pages/offline_page_bridge.h"
@@ -37,9 +32,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/search/instant_service.h"
-#include "chrome/browser/search/instant_service_factory.h"
-#include "chrome/browser/search/search.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/sync/glue/synced_tab_delegate_android.h"
@@ -51,12 +43,9 @@
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
 #include "chrome/browser/ui/android/view_android_helper.h"
 #include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
-#include "chrome/browser/ui/search/instant_search_prerenderer.h"
-#include "chrome/browser/ui/search/search_tab_helper.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/common/render_messages.h"
-#include "chrome/common/search/instant_types.h"
 #include "chrome/common/url_constants.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
@@ -66,9 +55,9 @@
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "components/navigation_interception/navigation_params.h"
-#include "components/offline_pages/offline_page_feature.h"
-#include "components/offline_pages/offline_page_item.h"
-#include "components/offline_pages/offline_page_model.h"
+#include "components/offline_pages/core/offline_page_feature.h"
+#include "components/offline_pages/core/offline_page_item.h"
+#include "components/offline_pages/core/offline_page_model.h"
 #include "components/sessions/content/content_live_tab.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/url_formatter/url_fixer.h"
@@ -268,45 +257,6 @@ void TabAndroid::SwapTabContents(content::WebContents* old_contents,
                            did_finish_load);
 }
 
-void TabAndroid::DefaultSearchProviderChanged(
-    bool google_base_url_domain_changed) {
-  // TODO(kmadhusu): Move this function definition to a common place and update
-  // BrowserInstantController::DefaultSearchProviderChanged to use the same.
-  if (!web_contents())
-    return;
-
-  InstantService* instant_service =
-      InstantServiceFactory::GetForProfile(GetProfile());
-  if (!instant_service)
-    return;
-
-  // Send new search URLs to the renderer.
-  content::RenderProcessHost* rph = web_contents()->GetRenderProcessHost();
-  instant_service->SendSearchURLsToRenderer(rph);
-
-  // Reload the contents to ensure that it gets assigned to a non-previledged
-  // renderer.
-  if (!instant_service->IsInstantProcess(rph->GetID()))
-    return;
-  web_contents()->GetController().Reload(false);
-
-  // As the reload was not triggered by the user we don't want to close any
-  // infobars. We have to tell the InfoBarService after the reload, otherwise it
-  // would ignore this call when
-  // WebContentsObserver::DidStartNavigationToPendingEntry is invoked.
-  InfoBarService::FromWebContents(web_contents())->set_ignore_next_reload();
-}
-
-void TabAndroid::OnWebContentsInstantSupportDisabled(
-    const content::WebContents* contents) {
-  DCHECK(contents);
-  if (web_contents() != contents)
-    return;
-
-  JNIEnv* env = base::android::AttachCurrentThread();
-  Java_Tab_onWebContentsInstantSupportDisabled(env, weak_java_tab_.get(env));
-}
-
 void TabAndroid::Observe(int type,
                          const content::NotificationSource& source,
                          const content::NotificationDetails& details) {
@@ -385,7 +335,6 @@ void TabAndroid::InitWebContents(
   ViewAndroidHelper::FromWebContents(web_contents())->
       SetViewAndroid(web_contents()->GetNativeView());
   CoreTabHelper::FromWebContents(web_contents())->set_delegate(this);
-  SearchTabHelper::FromWebContents(web_contents())->set_delegate(this);
   web_contents_delegate_ =
       base::MakeUnique<android::TabWebContentsDelegateAndroid>(
           env, jweb_contents_delegate);
@@ -414,46 +363,7 @@ void TabAndroid::InitWebContents(
   // off the record state.
   CHECK_EQ(GetProfile()->IsOffTheRecord(), incognito);
 
-  InstantService* instant_service =
-      InstantServiceFactory::GetForProfile(GetProfile());
-  if (instant_service)
-    instant_service->AddObserver(this);
-
-  if (!blimp_contents_)
-    content_layer_->InsertChild(web_contents_->GetNativeView()->GetLayer(), 0);
-}
-
-base::android::ScopedJavaLocalRef<jobject> TabAndroid::InitBlimpContents(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& j_profile,
-    jlong window_android_ptr) {
-  Profile* profile = ProfileAndroid::FromProfileAndroid(j_profile.obj());
-  DCHECK(!profile->IsOffTheRecord());
-  blimp::client::BlimpClientContext* context =
-      BlimpClientContextFactory::GetForBrowserContext(profile);
-  DCHECK(context);
-  ui::WindowAndroid* window =
-      reinterpret_cast<ui::WindowAndroid*>(window_android_ptr);
-  blimp_contents_ = context->CreateBlimpContents(window);
-  // If creating a BlimpContents failed, fall back to WebContents-based by
-  // doing an early out here.
-  if (!blimp_contents_)
-    return nullptr;
-
-  // Let's detach the layer from WebContents first, just to be sure.
-  if (web_contents_ && web_contents_->GetNativeView() &&
-      web_contents_->GetNativeView()->GetLayer()) {
-    cc::Layer* web_contents_layer = web_contents_->GetNativeView()->GetLayer();
-    if (web_contents_layer->parent() == content_layer_.get())
-      web_contents_layer->RemoveFromParent();
-  }
-
-  // Attach the layer holding the tab contents to the |content_layer_|.
-  content_layer_->InsertChild(
-      blimp_contents_->GetView()->GetNativeView()->GetLayer(), 0);
-
-  return blimp_contents_->GetJavaObject();
+  content_layer_->InsertChild(web_contents_->GetNativeView()->GetLayer(), 0);
 }
 
 void TabAndroid::UpdateDelegates(
@@ -492,11 +402,6 @@ void TabAndroid::DestroyWebContents(JNIEnv* env,
 
   if (favicon_driver)
     favicon_driver->RemoveObserver(this);
-
-  InstantService* instant_service =
-      InstantServiceFactory::GetForProfile(GetProfile());
-  if (instant_service)
-    instant_service->RemoveObserver(this);
 
   web_contents()->SetDelegate(NULL);
 
@@ -566,21 +471,6 @@ TabAndroid::TabLoadStatus TabAndroid::LoadUrl(
     bool prefetched_page_loaded = HasPrerenderedUrl(gurl);
     // Getting the load status before MaybeUsePrerenderedPage() b/c it resets.
     chrome::NavigateParams params(web_contents());
-    InstantSearchPrerenderer* prerenderer =
-        InstantSearchPrerenderer::GetForProfile(GetProfile());
-    if (prerenderer) {
-      const base::string16& search_terms =
-          search::ExtractSearchTermsFromURL(GetProfile(), gurl);
-      if (!search_terms.empty() &&
-          prerenderer->CanCommitQuery(web_contents_.get(), search_terms)) {
-        EmbeddedSearchRequestParams request_params(gurl);
-        prerenderer->Commit(search_terms, request_params);
-
-        if (prerenderer->UsePrerenderedPage(gurl, &params))
-          return FULL_PRERENDERED_PAGE_LOAD;
-      }
-      prerenderer->Cancel();
-    }
     if (prerender_manager->MaybeUsePrerenderedPage(gurl, &params)) {
       return prefetched_page_loaded ?
           FULL_PRERENDERED_PAGE_LOAD : PARTIAL_PRERENDERED_PAGE_LOAD;
@@ -597,11 +487,6 @@ TabAndroid::TabLoadStatus TabAndroid::LoadUrl(
     // typing chrome://history as well as selecting from the drop down menu.
     if (fixed_url.spec() == chrome::kChromeUIHistoryURL) {
       content::RecordAction(base::UserMetricsAction("ShowHistory"));
-    }
-
-    if (blimp_contents()) {
-      blimp_contents()->GetNavigationController().LoadURL(fixed_url);
-      return DEFAULT_PAGE_LOAD;
     }
 
     content::NavigationController::LoadURLParams load_params(fixed_url);
@@ -622,16 +507,6 @@ TabAndroid::TabLoadStatus TabAndroid::LoadUrl(
       load_params.referrer = content::Referrer(
           GURL(base::android::ConvertJavaStringToUTF8(env, j_referrer_url)),
           static_cast<blink::WebReferrerPolicy>(referrer_policy));
-    }
-    const base::string16 search_terms =
-        search::ExtractSearchTermsFromURL(GetProfile(), gurl);
-    SearchTabHelper* search_tab_helper =
-        SearchTabHelper::FromWebContents(web_contents_.get());
-    if (!search_terms.empty() && search_tab_helper &&
-        search_tab_helper->SupportsInstant()) {
-      EmbeddedSearchRequestParams request_params(gurl);
-      search_tab_helper->Submit(search_terms, request_params);
-      return DEFAULT_PAGE_LOAD;
     }
     load_params.is_renderer_initiated = is_renderer_initiated;
     load_params.should_replace_current_entry = should_replace_current_entry;
@@ -758,7 +633,8 @@ void TabAndroid::UpdateBrowserControlsState(JNIEnv* env,
       static_cast<content::BrowserControlsState>(current);
   WebContents* sender = web_contents();
   sender->Send(new ChromeViewMsg_UpdateBrowserControlsState(
-      sender->GetRoutingID(), constraints_state, current_state, animate));
+      sender->GetRenderViewHost()->GetRoutingID(), constraints_state,
+      current_state, animate));
 
   if (sender->ShowingInterstitialPage()) {
     content::RenderViewHost* interstitial_view_host =

@@ -77,7 +77,7 @@ static const WTF::TextEncoding getEncodingFromDomain(const KURL& url) {
   Vector<String> tokens;
   url.host().split(".", tokens);
   if (!tokens.isEmpty()) {
-    auto tld = tokens.last();
+    auto tld = tokens.back();
     for (size_t i = 0; i < WTF_ARRAY_LENGTH(encodings); i++) {
       if (tld == encodings[i].domain)
         return WTF::TextEncoding(encodings[i].encoding);
@@ -101,13 +101,15 @@ TextResourceDecoderBuilder::createDecoderInstance(Document* document) {
       getEncodingFromDomain(document->url());
   if (LocalFrame* frame = document->frame()) {
     if (Settings* settings = frame->settings()) {
+      const WTF::TextEncoding hintEncoding =
+          encodingFromDomain.isValid() ? encodingFromDomain
+                                       : settings->getDefaultTextEncodingName();
       // Disable autodetection for XML to honor the default encoding (UTF-8) for
       // unlabelled documents.
-      return TextResourceDecoder::create(
-          m_mimeType,
-          encodingFromDomain.isValid() ? encodingFromDomain
-                                       : settings->defaultTextEncodingName(),
-          !DOMImplementation::isXMLMIMEType(m_mimeType));
+      if (DOMImplementation::isXMLMIMEType(m_mimeType))
+        return TextResourceDecoder::create(m_mimeType, hintEncoding);
+      return TextResourceDecoder::createWithAutoDetection(
+          m_mimeType, hintEncoding, document->url());
     }
   }
 

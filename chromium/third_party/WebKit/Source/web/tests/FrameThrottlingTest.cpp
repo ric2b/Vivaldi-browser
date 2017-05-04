@@ -13,6 +13,7 @@
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/paint/PaintLayer.h"
+#include "platform/graphics/paint/TransformPaintPropertyNode.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/WebDisplayItemList.h"
@@ -75,7 +76,7 @@ class FrameThrottlingTest : public SimTest {
         ->frame()
         ->contentLayoutItem()
         .layer()
-        ->graphicsLayerBackingForScrolling()
+        ->graphicsLayerBacking()
         ->platformLayer()
         ->touchEventHandlerRegion()
         .size();
@@ -496,7 +497,9 @@ TEST_F(FrameThrottlingTest, ScrollingCoordinatorShouldSkipThrottledFrame) {
   compositeFrame();
   EXPECT_FALSE(frameElement->contentDocument()->view()->canThrottleRendering());
   // The fixed background in the throttled sub frame should be considered.
-  EXPECT_TRUE(document().view()->shouldScrollOnMainThread());
+  EXPECT_TRUE(
+      frameElement->contentDocument()->view()->shouldScrollOnMainThread());
+  EXPECT_FALSE(document().view()->shouldScrollOnMainThread());
 }
 
 TEST_F(FrameThrottlingTest, ScrollingCoordinatorShouldSkipThrottledLayer) {
@@ -926,6 +929,73 @@ TEST_F(FrameThrottlingTest, AllowOneAnimationFrame) {
       localFrame->script().executeScriptInMainWorldAndReturnValue(
           ScriptSourceCode("window.didRaf;"));
   EXPECT_TRUE(result->IsTrue());
+}
+
+TEST_F(FrameThrottlingTest, UpdatePaintPropertiesOnUnthrottling) {
+  if (!RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled())
+    return;
+
+  SimRequest mainResource("https://example.com/", "text/html");
+  SimRequest frameResource("https://example.com/iframe.html", "text/html");
+
+  loadURL("https://example.com/");
+  mainResource.complete("<iframe id=frame sandbox src=iframe.html></iframe>");
+  frameResource.complete("<div id='div'>Inner</div>");
+  compositeFrame();
+
+  auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+  auto* frameDocument = frameElement->contentDocument();
+  auto* innerDiv = frameDocument->getElementById("div");
+  auto* innerDivObject = innerDiv->layoutObject();
+  EXPECT_FALSE(frameDocument->view()->shouldThrottleRendering());
+
+  frameElement->setAttribute(HTMLNames::styleAttr,
+                             "transform: translateY(1000px)");
+  compositeFrame();
+  EXPECT_TRUE(frameDocument->view()->canThrottleRendering());
+  EXPECT_FALSE(innerDivObject->paintProperties()->transform());
+
+  // Mutating the throttled frame should not cause paint property update.
+  innerDiv->setAttribute(HTMLNames::styleAttr, "transform: translateY(20px)");
+  EXPECT_FALSE(compositor().needsBeginFrame());
+  EXPECT_TRUE(frameDocument->view()->canThrottleRendering());
+  {
+    DocumentLifecycle::AllowThrottlingScope throttlingScope(
+        document().lifecycle());
+    document().view()->updateAllLifecyclePhases();
+  }
+  EXPECT_FALSE(innerDivObject->paintProperties()->transform());
+
+  // Move the frame back on screen to unthrottle it.
+  frameElement->setAttribute(HTMLNames::styleAttr, "");
+  // The first update unthrottles the frame, the second actually update layout
+  // and paint properties etc.
+  compositeFrame();
+  compositeFrame();
+  EXPECT_FALSE(frameDocument->view()->canThrottleRendering());
+  EXPECT_EQ(TransformationMatrix().translate(0, 20),
+            innerDiv->layoutObject()->paintProperties()->transform()->matrix());
+}
+
+TEST_F(FrameThrottlingTest, DisplayNoneNotThrottled) {
+  SimRequest mainResource("https://example.com/", "text/html");
+
+  loadURL("https://example.com/");
+  mainResource.complete(
+      "<style>iframe { transform: translateY(480px); }</style>"
+      "<iframe sandbox id=frame></iframe>");
+
+  auto* frameElement = toHTMLIFrameElement(document().getElementById("frame"));
+  auto* frameDocument = frameElement->contentDocument();
+
+  // Initially the frame is throttled as it is offscreen.
+  compositeFrame();
+  EXPECT_TRUE(frameDocument->view()->canThrottleRendering());
+
+  // Setting display:none unthrottles the frame.
+  frameElement->setAttribute(styleAttr, "display: none");
+  compositeFrame();
+  EXPECT_FALSE(frameDocument->view()->canThrottleRendering());
 }
 
 }  // namespace blink

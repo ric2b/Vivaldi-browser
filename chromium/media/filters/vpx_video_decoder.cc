@@ -20,11 +20,13 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_byteorder.h"
 #include "base/sys_info.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_provider.h"
@@ -393,8 +395,16 @@ void VpxVideoDecoder::DecodeBuffer(const scoped_refptr<DecoderBuffer>& buffer,
     return;
   }
 
+  bool decode_okay;
   scoped_refptr<VideoFrame> video_frame;
-  if (!VpxDecode(buffer, &video_frame)) {
+  if (config_.codec() == kCodecVP9) {
+    SCOPED_UMA_HISTOGRAM_TIMER("Media.VpxVideoDecoder.Vp9DecodeTime");
+    decode_okay = VpxDecode(buffer, &video_frame);
+  } else {
+    decode_okay = VpxDecode(buffer, &video_frame);
+  }
+
+  if (!decode_okay) {
     state_ = kError;
     bound_decode_cb.Run(DecodeStatus::DECODE_ERROR);
     return;
@@ -589,56 +599,64 @@ bool VpxVideoDecoder::VpxDecode(const scoped_refptr<DecoderBuffer>& buffer,
       ->metadata()
       ->SetInteger(VideoFrameMetadata::COLOR_SPACE, color_space);
 
-  gfx::ColorSpace::PrimaryID primaries =
-      gfx::ColorSpace::PrimaryID::UNSPECIFIED;
-  gfx::ColorSpace::TransferID transfer =
-      gfx::ColorSpace::TransferID::UNSPECIFIED;
-  gfx::ColorSpace::MatrixID matrix = gfx::ColorSpace::MatrixID::UNSPECIFIED;
-  gfx::ColorSpace::RangeID range = vpx_image->range == VPX_CR_FULL_RANGE
-                                       ? gfx::ColorSpace::RangeID::FULL
-                                       : gfx::ColorSpace::RangeID::LIMITED;
+  if (config_.color_space_info() != gfx::ColorSpace()) {
+    // config_.color_space_info() comes from the color tag which is
+    // more expressive than the bitstream, so prefer it over the
+    // bitstream data below.
+    (*video_frame)->set_color_space(config_.color_space_info());
+  } else {
+    gfx::ColorSpace::PrimaryID primaries =
+        gfx::ColorSpace::PrimaryID::UNSPECIFIED;
+    gfx::ColorSpace::TransferID transfer =
+        gfx::ColorSpace::TransferID::UNSPECIFIED;
+    gfx::ColorSpace::MatrixID matrix = gfx::ColorSpace::MatrixID::UNSPECIFIED;
+    gfx::ColorSpace::RangeID range = vpx_image->range == VPX_CR_FULL_RANGE
+                                         ? gfx::ColorSpace::RangeID::FULL
+                                         : gfx::ColorSpace::RangeID::LIMITED;
 
-  switch (vpx_image->cs) {
-    case VPX_CS_BT_601:
-    case VPX_CS_SMPTE_170:
-      primaries = gfx::ColorSpace::PrimaryID::SMPTE170M;
-      transfer = gfx::ColorSpace::TransferID::SMPTE170M;
-      matrix = gfx::ColorSpace::MatrixID::SMPTE170M;
-      break;
-    case VPX_CS_SMPTE_240:
-      primaries = gfx::ColorSpace::PrimaryID::SMPTE240M;
-      transfer = gfx::ColorSpace::TransferID::SMPTE240M;
-      matrix = gfx::ColorSpace::MatrixID::SMPTE240M;
-      break;
-    case VPX_CS_BT_709:
-      primaries = gfx::ColorSpace::PrimaryID::BT709;
-      transfer = gfx::ColorSpace::TransferID::BT709;
-      matrix = gfx::ColorSpace::MatrixID::BT709;
-      break;
-    case VPX_CS_BT_2020:
-      primaries = gfx::ColorSpace::PrimaryID::BT2020;
-      if (vpx_image->bit_depth >= 12) {
-        transfer = gfx::ColorSpace::TransferID::BT2020_12;
-      } else if (vpx_image->bit_depth >= 10) {
-        transfer = gfx::ColorSpace::TransferID::BT2020_10;
-      } else {
+    switch (vpx_image->cs) {
+      case VPX_CS_BT_601:
+      case VPX_CS_SMPTE_170:
+        primaries = gfx::ColorSpace::PrimaryID::SMPTE170M;
+        transfer = gfx::ColorSpace::TransferID::SMPTE170M;
+        matrix = gfx::ColorSpace::MatrixID::SMPTE170M;
+        break;
+      case VPX_CS_SMPTE_240:
+        primaries = gfx::ColorSpace::PrimaryID::SMPTE240M;
+        transfer = gfx::ColorSpace::TransferID::SMPTE240M;
+        matrix = gfx::ColorSpace::MatrixID::SMPTE240M;
+        break;
+      case VPX_CS_BT_709:
+        primaries = gfx::ColorSpace::PrimaryID::BT709;
         transfer = gfx::ColorSpace::TransferID::BT709;
-      }
-      matrix = gfx::ColorSpace::MatrixID::BT2020_NCL;  // is this right?
-      break;
-    case VPX_CS_SRGB:
-      primaries = gfx::ColorSpace::PrimaryID::BT709;
-      transfer = gfx::ColorSpace::TransferID::IEC61966_2_1;
-      matrix = gfx::ColorSpace::MatrixID::BT709;
-      break;
+        matrix = gfx::ColorSpace::MatrixID::BT709;
+        break;
+      case VPX_CS_BT_2020:
+        primaries = gfx::ColorSpace::PrimaryID::BT2020;
+        if (vpx_image->bit_depth >= 12) {
+          transfer = gfx::ColorSpace::TransferID::BT2020_12;
+        } else if (vpx_image->bit_depth >= 10) {
+          transfer = gfx::ColorSpace::TransferID::BT2020_10;
+        } else {
+          transfer = gfx::ColorSpace::TransferID::BT709;
+        }
+        matrix = gfx::ColorSpace::MatrixID::BT2020_NCL;  // is this right?
+        break;
+      case VPX_CS_SRGB:
+        primaries = gfx::ColorSpace::PrimaryID::BT709;
+        transfer = gfx::ColorSpace::TransferID::IEC61966_2_1;
+        matrix = gfx::ColorSpace::MatrixID::BT709;
+        break;
 
-    default:
-      break;
-  }
+      default:
+        break;
+    }
 
-  if (primaries != gfx::ColorSpace::PrimaryID::UNSPECIFIED) {
-    (*video_frame)
-        ->set_color_space(gfx::ColorSpace(primaries, transfer, matrix, range));
+    if (primaries != gfx::ColorSpace::PrimaryID::UNSPECIFIED) {
+      (*video_frame)
+          ->set_color_space(
+              gfx::ColorSpace(primaries, transfer, matrix, range));
+    }
   }
 
   return true;

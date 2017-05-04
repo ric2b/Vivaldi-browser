@@ -26,7 +26,6 @@
 #include "url/gurl.h"
 
 namespace content {
-class NavigationEntry;
 class NavigationControllerImpl;
 class RenderViewHostImpl;
 class RenderWidgetHostView;
@@ -103,7 +102,7 @@ class CONTENT_EXPORT InterstitialPageImpl
                const NotificationDetails& details) override;
 
   // RenderFrameHostDelegate implementation:
-  bool OnMessageReceived(RenderFrameHost* render_frame_host,
+  bool OnMessageReceived(RenderFrameHostImpl* render_frame_host,
                          const IPC::Message& message) override;
   void RenderFrameCreated(RenderFrameHost* render_frame_host) override;
   void UpdateTitle(RenderFrameHost* render_frame_host,
@@ -115,10 +114,22 @@ class CONTENT_EXPORT InterstitialPageImpl
   void Copy() override;
   void Paste() override;
   void SelectAll() override;
+  void CreateNewWindow(
+      SiteInstance* source_site_instance,
+      int32_t render_view_route_id,
+      int32_t main_frame_route_id,
+      int32_t main_frame_widget_route_id,
+      const mojom::CreateNewWindowParams& params,
+      SessionStorageNamespace* session_storage_namespace) override;
+  void ShowCreatedWindow(int process_id,
+                         int main_frame_widget_route_id,
+                         WindowOpenDisposition disposition,
+                         const gfx::Rect& initial_rect,
+                         bool user_gesture) override;
 
   // RenderViewHostDelegate implementation:
   RenderViewHostDelegateView* GetDelegateView() override;
-  bool OnMessageReceived(RenderViewHost* render_view_host,
+  bool OnMessageReceived(RenderViewHostImpl* render_view_host,
                          const IPC::Message& message) override;
   const GURL& GetMainFrameLastCommittedURL() const override;
   void RenderViewTerminated(RenderViewHost* render_view_host,
@@ -126,23 +137,11 @@ class CONTENT_EXPORT InterstitialPageImpl
                             int error_code) override;
   RendererPreferences GetRendererPrefs(
       BrowserContext* browser_context) const override;
-  void CreateNewWindow(
-      SiteInstance* source_site_instance,
-      int32_t route_id,
-      int32_t main_frame_route_id,
-      int32_t main_frame_widget_route_id,
-      const mojom::CreateNewWindowParams& params,
-      SessionStorageNamespace* session_storage_namespace) override;
   void CreateNewWidget(int32_t render_process_id,
                        int32_t route_id,
                        blink::WebPopupType popup_type) override;
   void CreateNewFullscreenWidget(int32_t render_process_id,
                                  int32_t route_id) override;
-  void ShowCreatedWindow(int process_id,
-                         int route_id,
-                         WindowOpenDisposition disposition,
-                         const gfx::Rect& initial_rect,
-                         bool user_gesture) override;
   void ShowCreatedWidget(int process_id,
                          int route_id,
                          const gfx::Rect& initial_rect) override;
@@ -213,7 +212,8 @@ class CONTENT_EXPORT InterstitialPageImpl
   void TakeActionOnResourceDispatcher(ResourceRequestAction action);
 
   // IPC message handlers.
-  void OnDomOperationResponse(const std::string& json_string);
+  void OnDomOperationResponse(RenderFrameHostImpl* source,
+                              const std::string& json_string);
 
   // Creates the RenderViewHost containing the interstitial content.
   RenderViewHostImpl* CreateRenderViewHost();

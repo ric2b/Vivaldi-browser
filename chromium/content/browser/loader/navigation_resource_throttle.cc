@@ -21,7 +21,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_data.h"
 #include "content/public/browser/resource_context.h"
-#include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/ssl_status.h"
@@ -100,7 +99,8 @@ void CheckWillStartRequestOnUIThread(
     bool has_user_gesture,
     ui::PageTransition transition,
     bool is_external_protocol,
-    RequestContextType request_context_type) {
+    RequestContextType request_context_type,
+    blink::WebMixedContentContextType mixed_content_context_type) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   NavigationHandleImpl* navigation_handle =
       FindNavigationHandle(render_process_id, render_frame_host_id, callback);
@@ -110,6 +110,7 @@ void CheckWillStartRequestOnUIThread(
   navigation_handle->WillStartRequest(
       method, resource_request_body, sanitized_referrer, has_user_gesture,
       transition, is_external_protocol, request_context_type,
+      mixed_content_context_type,
       base::Bind(&SendCheckResultToIOThread, callback));
 }
 
@@ -179,10 +180,12 @@ void WillProcessResponseOnUIThread(
 NavigationResourceThrottle::NavigationResourceThrottle(
     net::URLRequest* request,
     ResourceDispatcherHostDelegate* resource_dispatcher_host_delegate,
-    RequestContextType request_context_type)
+    RequestContextType request_context_type,
+    blink::WebMixedContentContextType mixed_content_context_type)
     : request_(request),
       resource_dispatcher_host_delegate_(resource_dispatcher_host_delegate),
       request_context_type_(request_context_type),
+      mixed_content_context_type_(mixed_content_context_type),
       in_cross_site_transition_(false),
       on_transfer_done_result_(NavigationThrottle::DEFER),
       weak_ptr_factory_(this) {}
@@ -215,7 +218,8 @@ void NavigationResourceThrottle::WillStartRequest(bool* defer) {
                      request_->url(), Referrer(GURL(request_->referrer()),
                                                info->GetReferrerPolicy())),
                  info->HasUserGesture(), info->GetPageTransition(),
-                 is_external_protocol, request_context_type_));
+                 is_external_protocol, request_context_type_,
+                 mixed_content_context_type_));
   *defer = true;
 }
 
@@ -341,13 +345,23 @@ void NavigationResourceThrottle::OnUIChecksPerformed(
   }
 
   if (result == NavigationThrottle::CANCEL_AND_IGNORE) {
-    controller()->CancelAndIgnore();
+    CancelAndIgnore();
   } else if (result == NavigationThrottle::CANCEL) {
-    controller()->Cancel();
+    Cancel();
   } else if (result == NavigationThrottle::BLOCK_REQUEST) {
-    controller()->CancelWithError(net::ERR_BLOCKED_BY_CLIENT);
+    CancelWithError(net::ERR_BLOCKED_BY_CLIENT);
+  } else if (result == NavigationThrottle::BLOCK_RESPONSE) {
+    // TODO(mkwst): If we cancel the main frame request with anything other than
+    // 'net::ERR_ABORTED', we'll trigger some special behavior that might not be
+    // desirable here (non-POSTs will reload the page, while POST has some logic
+    // around reloading to avoid duplicating actions server-side). For the
+    // moment, only child frame navigations should be blocked. If we need to
+    // block main frame navigations in the future, we'll need to carefully
+    // consider the right thing to do here.
+    DCHECK(!ResourceRequestInfo::ForRequest(request_)->IsMainFrame());
+    CancelWithError(net::ERR_BLOCKED_BY_RESPONSE);
   } else {
-    controller()->Resume();
+    Resume();
   }
 }
 

@@ -1,0 +1,112 @@
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef UI_BASE_IME_CHROMEOS_MOCK_INPUT_METHOD_MANAGER_H_
+#define UI_BASE_IME_CHROMEOS_MOCK_INPUT_METHOD_MANAGER_H_
+
+#include "base/macros.h"
+#include "ui/base/ime/chromeos/input_method_manager.h"
+
+namespace chromeos {
+namespace input_method {
+class InputMethodUtil;
+class ImeKeyboard;
+
+// The mock InputMethodManager for testing.
+class UI_BASE_IME_EXPORT MockInputMethodManager : public InputMethodManager {
+ public:
+ public:
+  class State : public InputMethodManager::State {
+   public:
+    State();
+
+    void AddInputMethodExtension(
+        const std::string& extension_id,
+        const InputMethodDescriptors& descriptors,
+        ui::IMEEngineHandlerInterface* instance) override;
+    void RemoveInputMethodExtension(const std::string& extension_id) override;
+    void ChangeInputMethod(const std::string& input_method_id,
+                           bool show_message) override;
+    bool EnableInputMethod(
+        const std::string& new_active_input_method_id) override;
+    void EnableLoginLayouts(
+        const std::string& language_code,
+        const std::vector<std::string>& initial_layouts) override;
+    void EnableLockScreenLayouts() override;
+    void GetInputMethodExtensions(InputMethodDescriptors* result) override;
+    std::unique_ptr<InputMethodDescriptors> GetActiveInputMethods()
+        const override;
+    const std::vector<std::string>& GetActiveInputMethodIds() const override;
+    const InputMethodDescriptor* GetInputMethodFromId(
+        const std::string& input_method_id) const override;
+    size_t GetNumActiveInputMethods() const override;
+    void SetEnabledExtensionImes(std::vector<std::string>* ids) override;
+    void SetInputMethodLoginDefault() override;
+    void SetInputMethodLoginDefaultFromVPD(const std::string& locale,
+                                           const std::string& layout) override;
+    bool CanCycleInputMethod() override;
+    void SwitchToNextInputMethod() override;
+    void SwitchToPreviousInputMethod() override;
+    bool CanSwitchInputMethod(const ui::Accelerator& accelerator) override;
+    void SwitchInputMethod(const ui::Accelerator& accelerator) override;
+    InputMethodDescriptor GetCurrentInputMethod() const override;
+    bool ReplaceEnabledInputMethods(
+        const std::vector<std::string>& new_active_input_method_ids) override;
+
+    // The active input method ids cache (actually default only)
+    std::vector<std::string> active_input_method_ids;
+
+   protected:
+    friend base::RefCounted<InputMethodManager::State>;
+    ~State() override;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(State);
+  };
+
+  MockInputMethodManager();
+  ~MockInputMethodManager() override;
+
+  // InputMethodManager:
+  UISessionState GetUISessionState() override;
+  void AddObserver(InputMethodManager::Observer* observer) override;
+  void AddCandidateWindowObserver(
+      InputMethodManager::CandidateWindowObserver* observer) override;
+  void AddImeMenuObserver(
+      InputMethodManager::ImeMenuObserver* observer) override;
+  void RemoveObserver(InputMethodManager::Observer* observer) override;
+  void RemoveCandidateWindowObserver(
+      InputMethodManager::CandidateWindowObserver* observer) override;
+  void RemoveImeMenuObserver(
+      InputMethodManager::ImeMenuObserver* observer) override;
+  std::unique_ptr<InputMethodDescriptors> GetSupportedInputMethods()
+      const override;
+  void ActivateInputMethodMenuItem(const std::string& key) override;
+  bool IsISOLevel5ShiftUsedByCurrentInputMethod() const override;
+  bool IsAltGrUsedByCurrentInputMethod() const override;
+  ImeKeyboard* GetImeKeyboard() override;
+  InputMethodUtil* GetInputMethodUtil() override;
+  ComponentExtensionIMEManager* GetComponentExtensionIMEManager() override;
+  bool IsLoginKeyboard(const std::string& layout) const override;
+  bool MigrateInputMethods(std::vector<std::string>* input_method_ids) override;
+  scoped_refptr<InputMethodManager::State> CreateNewState(
+      Profile* profile) override;
+  scoped_refptr<InputMethodManager::State> GetActiveIMEState() override;
+  void SetState(scoped_refptr<InputMethodManager::State> state) override;
+  void ImeMenuActivationChanged(bool is_active) override;
+  void NotifyImeMenuItemsChanged(
+      const std::string& engine_id,
+      const std::vector<InputMethodManager::MenuItem>& items) override;
+  void MaybeNotifyImeMenuActivationChanged() override;
+  void OverrideKeyboardUrlRef(const std::string& keyset) override;
+  bool IsEmojiHandwritingVoiceOnImeMenuEnabled() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockInputMethodManager);
+};
+
+}  // namespace input_method
+}  // namespace chromeos
+
+#endif  // UI_BASE_IME_CHROMEOS_MOCK_INPUT_METHOD_MANAGER_H_

@@ -65,12 +65,28 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
     /** Flag for installing a slow payment app. */
     protected static final int DELAYED_RESPONSE = 1;
 
+    /** Flag for immediately installing a payment app. */
+    protected static final int IMMEDIATE_CREATION = 0;
+
+    /** Flag for installing a payment app with a delay. */
+    protected static final int DELAYED_CREATION = 1;
+
+    /** The expiration month dropdown index for December. */
+    protected static final int DECEMBER = 11;
+
+    /** The expiration year dropdown index for the next year. */
+    protected static final int NEXT_YEAR = 1;
+
+    /** The billing address dropdown index for the first billing address. */
+    protected static final int FIRST_BILLING_ADDRESS = 0;
+
     protected final PaymentsCallbackHelper<PaymentRequestUI> mReadyForInput;
     protected final PaymentsCallbackHelper<PaymentRequestUI> mReadyToPay;
     protected final PaymentsCallbackHelper<PaymentRequestUI> mSelectionChecked;
     protected final PaymentsCallbackHelper<PaymentRequestUI> mResultReady;
     protected final PaymentsCallbackHelper<CardUnmaskPrompt> mReadyForUnmaskInput;
     protected final PaymentsCallbackHelper<CardUnmaskPrompt> mReadyToUnmask;
+    protected final PaymentsCallbackHelper<CardUnmaskPrompt> mUnmaskValidationDone;
     protected final CallbackHelper mReadyToEdit;
     protected final CallbackHelper mEditorValidationError;
     protected final CallbackHelper mEditorTextUpdate;
@@ -95,6 +111,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         mResultReady = new PaymentsCallbackHelper<>();
         mReadyForUnmaskInput = new PaymentsCallbackHelper<>();
         mReadyToUnmask = new PaymentsCallbackHelper<>();
+        mUnmaskValidationDone = new PaymentsCallbackHelper<>();
         mReadyToEdit = new CallbackHelper();
         mEditorValidationError = new CallbackHelper();
         mEditorTextUpdate = new CallbackHelper();
@@ -107,35 +124,36 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         mViewCoreRef = new AtomicReference<>();
         mWebContentsRef = new AtomicReference<>();
         mTestFilePath = UrlUtils.getIsolatedTestFilePath(
-                String.format("chrome/test/data/android/payments/%s", testFileName));
+                String.format("chrome/test/data/payments/%s", testFileName));
     }
 
     @Override
-    public void startMainActivity() throws InterruptedException {}
+    public void startMainActivity() throws InterruptedException {
+        startMainActivityWithURL(mTestFilePath);
+    }
 
     protected abstract void onMainActivityStarted()
             throws InterruptedException, ExecutionException, TimeoutException;
 
     protected void triggerUIAndWait(PaymentsCallbackHelper<PaymentRequestUI> helper)
             throws InterruptedException, ExecutionException, TimeoutException {
-        triggerUIAndWait("buy", (CallbackHelper) helper);
+        openPageAndClickNodeAndWait("buy", helper);
         mUI = helper.getTarget();
     }
 
-    protected void triggerUIAndWait(CallbackHelper helper)
+    protected void openPageAndClickBuyAndWait(CallbackHelper helper)
             throws InterruptedException, ExecutionException, TimeoutException {
-        triggerUIAndWait("buy", helper);
+        openPageAndClickNodeAndWait("buy", helper);
     }
 
     protected void triggerUIAndWait(String nodeId, PaymentsCallbackHelper<PaymentRequestUI> helper)
             throws InterruptedException, ExecutionException, TimeoutException {
-        triggerUIAndWait(nodeId, (CallbackHelper) helper);
+        openPageAndClickNodeAndWait(nodeId, helper);
         mUI = helper.getTarget();
     }
 
-    protected void triggerUIAndWait(String nodeId, CallbackHelper helper)
+    protected void openPageAndClickNodeAndWait(String nodeId, CallbackHelper helper)
             throws InterruptedException, ExecutionException, TimeoutException {
-        startMainActivityWithURL(mTestFilePath);
         onMainActivityStarted();
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
@@ -284,6 +302,16 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         });
     }
 
+    /** Gets the button state for the contact details section. */
+    protected int getContactDetailsButtonState() throws ExecutionException {
+        return ThreadUtils.runOnUiThreadBlocking(new Callable<Integer>() {
+            @Override
+            public Integer call() {
+                return mUI.getContactDetailsSectionForTest().getEditButtonState();
+            }
+        });
+    }
+
     /**  Returns the label corresponding to the payment instrument at the specified |index|. */
     protected String getPaymentInstrumentLabel(final int index) throws ExecutionException {
         return ThreadUtils.runOnUiThreadBlocking(new Callable<String>() {
@@ -310,7 +338,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         });
     }
 
-    /**  Returns the the number of payment instruments. */
+    /**  Returns the number of payment instruments. */
     protected int getNumberOfPaymentInstruments() throws ExecutionException {
         return ThreadUtils.runOnUiThreadBlocking(new Callable<Integer>() {
             @Override
@@ -321,7 +349,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         });
     }
 
-    /**  Returns the the number of contact detail suggestions. */
+    /**  Returns the number of contact detail suggestions. */
     protected int getNumberOfContactDetailSuggestions() throws ExecutionException {
         return ThreadUtils.runOnUiThreadBlocking(new Callable<Integer>() {
             @Override
@@ -349,6 +377,11 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         });
     }
 
+    /** Returns the focused view in the card editor view. */
+    protected View getCardEditorFocusedView() {
+        return mUI.getCardEditorView().getCurrentFocus();
+    }
+
     /**
      *  Clicks on the label corresponding to the shipping address suggestion at the specified
      *  |suggestionIndex|.
@@ -365,6 +398,28 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
             public void run() {
                 ((OptionSection) mUI.getShippingAddressSectionForTest())
                         .getOptionLabelsForTest(suggestionIndex).performClick();
+            }
+        });
+        helper.waitForCallback(callCount);
+    }
+
+    /**
+     *  Clicks on the label corresponding to the payment method suggestion at the specified
+     *  |suggestionIndex|.
+     * @throws InterruptedException
+     */
+    protected void clickOnPaymentMethodSuggestionOptionAndWait(
+            final int suggestionIndex, CallbackHelper helper)
+            throws ExecutionException, TimeoutException, InterruptedException {
+        assert (suggestionIndex < getNumberOfPaymentInstruments());
+
+        int callCount = helper.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                ((OptionSection) mUI.getPaymentMethodSectionForTest())
+                        .getOptionLabelsForTest(suggestionIndex)
+                        .performClick();
             }
         });
         helper.waitForCallback(callCount);
@@ -432,6 +487,11 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
                         .getCount();
             }
         });
+    }
+
+    /** Returns the error message visible to the user in the credit card unmask prompt. */
+    protected String getUnmaskPromptErrorMessage() {
+        return mCardUnmaskPrompt.getErrorMessage();
     }
 
     /** Selects the spinner value in the editor UI for credit cards. */
@@ -520,8 +580,10 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                ((EditText) mCardUnmaskPrompt.getDialogForTest().findViewById(resourceId))
-                        .setText(input);
+                EditText editText =
+                        ((EditText) mCardUnmaskPrompt.getDialogForTest().findViewById(resourceId));
+                editText.setText(input);
+                editText.getOnFocusChangeListener().onFocusChange(null, false);
             }
         });
         helper.waitForCallback(callCount);
@@ -537,8 +599,10 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
             @Override
             public void run() {
                 for (int i = 0; i < resourceIds.length; ++i) {
-                    ((EditText) mCardUnmaskPrompt.getDialogForTest().findViewById(resourceIds[i]))
-                            .setText(values[i]);
+                    EditText editText = ((EditText) mCardUnmaskPrompt.getDialogForTest()
+                            .findViewById(resourceIds[i]));
+                    editText.setText(values[i]);
+                    editText.getOnFocusChangeListener().onFocusChange(null, false);
                 }
             }
         });
@@ -546,7 +610,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
     }
 
     /** Verifies the contents of the test webpage. */
-    protected void expectResultContains(final String[] contents) throws InterruptedException {
+    protected void expectResultContains(final String[] contents) {
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
@@ -571,6 +635,54 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
                     updateFailureReason(e2.getMessage());
                     return false;
                 }
+            }
+        });
+    }
+
+    /**  Will fail if the OptionRow at |index| is not selected in Contact Details.*/
+    protected void expectContactDetailsRowIsSelected(final int index) {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                boolean isSelected = ((OptionSection) mUI.getContactDetailsSectionForTest())
+                                             .getOptionRowAtIndex(index)
+                                             .isChecked();
+                if (!isSelected) {
+                    updateFailureReason("Contact Details row at " + index + " was not selected.");
+                }
+                return isSelected;
+            }
+        });
+    }
+
+    /**  Will fail if the OptionRow at |index| is not selected in Shipping Address section.*/
+    protected void expectShippingAddressRowIsSelected(final int index) {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                boolean isSelected = ((OptionSection) mUI.getShippingAddressSectionForTest())
+                                             .getOptionRowAtIndex(index)
+                                             .isChecked();
+                if (!isSelected) {
+                    updateFailureReason("Shipping Address row at " + index + " was not selected.");
+                }
+                return isSelected;
+            }
+        });
+    }
+
+    /**  Will fail if the OptionRow at |index| is not selected in PaymentMethod section.*/
+    protected void expectPaymentMethodRowIsSelected(final int index) {
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                boolean isSelected = ((OptionSection) mUI.getPaymentMethodSectionForTest())
+                                             .getOptionRowAtIndex(index)
+                                             .isChecked();
+                if (!isSelected) {
+                    updateFailureReason("Payment Method row at " + index + " was not selected.");
+                }
+                return isSelected;
             }
         });
     }
@@ -666,6 +778,12 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         mReadyToUnmask.notifyCalled(prompt);
     }
 
+    @Override
+    public void onCardUnmaskPromptValidationDone(CardUnmaskPrompt prompt) {
+        ThreadUtils.assertOnUiThread();
+        mUnmaskValidationDone.notifyCalled(prompt);
+    }
+
     /**
      * Listens for UI notifications.
      */
@@ -699,7 +817,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
      * @param instrumentPresence Whether the app has any payment instruments. Either NO_INSTRUMENTS
      *                           or HAVE_INSTRUMENTS.
      * @param responseSpeed      How quickly the app will respond to "get instruments" query. Either
-     *                           IMMEDIATE_RESPONSE, DELAYED_RESPONSE, or NO_RESPONSE.
+     *                           IMMEDIATE_RESPONSE or DELAYED_RESPONSE.
      * @return The installed payment app.
      */
     protected TestPay installPaymentApp(final int instrumentPresence, final int responseSpeed) {
@@ -713,18 +831,45 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
      * @param instrumentPresence Whether the app has any payment instruments. Either NO_INSTRUMENTS
      *                           or HAVE_INSTRUMENTS.
      * @param responseSpeed      How quickly the app will respond to "get instruments" query. Either
-     *                           IMMEDIATE_RESPONSE, DELAYED_RESPONSE, or NO_RESPONSE.
+     *                           IMMEDIATE_RESPONSE or DELAYED_RESPONSE.
      * @return The installed payment app.
      */
     protected TestPay installPaymentApp(final String methodName, final int instrumentPresence,
             final int responseSpeed) {
+        return installPaymentApp(methodName, instrumentPresence, responseSpeed, IMMEDIATE_CREATION);
+    }
+
+    /**
+     * Installs a payment app for testing.
+     *
+     * @param methodName         The name of the payment method used in the payment app.
+     * @param instrumentPresence Whether the app has any payment instruments. Either NO_INSTRUMENTS
+     *                           or HAVE_INSTRUMENTS.
+     * @param responseSpeed      How quickly the app will respond to "get instruments" query. Either
+     *                           IMMEDIATE_RESPONSE or DELAYED_RESPONSE.
+     * @param creationSpeed      How quickly the app factory will create this app. Either
+     *                           IMMEDIATE_CREATION or DELAYED_CREATION.
+     * @return The installed payment app.
+     */
+    protected TestPay installPaymentApp(final String methodName, final int instrumentPresence,
+            final int responseSpeed, final int creationSpeed) {
         final TestPay app = new TestPay(methodName, instrumentPresence, responseSpeed);
-        PaymentAppFactory.setAdditionalFactory(new PaymentAppFactoryAddition() {
+        PaymentAppFactory.getInstance().addAdditionalFactory(new PaymentAppFactoryAddition() {
             @Override
-            public List<PaymentApp> create(Context context, WebContents webContents) {
-                List<PaymentApp> additionalApps = new ArrayList<>();
-                additionalApps.add(app);
-                return additionalApps;
+            public void create(Context context, WebContents webContents, Set<String> methodNames,
+                    final PaymentAppFactory.PaymentAppCreatedCallback callback) {
+                if (creationSpeed == IMMEDIATE_CREATION) {
+                    callback.onPaymentAppCreated(app);
+                    callback.onAllPaymentAppsCreated();
+                } else {
+                    new Handler().postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            callback.onPaymentAppCreated(app);
+                            callback.onAllPaymentAppsCreated();
+                        }
+                    }, 100);
+                }
             }
         });
         return app;
@@ -744,7 +889,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         }
 
         @Override
-        public void getInstruments(Map<String, PaymentMethodData> methodData,
+        public void getInstruments(Map<String, PaymentMethodData> methodData, String origin,
                 InstrumentsCallback instrumentsCallback) {
             mCallback = instrumentsCallback;
             respond();
@@ -777,6 +922,12 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         }
 
         @Override
+        public boolean supportsMethodsAndData(Map<String, PaymentMethodData> methodsAndData) {
+            assert methodsAndData != null;
+            return methodsAndData.containsKey(mMethodName);
+        }
+
+        @Override
         public String getAppIdentifier() {
             return mMethodName;
         }
@@ -792,13 +943,15 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         }
 
         @Override
-        public String getInstrumentMethodName() {
-            return mMethodName;
+        public Set<String> getInstrumentMethodNames() {
+            Set<String> result = new HashSet<>();
+            result.add(mMethodName);
+            return result;
         }
 
         @Override
-        public void getInstrumentDetails(String merchantName, String origin, PaymentItem total,
-                List<PaymentItem> cart, PaymentMethodData details,
+        public void invokePaymentApp(String merchantName, String origin, PaymentItem total,
+                List<PaymentItem> cart, Map<String, PaymentMethodData> methodData,
                 InstrumentDetailsCallback detailsCallback) {
             detailsCallback.onInstrumentDetailsReady(
                     mMethodName, "{\"transaction\": 1337}");

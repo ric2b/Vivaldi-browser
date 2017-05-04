@@ -4,17 +4,21 @@
 
 #include "core/layout/ng/ng_units.h"
 
-#include "core/layout/ng/ng_writing_mode.h"
-
 namespace blink {
 
 LayoutUnit MinAndMaxContentSizes::ShrinkToFit(LayoutUnit available_size) const {
+  DCHECK_GE(max_content, min_content);
   return std::min(max_content, std::max(min_content, available_size));
 }
 
+bool MinAndMaxContentSizes::operator==(
+    const MinAndMaxContentSizes& other) const {
+  return min_content == other.min_content && max_content == other.max_content;
+}
+
 NGPhysicalSize NGLogicalSize::ConvertToPhysical(NGWritingMode mode) const {
-  return mode == HorizontalTopBottom ? NGPhysicalSize(inline_size, block_size)
-                                     : NGPhysicalSize(block_size, inline_size);
+  return mode == kHorizontalTopBottom ? NGPhysicalSize(inline_size, block_size)
+                                      : NGPhysicalSize(block_size, inline_size);
 }
 
 bool NGLogicalSize::operator==(const NGLogicalSize& other) const {
@@ -23,8 +27,8 @@ bool NGLogicalSize::operator==(const NGLogicalSize& other) const {
 }
 
 NGLogicalSize NGPhysicalSize::ConvertToLogical(NGWritingMode mode) const {
-  return mode == HorizontalTopBottom ? NGLogicalSize(width, height)
-                                     : NGLogicalSize(height, width);
+  return mode == kHorizontalTopBottom ? NGLogicalSize(width, height)
+                                      : NGLogicalSize(height, width);
 }
 
 bool NGLogicalRect::IsEmpty() const {
@@ -57,30 +61,30 @@ NGPhysicalOffset NGLogicalOffset::ConvertToPhysical(
     NGPhysicalSize outer_size,
     NGPhysicalSize inner_size) const {
   switch (mode) {
-    case HorizontalTopBottom:
-      if (direction == LTR)
+    case kHorizontalTopBottom:
+      if (direction == TextDirection::kLtr)
         return NGPhysicalOffset(inline_offset, block_offset);
       else
         return NGPhysicalOffset(
             outer_size.width - inline_offset - inner_size.width, block_offset);
-    case VerticalRightLeft:
-    case SidewaysRightLeft:
-      if (direction == LTR)
+    case kVerticalRightLeft:
+    case kSidewaysRightLeft:
+      if (direction == TextDirection::kLtr)
         return NGPhysicalOffset(
             outer_size.width - block_offset - inner_size.width, inline_offset);
       else
         return NGPhysicalOffset(
             outer_size.width - block_offset - inner_size.width,
             outer_size.height - inline_offset - inner_size.height);
-    case VerticalLeftRight:
-      if (direction == LTR)
+    case kVerticalLeftRight:
+      if (direction == TextDirection::kLtr)
         return NGPhysicalOffset(block_offset, inline_offset);
       else
         return NGPhysicalOffset(
             block_offset,
             outer_size.height - inline_offset - inner_size.height);
-    case SidewaysLeftRight:
-      if (direction == LTR)
+    case kSidewaysLeftRight:
+      if (direction == TextDirection::kLtr)
         return NGPhysicalOffset(
             block_offset,
             outer_size.height - inline_offset - inner_size.height);
@@ -133,6 +137,26 @@ String NGLogicalOffset::ToString() const {
   return String::format("%dx%d", inline_offset.toInt(), block_offset.toInt());
 }
 
+NGPhysicalOffset NGPhysicalOffset::operator+(
+    const NGPhysicalOffset& other) const {
+  return NGPhysicalOffset{this->left + other.left, this->top + other.top};
+}
+
+NGPhysicalOffset& NGPhysicalOffset::operator+=(const NGPhysicalOffset& other) {
+  *this = *this + other;
+  return *this;
+}
+
+NGPhysicalOffset NGPhysicalOffset::operator-(
+    const NGPhysicalOffset& other) const {
+  return NGPhysicalOffset{this->left - other.left, this->top - other.top};
+}
+
+NGPhysicalOffset& NGPhysicalOffset::operator-=(const NGPhysicalOffset& other) {
+  *this = *this - other;
+  return *this;
+}
+
 bool NGBoxStrut::IsEmpty() const {
   return *this == NGBoxStrut();
 }
@@ -149,21 +173,21 @@ NGBoxStrut NGPhysicalBoxStrut::ConvertToLogical(NGWritingMode writing_mode,
                                                 TextDirection direction) const {
   NGBoxStrut strut;
   switch (writing_mode) {
-    case HorizontalTopBottom:
+    case kHorizontalTopBottom:
       strut = {left, right, top, bottom};
       break;
-    case VerticalRightLeft:
-    case SidewaysRightLeft:
+    case kVerticalRightLeft:
+    case kSidewaysRightLeft:
       strut = {top, bottom, right, left};
       break;
-    case VerticalLeftRight:
+    case kVerticalLeftRight:
       strut = {top, bottom, left, right};
       break;
-    case SidewaysLeftRight:
+    case kSidewaysLeftRight:
       strut = {bottom, top, left, right};
       break;
   }
-  if (direction == RTL)
+  if (direction == TextDirection::kRtl)
     std::swap(strut.inline_start, strut.inline_end);
   return strut;
 }
@@ -223,6 +247,58 @@ bool NGMarginStrut::operator==(const NGMarginStrut& other) const {
                   other.negative_margin_block_end) ==
          std::tie(margin_block_start, margin_block_end,
                   negative_margin_block_start, negative_margin_block_end);
+}
+
+NGExclusions::NGExclusions()
+    : last_left_float(nullptr), last_right_float(nullptr) {}
+
+NGExclusions::NGExclusions(const NGExclusions& other) {
+  for (const auto& exclusion : other.storage)
+    Add(*exclusion);
+}
+
+void NGExclusions::Add(const NGExclusion& exclusion) {
+  storage.push_back(WTF::makeUnique<NGExclusion>(exclusion));
+  if (exclusion.type == NGExclusion::kFloatLeft) {
+    last_left_float = storage.rbegin()->get();
+  } else if (exclusion.type == NGExclusion::kFloatRight) {
+    last_right_float = storage.rbegin()->get();
+  }
+}
+
+inline NGExclusions& NGExclusions::operator=(const NGExclusions& other) {
+  storage.clear();
+  last_left_float = nullptr;
+  last_right_float = nullptr;
+  for (const auto& exclusion : other.storage)
+    Add(*exclusion);
+  return *this;
+}
+
+NGStaticPosition NGStaticPosition::Create(NGWritingMode writing_mode,
+                                          TextDirection direction,
+                                          NGPhysicalOffset offset) {
+  NGStaticPosition position;
+  position.offset = offset;
+  switch (writing_mode) {
+    case kHorizontalTopBottom:
+      position.type = (direction == TextDirection::kLtr) ? kTopLeft : kTopRight;
+      break;
+    case kVerticalRightLeft:
+    case kSidewaysRightLeft:
+      position.type =
+          (direction == TextDirection::kLtr) ? kTopRight : kBottomRight;
+      break;
+    case kVerticalLeftRight:
+      position.type =
+          (direction == TextDirection::kLtr) ? kTopLeft : kBottomLeft;
+      break;
+    case kSidewaysLeftRight:
+      position.type =
+          (direction == TextDirection::kLtr) ? kBottomLeft : kTopLeft;
+      break;
+  }
+  return position;
 }
 
 }  // namespace blink

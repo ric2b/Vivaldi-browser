@@ -8,15 +8,6 @@ namespace installer {
 
 namespace switches {
 
-// Install Chrome.
-// Currently this is only required when used in combination with kMultiInstall.
-const char kChrome[] = "chrome";
-
-#ifndef OMIT_CHROME_FRAME
-// Install Chrome Frame.
-const char kChromeFrame[] = "chrome-frame";
-#endif
-
 // Run the installer for Chrome SxS.
 const char kChromeSxS[] = "chrome-sxs";
 
@@ -87,10 +78,6 @@ const char kMakeChromeDefault[] = "make-chrome-default";
 
 // Tells installer to expect to be run as a subsidiary to an MSI.
 const char kMsi[] = "msi";
-
-// Tells installer to install multiple products specified on the command line.
-// (e.g. Chrome Frame, Chrome)
-const char kMultiInstall[] = "multi-install";
 
 // Useful only when used with --update-setup-exe, otherwise ignored. It
 // specifies the full path where updated setup.exe will be stored.
@@ -217,19 +204,12 @@ const char kGoogleUpdateIsMachineEnvVar[] = "GoogleUpdateIsMachine";
 // TODO(gab): Rename setup.exe itself altogether and use the same binary for
 // Active Setup.
 const wchar_t kActiveSetupExe[] = L"chrmstp.exe";
-const wchar_t kAppLauncherGuid[] = L"{FDA71E6F-AC4C-4a00-8B70-9958A68906BF}";
 const wchar_t kChromeDll[] = L"vivaldi.dll";
 const wchar_t kChromeChildDll[] = L"vivaldi_child.dll";
 const wchar_t kChromeExe[] = L"vivaldi.exe";
-const wchar_t kChromeFrameDll[] = L"npchrome_frame.dll";
-const wchar_t kChromeFrameHelperDll[] = L"chrome_frame_helper.dll";
-const wchar_t kChromeFrameHelperExe[] = L"chrome_frame_helper.exe";
-const wchar_t kChromeFrameHelperWndClass[] = L"ChromeFrameHelperWindowClass";
-const wchar_t kChromeLauncherExe[] = L"chrome_launcher.exe";
 const wchar_t kChromeNewExe[] = L"new_vivaldi.exe";
 const wchar_t kChromeOldExe[] = L"old_vivaldi.exe";
 const wchar_t kCmdOnOsUpgrade[] = L"on-os-upgrade";
-const wchar_t kCmdQuickEnableCf[] = L"quick-enable-cf";
 const wchar_t kEULASentinelFile[] = L"EULA Accepted";
 const wchar_t kGoogleChromeInstallSubDir1[] = L"Google";
 const wchar_t kGoogleChromeInstallSubDir2[] = L"Chrome";
@@ -263,7 +243,9 @@ const wchar_t kVivaldiInstallerInstallType[] = L"InstallType";
 const wchar_t kVivaldiInstallerDefaultBrowser[] = L"DefaultBrowser";
 const wchar_t kVivaldiInstallerRegisterBrowser[] = L"RegisterBrowser";
 
-const wchar_t kOptionMultiInstall[] = L"multi-install";
+// Vivaldi paths and filenames
+const wchar_t kVivaldiUpdateNotifierExe[] = L"update_notifier.exe";
+const wchar_t kVivaldiUpdateNotifierOldExe[] = L"update_notifier.old";
 
 // Chrome channel display names.
 const wchar_t kChromeChannelUnknown[] = L"unknown";

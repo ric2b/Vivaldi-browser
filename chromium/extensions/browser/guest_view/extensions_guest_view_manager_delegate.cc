@@ -57,15 +57,13 @@ void ExtensionsGuestViewManagerDelegate::DispatchEvent(
                                               << " must have a histogram value";
 
   content::WebContents* owner = guest->owner_web_contents();
-  // Note(andre@vivialdi.com):
-  // The owner |WebContents| might have been removed already. We dispatch an
-  // event in GuestDestroyed for webviews losing their guest WebContents.
-  if (owner) {
+  if (!owner)
+    return;  // Could happen at tab shutdown.
+
   EventRouter::DispatchEventToSender(owner, guest->browser_context(),
                                      guest->owner_host(), histogram_value,
                                      event_name, std::move(event_args),
                                      EventRouter::USER_GESTURE_UNKNOWN, info);
-  }
 }
 
 bool ExtensionsGuestViewManagerDelegate::IsGuestAvailableToContext(

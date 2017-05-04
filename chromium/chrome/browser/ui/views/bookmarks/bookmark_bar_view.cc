@@ -103,9 +103,6 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
 
-#include "base/i18n/time_formatting.h"
-#include "base/time/time.h"
-
 using base::UserMetricsAction;
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -186,8 +183,7 @@ gfx::Rect CalculateInkDropBounds(const gfx::Size& size) {
 class BookmarkButtonBase : public views::LabelButton {
  public:
   BookmarkButtonBase(views::ButtonListener* listener,
-                     const base::string16& title,
-                     const BookmarkNode *node=NULL)
+                     const base::string16& title)
       : LabelButton(listener, title) {
     SetElideBehavior(kElideBehavior);
     SetInkDropMode(InkDropMode::ON);
@@ -201,23 +197,12 @@ class BookmarkButtonBase : public views::LabelButton {
     } else {
       show_animation_->Show();
     }
-    if (node) {
-      nickname_ = node->GetNickName();
-      description_ = node->GetDescription();
-      created_time_ = node->date_added();
-      visited_time_ = node->date_visited();
-    }
   }
 
   View* GetTooltipHandlerForPoint(const gfx::Point& point) override {
     return HitTestPoint(point) && CanProcessEventsWithinSubtree() ? this
                                                                   : nullptr;
   }
-
-  const base::string16& NickName() const {return nickname_;}
-  const base::string16& Description() const {return description_;}
-  const base::Time& CreatedTime() const {return created_time_;}
-  const base::Time& VisitedTime() const {return visited_time_;}
 
   std::unique_ptr<LabelButtonBorder> CreateDefaultBorder() const override {
     std::unique_ptr<LabelButtonBorder> border =
@@ -264,11 +249,6 @@ class BookmarkButtonBase : public views::LabelButton {
 
  private:
   std::unique_ptr<gfx::SlideAnimation> show_animation_;
-  base::string16 nickname_;
-  base::string16 description_;
-  base::Time created_time_;
-  base::Time visited_time_;
-
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkButtonBase);
 };
@@ -284,9 +264,8 @@ class BookmarkButton : public BookmarkButtonBase {
 
   BookmarkButton(views::ButtonListener* listener,
                  const GURL& url,
-                 const base::string16& title,
-                 const BookmarkNode *node)
-      : BookmarkButtonBase(listener, title, node), url_(url) {}
+                 const base::string16& title)
+      : BookmarkButtonBase(listener, title), url_(url) {}
 
   // views::View:
   bool GetTooltipText(const gfx::Point& p,
@@ -301,8 +280,7 @@ class BookmarkButton : public BookmarkButtonBase {
     if (tooltip_text_.empty() || max_tooltip_width != max_tooltip_width_) {
       max_tooltip_width_ = max_tooltip_width;
       tooltip_text_ = BookmarkBarView::CreateToolTipForURLAndTitle(
-          max_tooltip_width_, tooltip_manager->GetFontList(), url_, GetText(),
-        &NickName(), &Description(), &CreatedTime(), &VisitedTime());
+          max_tooltip_width_, tooltip_manager->GetFontList(), url_, GetText());
     }
     *tooltip_text = tooltip_text_;
     return !tooltip_text->empty();
@@ -310,7 +288,7 @@ class BookmarkButton : public BookmarkButtonBase {
 
   void SetText(const base::string16& text) override {
     BookmarkButtonBase::SetText(text);
-    tooltip_text_.empty();
+    tooltip_text_.clear();
   }
 
   const char* GetClassName() const override { return kViewClassName; }
@@ -320,7 +298,7 @@ class BookmarkButton : public BookmarkButtonBase {
   // new tooltip text.
   mutable int max_tooltip_width_ = 0;
   mutable base::string16 tooltip_text_;
-  GURL url_;
+  const GURL& url_;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkButton);
 };
@@ -403,8 +381,7 @@ class BookmarkFolderButton : public BookmarkMenuButtonBase {
  public:
   BookmarkFolderButton(const base::string16& title,
                        views::MenuButtonListener* menu_button_listener,
-                       bool show_menu_marker,
-                       const BookmarkNode *node=NULL)
+                       bool show_menu_marker)
       : BookmarkMenuButtonBase(title, menu_button_listener, show_menu_marker) {
     SetElideBehavior(kElideBehavior);
     show_animation_.reset(new gfx::SlideAnimation(this));
@@ -769,11 +746,7 @@ base::string16 BookmarkBarView::CreateToolTipForURLAndTitle(
     int max_width,
     const gfx::FontList& tt_fonts,
     const GURL& url,
-    const base::string16& title,
-    const base::string16 *nickname,
-    const base::string16 *description,
-    const base::Time *created_time,
-    const base::Time *visited_time) {
+    const base::string16& title) {
   base::string16 result;
 
   // First the title.
@@ -782,49 +755,6 @@ base::string16 BookmarkBarView::CreateToolTipForURLAndTitle(
     base::i18n::AdjustStringForLocaleDirection(&localized_title);
     result.append(gfx::ElideText(localized_title, tt_fonts, max_width,
                                  gfx::ELIDE_TAIL));
-  }
-
-  // Nickname.
-  if (nickname && !nickname->empty()) {
-    if (!result.empty())
-      result.push_back('\n');
-    base::string16 localized_description = *nickname;
-    base::i18n::AdjustStringForLocaleDirection(&localized_description);
-    result.append(gfx::ElideText(localized_description, tt_fonts, max_width,
-                                gfx::ELIDE_TAIL));
-  }
-  // Then the description.
-  if (description && !description->empty()) {
-    if (!result.empty())
-      result.push_back('\n');
-    result.append(base::UTF8ToUTF16("Nickname: "));
-    base::string16 localized_description = *description;
-    base::i18n::AdjustStringForLocaleDirection(&localized_description);
-    result.append(gfx::ElideText(localized_description, tt_fonts, max_width,
-                                gfx::ELIDE_TAIL));
-  }
-
-  // Created time
-  if (created_time && !created_time->is_null())
-  {
-    base::string16 time_string = base::TimeFormatShortDateAndTime(*created_time);
-    if (!result.empty())
-      result.push_back('\n');
-    result.append(base::UTF8ToUTF16("Created: "));
-    base::i18n::AdjustStringForLocaleDirection(&time_string);
-    result.append(gfx::ElideText(time_string, tt_fonts, max_width,
-                                gfx::ELIDE_TAIL));
-  }
-  //Visited name
-  if (visited_time && !visited_time->is_null())
-  {
-    base::string16 time_string = base::TimeFormatShortDateAndTime(*visited_time);
-    if (!result.empty())
-      result.push_back('\n');
-    result.append(base::UTF8ToUTF16("Visited: "));
-    base::i18n::AdjustStringForLocaleDirection(&time_string);
-    result.append(gfx::ElideText(time_string, tt_fonts, max_width,
-                                gfx::ELIDE_TAIL));
   }
 
   // Only show the URL if the url and title differ.
@@ -1276,6 +1206,8 @@ int BookmarkBarView::OnPerformDrop(const DropTargetEvent& event) {
   DCHECK(data.is_valid());
   bool copy = drop_info_->location.operation == ui::DragDropTypes::DRAG_COPY;
   drop_info_.reset();
+
+  content::RecordAction(base::UserMetricsAction("BookmarkBar_DragEnd"));
   return chrome::DropBookmarks(
       browser_->profile(), data, parent_node, index, copy);
 }
@@ -1787,12 +1719,12 @@ MenuButton* BookmarkBarView::CreateOverflowButton() {
 views::View* BookmarkBarView::CreateBookmarkButton(const BookmarkNode* node) {
   if (node->is_url()) {
     BookmarkButton* button =
-        new BookmarkButton(this, node->url(), node->GetTitle(), node);
+        new BookmarkButton(this, node->url(), node->GetTitle());
     ConfigureButton(node, button);
     return button;
   }
   views::MenuButton* button =
-      new BookmarkFolderButton(node->GetTitle(), this, false, node);
+      new BookmarkFolderButton(node->GetTitle(), this, false);
   ConfigureButton(node, button);
   return button;
 }

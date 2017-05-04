@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -15,8 +16,9 @@
 #include "components/prefs/pref_change_registrar.h"
 
 #if defined(OS_CHROMEOS)
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
+#include "components/user_manager/user_manager.h"
+#else
+#include "chrome/browser/profiles/profile_statistics_common.h"
 #endif
 
 class Profile;
@@ -25,12 +27,13 @@ namespace settings {
 
 class ProfileInfoHandler : public SettingsPageUIHandler,
 #if defined(OS_CHROMEOS)
-                           public content::NotificationObserver,
+                           public user_manager::UserManager::Observer,
 #endif
                            public ProfileAttributesStorage::Observer {
  public:
   static const char kProfileInfoChangedEventName[];
   static const char kProfileManagesSupervisedUsersChangedEventName[];
+  static const char kProfileStatsCountReadyEventName[];
 
   explicit ProfileInfoHandler(Profile* profile);
   ~ProfileInfoHandler() override;
@@ -41,10 +44,8 @@ class ProfileInfoHandler : public SettingsPageUIHandler,
   void OnJavascriptDisallowed() override;
 
 #if defined(OS_CHROMEOS)
-  // content::NotificationObserver implementation.
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
+  // user_manager::UserManager::Observer implementation.
+  void OnUserImageChanged(const user_manager::User& user) override;
 #endif
 
   // ProfileAttributesStorage::Observer implementation.
@@ -63,8 +64,15 @@ class ProfileInfoHandler : public SettingsPageUIHandler,
   // Callbacks from the page.
   void HandleGetProfileInfo(const base::ListValue* args);
   void HandleGetProfileManagesSupervisedUsers(const base::ListValue* args);
-
   void PushProfileInfo();
+
+#if !defined(OS_CHROMEOS)
+  void HandleGetProfileStats(const base::ListValue* args);
+
+  // Returns the sum of the counts of individual profile states. Returns 0 if
+  // there exists a stat that was not successfully retrieved.
+  void PushProfileStatsCount(profiles::ProfileCategoryStats stats);
+#endif
 
   // Pushes whether the current profile manages supervised users to JavaScript.
   void PushProfileManagesSupervisedUsersStatus();
@@ -77,16 +85,18 @@ class ProfileInfoHandler : public SettingsPageUIHandler,
   // Weak pointer.
   Profile* profile_;
 
+#if defined(OS_CHROMEOS)
+  ScopedObserver<user_manager::UserManager, ProfileInfoHandler>
+      user_manager_observer_;
+#endif
+
   ScopedObserver<ProfileAttributesStorage, ProfileInfoHandler>
       profile_observer_;
 
   // Used to listen for changes in the list of managed supervised users.
   PrefChangeRegistrar profile_pref_registrar_;
 
-#if defined(OS_CHROMEOS)
-  // Used to listen to ChromeOS user image changes.
-  content::NotificationRegistrar registrar_;
-#endif
+  base::WeakPtrFactory<ProfileInfoHandler> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileInfoHandler);
 };

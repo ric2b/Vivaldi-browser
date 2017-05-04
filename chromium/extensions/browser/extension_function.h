@@ -49,10 +49,6 @@ class IOThreadExtensionMessageFilter;
 class QuotaLimitHeuristic;
 }
 
-namespace IPC {
-class Sender;
-}
-
 #ifdef NDEBUG
 #define EXTENSION_FUNCTION_VALIDATE(test) \
   do {                                    \
@@ -296,9 +292,6 @@ class ExtensionFunction
     response_callback_ = callback;
   }
 
-  void set_source_tab_id(int source_tab_id) { source_tab_id_ = source_tab_id; }
-  int source_tab_id() const { return source_tab_id_; }
-
   void set_source_context_type(extensions::Feature::Context type) {
     source_context_type_ = type;
   }
@@ -464,9 +457,6 @@ class ExtensionFunction
   // The sample value to record with the histogram API when the function
   // is invoked.
   extensions::functions::HistogramValue histogram_value_;
-
-  // The ID of the tab triggered this function call, or -1 if there is no tab.
-  int source_tab_id_;
 
   // The type of the JavaScript context where this call originated.
   extensions::Feature::Context source_context_type_;

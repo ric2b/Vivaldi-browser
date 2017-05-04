@@ -157,7 +157,7 @@ SDK.TargetManager = class extends Common.Object {
   /**
    * @param {string} name
    * @param {number} capabilitiesMask
-   * @param {!InspectorBackendClass.Connection.Factory} connectionFactory
+   * @param {!Protocol.InspectorBackend.Connection.Factory} connectionFactory
    * @param {?SDK.Target} parentTarget
    * @return {!SDK.Target}
    */
@@ -340,6 +340,14 @@ SDK.TargetManager = class extends Common.Object {
   }
 
   _connectAndCreateMainTarget() {
+    if (Runtime.queryParam('nodeFrontend')) {
+      var target = new SDK.Target(
+          this, Common.UIString('Node'), SDK.Target.Capability.Target, this._createMainConnection.bind(this), null);
+      target.subTargetsManager = new SDK.SubTargetsManager(target);
+      target.setInspectedURL('Node');
+      return;
+    }
+
     var capabilities = SDK.Target.Capability.Browser | SDK.Target.Capability.DOM | SDK.Target.Capability.JS |
         SDK.Target.Capability.Log | SDK.Target.Capability.Network | SDK.Target.Capability.Target;
     if (Runtime.queryParam('isSharedWorker')) {
@@ -354,8 +362,8 @@ SDK.TargetManager = class extends Common.Object {
   }
 
   /**
-   * @param {!InspectorBackendClass.Connection.Params} params
-   * @return {!InspectorBackendClass.Connection}
+   * @param {!Protocol.InspectorBackend.Connection.Params} params
+   * @return {!Protocol.InspectorBackend.Connection}
    */
   _createMainConnection(params) {
     if (Runtime.queryParam('ws')) {
@@ -371,7 +379,7 @@ SDK.TargetManager = class extends Common.Object {
 
   /**
    * @param {function(string)} onMessage
-   * @return {!Promise<!InspectorBackendClass.Connection>}
+   * @return {!Promise<!Protocol.InspectorBackend.Connection>}
    */
   interceptMainConnection(onMessage) {
     var params = {onMessage: onMessage, onDisconnect: this._connectAndCreateMainTarget.bind(this)};
@@ -402,12 +410,12 @@ SDK.TargetManager.Observer.prototype = {
   /**
    * @param {!SDK.Target} target
    */
-  targetAdded: function(target) {},
+  targetAdded(target) {},
 
   /**
    * @param {!SDK.Target} target
    */
-  targetRemoved: function(target) {},
+  targetRemoved(target) {},
 };
 
 /**

@@ -79,7 +79,7 @@ class CONTENT_EXPORT RedirectToFileResourceHandler
 
   bool WriteMore();
   bool BufIsFull() const;
-  void ResumeIfDeferred();
+  void Resume();
 
   CreateTemporaryFileStreamFunction create_temporary_file_stream_;
 

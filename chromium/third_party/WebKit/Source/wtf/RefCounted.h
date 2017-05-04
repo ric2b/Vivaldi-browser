@@ -27,7 +27,7 @@
 #include "wtf/Noncopyable.h"
 #include "wtf/WTFExport.h"
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 #define CHECK_REF_COUNTED_LIFECYCLE 1
 #include "wtf/ThreadRestrictionVerifier.h"
 #else
@@ -43,8 +43,8 @@ class WTF_EXPORT RefCountedBase {
  public:
   void ref() const {
 #if CHECK_REF_COUNTED_LIFECYCLE
-    m_verifier.onRef(m_refCount);
-    ASSERT(!m_adoptionIsRequired);
+    SECURITY_DCHECK(m_verifier.onRef(m_refCount));
+    DCHECK(!m_adoptionIsRequired);
 #endif
     SECURITY_DCHECK(!m_deletionHasBegun);
     ++m_refCount;
@@ -53,14 +53,14 @@ class WTF_EXPORT RefCountedBase {
   bool hasOneRef() const {
     SECURITY_DCHECK(!m_deletionHasBegun);
 #if CHECK_REF_COUNTED_LIFECYCLE
-    m_verifier.checkSafeToUse();
+    SECURITY_DCHECK(m_verifier.isSafeToUse());
 #endif
     return m_refCount == 1;
   }
 
   int refCount() const {
 #if CHECK_REF_COUNTED_LIFECYCLE
-    m_verifier.checkSafeToUse();
+    SECURITY_DCHECK(m_verifier.isSafeToUse());
 #endif
     return m_refCount;
   }
@@ -82,7 +82,7 @@ class WTF_EXPORT RefCountedBase {
   ~RefCountedBase() {
     SECURITY_DCHECK(m_deletionHasBegun);
 #if CHECK_REF_COUNTED_LIFECYCLE
-    ASSERT(!m_adoptionIsRequired);
+    DCHECK(!m_adoptionIsRequired);
 #endif
   }
 
@@ -90,11 +90,11 @@ class WTF_EXPORT RefCountedBase {
   bool derefBase() const {
     SECURITY_DCHECK(!m_deletionHasBegun);
 #if CHECK_REF_COUNTED_LIFECYCLE
-    m_verifier.onDeref(m_refCount);
-    ASSERT(!m_adoptionIsRequired);
+    SECURITY_DCHECK(m_verifier.onDeref(m_refCount));
+    DCHECK(!m_adoptionIsRequired);
 #endif
 
-    ASSERT(m_refCount > 0);
+    DCHECK_GT(m_refCount, 0);
     --m_refCount;
     if (!m_refCount) {
 #if ENABLE(SECURITY_ASSERT)

@@ -53,7 +53,8 @@ CSSVariableData* CSSVariableResolver::valueForCustomProperty(
     if (m_inheritedVariables)
       variableData = m_inheritedVariables->getVariable(name);
   } else {
-    variableData = m_nonInheritedVariables->getVariable(name);
+    if (m_nonInheritedVariables)
+      variableData = m_nonInheritedVariables->getVariable(name);
   }
   if (!variableData)
     return registration ? registration->initialVariableData() : nullptr;
@@ -184,7 +185,7 @@ bool CSSVariableResolver::resolveTokenRange(CSSParserTokenRange range,
                RuntimeEnabledFeatures::cssApplyAtRulesEnabled()) {
       resolveApplyAtRule(range, result);
     } else {
-      result.append(range.consume());
+      result.push_back(range.consume());
     }
   }
   return success;
@@ -255,7 +256,7 @@ const CSSValue* CSSVariableResolver::resolvePendingSubstitutions(
     if (resolver.resolveTokenRange(
             shorthandValue->variableDataValue()->tokens(),
             disallowAnimationTainted, tokens, isAnimationTainted)) {
-      CSSParserContext context(HTMLStandardMode, 0);
+      CSSParserContext* context = CSSParserContext::create(HTMLStandardMode);
 
       HeapVector<CSSProperty, 256> parsedProperties;
 

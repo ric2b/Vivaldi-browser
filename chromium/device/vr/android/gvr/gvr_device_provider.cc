@@ -13,18 +13,19 @@
 #include "device/vr/android/gvr/gvr_delegate.h"
 #include "device/vr/android/gvr/gvr_device.h"
 #include "device/vr/android/gvr/gvr_gamepad_data_fetcher.h"
+#include "device/vr/vr_device.h"
 #include "device/vr/vr_device_manager.h"
 #include "device/vr/vr_service.mojom.h"
-#include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr.h"
-#include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr_controller.h"
-#include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr_types.h"
+#include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr.h"
+#include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_controller.h"
+#include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
 
 using base::android::AttachCurrentThread;
 using base::android::GetApplicationContext;
 
 namespace device {
 
-GvrDeviceProvider::GvrDeviceProvider() : weak_ptr_factory_(this) {}
+GvrDeviceProvider::GvrDeviceProvider() {}
 
 GvrDeviceProvider::~GvrDeviceProvider() {
   GamepadDataFetcherManager::GetInstance()->RemoveSourceFactory(
@@ -35,6 +36,7 @@ GvrDeviceProvider::~GvrDeviceProvider() {
   if (delegate_provider) {
     delegate_provider->ExitWebVRPresent();
     delegate_provider->DestroyNonPresentingDelegate();
+    delegate_provider->SetDeviceProvider(nullptr);
   }
 }
 
@@ -50,7 +52,7 @@ void GvrDeviceProvider::Initialize() {
       device::GvrDelegateProvider::GetInstance();
   if (!delegate_provider)
     return;
-  delegate_provider->SetDeviceProvider(weak_ptr_factory_.GetWeakPtr());
+  delegate_provider->SetDeviceProvider(this);
   if (!vr_device_) {
     vr_device_.reset(
         new GvrDevice(this, delegate_provider->GetNonPresentingDelegate()));
@@ -77,8 +79,7 @@ void GvrDeviceProvider::ExitPresent() {
     delegate_provider->ExitWebVRPresent();
 }
 
-void GvrDeviceProvider::OnGvrDelegateReady(
-    const base::WeakPtr<GvrDelegate>& delegate) {
+void GvrDeviceProvider::OnGvrDelegateReady(GvrDelegate* delegate) {
   if (!vr_device_)
     return;
   VLOG(1) << "Switching to presenting delegate";
@@ -94,6 +95,12 @@ void GvrDeviceProvider::OnGvrDelegateRemoved() {
 
   SwitchToNonPresentingDelegate();
   vr_device_->OnExitPresent();
+}
+
+void GvrDeviceProvider::OnNonPresentingDelegateRemoved() {
+  if (!vr_device_)
+    return;
+  vr_device_->SetDelegate(nullptr);
 }
 
 void GvrDeviceProvider::OnDisplayBlur() {

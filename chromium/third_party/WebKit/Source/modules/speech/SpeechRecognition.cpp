@@ -40,10 +40,7 @@ SpeechRecognition* SpeechRecognition::create(ExecutionContext* context) {
   ASSERT(context && context->isDocument());
   Document* document = toDocument(context);
   ASSERT(document);
-  SpeechRecognition* speechRecognition =
-      new SpeechRecognition(document->page(), context);
-  speechRecognition->suspendIfNeeded();
-  return speechRecognition;
+  return new SpeechRecognition(document->page(), context);
 }
 
 void SpeechRecognition::start(ExceptionState& exceptionState) {
@@ -112,11 +109,11 @@ void SpeechRecognition::didReceiveResults(
   size_t resultIndex = m_finalResults.size();
 
   for (size_t i = 0; i < newFinalResults.size(); ++i)
-    m_finalResults.append(newFinalResults[i]);
+    m_finalResults.push_back(newFinalResults[i]);
 
   HeapVector<Member<SpeechRecognitionResult>> results = m_finalResults;
   for (size_t i = 0; i < currentInterimResults.size(); ++i)
-    results.append(currentInterimResults[i]);
+    results.push_back(currentInterimResults[i]);
 
   dispatchEvent(SpeechRecognitionEvent::createResult(resultIndex, results));
 }
@@ -148,10 +145,10 @@ const AtomicString& SpeechRecognition::interfaceName() const {
 }
 
 ExecutionContext* SpeechRecognition::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return ContextLifecycleObserver::getExecutionContext();
 }
 
-void SpeechRecognition::contextDestroyed() {
+void SpeechRecognition::contextDestroyed(ExecutionContext*) {
   m_controller = nullptr;
   if (hasPendingActivity())
     abort();
@@ -162,8 +159,7 @@ bool SpeechRecognition::hasPendingActivity() const {
 }
 
 SpeechRecognition::SpeechRecognition(Page* page, ExecutionContext* context)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : ContextLifecycleObserver(context),
       m_grammars(SpeechGrammarList::create()),  // FIXME: The spec is not clear
                                                 // on the default value for the
                                                 // grammars attribute.
@@ -186,7 +182,7 @@ DEFINE_TRACE(SpeechRecognition) {
   visitor->trace(m_controller);
   visitor->trace(m_finalResults);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 }  // namespace blink

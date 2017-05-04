@@ -12,20 +12,20 @@
  * login_non_lock_shared.js.
  */
 
-<include src="test_util.js">
-<include src="../../../../../ui/login/screen.js">
-<include src="screen_context.js">
-<include src="../user_images_grid.js">
-<include src="apps_menu.js">
-<include src="../../../../../ui/login/bubble.js">
-<include src="../../../../../ui/login/display_manager.js">
-<include src="header_bar.js">
+// <include src="test_util.js">
+// <include src="../../../../../ui/login/screen.js">
+// <include src="screen_context.js">
+// <include src="../user_images_grid.js">
+// <include src="apps_menu.js">
+// <include src="../../../../../ui/login/bubble.js">
+// <include src="../../../../../ui/login/display_manager.js">
+// <include src="header_bar.js">
 
-<include src="../../../../../ui/login/account_picker/screen_account_picker.js">
+// <include src="../../../../../ui/login/account_picker/screen_account_picker.js">
 
-<include src="../../../../../ui/login/login_ui_tools.js">
-<include src="../../../../../ui/login/account_picker/user_pod_row.js">
-<include src="../../../../../ui/login/resource_loader.js">
+// <include src="../../../../../ui/login/login_ui_tools.js">
+// <include src="../../../../../ui/login/account_picker/user_pod_row.js">
+// <include src="../../../../../ui/login/resource_loader.js">
 
 cr.define('cr.ui', function() {
   var DisplayManager = cr.ui.login.DisplayManager;
@@ -184,6 +184,14 @@ cr.define('cr.ui', function() {
    */
   Oobe.showTpmError = function() {
     DisplayManager.showTpmError();
+  };
+
+  /**
+   * Shows Active Directory password change screen.
+   * @param {string} username Name of the user that should change the password.
+   */
+  Oobe.showActiveDirectoryPasswordChangeScreen = function(username) {
+    DisplayManager.showActiveDirectoryPasswordChangeScreen(username);
   };
 
   /**

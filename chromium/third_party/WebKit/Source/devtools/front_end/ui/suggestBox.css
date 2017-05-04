@@ -70,45 +70,40 @@
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05),
                 0 2px 4px rgba(0, 0, 0, 0.2),
                 0 2px 6px rgba(0, 0, 0, 0.1);
+    overflow-x: hidden;
 }
 
 .suggest-box .suggest-box-content-item {
     padding: 1px;
     margin: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
     border: 1px solid transparent;
     padding-right: 0;
     white-space: nowrap;
+    display: flex;
 }
 
-.suggest-box .suggest-box-content-item.additional {
+.suggest-box .suggest-box-content-item.secondary {
     background-color: #f9f9f9;
 }
 
-.suggest-box .suggest-box-content-item.additional::before {
-    display: inline-block;
-    content: "";
-    -webkit-user-select: none;
-    -webkit-mask-image: url(Images/smallIcons.png);
-    -webkit-mask-size: 190px 30px;
-    width: 10px;
-    height: 10px;
-    position: relative;
-    top: 2px;
-    margin-right: 4px;
-    -webkit-mask-position: -20px -20px;
-    background-color: rgb(56, 121, 217);
+.suggestion-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-@media (-webkit-min-device-pixel-ratio: 1.1) {
-.suggest-box .suggest-box-content-item.additional::before {
-    -webkit-mask-image: url(Images/smallIcons_2x.png);
+.suggestion-subtitle {
+    flex: auto;
+    text-align: right;
+    color: #999;
+    margin-right: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
-} /* media */
 
-.suggest-box .suggest-box-content-item.additional.selected::before {
-    background-color: #FFF;
+.suggestion-icon {
+    user-select: none;
+    align-self: center;
+    flex-shrink: 0;
 }
 
 .suggest-box .suggest-box-content-item .query {
@@ -122,22 +117,12 @@
 
 .suggest-box .suggest-box-content-item.selected {
     background-color: rgb(56, 121, 217);
+}
+
+.suggest-box .suggest-box-content-item.selected > span {
     color: #FFF;
 }
 
 .suggest-box .suggest-box-content-item:hover:not(.selected) {
     background-color: rgba(56, 121, 217, 0.1);
-}
-
-.suggest-box .details-popup {
-    padding: 17px;
-    pointer-events: auto;
-    margin-left: 3px;
-    max-width: 750px;
-    word-wrap: normal;
-}
-
-.suggest-box .details-popup .description {
-    margin-top: 22px;
-    color: #808080;
 }

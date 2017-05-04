@@ -50,7 +50,7 @@ static void getObjectStack(const LayoutObject* ro,
                            Vector<const LayoutObject*>* roStack) {
   roStack->clear();
   while (ro) {
-    roStack->append(ro);
+    roStack->push_back(ro);
     ro = ro->parent();
   }
 }
@@ -120,13 +120,13 @@ static bool intersectsRect(const LayoutObject* renderer, const IntRect& rect) {
   return renderer->absoluteBoundingBoxRectIgnoringTransforms().intersects(
              rect) &&
          (!renderer->style() ||
-          renderer->style()->visibility() == EVisibility::Visible);
+          renderer->style()->visibility() == EVisibility::kVisible);
 }
 
 static void addToOcclusions(const LayoutBox* renderer,
                             Vector<IntRect>& occlusions) {
-  occlusions.append(IntRect(roundedIntPoint(renderer->localToAbsolute()),
-                            flooredIntSize(renderer->size())));
+  occlusions.push_back(IntRect(roundedIntPoint(renderer->localToAbsolute()),
+                               flooredIntSize(renderer->size())));
 }
 
 static void addTreeToOcclusions(const LayoutObject* renderer,

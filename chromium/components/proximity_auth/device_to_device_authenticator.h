@@ -8,17 +8,19 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "components/cryptauth/connection.h"
+#include "components/cryptauth/connection_observer.h"
 #include "components/proximity_auth/authenticator.h"
-#include "components/proximity_auth/connection_observer.h"
 
 namespace base {
 class Timer;
 };
 
-namespace proximity_auth {
-
-class Connection;
+namespace cryptauth {
 class SecureMessageDelegate;
+}
+
+namespace proximity_auth {
 
 // Authenticator implementation using the "device to device" protocol, which is
 // in turn built on top of the SecureMessage library.
@@ -39,7 +41,7 @@ class SecureMessageDelegate;
 // This protocol requires exclusive use of the connection. No other message
 // should be sent or received while authentication is in progress.
 class DeviceToDeviceAuthenticator : public Authenticator,
-                                    public ConnectionObserver {
+                                    public cryptauth::ConnectionObserver {
  public:
   // Creates the instance:
   // |connection|: The connection to the remote device, which must be in a
@@ -47,10 +49,10 @@ class DeviceToDeviceAuthenticator : public Authenticator,
   // |account_id|: The canonical account id of the user who is the owner of both
   //     the local and remote devices.
   // |secure_message_delegate|: Handles the SecureMessage crypto operations.
-  DeviceToDeviceAuthenticator(
-      Connection* connection,
-      const std::string& account_id,
-      std::unique_ptr<SecureMessageDelegate> secure_message_delegate);
+  DeviceToDeviceAuthenticator(cryptauth::Connection* connection,
+                              const std::string& account_id,
+                              std::unique_ptr<cryptauth::SecureMessageDelegate>
+                                  secure_message_delegate);
 
   ~DeviceToDeviceAuthenticator() override;
 
@@ -105,26 +107,27 @@ class DeviceToDeviceAuthenticator : public Authenticator,
   void Succeed();
 
   // ConnectionObserver:
-  void OnConnectionStatusChanged(Connection* connection,
-                                 Connection::Status old_status,
-                                 Connection::Status new_status) override;
-  void OnMessageReceived(const Connection& connection,
-                         const WireMessage& message) override;
-  void OnSendCompleted(const Connection& connection,
-                       const WireMessage& message,
+  void OnConnectionStatusChanged(
+      cryptauth::Connection* connection,
+      cryptauth::Connection::Status old_status,
+      cryptauth::Connection::Status new_status) override;
+  void OnMessageReceived(const cryptauth::Connection& connection,
+                         const cryptauth::WireMessage& message) override;
+  void OnSendCompleted(const cryptauth::Connection& connection,
+                       const cryptauth::WireMessage& message,
                        bool success) override;
 
   // The connection to the remote device. It is expected to be in the CONNECTED
   // state at all times during authentication.
   // Not owned, and must outlive this instance.
-  Connection* const connection_;
+  cryptauth::Connection* const connection_;
 
   // The account id of the user who owns the local and remote devices. This is
   // normally an email address, and should be canonicalized.
   const std::string account_id_;
 
   // Handles SecureMessage crypto operations.
-  std::unique_ptr<SecureMessageDelegate> secure_message_delegate_;
+  std::unique_ptr<cryptauth::SecureMessageDelegate> secure_message_delegate_;
 
   // The current state in the authentication flow.
   State state_;

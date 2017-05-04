@@ -25,6 +25,7 @@ const struct {
     {InputEvent::InputType::InsertHorizontalRule, "insertHorizontalRule"},
     {InputEvent::InputType::InsertFromPaste, "insertFromPaste"},
     {InputEvent::InputType::InsertFromDrop, "insertFromDrop"},
+    {InputEvent::InputType::InsertReplacementText, "insertReplacementText"},
     {InputEvent::InputType::DeleteComposedCharacterForward,
      "deleteComposedCharacterForward"},
     {InputEvent::InputType::DeleteComposedCharacterBackward,
@@ -168,7 +169,7 @@ String InputEvent::inputType() const {
 StaticRangeVector InputEvent::getTargetRanges() const {
   StaticRangeVector staticRanges;
   for (const auto& range : m_ranges)
-    staticRanges.append(StaticRange::create(
+    staticRanges.push_back(StaticRange::create(
         range->ownerDocument(), range->startContainer(), range->startOffset(),
         range->endContainer(), range->endOffset()));
   return staticRanges;

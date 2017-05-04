@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/common/ash_switches.h"
 #include "ash/common/metrics/user_metrics_action.h"
 #include "ash/common/wm/default_window_resizer.h"
 #include "ash/common/wm/dock/docked_window_layout_manager.h"
@@ -21,10 +22,10 @@
 #include "ash/common/wm/workspace/phantom_window_controller.h"
 #include "ash/common/wm/workspace/two_step_edge_cycler.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/base/hit_test.h"
@@ -439,12 +440,8 @@ void WorkspaceWindowResizer::CompleteDrag() {
                                        GetTarget()->GetBounds())) {
         // Set the window to WINDOW_STATE_TYPE_NORMAL but keep the
         // window at the bounds that the user has moved/resized the
-        // window to. ClearRestoreBounds() is used instead of
-        // SaveCurrentBoundsForRestore() because most of the restore
-        // logic is skipped because we are still in the middle of a
-        // drag.  TODO(pkotwicz): Fix this and use
-        // SaveCurrentBoundsForRestore().
-        window_state()->ClearRestoreBounds();
+        // window to.
+        window_state()->SaveCurrentBoundsForRestore();
         window_state()->Restore();
       }
     } else if (!dock_layout_->is_dragged_window_docked()) {
@@ -889,6 +886,7 @@ void WorkspaceWindowResizer::UpdateSnapPhantomWindow(const gfx::Point& location,
                                           ? DOCKED_ALIGNMENT_LEFT
                                           : DOCKED_ALIGNMENT_RIGHT;
   const bool can_dock =
+      ash::switches::DockedWindowsEnabled() &&
       dock_layout_->CanDockWindow(GetTarget(), desired_alignment) &&
       dock_layout_->GetAlignmentOfWindow(GetTarget()) != DOCKED_ALIGNMENT_NONE;
   if (!can_dock) {

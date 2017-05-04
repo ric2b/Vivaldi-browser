@@ -15,10 +15,6 @@
 #include "components/error_page/common/net_error_info.h"
 #include "url/gurl.h"
 
-namespace base {
-class ListValue;
-}
-
 namespace blink {
 struct WebURLError;
 }
@@ -113,6 +109,9 @@ class NetErrorHelperCore {
 
     // Schedule to download the page at a later time.
     virtual void DownloadPageLater() = 0;
+
+    // Inform that download button is being shown in the error page.
+    virtual void SetIsShowingDownloadButton(bool show) = 0;
 
    protected:
     virtual ~Delegate() {}

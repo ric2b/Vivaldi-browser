@@ -34,10 +34,14 @@ OAuth2TokenService* ProfileIdentityProvider::GetTokenService() {
 }
 
 bool ProfileIdentityProvider::RequestLogin() {
+#if defined(VIVALDI_BUILD)
+  return false;
+#else
   if (request_login_callback_.is_null())
     return false;
   request_login_callback_.Run();
   return true;
+#endif
 }
 
 void ProfileIdentityProvider::GoogleSigninSucceeded(

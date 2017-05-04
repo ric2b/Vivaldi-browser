@@ -9,6 +9,7 @@
 #include "content/common/content_export.h"
 #include "content/common/input/input_param_traits.h"
 #include "content/common/input/synthetic_gesture_params.h"
+#include "content/common/input/synthetic_web_input_event_builders.h"
 #include "ui/gfx/geometry/point_f.h"
 
 namespace ipc_fuzzer {
@@ -18,41 +19,32 @@ struct FuzzTraits;
 
 namespace content {
 
-struct CONTENT_EXPORT SyntheticPointerActionParams
-    : public SyntheticGestureParams {
+struct CONTENT_EXPORT SyntheticPointerActionParams {
  public:
-  // Actions are queued up until we receive a PROCESS action, at which point
-  // we'll dispatch all queued events. A FINISH action will be received when
-  // we reach the end of the action sequence.
+  // All the pointer actions that will be dispatched together will be grouped
+  // in an array.
   enum class PointerActionType {
     NOT_INITIALIZED,
     PRESS,
     MOVE,
     RELEASE,
-    PROCESS,
-    FINISH,
-    POINTER_ACTION_TYPE_MAX = FINISH
+    IDLE,
+    POINTER_ACTION_TYPE_MAX = IDLE
   };
 
+  enum class Button { LEFT, MIDDLE, RIGHT, BUTTON_MAX = RIGHT };
+
   SyntheticPointerActionParams();
-  explicit SyntheticPointerActionParams(PointerActionType type);
-  SyntheticPointerActionParams(const SyntheticPointerActionParams& other);
-  ~SyntheticPointerActionParams() override;
-
-  GestureType GetGestureType() const override;
-
-  static const SyntheticPointerActionParams* Cast(
-      const SyntheticGestureParams* gesture_params);
+  SyntheticPointerActionParams(PointerActionType action_type);
+  ~SyntheticPointerActionParams();
 
   void set_pointer_action_type(PointerActionType pointer_action_type) {
     pointer_action_type_ = pointer_action_type;
   }
 
   void set_index(int index) {
-    DCHECK(pointer_action_type_ != PointerActionType::PROCESS &&
-           pointer_action_type_ != PointerActionType::FINISH);
-    // For all mouse pointer actions, the index should always be 0.
-    DCHECK(gesture_source_type != MOUSE_INPUT || index == 0);
+    DCHECK_GE(index, 0);
+    DCHECK_LT(index, blink::WebTouchEvent::kTouchesLengthCap);
     index_ = index;
   }
 
@@ -62,12 +54,17 @@ struct CONTENT_EXPORT SyntheticPointerActionParams
     position_ = position;
   }
 
+  void set_button(Button button) {
+    DCHECK(pointer_action_type_ == PointerActionType::PRESS ||
+           pointer_action_type_ == PointerActionType::RELEASE);
+    button_ = button;
+  }
+
   PointerActionType pointer_action_type() const { return pointer_action_type_; }
 
   int index() const {
-    DCHECK(pointer_action_type_ != PointerActionType::PROCESS &&
-           pointer_action_type_ != PointerActionType::FINISH);
-    DCHECK(gesture_source_type != MOUSE_INPUT || index_ == 0);
+    DCHECK_GE(index_, 0);
+    DCHECK_LT(index_, blink::WebTouchEvent::kTouchesLengthCap);
     return index_;
   }
 
@@ -77,15 +74,28 @@ struct CONTENT_EXPORT SyntheticPointerActionParams
     return position_;
   }
 
+  Button button() const {
+    DCHECK(pointer_action_type_ == PointerActionType::PRESS ||
+           pointer_action_type_ == PointerActionType::RELEASE);
+    return button_;
+  }
+
+  static unsigned GetWebMouseEventModifier(
+      SyntheticPointerActionParams::Button button);
+  static blink::WebMouseEvent::Button GetWebMouseEventButton(
+      SyntheticPointerActionParams::Button button);
+
  private:
   friend struct IPC::ParamTraits<content::SyntheticPointerActionParams>;
   friend struct ipc_fuzzer::FuzzTraits<content::SyntheticPointerActionParams>;
 
   PointerActionType pointer_action_type_;
-  // Pass a position value when sending a press or move action.
+  // The position of the pointer, where it presses or moves to.
   gfx::PointF position_;
-  // Pass an index value except if the pointer_action_type_ is PROCESS.
+  // The index of the pointer in the pointer action sequence passed from the
+  // user API.
   int index_;
+  Button button_;
 };
 
 }  // namespace content

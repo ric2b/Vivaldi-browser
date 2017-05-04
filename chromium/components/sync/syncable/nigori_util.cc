@@ -225,6 +225,13 @@ bool UpdateEntryWithEncryption(BaseTransaction* const trans,
       if (!entry->GetIsDir())
         bookmark_specifics->set_url(kEncryptedString);
       bookmark_specifics->set_title(kEncryptedString);
+    } else if (type == NOTES) {
+      sync_pb::NotesSpecifics* notes_specifics =
+          generated_specifics.mutable_notes();
+      if (!entry->GetIsDir())
+        notes_specifics->set_url(kEncryptedString);
+      notes_specifics->set_subject(kEncryptedString);
+      notes_specifics->set_content(kEncryptedString);
     }
   }
 
@@ -246,7 +253,7 @@ void UpdateNigoriFromEncryptedTypes(ModelTypeSet encrypted_types,
                                     bool encrypt_everything,
                                     sync_pb::NigoriSpecifics* nigori) {
   nigori->set_encrypt_everything(encrypt_everything);
-  static_assert(39 == MODEL_TYPE_COUNT, "update encrypted types");
+  static_assert(39+1 == MODEL_TYPE_COUNT, "update encrypted types");
   nigori->set_encrypt_bookmarks(encrypted_types.Has(BOOKMARKS));
   nigori->set_encrypt_preferences(encrypted_types.Has(PREFERENCES));
   nigori->set_encrypt_autofill_profile(encrypted_types.Has(AUTOFILL_PROFILE));
@@ -271,6 +278,7 @@ void UpdateNigoriFromEncryptedTypes(ModelTypeSet encrypted_types,
   nigori->set_encrypt_arc_package(encrypted_types.Has(ARC_PACKAGE));
   nigori->set_encrypt_printers(encrypted_types.Has(PRINTERS));
   nigori->set_encrypt_reading_list(encrypted_types.Has(READING_LIST));
+  nigori->set_encrypt_notes(encrypted_types.Has(NOTES));
 }
 
 ModelTypeSet GetEncryptedTypesFromNigori(
@@ -279,7 +287,7 @@ ModelTypeSet GetEncryptedTypesFromNigori(
     return ModelTypeSet::All();
 
   ModelTypeSet encrypted_types;
-  static_assert(39 == MODEL_TYPE_COUNT, "update encrypted types");
+  static_assert(39+1 == MODEL_TYPE_COUNT, "update encrypted types");
   if (nigori.encrypt_bookmarks())
     encrypted_types.Put(BOOKMARKS);
   if (nigori.encrypt_preferences())
@@ -324,6 +332,8 @@ ModelTypeSet GetEncryptedTypesFromNigori(
     encrypted_types.Put(PRINTERS);
   if (nigori.encrypt_reading_list())
     encrypted_types.Put(READING_LIST);
+  if (nigori.encrypt_notes())
+    encrypted_types.Put(NOTES);
   return encrypted_types;
 }
 

@@ -10,8 +10,6 @@
 
 #include "ui/native_theme/native_theme.h"
 
-class SkBitmap;
-
 namespace aura {
 class Window;
 }
@@ -26,6 +24,22 @@ class Accelerator;
 }
 
 namespace libgtkui {
+
+extern const SkColor kInvalidColorIdColor;
+extern const SkColor kURLTextColor;
+
+// Generates the normal URL color, a green color used in unhighlighted URL
+// text. It is a mix of |kURLTextColor| and the current text color.  Unlike the
+// selected text color, it is more important to match the qualities of the
+// foreground typeface color instead of taking the background into account.
+SkColor NormalURLColor(SkColor foreground);
+
+// Generates the selected URL color, a green color used on URL text in the
+// currently highlighted entry in the autocomplete popup. It's a mix of
+// |kURLTextColor|, the current text color, and the background color (the
+// select highlight). It is more important to contrast with the background
+// saturation than to look exactly like the foreground color.
+SkColor SelectedURLColor(SkColor foreground, SkColor background);
 
 void GtkInitFromCommandLine(const base::CommandLine& command_line);
 
@@ -52,6 +66,85 @@ aura::Window* GetAuraTransientParent(GtkWidget* dialog);
 
 // Clears the transient parent for |dialog|.
 void ClearAuraTransientParent(GtkWidget* dialog);
+
+#if GTK_MAJOR_VERSION > 2
+// These constants are defined in gtk/gtkenums.h in Gtk3.12 or later.
+// They are added here as a convenience to avoid version checks, and
+// can be removed once the sysroot is switched from Wheezy to Jessie.
+#define GTK_STATE_FLAG_LINK static_cast<GtkStateFlags>(1 << 9)
+#define GTK_STATE_FLAG_VISITED static_cast<GtkStateFlags>(1 << 10)
+#define GTK_STATE_FLAG_CHECKED static_cast<GtkStateFlags>(1 << 11)
+
+// Returns true iff the runtime version of Gtk used meets
+// |major|.|minor|.|micro|.
+bool GtkVersionCheck(int major, int minor = 0, int micro = 0);
+
+template <typename T>
+class ScopedGObject {
+ public:
+  explicit ScopedGObject(T* obj) : obj_(obj) {
+    // Increase the reference count of |obj_|, removing the floating
+    // reference if it has one.
+    g_object_ref_sink(obj_);
+  }
+
+  ScopedGObject(const ScopedGObject<T>& other) : obj_(other.obj_) {
+    g_object_ref(obj_);
+  }
+
+  ScopedGObject(ScopedGObject<T>&& other) : obj_(other.obj_) {
+    other.obj_ = nullptr;
+  }
+
+  ~ScopedGObject() {
+    if (obj_)
+      g_object_unref(obj_);
+  }
+
+  ScopedGObject<T>& operator=(const ScopedGObject<T>& other) {
+    g_object_ref(other.obj_);
+    g_object_unref(obj_);
+    obj_ = other.obj_;
+    return *this;
+  }
+
+  ScopedGObject<T>& operator=(ScopedGObject<T>&& other) {
+    g_object_unref(obj_);
+    obj_ = other.obj_;
+    other.obj_ = nullptr;
+    return *this;
+  }
+
+  operator T*() { return obj_; }
+
+ private:
+  T* obj_;
+};
+
+typedef ScopedGObject<GtkStyleContext> ScopedStyleContext;
+
+// Parses |css_selector| into a GtkStyleContext.  The format is a
+// sequence of whitespace-separated objects.  Each object may have at
+// most one object name at the beginning of the string, and any number
+// of '.'-prefixed classes and ':'-prefixed pseudoclasses.  An example
+// is "GtkButton.button.suggested-action:hover:active".  The caller
+// must g_object_unref() the returned context.
+ScopedStyleContext GetStyleContextFromCss(const char* css_selector);
+
+// Get the 'color' property from the style context created by
+// GetStyleContextFromCss(|css_selector|).
+SkColor GetFgColor(const char* css_selector);
+
+// Renders a background from the style context created by
+// GetStyleContextFromCss(|css_selector|) into a single pixel and
+// returns the color.
+SkColor GetBgColor(const char* css_selector);
+
+// If there is a border, renders the border from the style context
+// created by GetStyleContextFromCss(|css_selector|) into a single
+// pixel and returns the color.  Otherwise returns kInvalidColor.
+SkColor GetBorderColor(const char* css_selector);
+#endif
 
 }  // namespace libgtkui
 

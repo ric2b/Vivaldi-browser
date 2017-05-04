@@ -103,7 +103,7 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsMixedScriptIgnoreCertErrorsTest,
   replace_host.SetHostStr("example.test");
   url = url.ReplaceComponents(replace_host);
 
-  rappor::TestRapporService rappor_service;
+  rappor::TestRapporServiceImpl rappor_service;
   EXPECT_EQ(0, rappor_service.GetReportsCount());
   base::HistogramTester histograms;
   histograms.ExpectTotalCount("ContentSettings.MixedScript", 0);
@@ -121,7 +121,7 @@ IN_PROC_BROWSER_TEST_F(ContentSettingsMixedScriptIgnoreCertErrorsTest,
           browser()->content_setting_bubble_model_delegate(),
           browser()->tab_strip_model()->GetActiveWebContents(),
           browser()->profile(), CONTENT_SETTINGS_TYPE_MIXEDSCRIPT));
-  model->SetRapporServiceForTesting(&rappor_service);
+  model->SetRapporServiceImplForTesting(&rappor_service);
   model->OnCustomLinkClicked();
 
   // Wait for reload
@@ -200,7 +200,10 @@ class ContentSettingBubbleModelMediaStreamTest : public InProcessBrowserTest {
 
 // Tests that clicking on the management link in the media bubble opens
 // the correct section of the settings UI.
-IN_PROC_BROWSER_TEST_F(ContentSettingBubbleModelMediaStreamTest, ManageLink) {
+// This test sometimes leaks memory, detected by linux_chromium_asan_rel_ng. See
+// http://crbug/668693 for more info.
+IN_PROC_BROWSER_TEST_F(ContentSettingBubbleModelMediaStreamTest,
+                       DISABLED_ManageLink) {
   // For each of the three options, we click the management link and check if
   // the active tab loads the correct internal url.
 
@@ -224,4 +227,58 @@ IN_PROC_BROWSER_TEST_F(ContentSettingBubbleModelMediaStreamTest, ManageLink) {
   ManageMediaStreamSettings(TabSpecificContentSettings::CAMERA_ACCESSED);
   EXPECT_EQ(GURL("chrome://settings/contentExceptions#media-stream-camera"),
             GetActiveTab()->GetLastCommittedURL());
+}
+
+class ContentSettingBubbleModelPopupTest : public InProcessBrowserTest {
+ protected:
+  void SetUpInProcessBrowserTestFixture() override {
+    https_server_.reset(
+        new net::EmbeddedTestServer(net::EmbeddedTestServer::TYPE_HTTPS));
+    https_server_->ServeFilesFromSourceDirectory(base::FilePath(kDocRoot));
+    ASSERT_TRUE(https_server_->Start());
+  }
+  std::unique_ptr<net::EmbeddedTestServer> https_server_;
+};
+
+// Tests that each popup action is counted in the right bucket.
+IN_PROC_BROWSER_TEST_F(ContentSettingBubbleModelPopupTest,
+                       PopupsActionsCount){
+  GURL url(https_server_->GetURL("/popup_blocker/popup-many.html"));
+  base::HistogramTester histograms;
+  histograms.ExpectTotalCount("ContentSettings.Popups", 0);
+
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  histograms.ExpectBucketCount(
+        "ContentSettings.Popups",
+        content_settings::POPUPS_ACTION_DISPLAYED_BLOCKED_ICON_IN_OMNIBOX, 1);
+
+  // Creates the ContentSettingPopupBubbleModel in order to emulate clicks.
+  std::unique_ptr<ContentSettingBubbleModel> model(
+      ContentSettingBubbleModel::CreateContentSettingBubbleModel(
+          browser()->content_setting_bubble_model_delegate(),
+          browser()->tab_strip_model()->GetActiveWebContents(),
+          browser()->profile(), CONTENT_SETTINGS_TYPE_POPUPS));
+
+  histograms.ExpectBucketCount(
+        "ContentSettings.Popups",
+        content_settings::POPUPS_ACTION_DISPLAYED_BUBBLE, 1);
+
+  model->OnListItemClicked(0);
+  histograms.ExpectBucketCount(
+        "ContentSettings.Popups",
+        content_settings::POPUPS_ACTION_CLICKED_LIST_ITEM_CLICKED, 1);
+
+  model->OnManageLinkClicked();
+  histograms.ExpectBucketCount(
+        "ContentSettings.Popups",
+        content_settings::POPUPS_ACTION_CLICKED_MANAGE_POPUPS_BLOCKING, 1);
+
+  model->OnRadioClicked(model->kAllowButtonIndex);
+  delete model.release();
+  histograms.ExpectBucketCount(
+        "ContentSettings.Popups",
+        content_settings::POPUPS_ACTION_SELECTED_ALWAYS_ALLOW_POPUPS_FROM, 1);
+
+  histograms.ExpectTotalCount("ContentSettings.Popups", 5);
 }

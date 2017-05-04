@@ -67,7 +67,9 @@ bear-1280x720-a_frag-cenc_missing-saiz-saio.mp4 - An invalid file similar to bea
 bear-320x240-v_frag-vp9.mp4 - Bear video with VP9 codec in MP4 container. Generated with shaka-packager (https://github.com/google/shaka-packager):
                               packager in=bear-vp9.webm,stream=video,out=bear-320x240-v_frag-vp9.mp4
 bear-320x240-v_frag-vp9-cenc.mp4 - Same as above, with video encrypted using key ID [1] and key [2]. Generated with shaka-packager (https://github.com/google/shaka-packager):
-                                   packager in=bear-vp9.webm,stream=video,out=bear-320x240-v_frag-vp9-cenc.mp4 --enable_fixed_key_encryption --key_id 30313233343536373839303132333435 --key ebdd62f16814d27b68ef122afce4ae3c
+                                   packager in=bear-vp9.webm,stream=video,out=bear-320x240-v_frag-vp9-cenc.mp4 --enable_fixed_key_encryption --key_id 30313233343536373839303132333435
+                                            --key ebdd62f16814d27b68ef122afce4ae3c --clear_lead 0
+                                            --pssh 0000003470737368010000001077EFECC0B24D02ACE33C1E52E2FB4B000000013031323334353637383930313233343500000000000000467073736800000000EDEF8BA979D64ACEA3C827DCD51D21ED000000261210303132333435363738393031323334351A00221030313233343536373839303132333435
 bear-320x240-16x9-aspect-av_enc-av.webm - bear-320x240-16x9-aspect.webm with audio & video encrypted using key ID [1] and key [2]
 bear-320x240-av_enc-av.webm - bear-320x240.webm with audio & video encrypted using key ID [1] and key [2].
 bear-320x240-av_enc-av_clear-1s.webm - Same as bear-320x240-av_enc-av.webm but with no frames in the first second encrypted.
@@ -90,6 +92,12 @@ bear-640x360-v_frag-cenc-key_rotation.mp4 - A fragmented MP4 version of the vide
 bear-a_enc-a.webm - bear-320x240-audio-only.webm encrypted using key ID [1] and key [2].
 frame_size_change-av_enc-v.webm - third_party/WebKit/LayoutTests/media/resources/frame_size_change.webm encrypted using key ID [1] and key [2].
 
+bear-1280x720-hls.ts: produced using Apple's mediafilesegmenter tool with bear-1280x720.ts as input, with no encryption.
+  mediafilesegmenter -t 10 -start-segments-with-iframe -f 'output_clear/' bear-1280x720.ts
+
+bear-1280x720-hls-sample-aes.ts: produced using Apple's mediafilesegmenter tool also with bear-1280x720.ts as input, but with SAMPLE_AES encryption.
+  (Additional TS packets were constructed manually and prepended to convey the encryption metadata, notably key id and IV).
+  mediafilesegmenter -S -P -k 'key_iv.bin' -t 10 -start-segments-with-iframe -f 'output/' bear-1280x720.ts
 
 [1] 30313233343536373839303132333435
 [2] ebdd62f16814d27b68ef122afce4ae3c

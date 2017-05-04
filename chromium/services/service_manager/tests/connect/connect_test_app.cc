@@ -76,7 +76,7 @@ class ConnectTestApp : public Service,
     state->initialize_local_name = context()->identity().name();
     state->initialize_userid = context()->identity().user_id();
 
-    context()->connector()->ConnectToInterface(remote_info.identity, &caller_);
+    context()->connector()->BindInterface(remote_info.identity, &caller_);
     caller_->ConnectionAccepted(std::move(state));
 
     return true;
@@ -172,9 +172,8 @@ class ConnectTestApp : public Service,
   void ConnectToClassAppAsDifferentUser(
       const service_manager::Identity& target,
       const ConnectToClassAppAsDifferentUserCallback& callback) override {
-    Connector::ConnectParams params(target);
     std::unique_ptr<Connection> connection =
-        context()->connector()->Connect(&params);
+        context()->connector()->Connect(target);
     {
       base::RunLoop loop;
       connection->AddConnectionCompletedClosure(base::Bind(&QuitLoop, &loop));

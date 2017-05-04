@@ -19,6 +19,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
+#include "chromeos/dbus/shill_manager_client.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -52,9 +53,9 @@ class MockNetworkStateHelper : public NetworkStateHelper {
 
 class NetworkScreenTest : public WizardInProcessBrowserTest {
  public:
-  NetworkScreenTest(): WizardInProcessBrowserTest("network"),
-                       fake_session_manager_client_(NULL) {
-  }
+  NetworkScreenTest()
+      : WizardInProcessBrowserTest(OobeScreen::SCREEN_OOBE_NETWORK),
+        fake_session_manager_client_(nullptr) {}
 
  protected:
   void SetUpInProcessBrowserTestFixture() override {
@@ -68,10 +69,10 @@ class NetworkScreenTest : public WizardInProcessBrowserTest {
   void SetUpOnMainThread() override {
     WizardInProcessBrowserTest::SetUpOnMainThread();
     mock_base_screen_delegate_.reset(new MockBaseScreenDelegate());
-    ASSERT_TRUE(WizardController::default_controller() != NULL);
+    ASSERT_TRUE(WizardController::default_controller() != nullptr);
     network_screen_ =
         NetworkScreen::Get(WizardController::default_controller());
-    ASSERT_TRUE(network_screen_ != NULL);
+    ASSERT_TRUE(network_screen_ != nullptr);
     ASSERT_EQ(WizardController::default_controller()->current_screen(),
               network_screen_);
     network_screen_->base_screen_delegate_ = mock_base_screen_delegate_.get();
@@ -158,6 +159,17 @@ class HandsOffNetworkScreenTest : public NetworkScreenTest {
  public:
   HandsOffNetworkScreenTest() {}
 
+ protected:
+  void SetUpOnMainThread() override {
+    NetworkScreenTest::SetUpOnMainThread();
+
+    // Set up fake networks.
+    DBusThreadManager::Get()
+        ->GetShillManagerClient()
+        ->GetTestInterface()
+        ->SetupDefaultEnvironment();
+  }
+
  private:
   // Overridden from InProcessBrowserTest:
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -168,7 +180,13 @@ class HandsOffNetworkScreenTest : public NetworkScreenTest {
   DISALLOW_COPY_AND_ASSIGN(HandsOffNetworkScreenTest);
 };
 
-IN_PROC_BROWSER_TEST_F(HandsOffNetworkScreenTest, RequiresNoInput) {
+#if defined(OS_CHROMEOS)
+// Flaky on ChromeOS. See https://crbug.com/674782.
+#define MAYBE_RequiresNoInput DISABLED_RequiresNoInput
+#else
+#define MAYBE_RequiresNoInput RequiresNoInput
+#endif
+IN_PROC_BROWSER_TEST_F(HandsOffNetworkScreenTest, MAYBE_RequiresNoInput) {
   WizardController* wizard_controller = WizardController::default_controller();
 
   // Allow the WizardController to advance throught the enrollment flow.
@@ -176,6 +194,7 @@ IN_PROC_BROWSER_TEST_F(HandsOffNetworkScreenTest, RequiresNoInput) {
 
   // Simulate a network connection.
   EXPECT_CALL(*mock_network_state_helper_, IsConnected())
+      .Times(AnyNumber())
       .WillRepeatedly((Return(true)));
   network_screen_->UpdateStatus();
 

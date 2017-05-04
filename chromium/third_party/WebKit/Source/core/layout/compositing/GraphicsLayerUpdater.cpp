@@ -28,10 +28,11 @@
 
 #include "core/html/HTMLMediaElement.h"
 #include "core/inspector/InspectorTraceEvents.h"
+#include "core/layout/LayoutBlock.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/paint/PaintLayer.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
 
@@ -53,6 +54,13 @@ class GraphicsLayerUpdater::UpdateContext {
   }
 
   const PaintLayer* compositingContainer(const PaintLayer& layer) const {
+    // TODO(chrishtr) this is not very performant for floats, but they should
+    // be uncommon enough, and SPv2 will remove this code.
+    if (layer.layoutObject()->isFloating() && layer.layoutObject()->parent() &&
+        !layer.stackingNode()->isStacked() &&
+        !layer.layoutObject()->parent()->isLayoutBlockFlow()) {
+      return layer.enclosingLayerWithCompositedLayerMapping(ExcludeSelf);
+    }
     return layer.stackingNode()->isStacked() ? m_compositingStackingContext
                                              : m_compositingAncestor;
   }
@@ -113,7 +121,7 @@ void GraphicsLayerUpdater::updateRecursive(
                     layersNeedingPaintInvalidation);
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 
 void GraphicsLayerUpdater::assertNeedsToUpdateGraphicsLayerBitsCleared(
     PaintLayer& layer) {

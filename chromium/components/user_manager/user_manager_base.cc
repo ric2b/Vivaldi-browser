@@ -182,14 +182,18 @@ void UserManagerBase::UserLoggedIn(const AccountId& account_id,
   active_user_->set_is_active(true);
   active_user_->set_username_hash(username_hash);
 
-  // Place user who just signed in to the top of the logged in users.
-  logged_in_users_.insert(logged_in_users_.begin(), active_user_);
+  logged_in_users_.push_back(active_user_);
   SetLRUUser(active_user_);
 
   if (!primary_user_) {
     primary_user_ = active_user_;
     if (primary_user_->HasGaiaAccount())
       SendGaiaUserLoginMetrics(account_id);
+  } else if (primary_user_ != active_user_) {
+    // This is only needed for tests where a new user session is created
+    // for non-existent user.
+    SetIsCurrentUserNew(true);
+    NotifyUserAddedToSession(active_user_, true /* user switch pending */);
   }
 
   UMA_HISTOGRAM_ENUMERATION(
@@ -490,7 +494,8 @@ void UserManagerBase::ParseUserList(const base::ListValue& users_list,
       continue;
     }
 
-    const AccountId account_id = known_user::GetAccountId(email, std::string());
+    const AccountId account_id = known_user::GetAccountId(
+        email, std::string() /* id */, AccountType::UNKNOWN);
 
     if (existing_users.find(account_id) != existing_users.end() ||
         !users_set->insert(account_id).second) {
@@ -669,9 +674,31 @@ void UserManagerBase::NotifyLocalStateChanged() {
     observer.LocalStateChanged(this);
 }
 
+void UserManagerBase::NotifyUserImageChanged(const User& user) {
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  for (auto& observer : observer_list_)
+    observer.OnUserImageChanged(user);
+}
+
+void UserManagerBase::NotifyUserProfileImageUpdateFailed(const User& user) {
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  for (auto& observer : observer_list_)
+    observer.OnUserProfileImageUpdateFailed(user);
+}
+
+void UserManagerBase::NotifyUserProfileImageUpdated(
+    const User& user,
+    const gfx::ImageSkia& profile_image) {
+  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  for (auto& observer : observer_list_)
+    observer.OnUserProfileImageUpdated(user, profile_image);
+}
+
 bool UserManagerBase::CanUserBeRemoved(const User* user) const {
   // Only regular and supervised users are allowed to be manually removed.
-  if (!user || !(user->HasGaiaAccount() || user->IsSupervised()))
+  if (!user ||
+      !(user->HasGaiaAccount() || user->IsSupervised() ||
+        user->IsActiveDirectoryUser()))
     return false;
 
   // Sanity check: we must not remove single user unless it's an enterprise
@@ -952,7 +979,8 @@ User* UserManagerBase::RemoveRegularOrSupervisedUserFromList(
       user = *it;
       it = users_.erase(it);
     } else {
-      if ((*it)->HasGaiaAccount() || (*it)->IsSupervised()) {
+      if ((*it)->HasGaiaAccount() || (*it)->IsSupervised() ||
+          (*it)->IsActiveDirectoryUser()) {
         const std::string user_email = (*it)->GetAccountId().GetUserEmail();
         prefs_users_update->AppendString(user_email);
       }

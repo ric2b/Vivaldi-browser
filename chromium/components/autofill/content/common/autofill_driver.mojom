@@ -5,7 +5,9 @@
 module autofill.mojom;
 
 import "components/autofill/content/common/autofill_types.mojom";
-import "mojo/common/common_custom_types.mojom";
+import "mojo/common/string16.mojom";
+import "mojo/common/text_direction.mojom";
+import "mojo/common/time.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 
 // There is one instance of this interface per render frame host in the browser
@@ -39,9 +41,6 @@ interface AutofillDriver {
   // Instructs the browser to hide the Autofill popup if it is open.
   HidePopup();
 
-  // Sent immediately after the renderer receives a ping IPC.
-  PingAck();
-
   // Sent when the current form is no longer focused.
   FocusNoLongerOnForm();
 
@@ -62,11 +61,6 @@ interface AutofillDriver {
 // There is one instance of this interface per render frame host in the browser
 // process.
 interface PasswordManagerDriver {
-  // A ping to the browser that PasswordAutofillAgent was constructed. As a
-  // consequence, the browser sends SetLoggingState with the current
-  // state of the logging activity.
-  PasswordAutofillAgentConstructed();
-
   // Notification that password forms have been seen that are candidates for
   // filling/submitting by the password manager.
   PasswordFormsParsed(array<PasswordForm> forms);
@@ -93,10 +87,17 @@ interface PasswordManagerDriver {
   // Instructs the browser to show a popup with suggestions filled from data
   // associated with |key|. The popup will use |text_direction| for displaying
   // text.
-  ShowPasswordSuggestions(int32 key, TextDirection text_direction,
+  ShowPasswordSuggestions(int32 key,
+                          mojo.common.mojom.TextDirection text_direction,
                           mojo.common.mojom.String16 typed_username,
                           int32 options, gfx.mojom.RectF bounds);
 
+  // Instructs the browser to show a popup with a warning that the form
+  // is not secure. The popup will use |text_direction| for displaying
+  // text. This popup is shown when a password form on a non-secure page is
+  // autofilled on page load.
+  ShowNotSecureWarning(mojo.common.mojom.TextDirection text_direction,
+                       gfx.mojom.RectF bounds);
 
   // Instructs the browser to presave the form with generated password.
   PresaveGeneratedPassword(PasswordForm password_form);

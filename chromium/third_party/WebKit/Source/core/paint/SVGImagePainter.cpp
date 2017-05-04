@@ -20,7 +20,7 @@ namespace blink {
 
 void SVGImagePainter::paint(const PaintInfo& paintInfo) {
   if (paintInfo.phase != PaintPhaseForeground ||
-      m_layoutSVGImage.style()->visibility() != EVisibility::Visible ||
+      m_layoutSVGImage.style()->visibility() != EVisibility::kVisible ||
       !m_layoutSVGImage.imageResource()->hasImage())
     return;
 
@@ -92,7 +92,8 @@ FloatSize SVGImagePainter::computeImageViewportSize() const {
           ->align() != SVGPreserveAspectRatio::kSvgPreserveaspectratioNone)
     return m_layoutSVGImage.objectBoundingBox().size();
 
-  ImageResource* cachedImage = m_layoutSVGImage.imageResource()->cachedImage();
+  ImageResourceContent* cachedImage =
+      m_layoutSVGImage.imageResource()->cachedImage();
 
   // Images with preserveAspectRatio=none should force non-uniform scaling. This
   // can be achieved by setting the image's container size to its viewport size

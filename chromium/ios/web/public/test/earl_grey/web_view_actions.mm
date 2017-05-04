@@ -6,9 +6,9 @@
 
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/mac/bind_objc_block.h"
+#import "base/mac/bind_objc_block.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/ios/wait_util.h"
+#import "base/test/ios/wait_util.h"
 #include "base/values.h"
 #import "ios/testing/wait_util.h"
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
@@ -21,6 +21,11 @@ namespace {
 
 // Long press duration to trigger context menu.
 const NSTimeInterval kContextMenuLongPressDuration = 0.3;
+
+// Duration to wait for verification of JavaScript action.
+// TODO(crbug.com/670910): Reduce duration if the time required for verification
+// is reduced on devices.
+const NSTimeInterval kWaitForVerificationTimeout = 8.0;
 
 // Callback prefix for injected verifiers.
 const std::string CallbackPrefixForElementId(const std::string& element_id) {
@@ -175,7 +180,7 @@ id<GREYAction> webViewVerifiedActionOnElement(WebState* state,
                                    @"verified before timing out.",
                                    action.name, element_id.c_str()];
     GREYAssert(testing::WaitUntilConditionOrTimeout(
-                   testing::kWaitForJSCompletionTimeout,
+                   kWaitForVerificationTimeout,
                    ^{
                      return verified;
                    }),

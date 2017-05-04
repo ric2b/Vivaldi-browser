@@ -13,7 +13,6 @@
 namespace blink {
 
 class SimRequest;
-class WebURLLoader;
 class WebURLLoaderClient;
 class WebURLResponse;
 
@@ -36,18 +35,18 @@ class SimNetwork final : public WebURLLoaderTestDelegate {
 
   // WebURLLoaderTestDelegate
   void didReceiveResponse(WebURLLoaderClient*,
-                          WebURLLoader*,
                           const WebURLResponse&) override;
   void didReceiveData(WebURLLoaderClient*,
-                      WebURLLoader*,
                       const char* data,
-                      int dataLength,
-                      int encodedDataLength) override;
-  void didFail(WebURLLoaderClient*, WebURLLoader*, const WebURLError&) override;
+                      int dataLength) override;
+  void didFail(WebURLLoaderClient*,
+               const WebURLError&,
+               int64_t totalEncodedDataLength,
+               int64_t totalEncodedBodyLength) override;
   void didFinishLoading(WebURLLoaderClient*,
-                        WebURLLoader*,
                         double finishTime,
-                        int64_t totalEncodedDataLength) override;
+                        int64_t totalEncodedDataLength,
+                        int64_t totalEncodedBodyLength) override;
 
   SimRequest* m_currentRequest;
   HashMap<String, SimRequest*> m_requests;

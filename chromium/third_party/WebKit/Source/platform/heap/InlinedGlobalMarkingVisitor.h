@@ -18,8 +18,9 @@ class InlinedGlobalMarkingVisitor final
   friend class MarkingVisitorImpl<InlinedGlobalMarkingVisitor>;
   using Impl = MarkingVisitorImpl<InlinedGlobalMarkingVisitor>;
 
-  explicit InlinedGlobalMarkingVisitor(ThreadState* state)
-      : VisitorHelper(state) {}
+  InlinedGlobalMarkingVisitor(ThreadState* state,
+                              VisitorMarkingMode markingMode)
+      : VisitorHelper(state, markingMode) {}
 
   // Hack to unify interface to visitor->trace().
   // Without this hack, we need to use visitor.trace() for
@@ -32,7 +33,7 @@ class InlinedGlobalMarkingVisitor final
   using Impl::registerDelayedMarkNoTracing;
   using Impl::registerWeakTable;
   using Impl::registerWeakMembers;
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   using Impl::weakTableRegistered;
 #endif
 
@@ -44,18 +45,6 @@ class InlinedGlobalMarkingVisitor final
   template <typename T, void (T::*method)(Visitor*)>
   void registerWeakMembers(const T* obj) {
     Helper::template registerWeakMembers<T, method>(obj);
-  }
-
- protected:
-  // Methods to be called from MarkingVisitorImpl.
-
-  inline bool shouldMarkObject(const void*) const {
-    // As this is global marking visitor, we need to mark all objects.
-    return true;
-  }
-
-  inline Visitor::MarkingMode getMarkingMode() const {
-    return Visitor::GlobalMarking;
   }
 
  private:

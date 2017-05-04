@@ -7,12 +7,14 @@
 // if an allocation out of the arena ever fails in debug builds; falls back to
 // heap allocation in release builds.
 
-#ifndef NET_QUIC_QUIC_ONE_BLOCK_ARENA_H_
-#define NET_QUIC_QUIC_ONE_BLOCK_ARENA_H_
+#ifndef NET_QUIC_CORE_QUIC_ONE_BLOCK_ARENA_H_
+#define NET_QUIC_CORE_QUIC_ONE_BLOCK_ARENA_H_
+
+#include <cstdint>
 
 #include "net/quic/core/quic_arena_scoped_ptr.h"
-#include "net/quic/core/quic_flags.h"
-#include "net/quic/core/quic_utils.h"
+#include "net/quic/core/quic_types.h"
+#include "net/quic/platform/api/quic_bug_tracker.h"
 
 #define PREDICT_FALSE(x) x
 
@@ -59,9 +61,9 @@ QuicArenaScopedPtr<T> QuicOneBlockArena<ArenaSize>::New(Args&&... args) {
   static_assert(QUIC_ALIGN_OF(T) > 1,
                 "Objects added to the arena must be at least 2B aligned.");
   if (PREDICT_FALSE(offset_ > ArenaSize - AlignedSize<T>())) {
-    LOG(DFATAL) << "Ran out of space in QuicOneBlockArena at " << this
-                << ", max size was " << ArenaSize << ", failing request was "
-                << AlignedSize<T>() << ", end of arena was " << offset_;
+    QUIC_BUG << "Ran out of space in QuicOneBlockArena at " << this
+             << ", max size was " << ArenaSize << ", failing request was "
+             << AlignedSize<T>() << ", end of arena was " << offset_;
     return QuicArenaScopedPtr<T>(new T(std::forward<Args>(args)...));
   }
 
@@ -74,4 +76,4 @@ QuicArenaScopedPtr<T> QuicOneBlockArena<ArenaSize>::New(Args&&... args) {
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_ONE_BLOCK_ARENA_H_
+#endif  // NET_QUIC_CORE_QUIC_ONE_BLOCK_ARENA_H_

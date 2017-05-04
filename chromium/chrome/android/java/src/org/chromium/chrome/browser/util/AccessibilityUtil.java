@@ -13,7 +13,6 @@ import android.support.v7.app.AlertDialog;
 import android.view.accessibility.AccessibilityManager;
 
 import org.chromium.base.PackageUtils;
-import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.R;
 
 import java.util.List;
@@ -23,7 +22,7 @@ import java.util.List;
  */
 public class AccessibilityUtil {
     // Whether we've already shown an alert that they have an old version of TalkBack running.
-    private static boolean sOldTalkBackVersionAlertShown = false;
+    private static boolean sOldTalkBackVersionAlertShown;
 
     // The link to download or update TalkBack from the Play Store.
     private static final String TALKBACK_MARKET_LINK =
@@ -44,7 +43,6 @@ public class AccessibilityUtil {
      * @param context A {@link Context} instance.
      * @return        Whether or not accessibility and touch exploration are enabled.
      */
-    @CalledByNative
     public static boolean isAccessibilityEnabled(Context context) {
         AccessibilityManager manager = (AccessibilityManager)
                 context.getSystemService(Context.ACCESSIBILITY_SERVICE);

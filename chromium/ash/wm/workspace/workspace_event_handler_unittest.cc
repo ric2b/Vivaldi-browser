@@ -14,6 +14,7 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/workspace_controller_test_helper.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
@@ -26,10 +27,6 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/public/window_move_client.h"
-
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#endif
 
 namespace ash {
 
@@ -158,12 +155,6 @@ TEST_F(WorkspaceEventHandlerTest, DoubleClickSingleAxisResizeEdge) {
   // Restore.
   generator.DoubleClickLeftButton();
   EXPECT_EQ(restored_bounds.ToString(), window->GetBoundsInScreen().ToString());
-
-#if defined(OS_WIN)
-  // Multi display test does not run on Win8 bot. crbug.com/247427.
-  if (!SupportsMultipleDisplays())
-    return;
-#endif
 
   // Verify the double clicking the resize edge works on 2nd display too.
   UpdateDisplay("200x200,400x300");
@@ -303,7 +294,8 @@ TEST_F(WorkspaceEventHandlerTest,
       CreateTestWindow(&delegate1, gfx::Rect(10, 20, 30, 40)));
   std::unique_ptr<aura::Window> child(
       CreateTestWindow(&delegate2, gfx::Rect(0, 0, 1, 1)));
-  window->SetProperty(aura::client::kCanMaximizeKey, true);
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanMaximize);
   delegate1.set_window_component(HTCAPTION);
 
   child->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_WINDOW);
@@ -329,7 +321,8 @@ TEST_F(WorkspaceEventHandlerTest, DoubleClickCaptionTogglesMaximize) {
   aura::test::TestWindowDelegate delegate;
   std::unique_ptr<aura::Window> window(
       CreateTestWindow(&delegate, gfx::Rect(1, 2, 30, 40)));
-  window->SetProperty(aura::client::kCanMaximizeKey, true);
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanMaximize);
 
   wm::WindowState* window_state = wm::GetWindowState(window.get());
   gfx::Rect restore_bounds = window->bounds();
@@ -387,7 +380,8 @@ TEST_F(WorkspaceEventHandlerTest,
   aura::test::TestWindowDelegate delegate;
   std::unique_ptr<aura::Window> window(
       CreateTestWindow(&delegate, gfx::Rect(1, 2, 30, 40)));
-  window->SetProperty(aura::client::kCanMaximizeKey, true);
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanMaximize);
   delegate.set_window_component(HTCAPTION);
   aura::Window* root = Shell::GetPrimaryRootWindow();
   ui::test::EventGenerator generator(root, window.get());
@@ -406,7 +400,8 @@ TEST_F(WorkspaceEventHandlerTest, DoubleTapCaptionTogglesMaximize) {
   aura::test::TestWindowDelegate delegate;
   gfx::Rect bounds(10, 20, 30, 40);
   std::unique_ptr<aura::Window> window(CreateTestWindow(&delegate, bounds));
-  window->SetProperty(aura::client::kCanMaximizeKey, true);
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanMaximize);
   delegate.set_window_component(HTCAPTION);
 
   wm::WindowState* window_state = wm::GetWindowState(window.get());
@@ -468,7 +463,8 @@ TEST_F(WorkspaceEventHandlerTest,
   aura::test::TestWindowDelegate delegate;
   std::unique_ptr<aura::Window> window(
       CreateTestWindow(&delegate, gfx::Rect(1, 2, 30, 40)));
-  window->SetProperty(aura::client::kCanMaximizeKey, true);
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanMaximize);
 
   wm::WindowState* window_state = wm::GetWindowState(window.get());
   EXPECT_FALSE(window_state->IsMaximized());
@@ -493,7 +489,8 @@ TEST_F(WorkspaceEventHandlerTest, DoubleTapTwoDifferentTargetsDoesntMaximize) {
   aura::test::TestWindowDelegate delegate;
   std::unique_ptr<aura::Window> window(
       CreateTestWindow(&delegate, gfx::Rect(1, 2, 30, 40)));
-  window->SetProperty(aura::client::kCanMaximizeKey, true);
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanMaximize);
 
   wm::WindowState* window_state = wm::GetWindowState(window.get());
   EXPECT_FALSE(window_state->IsMaximized());
@@ -515,7 +512,8 @@ TEST_F(WorkspaceEventHandlerTest, RightClickDuringDoubleClickDoesntMaximize) {
   aura::test::TestWindowDelegate delegate;
   std::unique_ptr<aura::Window> window(
       CreateTestWindow(&delegate, gfx::Rect(1, 2, 30, 40)));
-  window->SetProperty(aura::client::kCanMaximizeKey, true);
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanMaximize);
 
   wm::WindowState* window_state = wm::GetWindowState(window.get());
   EXPECT_FALSE(window_state->IsMaximized());

@@ -626,7 +626,6 @@ std::unique_ptr<IPC::Message> CreateOpenResourceReply(
   ppapi::proxy::SerializedHandle::WriteHeader(sh.header(),
                                               new_msg.get());
   new_msg->WriteBool(true);  // valid == true
-  new_msg->WriteBool(false);  // brokerable == false
   // The file descriptor is at index 0. There's only ever one file
   // descriptor provided for this message type, so this will be correct.
   new_msg->WriteInt(0);
@@ -773,7 +772,7 @@ bool NaClIPCAdapter::SendCompleteMessage(const char* buffer,
   std::unique_ptr<IPC::Message> new_msg;
   locked_data_.nacl_msg_scanner_.ScanUntrustedMessage(*msg, &new_msg);
   if (new_msg)
-    msg.reset(new_msg.release());
+    msg = std::move(new_msg);
 
   // Actual send must be done on the I/O thread.
   task_runner_->PostTask(FROM_HERE,

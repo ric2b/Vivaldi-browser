@@ -4,16 +4,17 @@
 
 #include "net/quic/core/quic_multipath_received_packet_manager.h"
 
-#include "base/memory/ptr_util.h"
+#include <cstdint>
 
-#include "net/quic/core/quic_bug_tracker.h"
+#include "net/quic/platform/api/quic_bug_tracker.h"
+#include "net/quic/platform/api/quic_ptr_util.h"
 
 namespace net {
 
 QuicMultipathReceivedPacketManager::QuicMultipathReceivedPacketManager(
     QuicConnectionStats* stats) {
   path_managers_[kDefaultPathId] =
-      base::MakeUnique<QuicReceivedPacketManager>(stats);
+      QuicMakeUnique<QuicReceivedPacketManager>(stats);
 }
 
 QuicMultipathReceivedPacketManager::~QuicMultipathReceivedPacketManager() {}
@@ -27,7 +28,7 @@ void QuicMultipathReceivedPacketManager::OnPathCreated(
     return;
   }
 
-  path_managers_[path_id] = base::MakeUnique<QuicReceivedPacketManager>(stats);
+  path_managers_[path_id] = QuicMakeUnique<QuicReceivedPacketManager>(stats);
 }
 
 void QuicMultipathReceivedPacketManager::OnPathClosed(QuicPathId path_id) {

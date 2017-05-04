@@ -104,7 +104,7 @@ bool UpdateScreen::HasInstance(UpdateScreen* inst) {
 // static
 UpdateScreen* UpdateScreen::Get(ScreenManager* manager) {
   return static_cast<UpdateScreen*>(
-      manager->GetScreen(WizardController::kUpdateScreenName));
+      manager->GetScreen(OobeScreen::SCREEN_OOBE_UPDATE));
 }
 
 UpdateScreen::UpdateScreen(BaseScreenDelegate* base_screen_delegate,
@@ -321,13 +321,6 @@ void UpdateScreen::StartNetworkCheck() {
   network_portal_detector::GetInstance()->AddAndFireObserver(this);
 }
 
-void UpdateScreen::PrepareToShow() {
-  if (!view_)
-    return;
-
-  view_->PrepareToShow();
-}
-
 void UpdateScreen::Show() {
   is_shown_ = true;
   histogram_helper_->OnScreenShow();
@@ -346,10 +339,6 @@ void UpdateScreen::Hide() {
   if (view_)
     view_->Hide();
   is_shown_ = false;
-}
-
-void UpdateScreen::Initialize(::login::ScreenContext* context) {
-  UpdateModel::Initialize(context);
 }
 
 void UpdateScreen::OnViewDestroyed(UpdateView* view) {

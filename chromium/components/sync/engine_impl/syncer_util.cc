@@ -278,6 +278,18 @@ std::string GetUniqueBookmarkTagFromUpdate(const sync_pb::SyncEntity& update) {
                                       update.originator_client_item_id());
 }
 
+std::string GetUniqueNotesTagFromUpdate(const sync_pb::SyncEntity& update) {
+  if (!update.has_originator_cache_guid() ||
+      !update.has_originator_client_item_id()) {
+    LOG(ERROR) << "Update is missing requirements for notes position."
+               << " This is a server bug.";
+    return UniquePosition::RandomSuffix();
+  }
+
+  return GenerateSyncableNotesHash(
+      update.originator_cache_guid(), update.originator_client_item_id());
+}
+
 UniquePosition GetUpdatePosition(const sync_pb::SyncEntity& update,
                                  const std::string& suffix) {
   DCHECK(UniquePosition::IsValidSuffix(suffix));
@@ -348,6 +360,29 @@ void UpdateBookmarkPositioning(
   }
 }
 
+
+void UpdateNotesPositioning(
+    const sync_pb::SyncEntity& update,
+    syncable::ModelNeutralMutableEntry* local_entry) {
+  // Update our unique notes tag.  In many cases this will be identical to
+  // the tag we already have.  However, clients that have recently upgraded to
+  // versions that support unique positions will have incorrect tags.  See the
+  // v86 migration logic in directory_backing_store.cc for more information.
+  //
+  // Both the old and new values are unique to this element.  Applying this
+  // update will not risk the creation of conflicting unique tags.
+  std::string notes_tag = GetUniqueNotesTagFromUpdate(update);
+  if (UniquePosition::IsValidSuffix(notes_tag)) {
+    local_entry->PutUniqueNotesTag(notes_tag);
+  }
+
+  // Update our position.
+  UniquePosition update_pos =
+      GetUpdatePosition(update, local_entry->GetUniqueNotesTag());
+  if (update_pos.IsValid()) {
+    local_entry->PutServerUniquePosition(update_pos);
+  }
+}
 }  // namespace
 
 void UpdateServerFieldsFromUpdate(syncable::ModelNeutralMutableEntry* target,
@@ -413,7 +448,17 @@ void UpdateServerFieldsFromUpdate(syncable::ModelNeutralMutableEntry* target,
   target->PutServerAttachmentMetadata(
       CreateAttachmentMetadata(update.attachment_id()));
   if (SyncerProtoUtil::ShouldMaintainPosition(update)) {
-    UpdateBookmarkPositioning(update, target);
+    switch(GetModelType(update))
+    {
+      case BOOKMARKS:
+          UpdateBookmarkPositioning(update, target);
+          break;
+      case NOTES:
+          UpdateNotesPositioning(update, target);
+          break;
+      default:
+        break;
+    }
   }
 
   // We only mark the entry as unapplied if its version is greater than the

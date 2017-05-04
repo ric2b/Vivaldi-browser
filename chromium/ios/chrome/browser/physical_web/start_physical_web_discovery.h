@@ -7,8 +7,13 @@
 
 #include "components/prefs/pref_service.h"
 
+namespace ios {
+class ChromeBrowserState;
+}
+
 // Checks the environment and starts Physical Web discovery if the required
 // conditions are met.
-void StartPhysicalWebDiscovery(PrefService* pref_service, bool is_incognito);
+void StartPhysicalWebDiscovery(PrefService* pref_service,
+                               ios::ChromeBrowserState* browser_state);
 
 #endif  // IOS_CHROME_BROWSER_PHYSICAL_WEB_START_PHYSICAL_WEB_DISCOVERY_H_

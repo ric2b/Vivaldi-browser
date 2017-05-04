@@ -12,7 +12,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 
 // On some platforms these are not defined.
 #if !defined(EV_RECEIPT)
@@ -26,7 +26,9 @@ namespace base {
 
 FilePathWatcherKQueue::FilePathWatcherKQueue() : kqueue_(-1) {}
 
-FilePathWatcherKQueue::~FilePathWatcherKQueue() {}
+FilePathWatcherKQueue::~FilePathWatcherKQueue() {
+  DCHECK(!task_runner() || task_runner()->RunsTasksOnCurrentThread());
+}
 
 void FilePathWatcherKQueue::ReleaseEvent(struct kevent& event) {
   CloseFileDescriptor(&event.ident);
@@ -229,10 +231,6 @@ bool FilePathWatcherKQueue::UpdateWatches(bool* target_file_affected) {
   return true;
 }
 
-void FilePathWatcherKQueue::WillDestroyCurrentMessageLoop() {
-  CancelOnMessageLoopThread();
-}
-
 bool FilePathWatcherKQueue::Watch(const FilePath& path,
                                   bool recursive,
                                   const FilePathWatcher::Callback& callback) {
@@ -245,8 +243,7 @@ bool FilePathWatcherKQueue::Watch(const FilePath& path,
   callback_ = callback;
   target_ = path;
 
-  MessageLoop::current()->AddDestructionObserver(this);
-  set_task_runner(ThreadTaskRunnerHandle::Get());
+  set_task_runner(SequencedTaskRunnerHandle::Get());
 
   kqueue_ = kqueue();
   if (kqueue_ == -1) {
@@ -270,11 +267,13 @@ bool FilePathWatcherKQueue::Watch(const FilePath& path,
     return false;
   }
 
-  // This creates an ownership cycle (|this| owns |kqueue_watch_controller_|
-  // which owns a callback which owns |this|). The cycle is broken when
-  // |kqueue_watch_controller_| is reset in CancelOnMessageLoopThread().
+  // It's safe to use Unretained() because the watch is cancelled and the
+  // callback cannot be invoked after |kqueue_watch_controller_| (which is a
+  // member of |this|) has been deleted.
   kqueue_watch_controller_ = FileDescriptorWatcher::WatchReadable(
-      kqueue_, Bind(&FilePathWatcherKQueue::OnKQueueReadable, this));
+      kqueue_,
+      Bind(&FilePathWatcherKQueue::OnKQueueReadable, Unretained(this)));
+
   return true;
 }
 
@@ -283,16 +282,23 @@ void FilePathWatcherKQueue::Cancel() {
     set_cancelled();
     return;
   }
-  if (!task_runner()->BelongsToCurrentThread()) {
-    task_runner()->PostTask(FROM_HERE,
-                            base::Bind(&FilePathWatcherKQueue::Cancel, this));
-    return;
+
+  DCHECK(task_runner()->RunsTasksOnCurrentThread());
+  if (!is_cancelled()) {
+    set_cancelled();
+    kqueue_watch_controller_.reset();
+    if (IGNORE_EINTR(close(kqueue_)) != 0) {
+      DPLOG(ERROR) << "close kqueue";
+    }
+    kqueue_ = -1;
+    std::for_each(events_.begin(), events_.end(), ReleaseEvent);
+    events_.clear();
+    callback_.Reset();
   }
-  CancelOnMessageLoopThread();
 }
 
 void FilePathWatcherKQueue::OnKQueueReadable() {
-  DCHECK(task_runner()->BelongsToCurrentThread());
+  DCHECK(task_runner()->RunsTasksOnCurrentThread());
   DCHECK(events_.size());
 
   // Request the file system update notifications that have occurred and return
@@ -360,22 +366,6 @@ void FilePathWatcherKQueue::OnKQueueReadable() {
 
   if (send_notification) {
     callback_.Run(target_, false);
-  }
-}
-
-void FilePathWatcherKQueue::CancelOnMessageLoopThread() {
-  DCHECK(!task_runner() || task_runner()->BelongsToCurrentThread());
-  if (!is_cancelled()) {
-    set_cancelled();
-    kqueue_watch_controller_.reset();
-    if (IGNORE_EINTR(close(kqueue_)) != 0) {
-      DPLOG(ERROR) << "close kqueue";
-    }
-    kqueue_ = -1;
-    std::for_each(events_.begin(), events_.end(), ReleaseEvent);
-    events_.clear();
-    MessageLoop::current()->RemoveDestructionObserver(this);
-    callback_.Reset();
   }
 }
 

@@ -51,7 +51,8 @@ class AudioDestinationHandler : public AudioHandler, public AudioIOCallback {
   // sourceBus (if it's not 0).
   void render(AudioBus* sourceBus,
               AudioBus* destinationBus,
-              size_t numberOfFrames) final;
+              size_t numberOfFrames,
+              const AudioIOPosition& outputPosition) final;
 
   size_t currentSampleFrame() const {
     return acquireLoad(&m_currentSampleFrame);
@@ -64,6 +65,9 @@ class AudioDestinationHandler : public AudioHandler, public AudioIOCallback {
 
   virtual void startRendering() = 0;
   virtual void stopRendering() = 0;
+
+  // Returns the rendering callback buffer size.
+  virtual size_t callbackBufferSize() const = 0;
 
  protected:
   // LocalAudioInputProvider allows us to expose an AudioSourceProvider for
@@ -111,6 +115,7 @@ class AudioDestinationNode : public AudioNode {
   AudioDestinationHandler& audioDestinationHandler() const;
 
   unsigned long maxChannelCount() const;
+  size_t callbackBufferSize() const { return handler().callbackBufferSize(); }
 
  protected:
   AudioDestinationNode(BaseAudioContext&);

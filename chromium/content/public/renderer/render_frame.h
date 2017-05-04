@@ -13,8 +13,10 @@
 #include "base/strings/string16.h"
 #include "content/common/content_export.h"
 #include "content/public/common/console_message_level.h"
+#include "content/public/common/previews_state.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "ppapi/features/features.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
 
@@ -65,7 +67,7 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
  public:
   // These numeric values are used in UMA logs; do not change them.
   enum PeripheralContentStatus {
-    // Content is peripheral because it doesn't meet any of the below criteria.
+    // Content is peripheral, and should be throttled, but is not tiny.
     CONTENT_STATUS_PERIPHERAL = 0,
     // Content is essential because it's same-origin with the top-level frame.
     CONTENT_STATUS_ESSENTIAL_SAME_ORIGIN = 1,
@@ -73,10 +75,10 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
     CONTENT_STATUS_ESSENTIAL_CROSS_ORIGIN_BIG = 2,
     // Content is essential because there's large content from the same origin.
     CONTENT_STATUS_ESSENTIAL_CROSS_ORIGIN_WHITELISTED = 3,
-    // Content is essential because it's tiny in size.
-    CONTENT_STATUS_ESSENTIAL_CROSS_ORIGIN_TINY = 4,
-    // Content is essential because it has an unknown size.
-    CONTENT_STATUS_ESSENTIAL_UNKNOWN_SIZE = 5,
+    // Content is tiny in size. These are usually blocked.
+    CONTENT_STATUS_TINY = 4,
+    // Content has an unknown size.
+    CONTENT_STATUS_UNKNOWN_SIZE = 5,
     // Must be last.
     CONTENT_STATUS_NUM_ITEMS
   };
@@ -163,7 +165,7 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // RenderFrameHost.
   virtual AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() = 0;
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   // Registers a plugin that has been marked peripheral. If the origin
   // whitelist is later updated and includes |content_origin|, then
   // |unthrottle_callback| will be called.
@@ -199,8 +201,8 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
 
   // Used by plugins that load data in this RenderFrame to update the loading
   // notifications.
-  virtual void DidStartLoading() = 0;
-  virtual void DidStopLoading() = 0;
+  virtual void PluginDidStartLoading() = 0;
+  virtual void PluginDidStopLoading() = 0;
 #endif
 
   // Returns true if this frame is a FTP directory listing.
@@ -228,8 +230,9 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   virtual void AddMessageToConsole(ConsoleMessageLevel level,
                                    const std::string& message) = 0;
 
-  // Whether or not this frame is using Lo-Fi.
-  virtual bool IsUsingLoFi() const = 0;
+  // Returns the PreviewsState of this frame, a bitmask of potentially several
+  // Previews optimizations.
+  virtual PreviewsState GetPreviewsState() const = 0;
 
   // Whether or not this frame is currently pasting.
   virtual bool IsPasting() const = 0;

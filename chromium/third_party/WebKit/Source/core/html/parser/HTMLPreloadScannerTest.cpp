@@ -11,6 +11,7 @@
 #include "core/html/CrossOriginAttribute.h"
 #include "core/html/parser/HTMLParserOptions.h"
 #include "core/html/parser/HTMLResourcePreloader.h"
+#include "core/html/parser/PreloadRequest.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include <memory>
@@ -172,7 +173,8 @@ class HTMLPreloadScannerTest : public testing::Test {
     MockHTMLResourcePreloader preloader;
     KURL baseURL(ParsedURLString, testCase.baseURL);
     m_scanner->appendToEnd(String(testCase.inputHTML));
-    m_scanner->scanAndPreload(&preloader, baseURL, nullptr);
+    PreloadRequestStream requests = m_scanner->scan(baseURL, nullptr);
+    preloader.takeAndPreload(requests);
 
     preloader.preloadRequestVerification(
         testCase.type, testCase.preloadedURL, testCase.outputBaseURL,
@@ -183,7 +185,8 @@ class HTMLPreloadScannerTest : public testing::Test {
     MockHTMLResourcePreloader preloader;
     KURL baseURL(ParsedURLString, testCase.baseURL);
     m_scanner->appendToEnd(String(testCase.inputHTML));
-    m_scanner->scanAndPreload(&preloader, baseURL, nullptr);
+    PreloadRequestStream requests = m_scanner->scan(baseURL, nullptr);
+    preloader.takeAndPreload(requests);
     preloader.preconnectRequestVerification(testCase.preconnectedHost,
                                             testCase.crossOrigin);
   }
@@ -192,7 +195,8 @@ class HTMLPreloadScannerTest : public testing::Test {
     MockHTMLResourcePreloader preloader;
     KURL baseURL(ParsedURLString, testCase.baseURL);
     m_scanner->appendToEnd(String(testCase.inputHTML));
-    m_scanner->scanAndPreload(&preloader, baseURL, nullptr);
+    PreloadRequestStream requests = m_scanner->scan(baseURL, nullptr);
+    preloader.takeAndPreload(requests);
 
     preloader.preloadRequestVerification(
         testCase.type, testCase.preloadedURL, testCase.outputBaseURL,
@@ -203,7 +207,8 @@ class HTMLPreloadScannerTest : public testing::Test {
     MockHTMLResourcePreloader preloader;
     KURL baseURL(ParsedURLString, testCase.baseURL);
     m_scanner->appendToEnd(String(testCase.inputHTML));
-    m_scanner->scanAndPreload(&preloader, baseURL, nullptr);
+    PreloadRequestStream requests = m_scanner->scan(baseURL, nullptr);
+    preloader.takeAndPreload(requests);
 
     preloader.nonceRequestVerification(testCase.nonce);
   }
@@ -718,11 +723,32 @@ TEST_F(HTMLPreloadScannerTest, testLinkRelPreload) {
        "http://example.test/", Resource::Raw, 0},
       {"http://example.test", "<link rel=preload href=bla as=script>", "bla",
        "http://example.test/", Resource::Script, 0},
+      {"http://example.test",
+       "<link rel=preload href=bla as=script type='script/foo'>", "bla",
+       "http://example.test/", Resource::Script, 0},
       {"http://example.test", "<link rel=preload href=bla as=style>", "bla",
+       "http://example.test/", Resource::CSSStyleSheet, 0},
+      {"http://example.test",
+       "<link rel=preload href=bla as=style type='text/css'>", "bla",
+       "http://example.test/", Resource::CSSStyleSheet, 0},
+      {"http://example.test",
+       "<link rel=preload href=bla as=style type='text/bla'>", nullptr,
        "http://example.test/", Resource::CSSStyleSheet, 0},
       {"http://example.test", "<link rel=preload href=bla as=image>", "bla",
        "http://example.test/", Resource::Image, 0},
+      {"http://example.test",
+       "<link rel=preload href=bla as=image type='image/webp'>", "bla",
+       "http://example.test/", Resource::Image, 0},
+      {"http://example.test",
+       "<link rel=preload href=bla as=image type='image/bla'>", nullptr,
+       "http://example.test/", Resource::Image, 0},
       {"http://example.test", "<link rel=preload href=bla as=font>", "bla",
+       "http://example.test/", Resource::Font, 0},
+      {"http://example.test",
+       "<link rel=preload href=bla as=font type='font/woff2'>", "bla",
+       "http://example.test/", Resource::Font, 0},
+      {"http://example.test",
+       "<link rel=preload href=bla as=font type='font/bla'>", nullptr,
        "http://example.test/", Resource::Font, 0},
       {"http://example.test", "<link rel=preload href=bla as=media>", "bla",
        "http://example.test/", Resource::Media, 0},
@@ -797,6 +823,19 @@ TEST_F(HTMLPreloadScannerTest, testScriptTypeAndLanguage) {
       {"http://example.test",
        "<script language='python' src='test.js'></script>", nullptr,
        "http://example.test/", Resource::Script, 0},
+  };
+
+  for (const auto& testCase : testCases)
+    test(testCase);
+}
+
+// Regression test for crbug.com/664744.
+TEST_F(HTMLPreloadScannerTest, testUppercaseAsValues) {
+  TestCase testCases[] = {
+      {"http://example.test", "<link rel=preload href=bla as=SCRIPT>", "bla",
+       "http://example.test/", Resource::Script, 0},
+      {"http://example.test", "<link rel=preload href=bla as=fOnT>", "bla",
+       "http://example.test/", Resource::Font, 0},
   };
 
   for (const auto& testCase : testCases)

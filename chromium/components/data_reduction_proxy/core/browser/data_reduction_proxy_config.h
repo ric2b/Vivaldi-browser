@@ -34,10 +34,8 @@ class SingleThreadTaskRunner;
 }
 
 namespace net {
-class HostPortPair;
 class NetLog;
 class ProxyServer;
-class URLFetcher;
 class URLRequest;
 class URLRequestContextGetter;
 class URLRequestStatus;
@@ -52,8 +50,8 @@ typedef base::Callback<void(const std::string&,
 class DataReductionProxyConfigValues;
 class DataReductionProxyConfigurator;
 class DataReductionProxyEventCreator;
-class DataReductionProxyService;
 class SecureProxyChecker;
+class WarmupURLFetcher;
 struct DataReductionProxyTypeInfo;
 
 // Values of the UMA DataReductionProxy.ProbeURL histogram.
@@ -88,7 +86,8 @@ enum SecureProxyCheckFetchResult {
 // This object lives on the IO thread and all of its methods are expected to be
 // called from there.
 class DataReductionProxyConfig
-    : public net::NetworkChangeNotifier::IPAddressObserver {
+    : public net::NetworkChangeNotifier::IPAddressObserver,
+      public net::NetworkChangeNotifier::ConnectionTypeObserver {
  public:
   // The caller must ensure that all parameters remain alive for the lifetime
   // of the |DataReductionProxyConfig| instance, with the exception of
@@ -106,7 +105,13 @@ class DataReductionProxyConfig
   ~DataReductionProxyConfig() override;
 
   // Performs initialization on the IO thread.
+  // |basic_url_request_context_getter| is the net::URLRequestContextGetter that
+  // disables the use of alternative protocols and proxies.
+  // |url_request_context_getter| is the default net::URLRequestContextGetter
+  // used for making URL requests.
   void InitializeOnIOThread(const scoped_refptr<net::URLRequestContextGetter>&
+                                basic_url_request_context_getter,
+                            const scoped_refptr<net::URLRequestContextGetter>&
                                 url_request_context_getter);
 
   // Sets the proxy configs, enabling or disabling the proxy according to
@@ -175,9 +180,6 @@ class DataReductionProxyConfig
   virtual bool ContainsDataReductionProxy(
       const net::ProxyConfig::ProxyRules& proxy_rules) const;
 
-  // Returns true if the Data Reduction Proxy configuration may be used.
-  bool allowed() const;
-
   // Returns true if the Data Reduction Proxy promo may be shown. This is not
   // tied to whether the Data Reduction Proxy is enabled.
   bool promo_allowed() const;
@@ -202,11 +204,6 @@ class DataReductionProxyConfig
   net::ProxyConfig ProxyConfigIgnoringHoldback() const;
 
  protected:
-  // Virtualized for mocking. Records UMA containing the result of requesting
-  // the secure proxy check.
-  virtual void RecordSecureProxyCheckFetchResult(
-      SecureProxyCheckFetchResult result);
-
   // Virtualized for mocking. Returns the list of network interfaces in use.
   // |interfaces| can be null.
   virtual void GetNetworkList(net::NetworkInterfaceList* interfaces,
@@ -219,16 +216,16 @@ class DataReductionProxyConfig
 
   virtual base::TimeTicks GetTicksNow() const;
 
+  // Updates the Data Reduction Proxy configurator with the current config.
+  void UpdateConfigForTesting(bool enabled, bool restricted);
+
+  // Updates the callback that is called when the warmup URL has been fetched.
+  void SetWarmupURLFetcherCallbackForTesting(
+      base::Callback<void()> warmup_url_fetched_callback);
+
  private:
-  friend class DataReductionProxyConfigTest;
   friend class MockDataReductionProxyConfig;
   friend class TestDataReductionProxyConfig;
-  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
-                           TestGetDataReductionProxies);
-  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
-                           TestOnIPAddressChanged);
-  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
-                           TestOnIPAddressChanged_SecureProxyDisabledByDefault);
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
                            TestSetProxyConfigsHoldback);
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
@@ -242,6 +239,7 @@ class DataReductionProxyConfig
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest, LoFiAccuracy);
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
                            LoFiAccuracyNonZeroDelay);
+  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest, WarmupURL);
 
   // Values of the estimated network quality at the beginning of the most
   // recent query of the Network Quality Estimator.
@@ -253,9 +251,8 @@ class DataReductionProxyConfig
 
   // NetworkChangeNotifier::IPAddressObserver:
   void OnIPAddressChanged() override;
-
-  // Updates the Data Reduction Proxy configurator with the current config.
-  virtual void UpdateConfigurator(bool enabled, bool restricted);
+  void OnConnectionTypeChanged(
+      net::NetworkChangeNotifier::ConnectionType type) override;
 
   // Populates the parameters for the Lo-Fi field trial if the session is part
   // of either Lo-Fi enabled or Lo-Fi control field trial group.
@@ -314,7 +311,23 @@ class DataReductionProxyConfig
   bool IsEffectiveConnectionTypeSlowerThanThreshold(
       net::EffectiveConnectionType effective_connection_type) const;
 
+  // Checks if the current network has captive portal, and handles the result.
+  // If the captive portal probe was blocked on the current network, disables
+  // the use of secure proxies.
+  void HandleCaptivePortal();
+
+  // Returns true if the current network has captive portal. Virtualized
+  // for testing.
+  virtual bool GetIsCaptivePortal() const;
+
+  // Fetches the warmup URL.
+  void FetchWarmupURL();
+
+  // URL fetcher used for performing the secure proxy check.
   std::unique_ptr<SecureProxyChecker> secure_proxy_checker_;
+
+  // URL fetcher used for fetching the warmup URL.
+  std::unique_ptr<WarmupURLFetcher> warmup_url_fetcher_;
 
   // Indicates if the secure Data Reduction Proxy can be used or not.
   bool secure_proxy_allowed_;
@@ -362,9 +375,13 @@ class DataReductionProxyConfig
   // than |auto_lofi_hysteresis_|.
   bool network_prohibitively_slow_;
 
-  // Set to the connection type reported by NetworkChangeNotifier when the
-  // network quality was last checked.
+  // The current connection type.
   net::NetworkChangeNotifier::ConnectionType connection_type_;
+
+  // True if the connection type changed since the last call to
+  // IsNetworkQualityProhibitivelySlow(). This call happens only on main frame
+  // requests.
+  bool connection_type_changed_;
 
   // If true, Lo-Fi is turned off for the rest of the session. This is set to
   // true if Lo-Fi is disabled via flags or if the user implicitly opts out.
@@ -387,6 +404,10 @@ class DataReductionProxyConfig
   // Intervals after the main frame request arrives at which accuracy of network
   // quality prediction is recorded.
   std::vector<base::TimeDelta> lofi_accuracy_recording_intervals_;
+
+  // Set to true if the captive portal probe for the current network has been
+  // blocked.
+  bool is_captive_portal_;
 
   base::WeakPtrFactory<DataReductionProxyConfig> weak_factory_;
 

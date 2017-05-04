@@ -68,8 +68,8 @@ class MODULES_EXPORT VibrationController final
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  // Inherited from ContextLifecycleObserver AND PageVisibilityObserver.
-  void contextDestroyed() override;
+  // Inherited from ContextLifecycleObserver.
+  void contextDestroyed(ExecutionContext*) override;
 
   // Inherited from PageVisibilityObserver.
   void pageVisibilityChanged() override;

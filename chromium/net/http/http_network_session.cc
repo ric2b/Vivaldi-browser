@@ -15,19 +15,23 @@
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
+#include "base/trace_event/memory_allocator_dump.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "base/values.h"
-#include "net/base/network_throttle_manager.h"
+#include "net/base/network_throttle_manager_impl.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_response_body_drainer.h"
 #include "net/http/http_stream_factory_impl.h"
 #include "net/http/url_security_manager.h"
 #include "net/proxy/proxy_service.h"
+#include "net/quic/chromium/quic_crypto_client_stream_factory.h"
 #include "net/quic/chromium/quic_stream_factory.h"
 #include "net/quic/core/crypto/quic_random.h"
-#include "net/quic/core/quic_clock.h"
-#include "net/quic/core/quic_crypto_client_stream_factory.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
+#include "net/quic/core/quic_tag.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/impl/quic_chromium_clock.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/client_socket_pool_manager_impl.h"
 #include "net/socket/next_proto.h"
@@ -68,20 +72,46 @@ const int32_t kSpdyStreamMaxRecvWindowSize = 6 * 1024 * 1024;    //  6 MB
 // and does not consume "too much" memory.
 const int32_t kQuicSocketReceiveBufferSize = 1024 * 1024;  // 1MB
 
+namespace {
+
+// Keep all HTTP2 parameters in |http2_settings|, even the ones that are not
+// implemented, to be sent to the server.
+// Set default values for settings that |http2_settings| does not specify.
+SettingsMap AddDefaultHttp2Settings(SettingsMap http2_settings) {
+  // Set default values only if |http2_settings| does not have
+  // a value set for given setting.
+  SettingsMap::iterator it = http2_settings.find(SETTINGS_HEADER_TABLE_SIZE);
+  if (it == http2_settings.end())
+    http2_settings[SETTINGS_HEADER_TABLE_SIZE] = kSpdyMaxHeaderTableSize;
+
+  it = http2_settings.find(SETTINGS_MAX_CONCURRENT_STREAMS);
+  if (it == http2_settings.end())
+    http2_settings[SETTINGS_MAX_CONCURRENT_STREAMS] =
+        kSpdyMaxConcurrentPushedStreams;
+
+  it = http2_settings.find(SETTINGS_INITIAL_WINDOW_SIZE);
+  if (it == http2_settings.end())
+    http2_settings[SETTINGS_INITIAL_WINDOW_SIZE] = kSpdyStreamMaxRecvWindowSize;
+
+  return http2_settings;
+}
+
+}  // unnamed namespace
+
 HttpNetworkSession::Params::Params()
-    : client_socket_factory(NULL),
-      host_resolver(NULL),
-      cert_verifier(NULL),
-      channel_id_service(NULL),
-      transport_security_state(NULL),
-      cert_transparency_verifier(NULL),
-      ct_policy_enforcer(NULL),
-      proxy_service(NULL),
-      ssl_config_service(NULL),
-      http_auth_handler_factory(NULL),
-      net_log(NULL),
-      host_mapping_rules(NULL),
-      socket_performance_watcher_factory(NULL),
+    : client_socket_factory(nullptr),
+      host_resolver(nullptr),
+      cert_verifier(nullptr),
+      channel_id_service(nullptr),
+      transport_security_state(nullptr),
+      cert_transparency_verifier(nullptr),
+      ct_policy_enforcer(nullptr),
+      proxy_service(nullptr),
+      ssl_config_service(nullptr),
+      http_auth_handler_factory(nullptr),
+      net_log(nullptr),
+      host_mapping_rules(nullptr),
+      socket_performance_watcher_factory(nullptr),
       ignore_certificate_errors(false),
       testing_fixed_http_port(0),
       testing_fixed_https_port(0),
@@ -89,13 +119,11 @@ HttpNetworkSession::Params::Params()
       enable_spdy_ping_based_connection_checking(true),
       enable_http2(true),
       spdy_session_max_recv_window_size(kSpdySessionMaxRecvWindowSize),
-      spdy_stream_max_recv_window_size(kSpdyStreamMaxRecvWindowSize),
       time_func(&base::TimeTicks::Now),
       enable_http2_alternative_service_with_different_host(false),
       enable_quic_alternative_service_with_different_host(true),
       enable_quic(false),
       disable_quic_on_timeout_with_open_streams(false),
-      enable_quic_port_selection(true),
       quic_always_require_handshake_confirmation(false),
       quic_disable_connection_pooling(false),
       quic_load_server_info_timeout_srtt_multiplier(0.25f),
@@ -106,8 +134,8 @@ HttpNetworkSession::Params::Params()
       quic_socket_receive_buffer_size(kQuicSocketReceiveBufferSize),
       quic_delay_tcp_race(true),
       quic_max_server_configs_stored_in_properties(0u),
-      quic_clock(NULL),
-      quic_random(NULL),
+      quic_clock(nullptr),
+      quic_random(nullptr),
       quic_max_packet_length(kDefaultMaxPacketSize),
       enable_user_alternate_protocol_ports(false),
       quic_crypto_client_stream_factory(
@@ -125,9 +153,10 @@ HttpNetworkSession::Params::Params()
       quic_force_hol_blocking(false),
       quic_race_cert_verification(false),
       quic_do_not_fragment(false),
-      proxy_delegate(NULL),
+      proxy_delegate(nullptr),
       enable_token_binding(false),
-      http_09_on_non_default_ports_enabled(true) {
+      http_09_on_non_default_ports_enabled(false),
+      restrict_to_one_preconnect_for_proxies(false) {
   quic_supported_versions.push_back(QUIC_VERSION_35);
 }
 
@@ -143,6 +172,7 @@ HttpNetworkSession::HttpNetworkSession(const Params& params)
       http_auth_handler_factory_(params.http_auth_handler_factory),
       proxy_service_(params.proxy_service),
       ssl_config_service_(params.ssl_config_service),
+      push_delegate_(nullptr),
       quic_stream_factory_(
           params.net_log,
           params.host_resolver,
@@ -160,11 +190,10 @@ HttpNetworkSession::HttpNetworkSession(const Params& params)
           params.socket_performance_watcher_factory,
           params.quic_crypto_client_stream_factory,
           params.quic_random ? params.quic_random : QuicRandom::GetInstance(),
-          params.quic_clock ? params.quic_clock : new QuicClock(),
+          params.quic_clock ? params.quic_clock : new QuicChromiumClock(),
           params.quic_max_packet_length,
           params.quic_user_agent_id,
           params.quic_supported_versions,
-          params.enable_quic_port_selection,
           params.quic_always_require_handshake_confirmation,
           params.quic_disable_connection_pooling,
           params.quic_load_server_info_timeout_srtt_multiplier,
@@ -194,12 +223,12 @@ HttpNetworkSession::HttpNetworkSession(const Params& params)
                          params.transport_security_state,
                          params.enable_spdy_ping_based_connection_checking,
                          params.spdy_session_max_recv_window_size,
-                         params.spdy_stream_max_recv_window_size,
+                         AddDefaultHttp2Settings(params.http2_settings),
                          params.time_func,
                          params.proxy_delegate),
       http_stream_factory_(new HttpStreamFactoryImpl(this, false)),
       http_stream_factory_for_websocket_(new HttpStreamFactoryImpl(this, true)),
-      network_stream_throttler_(NetworkThrottleManager::CreateThrottler()),
+      network_stream_throttler_(new NetworkThrottleManagerImpl()),
       params_(params) {
   DCHECK(proxy_service_);
   DCHECK(ssl_config_service_.get());
@@ -289,14 +318,12 @@ std::unique_ptr<base::Value> HttpNetworkSession::SpdySessionPoolInfoToValue()
 std::unique_ptr<base::Value> HttpNetworkSession::QuicInfoToValue() const {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->Set("sessions", quic_stream_factory_.QuicStreamFactoryInfoToValue());
-  dict->SetBoolean("quic_enabled", params_.enable_quic);
-  dict->SetBoolean("enable_quic_port_selection",
-                   params_.enable_quic_port_selection);
+  dict->SetBoolean("quic_enabled", IsQuicEnabled());
   std::unique_ptr<base::ListValue> connection_options(new base::ListValue);
   for (QuicTagVector::const_iterator it =
            params_.quic_connection_options.begin();
        it != params_.quic_connection_options.end(); ++it) {
-    connection_options->AppendString("'" + QuicUtils::TagToString(*it) + "'");
+    connection_options->AppendString("'" + QuicTagToString(*it) + "'");
   }
   dict->Set("connection_options", std::move(connection_options));
 
@@ -357,10 +384,19 @@ bool HttpNetworkSession::IsProtocolEnabled(NextProto protocol) const {
     case kProtoHTTP2:
       return params_.enable_http2;
     case kProtoQUIC:
-      return params_.enable_quic;
+      return IsQuicEnabled();
   }
   NOTREACHED();
   return false;
+}
+
+void HttpNetworkSession::SetServerPushDelegate(
+    std::unique_ptr<ServerPushDelegate> push_delegate) {
+  DCHECK(!push_delegate_ && push_delegate);
+
+  push_delegate_ = std::move(push_delegate);
+  spdy_session_pool_.set_server_push_delegate(push_delegate_.get());
+  quic_stream_factory_.set_server_push_delegate(push_delegate_.get());
 }
 
 void HttpNetworkSession::GetAlpnProtos(NextProtoVector* alpn_protos) const {
@@ -378,6 +414,36 @@ void HttpNetworkSession::GetSSLConfig(const HttpRequestInfo& request,
   } else if (params_.enable_token_binding && params_.channel_id_service) {
     server_config->token_binding_params.push_back(TB_PARAM_ECDSAP256);
   }
+}
+
+void HttpNetworkSession::DumpMemoryStats(
+    base::trace_event::ProcessMemoryDump* pmd,
+    const std::string& parent_absolute_name) const {
+  std::string name = base::StringPrintf("net/http_network_session_%p", this);
+  base::trace_event::MemoryAllocatorDump* http_network_session_dump =
+      pmd->GetAllocatorDump(name);
+  if (http_network_session_dump == nullptr) {
+    http_network_session_dump = pmd->CreateAllocatorDump(name);
+    normal_socket_pool_manager_->DumpMemoryStats(
+        pmd, http_network_session_dump->absolute_name());
+    spdy_session_pool_.DumpMemoryStats(
+        pmd, http_network_session_dump->absolute_name());
+  }
+  // Create an empty row under parent's dump so size can be attributed correctly
+  // if |this| is shared between URLRequestContexts.
+  base::trace_event::MemoryAllocatorDump* empty_row_dump =
+      pmd->CreateAllocatorDump(base::StringPrintf(
+          "%s/http_network_session", parent_absolute_name.c_str()));
+  pmd->AddOwnershipEdge(empty_row_dump->guid(),
+                        http_network_session_dump->guid());
+}
+
+bool HttpNetworkSession::IsQuicEnabled() const {
+  return params_.enable_quic;
+}
+
+void HttpNetworkSession::DisableQuic() {
+  params_.enable_quic = false;
 }
 
 ClientSocketPoolManager* HttpNetworkSession::GetSocketPoolManager(

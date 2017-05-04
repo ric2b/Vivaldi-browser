@@ -51,7 +51,7 @@ Sources.SourceMapNamesResolver._scopeIdentifiers = function(scope) {
     var scopeText = text.extract(scopeRange);
     var scopeStart = text.toSourceRange(scopeRange).offset;
     var prefix = 'function fui';
-    return Common.formatterWorkerPool.runTask('javaScriptIdentifiers', {content: prefix + scopeText})
+    return Common.formatterWorkerPool.javaScriptIdentifiers(prefix + scopeText)
         .then(onIdentifiers.bind(null, text, scopeStart, prefix));
   }
 
@@ -59,14 +59,12 @@ Sources.SourceMapNamesResolver._scopeIdentifiers = function(scope) {
    * @param {!Common.Text} text
    * @param {number} scopeStart
    * @param {string} prefix
-   * @param {?MessageEvent} event
+   * @param {!Array<!{name: string, offset: number}>} identifiers
    * @return {!Array<!Sources.SourceMapNamesResolver.Identifier>}
    */
-  function onIdentifiers(text, scopeStart, prefix, event) {
-    var identifiers = event ? /** @type {!Array<!{name: string, offset: number}>} */ (event.data) : [];
+  function onIdentifiers(text, scopeStart, prefix, identifiers) {
     var result = [];
     var cursor = new Common.TextCursor(text.lineEndings());
-    var promises = [];
     for (var i = 0; i < identifiers.length; ++i) {
       var id = identifiers[i];
       if (id.offset < prefix.length)
@@ -152,7 +150,8 @@ Sources.SourceMapNamesResolver._resolveScope = function(scope) {
     var sourceTextRange = new Common.TextRange(
         startEntry.sourceLineNumber, startEntry.sourceColumnNumber, endEntry.sourceLineNumber,
         endEntry.sourceColumnNumber);
-    var uiSourceCode = Bindings.NetworkProject.uiSourceCodeForScriptURL(Workspace.workspace, startEntry.sourceURL, script);
+    var uiSourceCode =
+        Bindings.NetworkProject.uiSourceCodeForScriptURL(Workspace.workspace, startEntry.sourceURL, script);
     if (!uiSourceCode)
       return Promise.resolve(/** @type {?string} */ (null));
 
@@ -224,7 +223,7 @@ Sources.SourceMapNamesResolver._allVariablesInCallFrame = function(callFrame) {
  */
 Sources.SourceMapNamesResolver.resolveExpression = function(
     callFrame, originalText, uiSourceCode, lineNumber, startColumnNumber, endColumnNumber) {
-  if (!Runtime.experiments.isEnabled('resolveVariableNames') || !uiSourceCode.contentType().isFromSourceMap())
+  if (!uiSourceCode.contentType().isFromSourceMap())
     return Promise.resolve('');
 
   return Sources.SourceMapNamesResolver._allVariablesInCallFrame(callFrame).then(findCompiledName);
@@ -281,15 +280,7 @@ Sources.SourceMapNamesResolver._resolveExpression = function(
     var originalText = text.extract(textRange);
     if (!originalText)
       return Promise.resolve('');
-    return Common.formatterWorkerPool.runTask('evaluatableJavaScriptSubstring', {content: originalText}).then(onResult);
-  }
-
-  /**
-   * @param {?MessageEvent} event
-   * @return {string}
-   */
-  function onResult(event) {
-    return event ? /** @type {string} */ (event.data) : '';
+    return Common.formatterWorkerPool.evaluatableJavaScriptSubstring(originalText);
   }
 };
 
@@ -300,7 +291,7 @@ Sources.SourceMapNamesResolver._resolveExpression = function(
 Sources.SourceMapNamesResolver.resolveThisObject = function(callFrame) {
   if (!callFrame)
     return Promise.resolve(/** @type {?SDK.RemoteObject} */ (null));
-  if (!Runtime.experiments.isEnabled('resolveVariableNames') || !callFrame.scopeChain().length)
+  if (!callFrame.scopeChain().length)
     return Promise.resolve(callFrame.thisObject());
 
   return Sources.SourceMapNamesResolver._resolveScope(callFrame.scopeChain()[0]).then(onScopeResolved);
@@ -337,9 +328,6 @@ Sources.SourceMapNamesResolver.resolveThisObject = function(callFrame) {
  * @return {!SDK.RemoteObject}
  */
 Sources.SourceMapNamesResolver.resolveScopeInObject = function(scope) {
-  if (!Runtime.experiments.isEnabled('resolveVariableNames'))
-    return scope.object();
-
   var startLocation = scope.startLocation();
   var endLocation = scope.endLocation();
 

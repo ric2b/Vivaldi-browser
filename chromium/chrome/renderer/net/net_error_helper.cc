@@ -68,7 +68,7 @@ const int kNavigationCorrectionFetchTimeoutSec = 3;
 
 NetErrorHelperCore::PageType GetLoadingPageType(RenderFrame* render_frame) {
   blink::WebFrame* web_frame = render_frame->GetWebFrame();
-  GURL url = web_frame->provisionalDataSource()->request().url();
+  GURL url = web_frame->provisionalDataSource()->getRequest().url();
   if (!url.is_valid() || url.spec() != kUnreachableWebDataURL)
     return NetErrorHelperCore::NON_ERROR_PAGE;
   return NetErrorHelperCore::ERROR_PAGE;
@@ -315,13 +315,13 @@ void NetErrorHelper::SendTrackingRequest(
 void NetErrorHelper::ReloadPage(bool bypass_cache) {
   render_frame()->GetWebFrame()->reload(
       bypass_cache ? blink::WebFrameLoadType::ReloadBypassingCache
-                   : blink::WebFrameLoadType::Reload);
+                   : blink::WebFrameLoadType::ReloadMainResource);
 }
 
 void NetErrorHelper::LoadPageFromCache(const GURL& page_url) {
   blink::WebFrame* web_frame = render_frame()->GetWebFrame();
   DCHECK(!base::EqualsASCII(
-      base::StringPiece16(web_frame->dataSource()->request().httpMethod()),
+      base::StringPiece16(web_frame->dataSource()->getRequest().httpMethod()),
       "POST"));
 
   blink::WebURLRequest request(page_url);
@@ -337,6 +337,14 @@ void NetErrorHelper::DownloadPageLater() {
 #if defined(OS_ANDROID)
   render_frame()->Send(new ChromeViewHostMsg_DownloadPageLater(
       render_frame()->GetRoutingID()));
+#endif  // defined(OS_ANDROID)
+}
+
+void NetErrorHelper::SetIsShowingDownloadButton(bool show) {
+#if defined(OS_ANDROID)
+  render_frame()->Send(
+      new ChromeViewHostMsg_SetIsShowingDownloadButtonInErrorPage(
+          render_frame()->GetRoutingID(), show));
 #endif  // defined(OS_ANDROID)
 }
 

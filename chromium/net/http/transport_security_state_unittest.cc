@@ -199,7 +199,7 @@ void CheckHPKPReport(
     const HashValueVector& known_pins) {
   std::unique_ptr<base::Value> value(base::JSONReader::Read(report));
   ASSERT_TRUE(value);
-  ASSERT_TRUE(value->IsType(base::Value::TYPE_DICTIONARY));
+  ASSERT_TRUE(value->IsType(base::Value::Type::DICTIONARY));
 
   base::DictionaryValue* report_dict;
   ASSERT_TRUE(value->GetAsDictionary(&report_dict));
@@ -264,7 +264,7 @@ void CheckSerializedExpectStapleReport(const std::string& report,
                                        const std::string& cert_status) {
   std::unique_ptr<base::Value> value(base::JSONReader::Read(report));
   ASSERT_TRUE(value);
-  ASSERT_TRUE(value->IsType(base::Value::TYPE_DICTIONARY));
+  ASSERT_TRUE(value->IsType(base::Value::Type::DICTIONARY));
 
   base::DictionaryValue* report_dict;
   ASSERT_TRUE(value->GetAsDictionary(&report_dict));
@@ -484,29 +484,6 @@ TEST_F(TransportSecurityStateTest, MatchesCase1) {
   bool include_subdomains = false;
   state.AddHSTS("EXample.coM", expiry, include_subdomains);
   EXPECT_TRUE(state.ShouldUpgradeToSSL("example.com"));
-}
-
-TEST_F(TransportSecurityStateTest, Fuzz) {
-  TransportSecurityState state;
-  TransportSecurityState::STSState sts_state;
-  TransportSecurityState::PKPState pkp_state;
-
-  EnableStaticPins(&state);
-
-  for (size_t i = 0; i < 128; i++) {
-    std::string hostname;
-
-    for (;;) {
-      if (base::RandInt(0, 16) == 7) {
-        break;
-      }
-      if (i > 0 && base::RandInt(0, 7) == 7) {
-        hostname.append(1, '.');
-      }
-      hostname.append(1, 'a' + base::RandInt(0, 25));
-    }
-    state.GetStaticDomainState(hostname, &sts_state, &pkp_state);
-  }
 }
 
 TEST_F(TransportSecurityStateTest, MatchesCase2) {

@@ -56,6 +56,9 @@
 
 namespace base {
 class DictionaryValue;
+namespace trace_event {
+class ProcessMemoryDump;
+}
 }
 
 namespace net {
@@ -338,6 +341,11 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
       const std::string& name,
       const std::string& type) const;
 
+  // Dumps memory allocation stats. |parent_dump_absolute_name| is the name
+  // used by the parent MemoryAllocatorDump in the memory dump hierarchy.
+  void DumpMemoryStats(base::trace_event::ProcessMemoryDump* pmd,
+                       const std::string& parent_dump_absolute_name) const;
+
   base::TimeDelta ConnectionTimeout() const {
     return connect_job_factory_->ConnectionTimeout();
   }
@@ -367,11 +375,6 @@ class NET_EXPORT_PRIVATE ClientSocketPoolBaseHelper
     // socket) may be used even with unread data.  This may be, e.g., a SPDY
     // SETTINGS frame.
     bool IsUsable() const;
-
-    // An idle socket should be removed if it can't be reused, or has been idle
-    // for too long. |now| is the current time value (TimeTicks::Now()).
-    // |timeout| is the length of time to wait before timing out an idle socket.
-    bool ShouldCleanup(base::TimeTicks now, base::TimeDelta timeout) const;
 
     StreamSocket* socket;
     base::TimeTicks start_time;
@@ -796,6 +799,11 @@ class ClientSocketPoolBase {
   LoadState GetLoadState(const std::string& group_name,
                          const ClientSocketHandle* handle) const {
     return helper_.GetLoadState(group_name, handle);
+  }
+
+  void DumpMemoryStats(base::trace_event::ProcessMemoryDump* pmd,
+                       const std::string& parent_dump_absolute_name) const {
+    return helper_.DumpMemoryStats(pmd, parent_dump_absolute_name);
   }
 
   virtual void OnConnectJobComplete(int result, ConnectJob* job) {

@@ -85,7 +85,7 @@ inline bool LinkedStack<T>::isEmpty() {
 
 template <typename T>
 inline void LinkedStack<T>::push(const T& data) {
-  m_head = wrapUnique(new Node(data, m_head.release()));
+  m_head = WTF::wrapUnique(new Node(data, m_head.release()));
   ++m_size;
 }
 
@@ -96,7 +96,8 @@ inline const T& LinkedStack<T>::peek() {
 
 template <typename T>
 inline void LinkedStack<T>::pop() {
-  ASSERT(m_head && m_size);
+  DCHECK(m_head);
+  DCHECK(m_size);
   m_head = m_head->m_next.release();
   --m_size;
 }

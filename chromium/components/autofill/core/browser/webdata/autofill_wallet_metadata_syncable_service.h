@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
@@ -20,14 +21,8 @@
 #include "components/sync/model/syncable_service.h"
 #include "components/sync/protocol/autofill_specifics.pb.h"
 
-namespace base {
-template <typename, typename>
-class ScopedPtrHashMap;
-}
-
 namespace syncer {
 class SyncChangeProcessor;
-class SyncData;
 class SyncErrorFactory;
 }
 
@@ -37,7 +32,6 @@ class Location;
 
 namespace autofill {
 
-class AutofillDataModel;
 class AutofillProfile;
 class AutofillWebDataBackend;
 class AutofillWebDataService;
@@ -97,9 +91,9 @@ class AutofillWalletMetadataSyncableService
   // to server profiles and server cards read from disk. This data contains the
   // usage stats. Returns true on success.
   virtual bool GetLocalData(
-      base::ScopedPtrHashMap<std::string, std::unique_ptr<AutofillProfile>>*
+      std::unordered_map<std::string, std::unique_ptr<AutofillProfile>>*
           profiles,
-      base::ScopedPtrHashMap<std::string, std::unique_ptr<CreditCard>>* cards)
+      std::unordered_map<std::string, std::unique_ptr<CreditCard>>* cards)
       const;
 
   // Updates the stats for |profile| stored on disk. Does not trigger
@@ -128,11 +122,13 @@ class AutofillWalletMetadataSyncableService
   // is not present locally.
   syncer::SyncMergeResult MergeData(const syncer::SyncDataList& sync_data);
 
-  // Sends updates to the sync server.
+  // Sends the autofill data model updates to the sync server if the local
+  // version is more recent. Used for both profiles and credit cards.
+  template <class DataType>
   void AutofillDataModelChanged(
       const std::string& server_id,
       const sync_pb::WalletMetadataSpecifics::Type& type,
-      const AutofillDataModel& local);
+      const DataType& local);
 
   base::ThreadChecker thread_checker_;
   AutofillWebDataBackend* web_data_backend_;  // Weak ref.

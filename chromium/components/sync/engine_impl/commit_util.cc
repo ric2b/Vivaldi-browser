@@ -162,8 +162,9 @@ void BuildCommitItem(const syncable::Entry& meta_entry,
 
   SetAttachmentIds(meta_entry, sync_entry);
 
-  // Handle bookmarks separately.
-  if (meta_entry.GetSpecifics().has_bookmark()) {
+  // Handle bookmarks and notes separately.
+  if (meta_entry.GetSpecifics().has_bookmark() ||
+      meta_entry.GetSpecifics().has_notes()) {
     if (meta_entry.GetIsDel()) {
       sync_entry->set_deleted(true);
     } else {

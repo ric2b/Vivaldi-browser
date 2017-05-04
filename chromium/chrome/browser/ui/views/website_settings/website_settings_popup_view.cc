@@ -55,6 +55,7 @@
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/grid_layout.h"
+#include "ui/views/layout/layout_constants.h"
 #include "ui/views/layout/layout_manager.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -77,19 +78,11 @@ WebsiteSettingsPopupView::PopupType g_shown_popup_type =
 const int kMinPopupWidth = 320;
 const int kMaxPopupWidth = 1000;
 
-// Margin and padding values shared by all sections.
-const int kSectionPaddingHorizontal = 16;
-
-// Padding for the bottom of the bubble.
-const int kPopupMarginBottom = 16;
-
 // Security Section (PopupHeaderView) ------------------------------------------
 
 // Margin and padding values for the |PopupHeaderView|.
 const int kHeaderMarginBottom = 10;
-const int kHeaderPaddingBottom = 16;
-const int kHeaderPaddingTop = 16;
-const int kHeaderPaddingForCloseButton = 8;
+const int kHeaderPaddingBottom = views::kPanelVertMargin;
 
 // Spacing between labels in the header.
 const int kHeaderLabelSpacing = 4;
@@ -112,6 +105,20 @@ const int STYLED_LABEL_RESET_CERTIFICATE_DECISIONS = 1339;
 const int LINK_COOKIE_DIALOG = 1340;
 const int LINK_SITE_SETTINGS = 1341;
 
+// The default, ui::kTitleFontSizeDelta, is too large for the website settings
+// bubble (e.g. +3). Use +1 to obtain a smaller font.
+constexpr int kSummaryFontSizeDelta = 1;
+
+// Adds a ColumnSet on |layout| with a single View column and padding columns
+// on either side of it with |margin| width.
+void AddColumnWithSideMargin(views::GridLayout* layout, int margin, int id) {
+  views::ColumnSet* column_set = layout->AddColumnSet(id);
+  column_set->AddPaddingColumn(0, margin);
+  column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 1,
+                        views::GridLayout::USE_PREF, 0, 0);
+  column_set->AddPaddingColumn(0, margin);
+}
+
 }  // namespace
 
 // |PopupHeaderView| is the UI element (view) that represents the header of the
@@ -119,8 +126,9 @@ const int LINK_SITE_SETTINGS = 1341;
 // identity check and the name of the site's identity.
 class PopupHeaderView : public views::View {
  public:
-  explicit PopupHeaderView(views::ButtonListener* button_listener,
-                           views::StyledLabelListener* styled_label_listener);
+  PopupHeaderView(views::ButtonListener* button_listener,
+                  views::StyledLabelListener* styled_label_listener,
+                  int side_margin);
   ~PopupHeaderView() override;
 
   // Sets the security summary for the current page.
@@ -134,9 +142,6 @@ class PopupHeaderView : public views::View {
  private:
   // The listener for the styled labels in this view.
   views::StyledLabelListener* styled_label_listener_;
-
-  // The label that displays security summary for the current page.
-  views::Label* summary_label_;
 
   // The label that displays the status of the identity check for this site.
   // Includes a link to open the Chrome Help Center article about connection
@@ -173,6 +178,9 @@ class InternalPageInfoPopupView : public views::BubbleDialogDelegateView {
  private:
   friend class WebsiteSettingsPopupView;
 
+  // Used around icon and inside bubble border.
+  static constexpr int kSpacing = 12;
+
   DISALLOW_COPY_AND_ASSIGN(InternalPageInfoPopupView);
 };
 
@@ -182,69 +190,17 @@ class InternalPageInfoPopupView : public views::BubbleDialogDelegateView {
 
 PopupHeaderView::PopupHeaderView(
     views::ButtonListener* button_listener,
-    views::StyledLabelListener* styled_label_listener)
+    views::StyledLabelListener* styled_label_listener,
+    int side_margin)
     : styled_label_listener_(styled_label_listener),
-      summary_label_(nullptr),
       details_label_(nullptr),
       reset_decisions_label_container_(nullptr),
       reset_decisions_label_(nullptr) {
   views::GridLayout* layout = new views::GridLayout(this);
   SetLayoutManager(layout);
 
-  const int label_column = 0;
-  views::ColumnSet* column_set = layout->AddColumnSet(label_column);
-  column_set->AddPaddingColumn(0, kSectionPaddingHorizontal);
-  column_set->AddColumn(views::GridLayout::FILL,
-                        views::GridLayout::FILL,
-                        1,
-                        views::GridLayout::USE_PREF,
-                        0,
-                        0);
-  column_set->AddPaddingColumn(1, 0);
-  column_set->AddColumn(views::GridLayout::FILL,
-                        views::GridLayout::FILL,
-                        1,
-                        views::GridLayout::USE_PREF,
-                        0,
-                        0);
-  column_set->AddPaddingColumn(0, kHeaderPaddingForCloseButton);
-
-  // First we add the padding needed for the close button.
-  // In order to move down the summary, we simulate additional padding by giving
-  // it an empty border on top later on.
-  layout->AddPaddingRow(0, kHeaderPaddingForCloseButton);
-
-  ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-
-  layout->StartRow(0, label_column);
-  const gfx::FontList& font_list = rb.GetFontListWithDelta(1);
-  summary_label_ = new views::Label(base::string16(), font_list);
-  summary_label_->SetMultiLine(true);
-  summary_label_->SetBorder(views::CreateEmptyBorder(
-      kHeaderPaddingTop - kHeaderPaddingForCloseButton, 0, 0, 0));
-  layout->AddView(summary_label_, 1, 1, views::GridLayout::LEADING,
-                  views::GridLayout::TRAILING);
-  views::ImageButton* close_button = new views::ImageButton(button_listener);
-  close_button->set_id(BUTTON_CLOSE);
-  close_button->SetImage(views::CustomButton::STATE_NORMAL,
-                         rb.GetImageNamed(IDR_CLOSE_2).ToImageSkia());
-  close_button->SetImage(views::CustomButton::STATE_HOVERED,
-                         rb.GetImageNamed(IDR_CLOSE_2_H).ToImageSkia());
-  close_button->SetImage(views::CustomButton::STATE_PRESSED,
-                         rb.GetImageNamed(IDR_CLOSE_2_P).ToImageSkia());
-  layout->AddView(close_button, 1, 1, views::GridLayout::TRAILING,
-                  views::GridLayout::LEADING);
-
-  layout->AddPaddingRow(0, kHeaderLabelSpacing);
-
   const int label_column_status = 1;
-  views::ColumnSet* column_set_status =
-      layout->AddColumnSet(label_column_status);
-  column_set_status->AddPaddingColumn(0, kSectionPaddingHorizontal);
-  column_set_status->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
-                               1, views::GridLayout::USE_PREF, 0, 0);
-  column_set_status->AddPaddingColumn(0, kSectionPaddingHorizontal);
-
+  AddColumnWithSideMargin(layout, side_margin, label_column_status);
   layout->AddPaddingRow(0, kHeaderLabelSpacing);
 
   layout->StartRow(0, label_column_status);
@@ -265,10 +221,6 @@ PopupHeaderView::PopupHeaderView(
 }
 
 PopupHeaderView::~PopupHeaderView() {}
-
-void PopupHeaderView::SetSummary(const base::string16& summary_text) {
-  summary_label_->SetText(summary_text);
-}
 
 void PopupHeaderView::SetDetails(const base::string16& details_text) {
   std::vector<base::string16> subst;
@@ -354,7 +306,6 @@ InternalPageInfoPopupView::InternalPageInfoPopupView(
   set_anchor_view_insets(gfx::Insets(
       GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
 
-  const int kSpacing = 16;
   SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal, kSpacing,
                                         kSpacing, kSpacing));
   set_margins(gfx::Insets());
@@ -379,9 +330,9 @@ views::NonClientFrameView* InternalPageInfoPopupView::CreateNonClientFrameView(
     views::Widget* widget) {
   views::BubbleFrameView* frame = static_cast<views::BubbleFrameView*>(
       BubbleDialogDelegateView::CreateNonClientFrameView(widget));
-  // 16px padding + half of icon width comes out to 24px.
+  // Padding around icon + half of icon width.
   frame->bubble_border()->set_arrow_offset(
-      24 + frame->bubble_border()->GetBorderThickness());
+      kSpacing + 8 + frame->bubble_border()->GetBorderThickness());
   return frame;
 }
 
@@ -475,8 +426,21 @@ WebsiteSettingsPopupView::WebsiteSettingsPopupView(
   set_anchor_view_insets(gfx::Insets(
       GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
 
+  // Capture the default bubble margin, and move it to the Layout classes. This
+  // is necessary so that the views::Separator can extend the full width of the
+  // bubble.
+  const int side_margin = margins().left();
+  DCHECK_EQ(margins().left(), margins().right());
+
+  // Also remove the top margin from the client area so there is less space
+  // below the dialog title.
+  set_margins(gfx::Insets(0, 0, margins().bottom(), 0));
+
   views::GridLayout* layout = new views::GridLayout(this);
   SetLayoutManager(layout);
+
+  // Use a single ColumnSet here. Otherwise the preferred width doesn't properly
+  // propagate up to the dialog width.
   const int content_column = 0;
   views::ColumnSet* column_set = layout->AddColumnSet(content_column);
   column_set->AddColumn(views::GridLayout::FILL,
@@ -486,7 +450,7 @@ WebsiteSettingsPopupView::WebsiteSettingsPopupView(
                         0,
                         0);
 
-  header_ = new PopupHeaderView(this, this);
+  header_ = new PopupHeaderView(this, this, side_margin);
   layout->StartRow(1, content_column);
   layout->AddView(header_);
 
@@ -497,12 +461,15 @@ WebsiteSettingsPopupView::WebsiteSettingsPopupView(
   layout->AddPaddingRow(1, kHeaderMarginBottom);
   layout->StartRow(1, content_column);
 
-  site_settings_view_ = CreateSiteSettingsView();
+  site_settings_view_ = CreateSiteSettingsView(side_margin);
   layout->AddView(site_settings_view_);
 
-  // Each section handles its own padding.
-  set_margins(gfx::Insets(0, 0, kPopupMarginBottom, 0));
-
+  if (!ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+    // In non-material, titles are inset from the dialog margin. Ensure the
+    // horizontal insets match.
+    set_title_margins(
+        gfx::Insets(views::kPanelVertMargin, side_margin, 0, side_margin));
+  }
   views::BubbleDialogDelegateView::CreateBubble(this);
 
   presenter_.reset(new WebsiteSettings(
@@ -533,6 +500,14 @@ void WebsiteSettingsPopupView::OnChosenObjectDeleted(
   presenter_->OnSiteChosenObjectDeleted(info.ui_info, *info.object);
 }
 
+base::string16 WebsiteSettingsPopupView::GetWindowTitle() const {
+  return summary_text_;
+}
+
+bool WebsiteSettingsPopupView::ShouldShowCloseButton() const {
+  return true;
+}
+
 void WebsiteSettingsPopupView::OnWidgetDestroying(views::Widget* widget) {
   g_shown_popup_type = POPUP_NONE;
   presenter_->OnUIClosing();
@@ -540,6 +515,11 @@ void WebsiteSettingsPopupView::OnWidgetDestroying(views::Widget* widget) {
 
 int WebsiteSettingsPopupView::GetDialogButtons() const {
   return ui::DIALOG_BUTTON_NONE;
+}
+
+const gfx::FontList& WebsiteSettingsPopupView::GetTitleFontList() const {
+  return ui::ResourceBundle::GetSharedInstance().GetFontListWithDelta(
+      kSummaryFontSizeDelta);
 }
 
 void WebsiteSettingsPopupView::ButtonPressed(views::Button* button,
@@ -718,7 +698,8 @@ void WebsiteSettingsPopupView::SetIdentityInfo(
   std::unique_ptr<WebsiteSettingsUI::SecurityDescription> security_description =
       identity_info.GetSecurityDescription();
 
-  header_->SetSummary(security_description->summary);
+  summary_text_ = security_description->summary;
+  GetWidget()->UpdateWindowTitle();
 
   if (identity_info.certificate) {
     certificate_ = identity_info.certificate;
@@ -733,19 +714,13 @@ void WebsiteSettingsPopupView::SetIdentityInfo(
   SizeToContents();
 }
 
-void WebsiteSettingsPopupView::SetSelectedTab(TabId tab_id) {
-  // TODO(lgarron): Remove this method. (https://crbug.com/571533)
-}
-
-views::View* WebsiteSettingsPopupView::CreateSiteSettingsView() {
+views::View* WebsiteSettingsPopupView::CreateSiteSettingsView(int side_margin) {
   views::View* site_settings_view = new views::View();
   views::BoxLayout* box_layout =
-      new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0);
+      new views::BoxLayout(views::BoxLayout::kVertical, side_margin, 0, 0);
   site_settings_view->SetLayoutManager(box_layout);
   box_layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_STRETCH);
-  box_layout->set_inside_border_insets(
-      gfx::Insets(0, kSectionPaddingHorizontal));
 
   // Add cookies view.
   cookies_view_ = new views::View();

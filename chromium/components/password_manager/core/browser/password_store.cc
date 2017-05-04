@@ -53,10 +53,28 @@ void PasswordStore::GetLoginsRequest::NotifyConsumerWithResults(
 }
 
 void PasswordStore::GetLoginsRequest::NotifyWithSiteStatistics(
-    std::vector<std::unique_ptr<InteractionsStats>> stats) {
+    std::vector<InteractionsStats> stats) {
   origin_task_runner_->PostTask(
       FROM_HERE, base::Bind(&PasswordStoreConsumer::OnGetSiteStatistics,
                             consumer_weak_, base::Passed(&stats)));
+}
+
+PasswordStore::CheckReuseRequest::CheckReuseRequest(
+    PasswordReuseDetectorConsumer* consumer)
+    : origin_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      consumer_weak_(consumer->AsWeakPtr()) {}
+
+PasswordStore::CheckReuseRequest::~CheckReuseRequest() {}
+
+void PasswordStore::CheckReuseRequest::OnReuseFound(
+    const base::string16& password,
+    const std::string& saved_domain,
+    int saved_passwords,
+    int number_matches) {
+  origin_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&PasswordReuseDetectorConsumer::OnReuseFound, consumer_weak_,
+                 password, saved_domain, saved_passwords, number_matches));
 }
 
 PasswordStore::FormDigest::FormDigest(autofill::PasswordForm::Scheme new_scheme,
@@ -68,6 +86,16 @@ PasswordStore::FormDigest::FormDigest(const PasswordForm& form)
     : scheme(form.scheme),
       signon_realm(form.signon_realm),
       origin(form.origin) {}
+
+PasswordStore::FormDigest::FormDigest(const FormDigest& other) = default;
+
+PasswordStore::FormDigest::FormDigest(FormDigest&& other) = default;
+
+PasswordStore::FormDigest& PasswordStore::FormDigest::operator=(
+    const FormDigest& other) = default;
+
+PasswordStore::FormDigest& PasswordStore::FormDigest::operator=(
+    FormDigest&& other) = default;
 
 bool PasswordStore::FormDigest::operator==(const FormDigest& other) const {
   return scheme == other.scheme && signon_realm == other.signon_realm &&
@@ -81,11 +109,10 @@ PasswordStore::PasswordStore(
       db_thread_runner_(db_thread_runner),
       observers_(new base::ObserverListThreadSafe<Observer>()),
       is_propagating_password_changes_to_web_credentials_enabled_(false),
-      shutdown_called_(false) {
-}
+      shutdown_called_(false) {}
 
 bool PasswordStore::Init(const syncer::SyncableService::StartSyncFlare& flare) {
-  ScheduleTask(base::Bind(&PasswordStore::InitSyncableService, this, flare));
+  ScheduleTask(base::Bind(&PasswordStore::InitOnBackgroundThread, this, flare));
   return true;
 }
 
@@ -262,7 +289,7 @@ bool PasswordStore::ScheduleTask(const base::Closure& task) {
 }
 
 void PasswordStore::ShutdownOnUIThread() {
-  ScheduleTask(base::Bind(&PasswordStore::DestroySyncableService, this));
+  ScheduleTask(base::Bind(&PasswordStore::DestroyOnBackgroundThread, this));
   // The AffiliationService must be destroyed from the main thread.
   affiliated_match_helper_.reset();
   shutdown_called_ = true;
@@ -273,6 +300,14 @@ PasswordStore::GetPasswordSyncableService() {
   DCHECK(GetBackgroundTaskRunner()->BelongsToCurrentThread());
   DCHECK(syncable_service_);
   return syncable_service_->AsWeakPtr();
+}
+
+void PasswordStore::CheckReuse(const base::string16& input,
+                               const std::string& domain,
+                               PasswordReuseDetectorConsumer* consumer) {
+  auto check_reuse_request = base::MakeUnique<CheckReuseRequest>(consumer);
+  ScheduleTask(base::Bind(&PasswordStore::CheckReuseImpl, this,
+                          base::Passed(&check_reuse_request), input, domain));
 }
 
 PasswordStore::~PasswordStore() {
@@ -339,7 +374,16 @@ void PasswordStore::NotifyLoginsChanged(
     observers_->Notify(FROM_HERE, &Observer::OnLoginsChanged, changes);
     if (syncable_service_)
       syncable_service_->ActOnPasswordStoreChanges(changes);
+    if (reuse_detector_)
+      reuse_detector_->OnLoginsChanged(changes);
   }
+}
+
+void PasswordStore::CheckReuseImpl(std::unique_ptr<CheckReuseRequest> request,
+                                   const base::string16& input,
+                                   const std::string& domain) {
+  if (reuse_detector_)
+    reuse_detector_->CheckReuse(input, domain, request.get());
 }
 
 void PasswordStore::Schedule(
@@ -492,12 +536,6 @@ void PasswordStore::GetLoginsWithAffiliationsImpl(
         FillMatchingLogins({PasswordForm::SCHEME_HTML, realm, GURL()}));
     for (auto& result : more_results)
       result->is_affiliation_based_match = true;
-    more_results.erase(
-        std::remove_if(more_results.begin(), more_results.end(),
-                       [](const std::unique_ptr<PasswordForm>& result) {
-                         return !result->federation_origin.unique();
-                       }),
-        more_results.end());
     password_manager_util::TrimUsernameOnlyCredentials(&more_results);
     const size_t results_count = results.size();
     results.resize(results_count + more_results.size());
@@ -649,17 +687,25 @@ void PasswordStore::ScheduleUpdateAffiliatedWebLoginsImpl(
                           updated_android_form, affiliated_web_realms));
 }
 
-void PasswordStore::InitSyncableService(
+void PasswordStore::InitOnBackgroundThread(
     const syncer::SyncableService::StartSyncFlare& flare) {
   DCHECK(GetBackgroundTaskRunner()->BelongsToCurrentThread());
   DCHECK(!syncable_service_);
   syncable_service_.reset(new PasswordSyncableService(this));
   syncable_service_->InjectStartSyncFlare(flare);
+  reuse_detector_.reset(new PasswordReuseDetector);
+#if !defined(OS_MACOSX)
+  // TODO(crbug.com/668155): For non-migrated keychain users it can lead to
+  // hundreds of requests to unlock keychain.
+  GetAutofillableLoginsImpl(
+      base::MakeUnique<GetLoginsRequest>(reuse_detector_.get()));
+#endif
 }
 
-void PasswordStore::DestroySyncableService() {
+void PasswordStore::DestroyOnBackgroundThread() {
   DCHECK(GetBackgroundTaskRunner()->BelongsToCurrentThread());
   syncable_service_.reset();
+  reuse_detector_.reset();
 }
 
 std::ostream& operator<<(std::ostream& os,

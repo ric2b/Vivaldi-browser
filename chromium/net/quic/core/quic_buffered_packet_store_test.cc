@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/stl_util.h"
+#include "net/quic/core/quic_flags.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "net/quic/test_tools/quic_buffered_packet_store_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
@@ -51,8 +52,8 @@ class QuicBufferedPacketStoreTest : public ::testing::Test {
  public:
   QuicBufferedPacketStoreTest()
       : store_(&visitor_, &clock_, &alarm_factory_),
-        server_address_(Loopback6(), 65535),
-        client_address_(Loopback6(), 65535),
+        server_address_(QuicIpAddress::Any6(), 65535),
+        client_address_(QuicIpAddress::Any6(), 65535),
         packet_content_("some encrypted content"),
         packet_time_(QuicTime::Zero() + QuicTime::Delta::FromMicroseconds(42)),
         packet_(packet_content_.data(), packet_content_.size(), packet_time_) {}
@@ -63,8 +64,8 @@ class QuicBufferedPacketStoreTest : public ::testing::Test {
   MockClock clock_;
   MockAlarmFactory alarm_factory_;
   QuicBufferedPacketStore store_;
-  IPEndPoint server_address_;
-  IPEndPoint client_address_;
+  QuicSocketAddress server_address_;
+  QuicSocketAddress client_address_;
   string packet_content_;
   QuicTime packet_time_;
   QuicReceivedPacket packet_;
@@ -88,7 +89,7 @@ TEST_F(QuicBufferedPacketStoreTest, SimpleEnqueueAndDeliverPacket) {
 }
 
 TEST_F(QuicBufferedPacketStoreTest, DifferentPacketAddressOnOneConnection) {
-  IPEndPoint addr_with_new_port(Loopback4(), 256);
+  QuicSocketAddress addr_with_new_port(QuicIpAddress::Any4(), 256);
   QuicConnectionId connection_id = 1;
   store_.EnqueuePacket(connection_id, packet_, server_address_, client_address_,
                        false);
@@ -126,7 +127,7 @@ TEST_F(QuicBufferedPacketStoreTest,
   // buffered.
   size_t num_packets = kDefaultMaxUndecryptablePackets + 1;
   QuicConnectionId connection_id = 1;
-  if (FLAGS_quic_limit_num_new_sessions_per_epoll_loop) {
+  if (FLAGS_quic_reloadable_flag_quic_limit_num_new_sessions_per_epoll_loop) {
     // Arrived CHLO packet shouldn't affect how many non-CHLO pacekts store can
     // keep.
     EXPECT_EQ(QuicBufferedPacketStore::SUCCESS,
@@ -146,16 +147,19 @@ TEST_F(QuicBufferedPacketStoreTest,
 
   // Only first |kDefaultMaxUndecryptablePackets| non-CHLO packets and CHLO are
   // buffered.
-  EXPECT_EQ(kDefaultMaxUndecryptablePackets +
-                (FLAGS_quic_limit_num_new_sessions_per_epoll_loop ? 1 : 0),
-            store_.DeliverPackets(connection_id).size());
+  EXPECT_EQ(
+      kDefaultMaxUndecryptablePackets +
+          (FLAGS_quic_reloadable_flag_quic_limit_num_new_sessions_per_epoll_loop
+               ? 1
+               : 0),
+      store_.DeliverPackets(connection_id).size());
 }
 
 TEST_F(QuicBufferedPacketStoreTest, ReachNonChloConnectionUpperLimit) {
   // Tests that store can only keep early arrived packets for limited number of
   // connections.
   const size_t kNumConnections =
-      (FLAGS_quic_limit_num_new_sessions_per_epoll_loop
+      (FLAGS_quic_reloadable_flag_quic_limit_num_new_sessions_per_epoll_loop
            ? kMaxConnectionsWithoutCHLO
            : kDefaultMaxConnectionsInStore) +
       1;
@@ -163,9 +167,10 @@ TEST_F(QuicBufferedPacketStoreTest, ReachNonChloConnectionUpperLimit) {
        ++connection_id) {
     EnqueuePacketResult result = store_.EnqueuePacket(
         connection_id, packet_, server_address_, client_address_, false);
-    if (connection_id <= (FLAGS_quic_limit_num_new_sessions_per_epoll_loop
-                              ? kMaxConnectionsWithoutCHLO
-                              : kDefaultMaxConnectionsInStore)) {
+    if (connection_id <=
+        (FLAGS_quic_reloadable_flag_quic_limit_num_new_sessions_per_epoll_loop
+             ? kMaxConnectionsWithoutCHLO
+             : kDefaultMaxConnectionsInStore)) {
       EXPECT_EQ(EnqueuePacketResult::SUCCESS, result);
     } else {
       EXPECT_EQ(EnqueuePacketResult::TOO_MANY_CONNECTIONS, result);
@@ -175,9 +180,10 @@ TEST_F(QuicBufferedPacketStoreTest, ReachNonChloConnectionUpperLimit) {
   for (size_t connection_id = 1; connection_id <= kNumConnections;
        ++connection_id) {
     std::list<BufferedPacket> queue = store_.DeliverPackets(connection_id);
-    if (connection_id <= (FLAGS_quic_limit_num_new_sessions_per_epoll_loop
-                              ? kMaxConnectionsWithoutCHLO
-                              : kDefaultMaxConnectionsInStore)) {
+    if (connection_id <=
+        (FLAGS_quic_reloadable_flag_quic_limit_num_new_sessions_per_epoll_loop
+             ? kMaxConnectionsWithoutCHLO
+             : kDefaultMaxConnectionsInStore)) {
       EXPECT_EQ(1u, queue.size());
     } else {
       EXPECT_EQ(0u, queue.size());
@@ -187,7 +193,7 @@ TEST_F(QuicBufferedPacketStoreTest, ReachNonChloConnectionUpperLimit) {
 
 TEST_F(QuicBufferedPacketStoreTest,
        FullStoreFailToBufferDataPacketOnNewConnection) {
-  FLAGS_quic_limit_num_new_sessions_per_epoll_loop = true;
+  FLAGS_quic_reloadable_flag_quic_limit_num_new_sessions_per_epoll_loop = true;
   // Send enough CHLOs so that store gets full before number of connections
   // without CHLO reaches its upper limit.
   size_t num_chlos =
@@ -213,7 +219,7 @@ TEST_F(QuicBufferedPacketStoreTest,
 }
 
 TEST_F(QuicBufferedPacketStoreTest, EnqueueChloOnTooManyDifferentConnections) {
-  FLAGS_quic_limit_num_new_sessions_per_epoll_loop = true;
+  FLAGS_quic_reloadable_flag_quic_limit_num_new_sessions_per_epoll_loop = true;
   // Buffer data packets on different connections upto limit.
   for (QuicConnectionId conn_id = 1; conn_id <= kMaxConnectionsWithoutCHLO;
        ++conn_id) {
@@ -266,7 +272,7 @@ TEST_F(QuicBufferedPacketStoreTest, EnqueueChloOnTooManyDifferentConnections) {
 }
 
 TEST_F(QuicBufferedPacketStoreTest, PacketQueueExpiredBeforeDelivery1) {
-  FLAGS_quic_limit_num_new_sessions_per_epoll_loop = false;
+  FLAGS_quic_reloadable_flag_quic_limit_num_new_sessions_per_epoll_loop = false;
   QuicConnectionId connection_id = 1;
   store_.EnqueuePacket(connection_id, packet_, server_address_, client_address_,
                        false);
@@ -275,7 +281,7 @@ TEST_F(QuicBufferedPacketStoreTest, PacketQueueExpiredBeforeDelivery1) {
   QuicConnectionId connection_id2 = 2;
   // Use different client address to differetiate packets from different
   // connections.
-  IPEndPoint another_client_address(Loopback4(), 255);
+  QuicSocketAddress another_client_address(QuicIpAddress::Any4(), 255);
   store_.EnqueuePacket(connection_id2, packet_, server_address_,
                        another_client_address, false);
   // Advance clock to the time when connection 1 expires.
@@ -318,11 +324,11 @@ TEST_F(QuicBufferedPacketStoreTest, PacketQueueExpiredBeforeDelivery1) {
 // Tests that store expires long-staying connections appropriately for
 // connections both with and without CHLOs.
 TEST_F(QuicBufferedPacketStoreTest, PacketQueueExpiredBeforeDelivery2) {
-  FLAGS_quic_limit_num_new_sessions_per_epoll_loop = true;
+  FLAGS_quic_reloadable_flag_quic_limit_num_new_sessions_per_epoll_loop = true;
   QuicConnectionId connection_id = 1;
   store_.EnqueuePacket(connection_id, packet_, server_address_, client_address_,
                        false);
-  if (FLAGS_quic_limit_num_new_sessions_per_epoll_loop) {
+  if (FLAGS_quic_reloadable_flag_quic_limit_num_new_sessions_per_epoll_loop) {
     EXPECT_EQ(EnqueuePacketResult::SUCCESS,
               store_.EnqueuePacket(connection_id, packet_, server_address_,
                                    client_address_, true));
@@ -337,7 +343,7 @@ TEST_F(QuicBufferedPacketStoreTest, PacketQueueExpiredBeforeDelivery2) {
   QuicConnectionId connection_id3 = 3;
   // Use different client address to differetiate packets from different
   // connections.
-  IPEndPoint another_client_address(Any4(), 255);
+  QuicSocketAddress another_client_address(QuicIpAddress::Any4(), 255);
   store_.EnqueuePacket(connection_id3, packet_, server_address_,
                        another_client_address, true);
 

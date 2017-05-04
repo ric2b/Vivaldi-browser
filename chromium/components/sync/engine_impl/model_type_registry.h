@@ -28,10 +28,8 @@ class CommitContributor;
 class DataTypeDebugInfoEmitter;
 class DirectoryCommitContributor;
 class DirectoryUpdateHandler;
-class ModelTypeProcessor;
 class ModelTypeWorker;
 class UpdateHandler;
-struct ModelTypeState;
 
 typedef std::map<ModelType, UpdateHandler*> UpdateHandlerMap;
 typedef std::map<ModelType, CommitContributor*> CommitContributorMap;
@@ -86,6 +84,9 @@ class ModelTypeRegistry : public ModelTypeConnector,
   // Returns set of types for which initial set of updates was downloaded and
   // applied.
   ModelTypeSet GetInitialSyncEndedTypes() const;
+
+  // Returns the set of non-blocking types with initial sync done.
+  ModelTypeSet GetInitialSyncDoneNonBlockingTypes() const;
 
   // Simple getters.
   UpdateHandlerMap* update_handler_map();

@@ -7,6 +7,8 @@
 #import <Foundation/Foundation.h>
 #import <XCTest/XCTest.h>
 
+#include "base/ios/ios_util.h"
+#include "ios/testing/earl_grey/disabled_test_macros.h"
 #import "ios/web/public/test/http_server.h"
 #include "ios/web/public/test/http_server_util.h"
 #import "ios/web/shell/test/earl_grey/shell_base_test_case.h"
@@ -45,6 +47,29 @@ id<GREYMatcher> contentOffset(CGPoint offset) {
       nil);
 }
 
+// Waits for the web view scroll view is scrolled to |y_offset|.
+void WaitForOffset(CGFloat y_offset) {
+  CGPoint content_offset = CGPointMake(0.0, y_offset);
+  NSString* content_offset_string = NSStringFromCGPoint(content_offset);
+  NSString* name =
+      [NSString stringWithFormat:@"Wait for scroll view to scroll to %@.",
+                                 content_offset_string];
+  GREYCondition* condition = [GREYCondition
+      conditionWithName:name
+                  block:^BOOL {
+                    NSError* error = nil;
+                    [[EarlGrey
+                        selectElementWithMatcher:web::webViewScrollView()]
+                        assertWithMatcher:contentOffset(content_offset)
+                                    error:&error];
+                    return (error == nil);
+                  }];
+  NSString* error_text =
+      [NSString stringWithFormat:@"Scroll view did not scroll to %@",
+                                 content_offset_string];
+  GREYAssert([condition waitWithTimeout:10], error_text);
+}
+
 }  // namespace
 
 using web::test::HttpServer;
@@ -81,14 +106,12 @@ using web::test::HttpServer;
   // Go back and verify that the first page offset has been restored.
   [[EarlGrey selectElementWithMatcher:web::backButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:web::webViewScrollView()]
-      assertWithMatcher:contentOffset(CGPointMake(0, kScrollOffset1))];
+  WaitForOffset(kScrollOffset1);
 
   // Go forward and verify that the second page offset has been restored.
   [[EarlGrey selectElementWithMatcher:web::forwardButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:web::webViewScrollView()]
-      assertWithMatcher:contentOffset(CGPointMake(0, kScrollOffset2))];
+  WaitForOffset(kScrollOffset2);
 }
 
 @end

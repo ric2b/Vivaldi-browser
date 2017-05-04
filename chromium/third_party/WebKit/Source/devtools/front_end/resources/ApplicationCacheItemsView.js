@@ -36,7 +36,7 @@ Resources.ApplicationCacheItemsView = class extends UI.SimpleView {
 
     this._deleteButton = new UI.ToolbarButton(Common.UIString('Delete'), 'largeicon-delete');
     this._deleteButton.setVisible(false);
-    this._deleteButton.addEventListener('click', this._deleteButtonClicked, this);
+    this._deleteButton.addEventListener(UI.ToolbarButton.Events.Click, this._deleteButtonClicked, this);
 
     this._connectivityIcon = createElement('label', 'dt-icon-label');
     this._connectivityIcon.style.margin = '0 2px 0 5px';
@@ -179,14 +179,14 @@ Resources.ApplicationCacheItemsView = class extends UI.SimpleView {
   }
 
   _createDataGrid() {
-    var columns = /** @type {!Array<!UI.DataGrid.ColumnDescriptor>} */ ([
-      {id: 'resource', title: Common.UIString('Resource'), sort: UI.DataGrid.Order.Ascending, sortable: true},
+    var columns = /** @type {!Array<!DataGrid.DataGrid.ColumnDescriptor>} */ ([
+      {id: 'resource', title: Common.UIString('Resource'), sort: DataGrid.DataGrid.Order.Ascending, sortable: true},
       {id: 'type', title: Common.UIString('Type'), sortable: true},
-      {id: 'size', title: Common.UIString('Size'), align: UI.DataGrid.Align.Right, sortable: true}
+      {id: 'size', title: Common.UIString('Size'), align: DataGrid.DataGrid.Align.Right, sortable: true}
     ]);
-    this._dataGrid = new UI.DataGrid(columns);
+    this._dataGrid = new DataGrid.DataGrid(columns);
     this._dataGrid.asWidget().show(this.element);
-    this._dataGrid.addEventListener(UI.DataGrid.Events.SortingChanged, this._populateDataGrid, this);
+    this._dataGrid.addEventListener(DataGrid.DataGrid.Events.SortingChanged, this._populateDataGrid, this);
   }
 
   _populateDataGrid() {
@@ -225,7 +225,7 @@ Resources.ApplicationCacheItemsView = class extends UI.SimpleView {
       data.resource = resource.url;
       data.type = resource.type;
       data.size = Number.bytesToString(resource.size);
-      var node = new UI.DataGridNode(data);
+      var node = new DataGrid.DataGridNode(data);
       node.resource = resource;
       node.selectable = true;
       this._dataGrid.rootNode().appendChild(node);
@@ -239,6 +239,9 @@ Resources.ApplicationCacheItemsView = class extends UI.SimpleView {
       this._dataGrid.rootNode().children[0].selected = true;
   }
 
+  /**
+   * @param {!Common.Event} event
+   */
   _deleteButtonClicked(event) {
     if (!this._dataGrid || !this._dataGrid.selectedNode)
       return;
@@ -249,7 +252,7 @@ Resources.ApplicationCacheItemsView = class extends UI.SimpleView {
 
   _deleteCallback(node) {
     // FIXME: Should we delete a single (selected) resource or all resources?
-    // InspectorBackend.deleteCachedResource(...)
+    // Protocol.inspectorBackend.deleteCachedResource(...)
     // this._update();
   }
 };

@@ -42,50 +42,6 @@ class HTMLElement;
 class HTMLSpanElement;
 class Text;
 
-class EditCommandComposition final : public UndoStep {
- public:
-  static EditCommandComposition* create(Document*,
-                                        const VisibleSelection&,
-                                        const VisibleSelection&,
-                                        InputEvent::InputType);
-
-  bool belongsTo(const LocalFrame&) const override;
-  void unapply() override;
-  void reapply() override;
-  InputEvent::InputType inputType() const override;
-  void append(SimpleEditCommand*);
-  void append(EditCommandComposition*);
-
-  const VisibleSelection& startingSelection() const {
-    return m_startingSelection;
-  }
-  const VisibleSelection& endingSelection() const { return m_endingSelection; }
-  void setStartingSelection(const VisibleSelection&);
-  void setEndingSelection(const VisibleSelection&);
-  Element* startingRootEditableElement() const {
-    return m_startingRootEditableElement.get();
-  }
-  Element* endingRootEditableElement() const {
-    return m_endingRootEditableElement.get();
-  }
-
-  DECLARE_VIRTUAL_TRACE();
-
- private:
-  EditCommandComposition(Document*,
-                         const VisibleSelection& startingSelection,
-                         const VisibleSelection& endingSelection,
-                         InputEvent::InputType);
-
-  Member<Document> m_document;
-  VisibleSelection m_startingSelection;
-  VisibleSelection m_endingSelection;
-  HeapVector<Member<SimpleEditCommand>> m_commands;
-  Member<Element> m_startingRootEditableElement;
-  Member<Element> m_endingRootEditableElement;
-  InputEvent::InputType m_inputType;
-};
-
 class CORE_EXPORT CompositeEditCommand : public EditCommand {
  public:
   enum ShouldPreserveSelection { PreserveSelection, DoNotPreserveSelection };
@@ -93,15 +49,28 @@ class CORE_EXPORT CompositeEditCommand : public EditCommand {
 
   ~CompositeEditCommand() override;
 
+  const VisibleSelection& startingSelection() const {
+    return m_startingSelection;
+  }
+  const VisibleSelection& endingSelection() const { return m_endingSelection; }
+
+  void setStartingSelection(const VisibleSelection&);
+  void setEndingSelection(const SelectionInDOMTree&);
+  // TODO(yosin): |setEndingVisibleSelection()| will take |SelectionInUndoStep|
+  // You should not use this function other than copying existing selection.
+  void setEndingVisibleSelection(const VisibleSelection&);
+
+  void setParent(CompositeEditCommand*) override;
+
   // Returns |false| if the command failed.  e.g. It's aborted.
   bool apply();
   bool isFirstCommand(EditCommand* command) {
-    return !m_commands.isEmpty() && m_commands.first() == command;
+    return !m_commands.isEmpty() && m_commands.front() == command;
   }
-  EditCommandComposition* composition() { return m_composition.get(); }
-  EditCommandComposition* ensureComposition();
-  // Append composition from an already applied command.
-  void appendCommandToComposite(CompositeEditCommand*);
+  UndoStep* undoStep() { return m_undoStep.get(); }
+  UndoStep* ensureUndoStep();
+  // Append undo step from an already applied command.
+  void appendCommandToUndoStep(CompositeEditCommand*);
 
   virtual bool isReplaceSelectionCommand() const;
   virtual bool isTypingCommand() const;
@@ -265,7 +234,9 @@ class CORE_EXPORT CompositeEditCommand : public EditCommand {
  private:
   bool isCompositeEditCommand() const final { return true; }
 
-  Member<EditCommandComposition> m_composition;
+  VisibleSelection m_startingSelection;
+  VisibleSelection m_endingSelection;
+  Member<UndoStep> m_undoStep;
 };
 
 DEFINE_TYPE_CASTS(CompositeEditCommand,

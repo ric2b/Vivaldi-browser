@@ -8,7 +8,6 @@
 #include "base/bind_helpers.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "net/base/auth.h"
 #include "net/base/host_port_pair.h"
@@ -175,9 +174,9 @@ bool HttpProxyClientSocket::WasEverUsed() const {
   return false;
 }
 
-bool HttpProxyClientSocket::WasNpnNegotiated() const {
+bool HttpProxyClientSocket::WasAlpnNegotiated() const {
   if (transport_.get() && transport_->socket()) {
-    return transport_->socket()->WasNpnNegotiated();
+    return transport_->socket()->WasAlpnNegotiated();
   }
   NOTREACHED();
   return false;

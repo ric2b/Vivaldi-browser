@@ -7,7 +7,10 @@
 #include "core/css/RuleFeature.h"
 #include "core/css/RuleSet.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/css/parser/CSSParserContext.h"
 #include "core/dom/Document.h"
+#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/shadow/ShadowRootInit.h"
 #include "core/frame/FrameView.h"
 #include "core/html/HTMLElement.h"
 #include "core/testing/DummyPageHolder.h"
@@ -28,9 +31,19 @@ class SharedStyleFinderTest : public ::testing::Test {
     document().view()->updateAllLifecyclePhases();
   }
 
+  ShadowRoot& attachShadow(Element& host) {
+    ShadowRootInit init;
+    init.setMode("open");
+    ShadowRoot* shadowRoot =
+        host.attachShadow(ScriptState::forMainWorld(document().frame()), init,
+                          ASSERT_NO_EXCEPTION);
+    EXPECT_TRUE(shadowRoot);
+    return *shadowRoot;
+  }
+
   void addSelector(const String& selector) {
     StyleRuleBase* newRule =
-        CSSParser::parseRule(CSSParserContext(HTMLStandardMode, nullptr),
+        CSSParser::parseRule(CSSParserContext::create(HTMLStandardMode),
                              nullptr, selector + "{color:pink}");
     m_ruleSet->addStyleRule(static_cast<StyleRule*>(newRule),
                             RuleHasNoSpecialState);
@@ -179,6 +192,26 @@ TEST_F(SharedStyleFinderTest, AttributeAffectedByDrag) {
 
   EXPECT_TRUE(matchesUncommonAttributeRuleSet(*a));
   EXPECT_FALSE(matchesUncommonAttributeRuleSet(*b));
+}
+
+TEST_F(SharedStyleFinderTest, SlottedPseudoWithAttribute) {
+  setBodyContent("<div id=host><div id=a></div><div id=b attr></div></div>");
+  Element* host = document().getElementById("host");
+  ShadowRoot& root = attachShadow(*host);
+  root.setInnerHTML("<slot></slot>");
+  document().updateDistribution();
+
+  addSelector("::slotted([attr])");
+  finishAddingSelectors();
+
+  Element* a = document().getElementById("a");
+  Element* b = document().getElementById("b");
+
+  EXPECT_TRUE(a->assignedSlot());
+  EXPECT_TRUE(b->assignedSlot());
+
+  EXPECT_FALSE(matchesUncommonAttributeRuleSet(*a));
+  EXPECT_TRUE(matchesUncommonAttributeRuleSet(*b));
 }
 
 }  // namespace blink

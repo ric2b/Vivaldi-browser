@@ -7,8 +7,8 @@
 #include "ash/common/system/chromeos/devicetype_utils.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/grit/generated_resources.h"
@@ -60,10 +60,10 @@ class ArcAuthNotificationDelegate
     StopObserving();
     if (button_index == 0) {
       UpdateOptInActionUMA(arc::OptInActionType::NOTIFICATION_ACCEPTED);
-      arc::ArcAuthService::Get()->EnableArc();
+      arc::ArcSessionManager::Get()->EnableArc();
     } else {
       UpdateOptInActionUMA(arc::OptInActionType::NOTIFICATION_DECLINED);
-      arc::ArcAuthService::Get()->DisableArc();
+      arc::ArcSessionManager::Get()->DisableArc();
     }
   }
 

@@ -5,8 +5,9 @@
 #include "core/dom/IntersectionObserverController.h"
 
 #include "core/dom/Document.h"
+#include "core/dom/Element.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 
 namespace blink {
 
@@ -20,15 +21,13 @@ IntersectionObserverController* IntersectionObserverController::create(
 
 IntersectionObserverController::IntersectionObserverController(
     Document* document)
-    : ActiveDOMObject(document),
+    : SuspendableObject(document),
       m_weakPtrFactory(this),
       m_callbackFiredWhileSuspended(false) {}
 
 IntersectionObserverController::~IntersectionObserverController() {}
 
-void IntersectionObserverController::scheduleIntersectionObserverForDelivery(
-    IntersectionObserver& observer) {
-  m_pendingIntersectionObservers.add(&observer);
+void IntersectionObserverController::postTaskToDeliverObservations() {
   if (!m_weakPtrFactory.hasWeakPtrs()) {
     // TODO(ojan): These tasks decide whether to throttle a subframe, so they
     // need to be unthrottled, but we should throttle all the other tasks
@@ -41,12 +40,18 @@ void IntersectionObserverController::scheduleIntersectionObserverForDelivery(
   }
 }
 
+void IntersectionObserverController::scheduleIntersectionObserverForDelivery(
+    IntersectionObserver& observer) {
+  m_pendingIntersectionObservers.add(&observer);
+  postTaskToDeliverObservations();
+}
+
 void IntersectionObserverController::resume() {
   // If the callback fired while DOM objects were suspended, notifications might
   // be late, so deliver them right away (rather than waiting to fire again).
   if (m_callbackFiredWhileSuspended) {
     m_callbackFiredWhileSuspended = false;
-    deliverIntersectionObservations();
+    postTaskToDeliverObservations();
   }
 }
 
@@ -56,7 +61,7 @@ void IntersectionObserverController::deliverIntersectionObservations() {
     m_pendingIntersectionObservers.clear();
     return;
   }
-  if (context->activeDOMObjectsAreSuspended()) {
+  if (context->isContextSuspended()) {
     m_callbackFiredWhileSuspended = true;
     return;
   }
@@ -86,8 +91,8 @@ void IntersectionObserverController::removeTrackedObserversForRoot(
     const Node& root) {
   HeapVector<Member<IntersectionObserver>> toRemove;
   for (auto& observer : m_trackedIntersectionObservers) {
-    if (observer->rootNode() == &root)
-      toRemove.append(observer);
+    if (observer->root() == &root)
+      toRemove.push_back(observer);
   }
   m_trackedIntersectionObservers.removeAll(toRemove);
 }
@@ -95,7 +100,7 @@ void IntersectionObserverController::removeTrackedObserversForRoot(
 DEFINE_TRACE(IntersectionObserverController) {
   visitor->trace(m_trackedIntersectionObservers);
   visitor->trace(m_pendingIntersectionObservers);
-  ActiveDOMObject::trace(visitor);
+  SuspendableObject::trace(visitor);
 }
 
 }  // namespace blink

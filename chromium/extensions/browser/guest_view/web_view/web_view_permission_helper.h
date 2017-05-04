@@ -13,6 +13,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/media_stream_request.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
+#include "ppapi/features/features.h"
 
 #include "content/public/browser/web_contents_delegate.h"
 
@@ -159,12 +160,12 @@ class WebViewPermissionHelper
                                  bool allow,
                                  const std::string& user_input);
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   // content::WebContentsObserver implementation.
   bool OnMessageReceived(const IPC::Message& message,
                          content::RenderFrameHost* render_frame_host) override;
   bool OnMessageReceived(const IPC::Message& message) override;
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
   // A counter to generate a unique request id for a permission request.
   // We only need the ids to be unique for a given WebViewGuest.

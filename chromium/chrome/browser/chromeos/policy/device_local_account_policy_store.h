@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -21,7 +22,6 @@ class SequencedTaskRunner;
 }
 
 namespace chromeos {
-class DeviceSettingsService;
 class SessionManagerClient;
 }
 
@@ -31,12 +31,9 @@ class PolicyFetchResponse;
 
 namespace policy {
 
-class DeviceLocalAccountPolicyBroker;
-
 // CloudPolicyStore implementation for device-local account policy. Stores/loads
 // policy to/from session_manager.
-class DeviceLocalAccountPolicyStore
-    : public UserCloudPolicyStoreBase {
+class DeviceLocalAccountPolicyStore : public UserCloudPolicyStoreBase {
  public:
   DeviceLocalAccountPolicyStore(
       const std::string& account_id,
@@ -51,16 +48,28 @@ class DeviceLocalAccountPolicyStore
   void Store(const enterprise_management::PolicyFetchResponse& policy) override;
   void Load() override;
 
+  // Loads the policy synchronously on the current thread.
+  void LoadImmediately();
+
  private:
+  // The callback invoked once policy validation is complete. Passed are the
+  // used public key and the validator.
+  using ValidateCompletionCallback =
+      base::Callback<void(const std::string&, UserCloudPolicyValidator*)>;
+
   // Called back by |session_manager_client_| after policy retrieval. Checks for
   // success and triggers policy validation.
-  void ValidateLoadedPolicyBlob(const std::string& policy_blob);
+  void ValidateLoadedPolicyBlob(bool validate_in_background,
+                                const std::string& policy_blob);
 
   // Updates state after validation and notifies observers.
-  void UpdatePolicy(UserCloudPolicyValidator* validator);
+  void UpdatePolicy(const std::string& signature_validation_public_key,
+                    UserCloudPolicyValidator* validator);
 
   // Sends the policy blob to session_manager for storing after validation.
-  void StoreValidatedPolicy(UserCloudPolicyValidator* validator);
+  void StoreValidatedPolicy(
+      const std::string& signature_validation_public_key_unused,
+      UserCloudPolicyValidator* validator);
 
   // Called back when a store operation completes, updates state and reloads the
   // policy if applicable.
@@ -70,13 +79,15 @@ class DeviceLocalAccountPolicyStore
   void CheckKeyAndValidate(
       bool valid_timestamp_required,
       std::unique_ptr<enterprise_management::PolicyFetchResponse> policy,
-      const UserCloudPolicyValidator::CompletionCallback& callback);
+      bool validate_in_background,
+      const ValidateCompletionCallback& callback);
 
   // Triggers policy validation.
   void Validate(
       bool valid_timestamp_required,
       std::unique_ptr<enterprise_management::PolicyFetchResponse> policy,
-      const UserCloudPolicyValidator::CompletionCallback& callback,
+      const ValidateCompletionCallback& callback,
+      bool validate_in_background,
       chromeos::DeviceSettingsService::OwnershipStatus ownership_status);
 
   const std::string account_id_;

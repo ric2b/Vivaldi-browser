@@ -91,19 +91,20 @@ class CAPTURE_EXPORT ThreadSafeCaptureOracle
   void ReportError(const tracked_objects::Location& from_here,
                    const std::string& reason);
 
+  void OnConsumerReportingUtilization(int frame_number, double utilization);
+
  private:
   friend class base::RefCountedThreadSafe<ThreadSafeCaptureOracle>;
   virtual ~ThreadSafeCaptureOracle();
 
   // Callback invoked on completion of all captures.
-  void DidCaptureFrame(
-      int frame_number,
-      std::unique_ptr<VideoCaptureDevice::Client::Buffer> buffer,
-      base::TimeTicks capture_begin_time,
-      base::TimeDelta estimated_frame_duration,
-      scoped_refptr<VideoFrame> frame,
-      base::TimeTicks reference_time,
-      bool success);
+  void DidCaptureFrame(int frame_number,
+                       VideoCaptureDevice::Client::Buffer buffer,
+                       base::TimeTicks capture_begin_time,
+                       base::TimeDelta estimated_frame_duration,
+                       scoped_refptr<VideoFrame> frame,
+                       base::TimeTicks reference_time,
+                       bool success);
 
   // Callback invoked once all consumers have finished with a delivered video
   // frame.  Consumer feedback signals are scanned from the frame's |metadata|.

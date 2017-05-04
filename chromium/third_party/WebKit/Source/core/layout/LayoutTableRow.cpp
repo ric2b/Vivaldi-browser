@@ -27,7 +27,6 @@
 #include "core/layout/LayoutTableRow.h"
 
 #include "core/HTMLNames.h"
-#include "core/fetch/ImageResource.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutState.h"
@@ -280,7 +279,7 @@ LayoutTableRow* LayoutTableRow::createAnonymousWithParent(
   RefPtr<ComputedStyle> newStyle =
       ComputedStyle::createAnonymousStyleWithDisplay(parent->styleRef(),
                                                      EDisplay::TableRow);
-  newRow->setStyle(newStyle.release());
+  newRow->setStyle(std::move(newStyle));
   return newRow;
 }
 
@@ -311,6 +310,20 @@ void LayoutTableRow::addOverflowFromCell(const LayoutTableCell* cell) {
   cellVisualOverflowRect.move(LayoutUnit(), cellOffsetLogicalTopDifference);
 
   addContentsVisualOverflow(cellVisualOverflowRect);
+}
+
+bool LayoutTableRow::isFirstRowInSectionAfterHeader() const {
+  // If there isn't room on the page for at least one content row after the
+  // header group, then we won't repeat the header on each page.
+  // https://drafts.csswg.org/css-tables-3/#repeated-headers reads like
+  // it wants us to drop headers on only the pages that a single row
+  // won't fit but we avoid the complexity of that reading until it
+  // is clarified. Tracked by crbug.com/675904
+  if (rowIndex())
+    return false;
+  LayoutTableSection* header = table()->header();
+  return header && table()->sectionAbove(section()) == header &&
+         header->getPaginationBreakability() != AllowAnyBreaks;
 }
 
 }  // namespace blink

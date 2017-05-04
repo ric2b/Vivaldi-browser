@@ -4,18 +4,42 @@
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/permissions/permissions_browsertest.h"
 #include "chrome/browser/ui/website_settings/mock_permission_prompt_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/variations/variations_switches.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/ppapi_test_utils.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "url/gurl.h"
+
+namespace {
+
+class PageReloadWaiter {
+ public:
+  explicit PageReloadWaiter(content::WebContents* web_contents)
+      : web_contents_(web_contents),
+        navigation_observer_(web_contents,
+                             web_contents->GetLastCommittedURL()) {}
+
+  bool Wait() {
+    navigation_observer_.WaitForNavigationFinished();
+    return content::WaitForLoadStop(web_contents_);
+  }
+
+ private:
+  content::WebContents* web_contents_;
+  content::TestNavigationManager navigation_observer_;
+};
+
+}  // namespace
 
 class FlashPermissionBrowserTest : public PermissionsBrowserTest {
  public:
@@ -44,18 +68,21 @@ class FlashPermissionBrowserTest : public PermissionsBrowserTest {
     if (prompt_factory()->response_type() ==
         PermissionRequestManager::ACCEPT_ALL) {
       // If the prompt will be allowed, we need to wait for the page to refresh.
-      content::TestNavigationManager observer(
-          GetWebContents(), GetWebContents()->GetLastCommittedURL());
+      PageReloadWaiter reload_waiter(GetWebContents());
       EXPECT_TRUE(RunScriptReturnBool("triggerPrompt();"));
-      observer.WaitForNavigationFinished();
+      EXPECT_TRUE(reload_waiter.Wait());
     } else {
       EXPECT_TRUE(RunScriptReturnBool("triggerPrompt();"));
     }
   }
 
   bool FeatureUsageSucceeds() override {
-    // Wait until the page is refreshed before testing whether flash is enabled
-    // or disabled.
+    // If flash should have been blocked, reload the page to be sure that it is
+    // blocked.
+    //
+    // NB: In cases where flash is allowed the page reloads automatically,
+    // and tests should always wait for that reload to finish before calling
+    // this method.
     ui_test_utils::NavigateToURL(browser(),
                                  GetWebContents()->GetLastCommittedURL());
     // If either flash with or without fallback content runs successfully it
@@ -83,10 +110,45 @@ IN_PROC_BROWSER_TEST_F(FlashPermissionBrowserTest, CommonSucceedsIfAllowed) {
   CommonSucceedsIfAllowed();
 }
 
+IN_PROC_BROWSER_TEST_F(FlashPermissionBrowserTest, SucceedsInPopupWindow) {
+  // Spawn the same page in a popup window and wait for it to finish loading.
+  content::WebContents* original_contents = GetWebContents();
+  ASSERT_TRUE(RunScriptReturnBool("spawnPopupAndAwaitLoad();"));
+
+  // Assert that the popup's WebContents is now the active one.
+  ASSERT_NE(original_contents, GetWebContents());
+
+  PermissionRequestManager* manager = PermissionRequestManager::FromWebContents(
+      GetWebContents());
+  auto popup_prompt_factory =
+      base::MakeUnique<MockPermissionPromptFactory>(manager);
+  manager->DisplayPendingRequests();
+
+  EXPECT_EQ(0, popup_prompt_factory->total_request_count());
+  popup_prompt_factory->set_response_type(PermissionRequestManager::ACCEPT_ALL);
+  // FlashPermissionContext::UpdateTabContext will reload the page, we'll have
+  // to wait until it is ready.
+  PageReloadWaiter reload_waiter(GetWebContents());
+  EXPECT_TRUE(RunScriptReturnBool("triggerPrompt();"));
+  EXPECT_TRUE(reload_waiter.Wait());
+
+  EXPECT_TRUE(FeatureUsageSucceeds());
+  EXPECT_EQ(1, popup_prompt_factory->total_request_count());
+
+  // Shut down the popup window tab, as the normal test teardown assumes there
+  // is only one test tab.
+  popup_prompt_factory.reset();
+  GetWebContents()->Close();
+}
+
 IN_PROC_BROWSER_TEST_F(FlashPermissionBrowserTest, TriggerPromptViaNewWindow) {
   EXPECT_EQ(0, prompt_factory()->total_request_count());
   prompt_factory()->set_response_type(PermissionRequestManager::ACCEPT_ALL);
+  // FlashPermissionContext::UpdateTabContext will reload the page, we'll have
+  // to wait until it is ready.
+  PageReloadWaiter reload_waiter(GetWebContents());
   EXPECT_TRUE(RunScriptReturnBool("triggerPromptViaNewWindow();"));
+  EXPECT_TRUE(reload_waiter.Wait());
 
   EXPECT_TRUE(FeatureUsageSucceeds());
   EXPECT_EQ(1, prompt_factory()->total_request_count());
@@ -98,12 +160,30 @@ IN_PROC_BROWSER_TEST_F(FlashPermissionBrowserTest,
   EXPECT_FALSE(FeatureUsageSucceeds());
   prompt_factory()->set_response_type(PermissionRequestManager::ACCEPT_ALL);
   // We need to simulate a mouse click to trigger the placeholder to prompt.
-  content::TestNavigationManager observer(
-      GetWebContents(), GetWebContents()->GetLastCommittedURL());
+  // When the prompt is auto-accepted, the page will be reloaded.
+  PageReloadWaiter reload_waiter(GetWebContents());
   content::SimulateMouseClickAt(GetWebContents(), 0 /* modifiers */,
                                 blink::WebMouseEvent::Button::Left,
                                 gfx::Point(50, 50));
-  observer.WaitForNavigationFinished();
+  EXPECT_TRUE(reload_waiter.Wait());
+
+  EXPECT_TRUE(FeatureUsageSucceeds());
+  EXPECT_EQ(1, prompt_factory()->total_request_count());
+}
+
+IN_PROC_BROWSER_TEST_F(FlashPermissionBrowserTest,
+                       TriggerPromptViaMainFrameNavigationWithoutUserGesture) {
+  EXPECT_EQ(0, prompt_factory()->total_request_count());
+  EXPECT_FALSE(FeatureUsageSucceeds());
+  prompt_factory()->set_response_type(PermissionRequestManager::ACCEPT_ALL);
+
+  PageReloadWaiter reload_waiter(GetWebContents());
+
+  // Unlike the other tests, this JavaScript is called without a user gesture.
+  GetWebContents()->GetMainFrame()->ExecuteJavaScriptForTests(
+      base::ASCIIToUTF16("triggerPromptWithMainFrameNavigation();"));
+
+  EXPECT_TRUE(reload_waiter.Wait());
 
   EXPECT_TRUE(FeatureUsageSucceeds());
   EXPECT_EQ(1, prompt_factory()->total_request_count());

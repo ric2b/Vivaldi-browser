@@ -6,18 +6,20 @@
 #define PresentationAvailability_h
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/events/EventTarget.h"
 #include "core/page/PageVisibilityObserver.h"
 #include "modules/ModulesExport.h"
+#include "modules/presentation/PresentationPromiseProperty.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/WebURL.h"
+#include "public/platform/WebVector.h"
 #include "public/platform/modules/presentation/WebPresentationAvailabilityObserver.h"
+#include "wtf/Vector.h"
 
 namespace blink {
 
 class ExecutionContext;
-class ScriptPromiseResolver;
 
 // Expose whether there is a presentation display available for |url|. The
 // object will be initialized with a default value passed via ::take() and will
@@ -25,16 +27,16 @@ class ScriptPromiseResolver;
 // change. The object will only listen to changes when required.
 class MODULES_EXPORT PresentationAvailability final
     : public EventTargetWithInlineData,
-      public ActiveScriptWrappable,
-      public ActiveDOMObject,
+      public ActiveScriptWrappable<PresentationAvailability>,
+      public SuspendableObject,
       public PageVisibilityObserver,
       public WebPresentationAvailabilityObserver {
   USING_GARBAGE_COLLECTED_MIXIN(PresentationAvailability);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static PresentationAvailability* take(ScriptPromiseResolver*,
-                                        const KURL&,
+  static PresentationAvailability* take(PresentationAvailabilityProperty*,
+                                        const WTF::Vector<KURL>&,
                                         bool);
   ~PresentationAvailability() override;
 
@@ -44,15 +46,15 @@ class MODULES_EXPORT PresentationAvailability final
 
   // WebPresentationAvailabilityObserver implementation.
   void availabilityChanged(bool) override;
-  const WebURL url() const override;
+  const WebVector<WebURL>& urls() const override;
 
   // ScriptWrappable implementation.
   bool hasPendingActivity() const final;
 
-  // ActiveDOMObject implementation.
+  // SuspendableObject implementation.
   void suspend() override;
   void resume() override;
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   // PageVisibilityObserver implementation.
   void pageVisibilityChanged() override;
@@ -69,7 +71,7 @@ class MODULES_EXPORT PresentationAvailability final
                           RegisteredEventListener&) override;
 
  private:
-  // Current state of the ActiveDOMObject. It is Active when created. It
+  // Current state of the SuspendableObject. It is Active when created. It
   // becomes Suspended when suspend() is called and moves back to Active if
   // resume() is called. It becomes Inactive when stop() is called or at
   // destruction time.
@@ -79,12 +81,12 @@ class MODULES_EXPORT PresentationAvailability final
     Inactive,
   };
 
-  PresentationAvailability(ExecutionContext*, const KURL&, bool);
+  PresentationAvailability(ExecutionContext*, const WTF::Vector<KURL>&, bool);
 
   void setState(State);
   void updateListening();
 
-  const KURL m_url;
+  WebVector<WebURL> m_urls;
   bool m_value;
   State m_state;
 };

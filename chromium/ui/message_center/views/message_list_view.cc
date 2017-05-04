@@ -23,14 +23,11 @@ namespace {
 const int kAnimateClearingNextNotificationDelayMS = 40;
 }  // namespace
 
-MessageListView::MessageListView(MessageCenterView* message_center_view,
-                                 bool top_down)
-    : message_center_view_(message_center_view),
-      reposition_top_(-1),
+MessageListView::MessageListView()
+    : reposition_top_(-1),
       fixed_height_(0),
       has_deferred_task_(false),
       clear_all_started_(false),
-      top_down_(top_down),
       animator_(this),
       quit_message_loop_after_animation_for_test_(false),
       weak_ptr_factory_(this) {
@@ -47,9 +44,9 @@ MessageListView::MessageListView(MessageCenterView* message_center_view,
   set_background(
       views::Background::CreateSolidBackground(kMessageCenterBackgroundColor));
   SetBorder(views::CreateEmptyBorder(
-      top_down ? 0 : kMarginBetweenItems - shadow_insets.top(),    /* top */
-      kMarginBetweenItems - shadow_insets.left(),                  /* left */
-      top_down ? kMarginBetweenItems - shadow_insets.bottom() : 0, /* bottom */
+      kMarginBetweenItems - shadow_insets.top(), /* top */
+      kMarginBetweenItems - shadow_insets.left(), /* left */
+      0, /* bottom */
       kMarginBetweenItems - shadow_insets.right() /* right */));
   animator_.AddObserver(this);
 }
@@ -102,13 +99,19 @@ void MessageListView::AddNotificationAt(MessageView* view, int index) {
 
 void MessageListView::RemoveNotification(MessageView* view) {
   DCHECK_EQ(view->parent(), this);
+
+
   if (GetContentsBounds().IsEmpty()) {
     delete view;
   } else {
+    if (adding_views_.find(view) != adding_views_.end())
+      adding_views_.erase(view);
+    if (animator_.IsAnimating(view))
+      animator_.StopAnimatingView(view);
+
     if (view->layer()) {
       deleting_views_.insert(view);
     } else {
-      animator_.StopAnimatingView(view);
       delete view;
     }
     DoUpdateIfPossible();
@@ -209,10 +212,19 @@ void MessageListView::ClearAllClosableNotifications(
     clearing_all_views_.push_back(child);
   }
   if (clearing_all_views_.empty()) {
-    message_center_view()->OnAllNotificationsCleared();
+    for (auto& observer : observers_)
+      observer.OnAllNotificationsCleared();
   } else {
     DoUpdateIfPossible();
   }
+}
+
+void MessageListView::AddObserver(MessageListView::Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void MessageListView::RemoveObserver(MessageListView::Observer* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 void MessageListView::OnBoundsAnimatorProgressed(
@@ -232,7 +244,8 @@ void MessageListView::OnBoundsAnimatorDone(views::BoundsAnimator* animator) {
 
   if (clear_all_started_) {
     clear_all_started_ = false;
-    message_center_view()->OnAllNotificationsCleared();
+    for (auto& observer : observers_)
+      observer.OnAllNotificationsCleared();
   }
 
   if (has_deferred_task_) {
@@ -273,8 +286,7 @@ void MessageListView::DoUpdateIfPossible() {
   int new_height = GetHeightForWidth(child_area.width() + GetInsets().width());
   SetSize(gfx::Size(child_area.width() + GetInsets().width(), new_height));
 
-  if (top_down_ ||
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableMessageCenterAlwaysScrollUpUponNotificationRemoval))
     AnimateNotificationsBelowTarget();
   else
@@ -436,7 +448,7 @@ bool MessageListView::AnimateChild(views::View* child,
     return false;
   } else {
     gfx::Rect target(child_area.x(), top, child_area.width(), height);
-    if (child->bounds().origin() != target.origin() && animate_on_move)
+    if (child->origin() != target.origin() && animate_on_move)
       animator_.AnimateViewTo(child, target);
     else
       child->SetBoundsRect(target);

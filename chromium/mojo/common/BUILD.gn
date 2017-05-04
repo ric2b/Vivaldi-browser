@@ -14,7 +14,14 @@ group("common") {
 
 mojom("common_custom_types") {
   sources = [
-    "common_custom_types.mojom",
+    "file.mojom",
+    "file_path.mojom",
+    "string16.mojom",
+    "text_direction.mojom",
+    "time.mojom",
+    "unguessable_token.mojom",
+    "values.mojom",
+    "version.mojom",
   ]
 }
 
@@ -22,15 +29,10 @@ component("common_base") {
   output_name = "mojo_common_lib"
 
   sources = [
-    "common_type_converters.cc",
-    "common_type_converters.h",
     "data_pipe_drainer.cc",
     "data_pipe_drainer.h",
-    "data_pipe_file_utils.cc",
     "data_pipe_utils.cc",
     "data_pipe_utils.h",
-    "user_agent.cc",
-    "user_agent.h",
   ]
 
   defines = [ "MOJO_COMMON_IMPLEMENTATION" ]
@@ -71,7 +73,6 @@ test("mojo_common_unittests") {
 
   sources = [
     "common_custom_types_unittest.cc",
-    "common_type_converters_unittest.cc",
     "struct_traits_unittest.cc",
   ]
 }
@@ -94,5 +95,9 @@ source_set("struct_traits") {
   deps = [
     ":common_custom_types_shared_cpp_sources",
     "//base:base",
+    "//mojo/public/cpp/system",
+  ]
+  public_deps = [
+    "//base:i18n",
   ]
 }

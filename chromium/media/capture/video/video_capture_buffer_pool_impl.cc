@@ -27,8 +27,8 @@ VideoCaptureBufferPoolImpl::VideoCaptureBufferPoolImpl(
 
 VideoCaptureBufferPoolImpl::~VideoCaptureBufferPoolImpl() {}
 
-mojo::ScopedSharedBufferHandle VideoCaptureBufferPoolImpl::GetHandleForTransit(
-    int buffer_id) {
+mojo::ScopedSharedBufferHandle
+VideoCaptureBufferPoolImpl::GetHandleForInterProcessTransit(int buffer_id) {
   base::AutoLock lock(lock_);
 
   VideoCaptureBufferTracker* tracker = GetTracker(buffer_id);
@@ -39,28 +39,41 @@ mojo::ScopedSharedBufferHandle VideoCaptureBufferPoolImpl::GetHandleForTransit(
   return tracker->GetHandleForTransit();
 }
 
-std::unique_ptr<VideoCaptureBufferHandle>
-VideoCaptureBufferPoolImpl::GetBufferHandle(int buffer_id) {
+base::SharedMemoryHandle
+VideoCaptureBufferPoolImpl::GetNonOwnedSharedMemoryHandleForLegacyIPC(
+    int buffer_id) {
   base::AutoLock lock(lock_);
 
   VideoCaptureBufferTracker* tracker = GetTracker(buffer_id);
   if (!tracker) {
     NOTREACHED() << "Invalid buffer_id.";
-    return std::unique_ptr<VideoCaptureBufferHandle>();
+    return base::SharedMemoryHandle();
+  }
+  return tracker->GetNonOwnedSharedMemoryHandleForLegacyIPC();
+}
+
+std::unique_ptr<VideoCaptureBufferHandle>
+VideoCaptureBufferPoolImpl::GetHandleForInProcessAccess(int buffer_id) {
+  base::AutoLock lock(lock_);
+
+  VideoCaptureBufferTracker* tracker = GetTracker(buffer_id);
+  if (!tracker) {
+    NOTREACHED() << "Invalid buffer_id.";
+    return nullptr;
   }
 
-  DCHECK(tracker->held_by_producer());
-  return tracker->GetBufferHandle();
+  return tracker->GetMemoryMappedAccess();
 }
 
 int VideoCaptureBufferPoolImpl::ReserveForProducer(
     const gfx::Size& dimensions,
     media::VideoPixelFormat format,
     media::VideoPixelStorage storage,
+    int frame_feedback_id,
     int* buffer_id_to_drop) {
   base::AutoLock lock(lock_);
   return ReserveForProducerInternal(dimensions, format, storage,
-                                    buffer_id_to_drop);
+                                    frame_feedback_id, buffer_id_to_drop);
 }
 
 void VideoCaptureBufferPoolImpl::RelinquishProducerReservation(int buffer_id) {
@@ -151,6 +164,7 @@ int VideoCaptureBufferPoolImpl::ReserveForProducerInternal(
     const gfx::Size& dimensions,
     media::VideoPixelFormat pixel_format,
     media::VideoPixelStorage storage_type,
+    int frame_feedback_id,
     int* buffer_id_to_drop) {
   lock_.AssertAcquired();
 
@@ -177,6 +191,7 @@ int VideoCaptureBufferPoolImpl::ReserveForProducerInternal(
         // Existing tracker is big enough and has correct format. Reuse it.
         tracker->set_dimensions(dimensions);
         tracker->set_held_by_producer(true);
+        tracker->set_frame_feedback_id(frame_feedback_id);
         return it->first;
       }
       if (tracker->max_pixel_count() > largest_size_in_pixels) {
@@ -194,6 +209,7 @@ int VideoCaptureBufferPoolImpl::ReserveForProducerInternal(
       last_relinquished_buffer_id_ = kInvalidId;
       tracker_of_last_resort->second->set_dimensions(dimensions);
       tracker_of_last_resort->second->set_held_by_producer(true);
+      tracker_of_last_resort->second->set_frame_feedback_id(frame_feedback_id);
       return tracker_of_last_resort->first;
     }
     if (tracker_to_drop == trackers_.end()) {
@@ -219,6 +235,7 @@ int VideoCaptureBufferPoolImpl::ReserveForProducerInternal(
   }
 
   tracker->set_held_by_producer(true);
+  tracker->set_frame_feedback_id(frame_feedback_id);
   trackers_[buffer_id] = std::move(tracker);
 
   return buffer_id;

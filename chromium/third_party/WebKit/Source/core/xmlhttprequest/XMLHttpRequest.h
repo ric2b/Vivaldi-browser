@@ -27,8 +27,9 @@
 #include "bindings/core/v8/ScriptString.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/TraceWrapperMember.h"
-#include "core/dom/ActiveDOMObject.h"
 #include "core/dom/DocumentParserClient.h"
+#include "core/dom/ExceptionCode.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/loader/ThreadableLoaderClient.h"
 #include "core/xmlhttprequest/XMLHttpRequestEventTarget.h"
 #include "core/xmlhttprequest/XMLHttpRequestProgressEventThrottle.h"
@@ -42,7 +43,6 @@
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/text/AtomicString.h"
-#include "wtf/text/StringBuilder.h"
 #include "wtf/text/WTFString.h"
 #include <memory>
 
@@ -65,13 +65,11 @@ class ThreadableLoader;
 class WebDataConsumerHandle;
 class XMLHttpRequestUpload;
 
-typedef int ExceptionCode;
-
 class XMLHttpRequest final : public XMLHttpRequestEventTarget,
                              private ThreadableLoaderClient,
                              public DocumentParserClient,
-                             public ActiveScriptWrappable,
-                             public ActiveDOMObject {
+                             public ActiveScriptWrappable<XMLHttpRequest>,
+                             public SuspendableObject {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(XMLHttpRequest);
 
@@ -104,8 +102,8 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
     ResponseTypeArrayBuffer,
   };
 
-  // ActiveDOMObject
-  void contextDestroyed() override;
+  // SuspendableObject
+  void contextDestroyed(ExecutionContext*) override;
   ExecutionContext* getExecutionContext() const override;
   void suspend() override;
   void resume() override;

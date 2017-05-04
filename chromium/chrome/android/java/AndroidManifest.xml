@@ -258,7 +258,7 @@ by a child template that "extends" this file.
             </intent-filter>
             <meta-data android:name="android.app.searchable"
                 android:resource="@xml/searchable" />
-            {% if target_sdk_version|int > 24 %}
+            {% if target_sdk_version|int > 24 or target_sdk_version == 'O' %}
             <meta-data android:name="android.app.shortcuts"
                 android:resource="@xml/launchershortcuts" />
             {% endif %}
@@ -413,6 +413,12 @@ by a child template that "extends" this file.
             android:hardwareAccelerated="false">
         </activity>
 
+        <activity android:name="org.chromium.chrome.browser.suggestions.ContentSuggestionsActivity"
+            android:theme="@style/FullscreenWhiteActivityTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:windowSoftInputMode="stateAlwaysHidden">
+        </activity>
+
         <activity android:name="org.chromium.chrome.browser.sync.ui.PassphraseActivity"
             android:theme="@style/MainTheme"
             android:autoRemoveFromRecents="true">
@@ -447,11 +453,6 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:label="@string/storage_management_activity_label"
             android:exported="false">
-        </activity>
-        <activity android:name="org.chromium.chrome.browser.EmbedContentViewActivity"
-            android:theme="@style/ThemeWithActionBar"
-            android:hardwareAccelerated="false"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkActivity"
             android:theme="@style/FullscreenWhiteActivityTheme"
@@ -490,6 +491,14 @@ by a child template that "extends" this file.
 
         <!-- Activities for downloads. -->
         <activity android:name="org.chromium.chrome.browser.download.DownloadActivity"
+            android:theme="@style/FullscreenWhiteActivityTheme"
+            android:windowSoftInputMode="stateAlwaysHidden"
+            android:exported="false"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
+        </activity>
+
+        <!-- Activities for history. -->
+        <activity android:name="org.chromium.chrome.browser.history.HistoryActivity"
             android:theme="@style/FullscreenWhiteActivityTheme"
             android:windowSoftInputMode="stateAlwaysHidden"
             android:exported="false"
@@ -806,6 +815,7 @@ by a child template that "extends" this file.
               <action android:name="android.support.customtabs.action.CustomTabsService" />
             </intent-filter>
         </service>
+        <service android:name="android.support.customtabs.PostMessageService" />
         <service android:name="org.chromium.chrome.browser.crash.LogcatExtractionService"
                  android:exported="false"/>
         <service android:name="org.chromium.chrome.browser.crash.MinidumpPreparationService"
@@ -860,6 +870,13 @@ android:value="true" />
                 <action android:name="android.intent.action.DOWNLOAD_NOTIFICATION_CLICKED"/>
             </intent-filter>
         </receiver>
+
+        <receiver android:name="org.chromium.chrome.browser.ntp.ContentSuggestionsNotificationHelper$OpenUrlReceiver"
+            android:exported="false"/>
+        <receiver android:name="org.chromium.chrome.browser.ntp.ContentSuggestionsNotificationHelper$DeleteReceiver"
+            android:exported="false"/>
+        <receiver android:name="org.chromium.chrome.browser.ntp.ContentSuggestionsNotificationHelper$TimeoutReceiver"
+            android:exported="false"/>
 
         <receiver android:name="org.chromium.base.PowerStatusReceiver">
             <intent-filter>

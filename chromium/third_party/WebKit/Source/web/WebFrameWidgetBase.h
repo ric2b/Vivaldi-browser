@@ -12,13 +12,12 @@
 
 namespace blink {
 
-class CompositorAnimationTimeline;
+class CompositorAnimationHost;
 class CompositorProxyClient;
-class DragController;
 class GraphicsLayer;
 class WebImage;
 class WebLayer;
-class WebLocalFrameImpl;
+class WebLayerTreeView;
 class WebViewImpl;
 class HitTestResult;
 struct WebPoint;
@@ -37,11 +36,8 @@ class WebFrameWidgetBase : public WebFrameWidget {
   // Sets the root layer. |WebLayer| can be null when detaching the root layer.
   virtual void setRootLayer(WebLayer*) = 0;
 
-  // Attaches/detaches a CompositorAnimationTimeline to the layer tree.
-  virtual void attachCompositorAnimationTimeline(
-      CompositorAnimationTimeline*) = 0;
-  virtual void detachCompositorAnimationTimeline(
-      CompositorAnimationTimeline*) = 0;
+  virtual WebLayerTreeView* getLayerTreeView() const = 0;
+  virtual CompositorAnimationHost* animationHost() const = 0;
 
   virtual HitTestResult coreHitTestResultAt(const WebPoint&) = 0;
 
@@ -73,6 +69,8 @@ class WebFrameWidgetBase : public WebFrameWidget {
                      const WebPoint& dragImageOffset);
 
   bool doingDragAndDrop() { return m_doingDragAndDrop; }
+  static void setIgnoreInputEvents(bool value) { s_ignoreInputEvents = value; }
+  static bool ignoreInputEvents() { return s_ignoreInputEvents; }
 
  protected:
   enum DragAction { DragEnter, DragOver };
@@ -106,6 +104,11 @@ class WebFrameWidgetBase : public WebFrameWidget {
   // When not equal to DragOperationNone, the drag data can be dropped onto the
   // current drop target in this WebView (the drop target can accept the drop).
   WebDragOperation m_dragOperation = WebDragOperationNone;
+
+ private:
+  void cancelDrag();
+
+  static bool s_ignoreInputEvents;
 };
 
 DEFINE_TYPE_CASTS(WebFrameWidgetBase, WebFrameWidget, widget, true, true);

@@ -7,7 +7,7 @@ import os.path
 from licenses_vivaldi_texts import onlineLicenses
 
 basepath = "../../vivapp"
-maindeps = check_output(["python", basepath+"/bin/list_jsdeps.py", basepath, "src/app.js"])
+maindeps = check_output(["python", basepath+"/bin/list_jsdeps.py", basepath])
 
 modules = {}
 

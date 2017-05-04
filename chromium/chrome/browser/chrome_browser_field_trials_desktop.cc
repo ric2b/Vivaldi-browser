@@ -4,6 +4,10 @@
 
 #include "chrome/browser/chrome_browser_field_trials_desktop.h"
 
+#if defined(OS_WIN)
+#include <windows.h>
+#endif
+
 #include <map>
 #include <string>
 
@@ -14,15 +18,26 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
+#include "chrome/browser/features.h"
 #include "chrome/browser/prerender/prerender_field_trial.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/browser_watcher/features.h"
+#include "components/browser_watcher/stability_debugging.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/common/content_switches.h"
+#include "media/media_features.h"
 
 #if defined(OS_WIN)
-#include "components/browser_watcher/stability_debugging_win.h"
+#include "base/win/pe_image.h"
+#include "chrome/install_static/install_util.h"
+#include "components/browser_watcher/stability_data_names.h"
+#endif
+
+#if defined(OS_WIN)
+// http://blogs.msdn.com/oldnewthing/archive/2004/10/25/247180.aspx
+extern "C" IMAGE_DOS_HEADER __ImageBase;
 #endif
 
 namespace chrome {
@@ -30,7 +45,7 @@ namespace chrome {
 namespace {
 
 void SetupStunProbeTrial() {
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   std::map<std::string, std::string> params;
   if (!variations::GetVariationParams("StunProbeTrial2", &params))
     return;
@@ -100,17 +115,65 @@ void SetupStabilityDebugging() {
   base::debug::GlobalActivityTracker::CreateWithFile(
       stability_file, kMemorySize, kAllocatorId,
       browser_watcher::kStabilityDebuggingFeature.name, kStackDepth);
+
+  // Record basic information.
+  base::debug::GlobalActivityTracker* global_tracker =
+      base::debug::GlobalActivityTracker::Get();
+  if (global_tracker) {
+    // Record product, version, channel, special build and platform.
+    wchar_t exe_file[MAX_PATH] = {};
+    CHECK(::GetModuleFileName(nullptr, exe_file, arraysize(exe_file)));
+
+    base::string16 product_name;
+    base::string16 version_number;
+    base::string16 channel_name;
+    base::string16 special_build;
+    install_static::GetExecutableVersionDetails(exe_file, &product_name,
+                                                &version_number, &special_build,
+                                                &channel_name);
+
+    base::debug::ActivityUserData& global_data = global_tracker->user_data();
+    global_data.SetString(browser_watcher::kStabilityProduct, product_name);
+    global_data.SetString(browser_watcher::kStabilityVersion, version_number);
+    global_data.SetString(browser_watcher::kStabilityChannel, channel_name);
+    global_data.SetString(browser_watcher::kStabilitySpecialBuild,
+                          special_build);
+#if defined(ARCH_CPU_X86)
+    global_data.SetString(browser_watcher::kStabilityPlatform, "Win32");
+#elif defined(ARCH_CPU_X86_64)
+    global_data.SetString(browser_watcher::kStabilityPlatform, "Win64");
+#endif
+
+    // Record information about chrome's module.
+    global_data.SetUint(browser_watcher::kStabilityModuleAddress,
+                        reinterpret_cast<uint64_t>(&__ImageBase));
+
+    base::win::PEImage pe(&__ImageBase);
+    PIMAGE_NT_HEADERS headers = pe.GetNTHeaders();
+    CHECK(headers);
+    global_data.SetUint(browser_watcher::kStabilityModuleTimestamp,
+                        headers->FileHeader.TimeDateStamp);
+    global_data.SetUint(browser_watcher::kStabilityModuleSize,
+                        headers->OptionalHeader.SizeOfImage);
+  }
 }
 #endif  // defined(OS_WIN)
 
 }  // namespace
 
-void SetupDesktopFieldTrials(const base::CommandLine& parsed_command_line) {
-  prerender::ConfigurePrerender(parsed_command_line);
+void SetupDesktopFieldTrials() {
+  prerender::ConfigurePrerender();
   SetupStunProbeTrial();
 #if defined(OS_WIN)
   SetupStabilityDebugging();
+  base::FeatureList::IsEnabled(features::kModuleDatabase);
 #endif  // defined(OS_WIN)
+  // Activate the experiment as early as possible to increase its visibility
+  // (e.g. the likelihood of its presence in the serialized system profile).
+  // This also needs to happen before the browser rendez-vous attempt
+  // (NotifyOtherProcessOrCreate) in PreMainMessageLoopRun so the corresponding
+  // metrics are tagged.
+  base::FeatureList::IsEnabled(features::kDesktopFastShutdown);
 }
 
 }  // namespace chrome

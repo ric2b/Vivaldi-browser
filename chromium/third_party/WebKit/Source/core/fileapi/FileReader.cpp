@@ -37,6 +37,7 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/ProgressEvent.h"
 #include "core/fileapi/File.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -186,14 +187,11 @@ class FileReader::ThrottlingController final
 };
 
 FileReader* FileReader::create(ExecutionContext* context) {
-  FileReader* fileReader = new FileReader(context);
-  fileReader->suspendIfNeeded();
-  return fileReader;
+  return new FileReader(context);
 }
 
 FileReader::FileReader(ExecutionContext* context)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : ContextLifecycleObserver(context),
       m_state(kEmpty),
       m_loadingState(LoadingStateNone),
       m_stillFiringEvents(false),
@@ -208,15 +206,16 @@ const AtomicString& FileReader::interfaceName() const {
   return EventTargetNames::FileReader;
 }
 
-void FileReader::contextDestroyed() {
+void FileReader::contextDestroyed(ExecutionContext* destroyedContext) {
   // The delayed abort task tidies up and advances to the DONE state.
   if (m_loadingState == LoadingStateAborted)
     return;
 
-  if (hasPendingActivity())
+  if (hasPendingActivity()) {
     ThrottlingController::finishReader(
-        getExecutionContext(), this,
-        ThrottlingController::removeReader(getExecutionContext(), this));
+        destroyedContext, this,
+        ThrottlingController::removeReader(destroyedContext, this));
+  }
   terminate();
 }
 
@@ -355,7 +354,7 @@ void FileReader::abort() {
   // to be on the stack when doing so. The persistent reference keeps the
   // reader alive until the task has completed.
   getExecutionContext()->postTask(
-      BLINK_FROM_HERE,
+      TaskType::FileReading, BLINK_FROM_HERE,
       createSameThreadTask(&FileReader::terminate, wrapPersistent(this)));
 }
 
@@ -404,7 +403,7 @@ void FileReader::didFinishLoading() {
   // TODO(jochen): When we set m_state to DONE below, we still need to fire
   // the load and loadend events. To avoid GC to collect this FileReader, we
   // use this separate variable to keep the wrapper of this FileReader alive.
-  // An alternative would be to keep any active DOM object alive that is on
+  // An alternative would be to keep any ActiveScriptWrappables alive that is on
   // the stack.
   AutoReset<bool> firingEvents(&m_stillFiringEvents, true);
 
@@ -472,7 +471,7 @@ void FileReader::fireEvent(const AtomicString& type) {
 DEFINE_TRACE(FileReader) {
   visitor->trace(m_error);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 }  // namespace blink

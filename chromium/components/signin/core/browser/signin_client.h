@@ -16,7 +16,6 @@
 #include "url/gurl.h"
 
 class PrefService;
-class SigninManagerBase;
 class TokenWebData;
 
 namespace content_settings {
@@ -126,6 +125,10 @@ class SigninClient : public KeyedService {
 
   // Called once the credentials has been copied to another SigninManager.
   virtual void AfterCredentialsCopied() {}
+
+  // Used do debug channel id binding problem in chrome.  Returns the number of
+  // times the request context changed unexpectedly.
+  virtual int number_of_request_context_pointer_changes() const;
 
  protected:
   // Returns device id that is scoped to single signin.

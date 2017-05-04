@@ -5,12 +5,14 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_CREDENTIAL_MANAGER_PENDING_REQUEST_TASK_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_CREDENTIAL_MANAGER_PENDING_REQUEST_TASK_H_
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "components/password_manager/core/browser/http_password_migrator.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "url/gurl.h"
@@ -37,9 +39,6 @@ class CredentialManagerPendingRequestTaskDelegate {
   // Retrieves the current page origin.
   virtual GURL GetOrigin() const = 0;
 
-  // Retrieves a synthetic PasswordForm for the current page origin.
-  virtual PasswordStore::FormDigest GetSynthesizedFormForOrigin() const = 0;
-
   // Returns the PasswordManagerClient.
   virtual PasswordManagerClient* client() const = 0;
 
@@ -54,33 +53,41 @@ class CredentialManagerPendingRequestTaskDelegate {
 };
 
 // Retrieves credentials from the PasswordStore.
-class CredentialManagerPendingRequestTask : public PasswordStoreConsumer {
+class CredentialManagerPendingRequestTask
+    : public PasswordStoreConsumer,
+      public HttpPasswordMigrator::Consumer {
  public:
   CredentialManagerPendingRequestTask(
       CredentialManagerPendingRequestTaskDelegate* delegate,
       const SendCredentialCallback& callback,
       bool request_zero_click_only,
-      const GURL& request_origin,
       bool include_passwords,
-      const std::vector<GURL>& request_federations,
-      const std::vector<std::string>& affiliated_realms);
+      const std::vector<GURL>& request_federations);
   ~CredentialManagerPendingRequestTask() override;
 
   SendCredentialCallback send_callback() const { return send_callback_; }
   const GURL& origin() const { return origin_; }
 
-  // PasswordStoreConsumer implementation.
+  // PasswordStoreConsumer:
   void OnGetPasswordStoreResults(
       std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
 
  private:
+  // HttpPasswordMigrator::Consumer:
+  void ProcessMigratedForms(
+      std::vector<std::unique_ptr<autofill::PasswordForm>> forms) override;
+
+  void ProcessForms(
+      std::vector<std::unique_ptr<autofill::PasswordForm>> results);
+
   CredentialManagerPendingRequestTaskDelegate* delegate_;  // Weak;
   SendCredentialCallback send_callback_;
   const bool zero_click_only_;
   const GURL origin_;
   const bool include_passwords_;
   std::set<std::string> federations_;
-  std::set<std::string> affiliated_realms_;
+
+  std::unique_ptr<HttpPasswordMigrator> http_migrator_;
 
   DISALLOW_COPY_AND_ASSIGN(CredentialManagerPendingRequestTask);
 };

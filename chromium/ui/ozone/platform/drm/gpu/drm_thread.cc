@@ -90,7 +90,8 @@ void DrmThread::Start() {
 void DrmThread::Init() {
   bool use_atomic = false;
 #if defined(USE_DRM_ATOMIC)
-  use_atomic = true;
+  use_atomic = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableDrmAtomic);
 #endif
 
   device_manager_.reset(
@@ -264,23 +265,23 @@ void DrmThread::RemoveGraphicsDevice(const base::FilePath& path) {
 
 void DrmThread::GetHDCPState(
     int64_t display_id,
-    const base::Callback<void(int64_t, bool, HDCPState)>& callback) {
-  HDCPState state = HDCP_STATE_UNDESIRED;
+    const base::Callback<void(int64_t, bool, display::HDCPState)>& callback) {
+  display::HDCPState state = display::HDCP_STATE_UNDESIRED;
   bool success = display_manager_->GetHDCPState(display_id, &state);
   callback.Run(display_id, success, state);
 }
 
 void DrmThread::SetHDCPState(
     int64_t display_id,
-    HDCPState state,
+    display::HDCPState state,
     const base::Callback<void(int64_t, bool)>& callback) {
   callback.Run(display_id, display_manager_->SetHDCPState(display_id, state));
 }
 
 void DrmThread::SetColorCorrection(
     int64_t display_id,
-    const std::vector<GammaRampRGBEntry>& degamma_lut,
-    const std::vector<GammaRampRGBEntry>& gamma_lut,
+    const std::vector<display::GammaRampRGBEntry>& degamma_lut,
+    const std::vector<display::GammaRampRGBEntry>& gamma_lut,
     const std::vector<float>& correction_matrix) {
   display_manager_->SetColorCorrection(display_id, degamma_lut, gamma_lut,
                                        correction_matrix);

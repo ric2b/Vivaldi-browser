@@ -30,25 +30,25 @@ class SessionManagerClient;
 
 namespace policy {
 
-class LegacyPolicyCacheLoader;
-
-// Implements a cloud policy store backed by the Chrome OS' session_manager,
-// which takes care of persisting policy to disk and is accessed via DBus calls
+// Implements a policy store backed by the Chrome OS' session_manager, which
+// takes care of persisting policy to disk and is accessed via DBus calls
 // through SessionManagerClient.
-//
-// Additionally, this class drives legacy UserPolicyTokenCache and
-// UserPolicyDiskCache instances, migrating policy from these to session_manager
-// storage on the fly.
+// TODO(tnagel): Rename class to reflect that it can store Active Directory
+// policy as well. Also think about whether it would make more sense to keep
+// cloud and AD policy stores separate and to extract the common functionality
+// somewhere else.
 class UserCloudPolicyStoreChromeOS : public UserCloudPolicyStoreBase {
  public:
+  // Policy validation is relaxed when |is_active_directory| is set, most
+  // notably signature validation is disabled.  It is essential that this flag
+  // is only set when install attributes are locked into Active Directory mode.
   UserCloudPolicyStoreChromeOS(
       chromeos::CryptohomeClient* cryptohome_client,
       chromeos::SessionManagerClient* session_manager_client,
       scoped_refptr<base::SequencedTaskRunner> background_task_runner,
       const AccountId& account_id,
       const base::FilePath& user_policy_key_dir,
-      const base::FilePath& legacy_token_cache_file,
-      const base::FilePath& legacy_policy_cache_file);
+      bool is_active_directory);
   ~UserCloudPolicyStoreChromeOS() override;
 
   // CloudPolicyStore:
@@ -81,25 +81,6 @@ class UserCloudPolicyStoreChromeOS : public UserCloudPolicyStoreBase {
   // policy and publishes it if validation succeeded.
   void OnRetrievedPolicyValidated(UserCloudPolicyValidator* validator);
 
-  // Callback for loading legacy caches.
-  void OnLegacyLoadFinished(
-      const std::string& dm_token,
-      const std::string& device_id,
-      Status status,
-      std::unique_ptr<enterprise_management::PolicyFetchResponse>);
-
-  // Completion callback for legacy policy validation.
-  void OnLegacyPolicyValidated(const std::string& dm_token,
-                               const std::string& device_id,
-                               UserCloudPolicyValidator* validator);
-
-  // Installs legacy tokens.
-  void InstallLegacyTokens(const std::string& dm_token,
-                           const std::string& device_id);
-
-  // Removes the passed-in legacy cache directory.
-  static void RemoveLegacyCacheDir(const base::FilePath& dir);
-
   // Invokes |callback| after reloading |policy_key_|.
   void ReloadPolicyKey(const base::Closure& callback);
 
@@ -127,16 +108,16 @@ class UserCloudPolicyStoreChromeOS : public UserCloudPolicyStoreBase {
   chromeos::SessionManagerClient* session_manager_client_;
   const AccountId account_id_;
   base::FilePath user_policy_key_dir_;
+  bool is_active_directory_;
 
-  // TODO(mnissler): Remove all the legacy policy support members below after
-  // the number of pre-M20 clients drops back to zero.
-  base::FilePath legacy_cache_dir_;
-  std::unique_ptr<LegacyPolicyCacheLoader> legacy_loader_;
-  bool legacy_caches_loaded_;
-
-  bool policy_key_loaded_;
-  base::FilePath policy_key_path_;
-  std::string policy_key_;
+  // The current key used to verify signatures of policy. This value is loaded
+  // from the key cache file (which is owned and kept up to date by the Chrome
+  // OS session manager). This is, generally, different from
+  // |policy_signature_public_key_|, which always corresponds to the currently
+  // effective policy.
+  std::string cached_policy_key_;
+  bool cached_policy_key_loaded_ = false;
+  base::FilePath cached_policy_key_path_;
 
   base::WeakPtrFactory<UserCloudPolicyStoreChromeOS> weak_factory_;
 

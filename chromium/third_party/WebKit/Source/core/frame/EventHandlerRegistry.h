@@ -36,7 +36,7 @@ class CORE_EXPORT EventHandlerRegistry final
     TouchStartOrMoveEventPassive,
     TouchEndOrCancelEventBlocking,
     TouchEndOrCancelEventPassive,
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     // Additional event categories for verifying handler tracking logic.
     EventsForTesting,
 #endif
@@ -63,9 +63,6 @@ class CORE_EXPORT EventHandlerRegistry final
 
   void didMoveIntoFrameHost(EventTarget&);
   void didMoveOutOfFrameHost(EventTarget&);
-  static void didMoveBetweenFrameHosts(EventTarget&,
-                                       FrameHost* oldFrameHost,
-                                       FrameHost* newFrameHost);
 
   // Either |documentDetached| or |didMove{Into,OutOf,Between}FrameHosts| must
   // be called whenever the FrameHost that is associated with a registered event

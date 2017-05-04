@@ -434,6 +434,11 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
   EXPECT_CALL(*gl_, BindRenderbufferEXT(GL_RENDERBUFFER, 0))
       .Times(1)
       .RetiresOnSaturation();
+  if (feature_info->feature_flags().desktop_srgb_support) {
+    EXPECT_CALL(*gl_, Disable(GL_FRAMEBUFFER_SRGB))
+        .Times(1)
+        .RetiresOnSaturation();
+  }
 
   // TODO(boliu): Remove OS_ANDROID once crbug.com/259023 is fixed and the
   // workaround has been reverted.
@@ -562,7 +567,7 @@ void GLES2DecoderTestBase::ResetDecoder() {
   engine_.reset();
   ::gl::MockGLInterface::SetGLInterface(NULL);
   gl_.reset();
-  gl::init::ClearGLBindings();
+  gl::init::ShutdownGL();
 }
 
 void GLES2DecoderTestBase::TearDown() {
@@ -648,6 +653,64 @@ void GLES2DecoderTestBase::DoFenceSync(
   cmds::FenceSync cmd;
   cmd.Init(client_id);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+}
+
+void GLES2DecoderTestBase::DoCreateSampler(
+    GLuint client_id, GLuint service_id) {
+  EXPECT_CALL(*gl_, GenSamplers(1, _))
+      .WillOnce(SetArgPointee<1>(service_id));
+  cmds::GenSamplersImmediate* cmd =
+      GetImmediateAs<cmds::GenSamplersImmediate>();
+  GLuint temp = client_id;
+  cmd->Init(1, &temp);
+  EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(*cmd, sizeof(temp)));
+}
+
+void GLES2DecoderTestBase::DoBindSampler(
+    GLuint unit, GLuint client_id, GLuint service_id) {
+  EXPECT_CALL(*gl_, BindSampler(unit, service_id))
+      .Times(1)
+      .RetiresOnSaturation();
+  cmds::BindSampler cmd;
+  cmd.Init(unit, client_id);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+}
+
+void GLES2DecoderTestBase::DoDeleteSampler(
+    GLuint client_id, GLuint service_id) {
+  EXPECT_CALL(*gl_, DeleteSamplers(1, Pointee(service_id)))
+      .Times(1)
+      .RetiresOnSaturation();
+  GenHelper<cmds::DeleteSamplersImmediate>(client_id);
+}
+
+void GLES2DecoderTestBase::DoCreateTransformFeedback(
+    GLuint client_id, GLuint service_id) {
+  EXPECT_CALL(*gl_, GenTransformFeedbacks(1, _))
+      .WillOnce(SetArgPointee<1>(service_id));
+  cmds::GenTransformFeedbacksImmediate* cmd =
+      GetImmediateAs<cmds::GenTransformFeedbacksImmediate>();
+  GLuint temp = client_id;
+  cmd->Init(1, &temp);
+  EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(*cmd, sizeof(temp)));
+}
+
+void GLES2DecoderTestBase::DoBindTransformFeedback(
+    GLenum target, GLuint client_id, GLuint service_id) {
+  EXPECT_CALL(*gl_, BindTransformFeedback(target, service_id))
+      .Times(1)
+      .RetiresOnSaturation();
+  cmds::BindTransformFeedback cmd;
+  cmd.Init(target, client_id);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+}
+
+void GLES2DecoderTestBase::DoDeleteTransformFeedback(
+    GLuint client_id, GLuint service_id) {
+  EXPECT_CALL(*gl_, DeleteTransformFeedbacks(1, Pointee(service_id)))
+      .Times(1)
+      .RetiresOnSaturation();
+  GenHelper<cmds::DeleteTransformFeedbacksImmediate>(client_id);
 }
 
 void GLES2DecoderTestBase::SetBucketData(

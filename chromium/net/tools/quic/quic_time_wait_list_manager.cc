@@ -8,19 +8,20 @@
 
 #include <memory>
 
-#include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
-#include "net/base/ip_endpoint.h"
+#include "base/stl_util.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
 #include "net/quic/core/crypto/quic_decrypter.h"
 #include "net/quic/core/crypto/quic_encrypter.h"
-#include "net/quic/core/quic_clock.h"
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_framer.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_server_session_base.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_clock.h"
+#include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_ptr_util.h"
+#include "net/quic/platform/api/quic_socket_address.h"
 
 using base::StringPiece;
 
@@ -55,20 +56,20 @@ class ConnectionIdCleanUpAlarm : public QuicAlarm::Delegate {
 //          created instance takes the ownership of this packet.
 class QuicTimeWaitListManager::QueuedPacket {
  public:
-  QueuedPacket(const IPEndPoint& server_address,
-               const IPEndPoint& client_address,
+  QueuedPacket(const QuicSocketAddress& server_address,
+               const QuicSocketAddress& client_address,
                std::unique_ptr<QuicEncryptedPacket> packet)
       : server_address_(server_address),
         client_address_(client_address),
         packet_(std::move(packet)) {}
 
-  const IPEndPoint& server_address() const { return server_address_; }
-  const IPEndPoint& client_address() const { return client_address_; }
+  const QuicSocketAddress& server_address() const { return server_address_; }
+  const QuicSocketAddress& client_address() const { return client_address_; }
   QuicEncryptedPacket* packet() { return packet_.get(); }
 
  private:
-  const IPEndPoint server_address_;
-  const IPEndPoint client_address_;
+  const QuicSocketAddress server_address_;
+  const QuicSocketAddress client_address_;
   std::unique_ptr<QuicEncryptedPacket> packet_;
 
   DISALLOW_COPY_AND_ASSIGN(QueuedPacket);
@@ -147,13 +148,13 @@ void QuicTimeWaitListManager::OnCanWrite() {
 }
 
 void QuicTimeWaitListManager::ProcessPacket(
-    const IPEndPoint& server_address,
-    const IPEndPoint& client_address,
+    const QuicSocketAddress& server_address,
+    const QuicSocketAddress& client_address,
     QuicConnectionId connection_id,
     QuicPacketNumber packet_number,
     const QuicEncryptedPacket& /*packet*/) {
   DCHECK(IsConnectionIdInTimeWait(connection_id));
-  DVLOG(1) << "Processing " << connection_id << " in time wait state.";
+  QUIC_DLOG(INFO) << "Processing " << connection_id << " in time wait state.";
   // TODO(satyamshekhar): Think about handling packets from different client
   // addresses.
   ConnectionIdMap::iterator it = connection_id_map_.find(connection_id);
@@ -168,11 +169,12 @@ void QuicTimeWaitListManager::ProcessPacket(
 
   if (!connection_data->termination_packets.empty()) {
     if (connection_data->connection_rejected_statelessly) {
-      DVLOG(3) << "Time wait list sending previous stateless reject response "
-               << "for connection " << connection_id;
+      QUIC_DVLOG(3)
+          << "Time wait list sending previous stateless reject response "
+          << "for connection " << connection_id;
     }
     for (const auto& packet : connection_data->termination_packets) {
-      SendOrQueuePacket(base::MakeUnique<QueuedPacket>(
+      SendOrQueuePacket(QuicMakeUnique<QueuedPacket>(
           server_address, client_address, packet->Clone()));
     }
     return;
@@ -184,9 +186,9 @@ void QuicTimeWaitListManager::ProcessPacket(
 void QuicTimeWaitListManager::SendVersionNegotiationPacket(
     QuicConnectionId connection_id,
     const QuicVersionVector& supported_versions,
-    const IPEndPoint& server_address,
-    const IPEndPoint& client_address) {
-  SendOrQueuePacket(base::MakeUnique<QueuedPacket>(
+    const QuicSocketAddress& server_address,
+    const QuicSocketAddress& client_address) {
+  SendOrQueuePacket(QuicMakeUnique<QueuedPacket>(
       server_address, client_address, QuicFramer::BuildVersionNegotiationPacket(
                                           connection_id, supported_versions)));
 }
@@ -199,8 +201,8 @@ bool QuicTimeWaitListManager::ShouldSendResponse(int received_packet_count) {
 }
 
 void QuicTimeWaitListManager::SendPublicReset(
-    const IPEndPoint& server_address,
-    const IPEndPoint& client_address,
+    const QuicSocketAddress& server_address,
+    const QuicSocketAddress& client_address,
     QuicConnectionId connection_id,
     QuicPacketNumber rejected_packet_number) {
   QuicPublicResetPacket packet;
@@ -212,8 +214,8 @@ void QuicTimeWaitListManager::SendPublicReset(
   packet.nonce_proof = 1010101;
   packet.client_address = client_address;
   // Takes ownership of the packet.
-  SendOrQueuePacket(base::MakeUnique<QueuedPacket>(
-      server_address, client_address, BuildPublicReset(packet)));
+  SendOrQueuePacket(QuicMakeUnique<QueuedPacket>(server_address, client_address,
+                                                 BuildPublicReset(packet)));
 }
 
 std::unique_ptr<QuicEncryptedPacket> QuicTimeWaitListManager::BuildPublicReset(
@@ -239,17 +241,18 @@ bool QuicTimeWaitListManager::WriteToWire(QueuedPacket* queued_packet) {
   }
   WriteResult result = writer_->WritePacket(
       queued_packet->packet()->data(), queued_packet->packet()->length(),
-      queued_packet->server_address().address(),
-      queued_packet->client_address(), nullptr);
+      queued_packet->server_address().host(), queued_packet->client_address(),
+      nullptr);
   if (result.status == WRITE_STATUS_BLOCKED) {
     // If blocked and unbuffered, return false to retry sending.
     DCHECK(writer_->IsWriteBlocked());
     visitor_->OnWriteBlocked(this);
     return writer_->IsWriteBlockedDataBuffered();
   } else if (result.status == WRITE_STATUS_ERROR) {
-    LOG(WARNING) << "Received unknown error while sending reset packet to "
-                 << queued_packet->client_address().ToString() << ": "
-                 << strerror(result.error_code);
+    QUIC_LOG_FIRST_N(WARNING, 1)
+        << "Received unknown error while sending reset packet to "
+        << queued_packet->client_address().ToString() << ": "
+        << strerror(result.error_code);
   }
   return true;
 }
@@ -263,7 +266,8 @@ void QuicTimeWaitListManager::SetConnectionIdCleanUpAlarm() {
     if (now - oldest_connection_id < time_wait_period_) {
       next_alarm_interval = oldest_connection_id + time_wait_period_ - now;
     } else {
-      LOG(ERROR) << "ConnectionId lingered for longer than time_wait_period_";
+      QUIC_LOG(ERROR)
+          << "ConnectionId lingered for longer than time_wait_period_";
     }
   } else {
     // No connection_ids added so none will expire before time_wait_period_.

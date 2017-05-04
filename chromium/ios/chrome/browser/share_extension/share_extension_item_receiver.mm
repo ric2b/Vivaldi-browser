@@ -15,13 +15,17 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/reading_list/ios/reading_list_model.h"
+#include "components/reading_list/ios/reading_list_model_observer.h"
 #include "ios/chrome/browser/experimental_flags.h"
-#include "ios/chrome/browser/reading_list/reading_list_model.h"
-#include "ios/chrome/browser/reading_list/reading_list_model_observer.h"
 #include "ios/chrome/common/app_group/app_group_constants.h"
 #include "ios/web/public/web_thread.h"
 #import "net/base/mac/url_conversions.h"
 #include "url/gurl.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 // Enum used to send metrics on item reception.
@@ -94,19 +98,15 @@ void LogHistogramReceivedItem(ShareExtensionItemReceived type) {
   DCHECK(!_readingListModel);
   DCHECK(!_bookmarkModel);
 
-#if TARGET_IPHONE_SIMULATOR
   if (![self presentedItemURL]) {
     return;
   }
-#else
-  DCHECK([self presentedItemURL]);
-#endif
 
   _readingListModel = readingListModel;
   _bookmarkModel = bookmarkModel;
 
   web::WebThread::PostTask(web::WebThread::FILE, FROM_HERE,
-                           base::BindBlock(^() {
+                           base::BindBlockArc(^() {
                              [self createReadingListFolder];
                            }));
   [[NSNotificationCenter defaultCenter]
@@ -132,7 +132,6 @@ void LogHistogramReceivedItem(ShareExtensionItemReceived type) {
 
 - (void)dealloc {
   NOTREACHED();
-  [super dealloc];
 }
 
 - (void)createReadingListFolder {
@@ -146,7 +145,7 @@ void LogHistogramReceivedItem(ShareExtensionItemReceived type) {
                               error:nil];
   }
   web::WebThread::PostTask(
-      web::WebThread::UI, FROM_HERE, base::BindBlock(^() {
+      web::WebThread::UI, FROM_HERE, base::BindBlockArc(^() {
         if ([[UIApplication sharedApplication] applicationState] ==
             UIApplicationStateActive) {
           _folderCreated = YES;
@@ -190,7 +189,8 @@ void LogHistogramReceivedItem(ShareExtensionItemReceived type) {
   NSNumber* entryType = base::mac::ObjCCast<NSNumber>(
       [entry objectForKey:app_group::kShareItemType]);
 
-  if (!entryURL.is_valid() || !entryDate || !entryType) {
+  if (!entryURL.is_valid() || !entryDate || !entryType ||
+      !entryURL.SchemeIsHTTPOrHTTPS()) {
     if (completion) {
       completion();
     }
@@ -202,7 +202,8 @@ void LogHistogramReceivedItem(ShareExtensionItemReceived type) {
                           [[NSDate date] timeIntervalSinceDate:entryDate]));
 
   // Entry is valid. Add it to the reading list model.
-  web::WebThread::PostTask(web::WebThread::UI, FROM_HERE, base::BindBlock(^() {
+  web::WebThread::PostTask(web::WebThread::UI, FROM_HERE,
+                           base::BindBlockArc(^() {
                              if (!_readingListModel || !_bookmarkModel) {
                                // Models may have been deleted after the file
                                // processing started.
@@ -213,19 +214,20 @@ void LogHistogramReceivedItem(ShareExtensionItemReceived type) {
                                      [entryType integerValue]);
                              if (type == app_group::READING_LIST_ITEM) {
                                LogHistogramReceivedItem(READINGLIST_ENTRY);
-                               _readingListModel->AddEntry(entryURL,
-                                                           entryTitle);
+                               _readingListModel->AddEntry(
+                                   entryURL, entryTitle,
+                                   reading_list::ADDED_VIA_EXTENSION);
                              }
                              if (type == app_group::BOOKMARK_ITEM) {
                                LogHistogramReceivedItem(BOOKMARK_ENTRY);
                                _bookmarkModel->AddURL(
                                    _bookmarkModel->mobile_node(), 0,
-                                   base::ASCIIToUTF16(entryTitle), entryURL);
+                                   base::UTF8ToUTF16(entryTitle), entryURL);
                              }
                              if (completion) {
                                web::WebThread::PostTask(web::WebThread::FILE,
                                                         FROM_HERE,
-                                                        base::BindBlock(^() {
+                                                        base::BindBlockArc(^() {
                                                           completion();
                                                         }));
                              }
@@ -289,7 +291,7 @@ void LogHistogramReceivedItem(ShareExtensionItemReceived type) {
 
   // There may already be files. Process them.
   web::WebThread::PostTask(
-      web::WebThread::FILE, FROM_HERE, base::BindBlock(^() {
+      web::WebThread::FILE, FROM_HERE, base::BindBlockArc(^() {
         NSArray<NSURL*>* files = [[NSFileManager defaultManager]
               contentsOfDirectoryAtURL:[self presentedItemURL]
             includingPropertiesForKeys:nil
@@ -299,7 +301,7 @@ void LogHistogramReceivedItem(ShareExtensionItemReceived type) {
           return;
         }
         web::WebThread::PostTask(
-            web::WebThread::UI, FROM_HERE, base::BindBlock(^() {
+            web::WebThread::UI, FROM_HERE, base::BindBlockArc(^() {
               UMA_HISTOGRAM_COUNTS_100(
                   "IOS.ShareExtension.ReceivedEntriesCount", [files count]);
               for (NSURL* fileURL : files) {
@@ -307,12 +309,12 @@ void LogHistogramReceivedItem(ShareExtensionItemReceived type) {
                     ReadingListModel::ScopedReadingListBatchUpdate>
                     batchToken(_readingListModel->BeginBatchUpdates());
                 web::WebThread::PostTask(
-                    web::WebThread::FILE, FROM_HERE, base::BindBlock(^() {
+                    web::WebThread::FILE, FROM_HERE, base::BindBlockArc(^() {
                       [self handleFileAtURL:fileURL
                              withCompletion:^{
                                web::WebThread::PostTask(web::WebThread::UI,
                                                         FROM_HERE,
-                                                        base::BindBlock(^() {
+                                                        base::BindBlockArc(^() {
                                                           batchToken.reset();
                                                         }));
                              }];
@@ -335,7 +337,7 @@ void LogHistogramReceivedItem(ShareExtensionItemReceived type) {
 
 - (void)presentedSubitemDidChangeAtURL:(NSURL*)url {
   web::WebThread::PostTask(web::WebThread::FILE, FROM_HERE,
-                           base::BindBlock(^() {
+                           base::BindBlockArc(^() {
                              [self handleFileAtURL:url withCompletion:nil];
                            }));
 }

@@ -4,6 +4,7 @@
 
 #include "core/animation/InterpolationEffect.h"
 
+#include "core/animation/LegacyStyleInterpolation.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include <memory>
 
@@ -11,22 +12,20 @@ namespace blink {
 
 namespace {
 
-class SampleInterpolation : public Interpolation {
+class SampleInterpolation : public LegacyStyleInterpolation {
  public:
-  static PassRefPtr<Interpolation> create(
+  static PassRefPtr<LegacyStyleInterpolation> create(
       std::unique_ptr<InterpolableValue> start,
       std::unique_ptr<InterpolableValue> end) {
     return adoptRef(new SampleInterpolation(std::move(start), std::move(end)));
   }
 
-  PropertyHandle getProperty() const override {
-    return PropertyHandle(CSSPropertyBackgroundColor);
-  }
-
  private:
   SampleInterpolation(std::unique_ptr<InterpolableValue> start,
                       std::unique_ptr<InterpolableValue> end)
-      : Interpolation(std::move(start), std::move(end)) {}
+      : LegacyStyleInterpolation(std::move(start),
+                                 std::move(end),
+                                 CSSPropertyBackgroundColor) {}
 };
 
 const double duration = 1.0;
@@ -35,12 +34,15 @@ const double duration = 1.0;
 
 class AnimationInterpolationEffectTest : public ::testing::Test {
  protected:
-  InterpolableValue* interpolationValue(Interpolation& interpolation) {
+  InterpolableValue* interpolationValue(
+      LegacyStyleInterpolation& interpolation) {
     return interpolation.getCachedValueForTesting();
   }
 
   double getInterpolableNumber(PassRefPtr<Interpolation> value) {
-    return toInterpolableNumber(interpolationValue(*value.get()))->value();
+    LegacyStyleInterpolation& interpolation =
+        toLegacyStyleInterpolation(*value.get());
+    return toInterpolableNumber(interpolationValue(interpolation))->value();
   }
 };
 

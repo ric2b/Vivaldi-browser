@@ -31,7 +31,7 @@
 
 #include "bindings/core/v8/DoubleOrAutoKeyword.h"
 #include "bindings/core/v8/ExceptionMessages.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
 #include "core/dom/DocumentFragment.h"
@@ -546,7 +546,7 @@ static TextDirection determineDirectionality(const String& value,
                                              bool& hasStrongDirectionality) {
   TextRun run(value);
   BidiResolver<VTTTextRunIterator, BidiCharacterRun> bidiResolver;
-  bidiResolver.setStatus(BidiStatus(LTR, false));
+  bidiResolver.setStatus(BidiStatus(TextDirection::kLtr, false));
   bidiResolver.setPositionIgnoringNestedIsolates(VTTTextRunIterator(&run, 0));
   return bidiResolver.determineDirectionality(&hasStrongDirectionality);
 }
@@ -558,7 +558,7 @@ static CSSValueID determineTextDirection(DocumentFragment* vttRoot) {
   // concatenation of the values of each WebVTT Text Object in nodes, in a
   // pre-order, depth-first traversal, excluding WebVTT Ruby Text Objects and
   // their descendants.
-  TextDirection textDirection = LTR;
+  TextDirection textDirection = TextDirection::kLtr;
   Node* node = NodeTraversal::next(*vttRoot);
   while (node) {
     DCHECK(node->isDescendantOf(vttRoot));
@@ -1113,19 +1113,19 @@ void VTTCue::applyUserOverrideCSSProperties() {
 
   setInlineStylePropertyIfNotEmpty(*m_cueBackgroundBox,
                                    CSSPropertyBackgroundColor,
-                                   settings->textTrackBackgroundColor());
+                                   settings->getTextTrackBackgroundColor());
   setInlineStylePropertyIfNotEmpty(*m_cueBackgroundBox, CSSPropertyFontFamily,
-                                   settings->textTrackFontFamily());
+                                   settings->getTextTrackFontFamily());
   setInlineStylePropertyIfNotEmpty(*m_cueBackgroundBox, CSSPropertyFontStyle,
-                                   settings->textTrackFontStyle());
+                                   settings->getTextTrackFontStyle());
   setInlineStylePropertyIfNotEmpty(*m_cueBackgroundBox, CSSPropertyFontVariant,
-                                   settings->textTrackFontVariant());
+                                   settings->getTextTrackFontVariant());
   setInlineStylePropertyIfNotEmpty(*m_cueBackgroundBox, CSSPropertyColor,
-                                   settings->textTrackTextColor());
+                                   settings->getTextTrackTextColor());
   setInlineStylePropertyIfNotEmpty(*m_cueBackgroundBox, CSSPropertyTextShadow,
-                                   settings->textTrackTextShadow());
+                                   settings->getTextTrackTextShadow());
   setInlineStylePropertyIfNotEmpty(*m_cueBackgroundBox, CSSPropertyFontSize,
-                                   settings->textTrackTextSize());
+                                   settings->getTextTrackTextSize());
 }
 
 ExecutionContext* VTTCue::getExecutionContext() const {

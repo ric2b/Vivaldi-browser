@@ -26,7 +26,7 @@ struct WebAssociatedURLLoaderOptions;
 
 class WEB_EXPORT WebRemoteFrameImpl final
     : public WebFrameImplBase,
-      WTF_NON_EXPORTED_BASE(public WebRemoteFrame) {
+      NON_EXPORTED_BASE(public WebRemoteFrame) {
  public:
   static WebRemoteFrameImpl* create(WebTreeScopeType,
                                     WebRemoteFrameClient*,
@@ -39,11 +39,10 @@ class WEB_EXPORT WebRemoteFrameImpl final
   WebString assignedName() const override;
   void setName(const WebString&) override;
   WebVector<WebIconURL> iconURLs(int iconTypesMask) const override;
-  void setRemoteWebLayer(WebLayer*) override;
   void setSharedWorkerRepositoryClient(
       WebSharedWorkerRepositoryClient*) override;
   void setCanHaveScrollbars(bool) override;
-  WebSize scrollOffset() const override;
+  WebSize getScrollOffset() const override;
   void setScrollOffset(const WebSize&) override;
   WebSize contentsSize() const override;
   bool hasVisibleContent() const override;
@@ -57,13 +56,11 @@ class WEB_EXPORT WebRemoteFrameImpl final
   void executeScript(const WebScriptSource&) override;
   void executeScriptInIsolatedWorld(int worldID,
                                     const WebScriptSource* sources,
-                                    unsigned numSources,
-                                    int extensionGroup) override;
+                                    unsigned numSources) override;
   void setIsolatedWorldSecurityOrigin(int worldID,
                                       const WebSecurityOrigin&) override;
   void setIsolatedWorldContentSecurityPolicy(int worldID,
                                              const WebString&) override;
-  void addMessageToConsole(const WebConsoleMessage&) override;
   void collectGarbage() override;
   v8::Local<v8::Value> executeScriptAndReturnValue(
       const WebScriptSource&) override;
@@ -71,7 +68,6 @@ class WEB_EXPORT WebRemoteFrameImpl final
       int worldID,
       const WebScriptSource* sourcesIn,
       unsigned numSources,
-      int extensionGroup,
       WebVector<v8::Local<v8::Value>>* results) override;
   v8::Local<v8::Value> callFunctionEvenIfScriptDisabled(
       v8::Local<v8::Function>,
@@ -143,11 +139,13 @@ class WEB_EXPORT WebRemoteFrameImpl final
                                     WebSandboxFlags,
                                     WebRemoteFrameClient*,
                                     WebFrame* opener) override;
-
+  void setWebLayer(WebLayer*) override;
   void setReplicatedOrigin(const WebSecurityOrigin&) const override;
   void setReplicatedSandboxFlags(WebSandboxFlags) const override;
   void setReplicatedName(const WebString& name,
                          const WebString& uniqueName) const override;
+  void setReplicatedFeaturePolicyHeader(
+      const WebParsedFeaturePolicy& parsedHeader) const override;
   void addReplicatedContentSecurityPolicyHeader(
       const WebString& headerValue,
       WebContentSecurityPolicyType,
@@ -156,7 +154,7 @@ class WEB_EXPORT WebRemoteFrameImpl final
   void setReplicatedInsecureRequestPolicy(
       WebInsecureRequestPolicy) const override;
   void setReplicatedPotentiallyTrustworthyUniqueOrigin(bool) const override;
-  void DispatchLoadEventForFrameOwner() const override;
+  void dispatchLoadEventOnFrameOwner() const override;
 
   void didStartLoading() override;
   void didStopLoading() override;
@@ -164,6 +162,8 @@ class WEB_EXPORT WebRemoteFrameImpl final
   bool isIgnoredForHitTest() const override;
 
   void willEnterFullscreen() override;
+
+  void setHasReceivedUserGesture() override;
 
   bool snapshotPage(SkBitmap&, bool, float, float) override { return false; }
 

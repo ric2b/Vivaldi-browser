@@ -42,8 +42,7 @@ void DeviceOrientationAbsoluteController::didAddEventListener(
     return;
 
   if (document().frame()) {
-    String errorMessage;
-    if (document().isSecureContext(errorMessage)) {
+    if (document().isSecureContext()) {
       UseCounter::count(document().frame(),
                         UseCounter::DeviceOrientationAbsoluteSecureOrigin);
     } else {
@@ -52,7 +51,10 @@ void DeviceOrientationAbsoluteController::didAddEventListener(
           UseCounter::DeviceOrientationAbsoluteInsecureOrigin);
       // TODO: add rappor logging of insecure origins as in
       // DeviceOrientationController.
-      if (document().frame()->settings()->strictPowerfulFeatureRestrictions())
+      if (document()
+              .frame()
+              ->settings()
+              ->getStrictPowerfulFeatureRestrictions())
         return;
     }
   }

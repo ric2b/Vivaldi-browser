@@ -266,6 +266,8 @@ std::string SavePasswordProgressLogger::GetStringFromID(
       return "Invalid form";
     case SavePasswordProgressLogger::STRING_SYNC_CREDENTIAL:
       return "Credential is used for syncing passwords";
+    case STRING_BLOCK_PASSWORD_SAME_ORIGIN_INSECURE_SCHEME:
+      return "Blocked password due to same origin but insecure scheme";
     case SavePasswordProgressLogger::STRING_PROVISIONALLY_SAVED_FORM:
       return "provisionally_saved_form";
     case SavePasswordProgressLogger::STRING_IGNORE_POSSIBLE_USERNAMES:
@@ -318,11 +320,11 @@ std::string SavePasswordProgressLogger::GetStringFromID(
     case SavePasswordProgressLogger::STRING_BEST_SCORE:
       return "best_score";
     case SavePasswordProgressLogger::STRING_ON_GET_STORE_RESULTS_METHOD:
-      return "PasswordFormManager::OnGetPasswordStoreResults";
+      return "FormFetcherImpl::OnGetPasswordStoreResults";
     case SavePasswordProgressLogger::STRING_NUMBER_RESULTS:
       return "Number of results from the password store";
-    case SavePasswordProgressLogger::STRING_FETCH_LOGINS_METHOD:
-      return "PasswordFormManager::FetchMatchingLoginsFromPasswordStore";
+    case SavePasswordProgressLogger::STRING_FETCH_METHOD:
+      return "FormFetcherImpl::Fetch";
     case SavePasswordProgressLogger::STRING_NO_STORE:
       return "PasswordStore is not available";
     case SavePasswordProgressLogger::STRING_CREATE_LOGIN_MANAGERS_METHOD:
@@ -346,8 +348,8 @@ std::string SavePasswordProgressLogger::GetStringFromID(
       return "PasswordFormManager::ProcessFrame";
     case SavePasswordProgressLogger::STRING_FORM_SIGNATURE:
       return "Signature of form";
-    case SavePasswordProgressLogger::STRING_FORM_MANAGER_STATE:
-      return "PasswordFormManager::state_";
+    case SavePasswordProgressLogger::STRING_FORM_FETCHER_STATE:
+      return "FormFetcherImpl::state_";
     case SavePasswordProgressLogger::STRING_ADDING_SIGNATURE:
       return "Adding manager for form";
     case SavePasswordProgressLogger::STRING_UNOWNED_INPUTS_VISIBLE:
@@ -388,6 +390,8 @@ std::string SavePasswordProgressLogger::GetStringFromID(
       return "Server predictions";
     case SavePasswordProgressLogger::STRING_FORM_VOTES:
       return "Form votes";
+    case SavePasswordProgressLogger::STRING_REUSE_FOUND:
+      return "Password reused from ";
     case SavePasswordProgressLogger::STRING_INVALID:
       return "INVALID";
       // Intentionally no default: clause here -- all IDs need to get covered.

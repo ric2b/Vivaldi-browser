@@ -41,6 +41,7 @@
 <translation id="1938872420421548906">Shift+Alt</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
+<translation id="2122028596993374965">Зупинити трансляцію вкладки "<ph name="TAB_NAME" />" на пристрій "<ph name="RECEIVER_NAME" />"</translation>
 <translation id="2127372758936585790">Зарядний пристрій низької потужності</translation>
 <translation id="2204305834655267233">Інформація про мережу</translation>
 <translation id="2208323208084708176">Режим уніфікованого комп’ютера</translation>
@@ -54,10 +55,8 @@
 <translation id="2429753432712299108">Пристрою Bluetooth "<ph name="DEVICE_NAME" />" потрібен дозвіл на підключення. Перш ніж надати його, підтвердьте, що на пристрої відображається цей ключ доступу: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">Сталася помилка</translation>
 <translation id="2509468283778169019">Режим CAPS LOCK увімкнено</translation>
-<translation id="252373100621549798">Невідомий дисплей</translation>
 <translation id="2532589005999780174">Режим високого контрасту</translation>
 <translation id="2562916301614567480">Приватна мережа</translation>
-<translation id="2661637000095600270">Не вдалося дублювати зображення екранів, оскільки не знайдено підтримувані значення роздільної здатності. Увімкнено режим розширеного робочого столу. Натисніть, щоб надіслати відгук.</translation>
 <translation id="2692809339924654275"><ph name="BLUETOOTH" />: Під’єднання…</translation>
 <translation id="2700058918926273959">Сеанс закінчиться через <ph name="SESSION_TIME_REMAINING" />. Ви вийдете.</translation>
 <translation id="2727977024730340865">Підключено до зарядного пристрою низької потужності. Акумулятор може заряджатися неналежним чином.</translation>
@@ -114,7 +113,6 @@
 <translation id="3846575436967432996">Інформація про мережу не доступна</translation>
 <translation id="3866182280516392520">Адреса IPv6</translation>
 <translation id="3891340733213178823">Щоб вийти, двічі натисніть Ctrl+Shift+Q.</translation>
-<translation id="3892641579809465218">Внутрішній екран</translation>
 <translation id="3893630138897523026">ChromeVox (голосові підказки)</translation>
 <translation id="3899995891769452915">Голосовий ввід</translation>
 <translation id="3901991538546252627">Під’єднання до <ph name="NAME" /></translation>
@@ -153,6 +151,7 @@
 <translation id="5238774010593222950">Неможливо ввійти в інший обліковий запис.</translation>
 <translation id="532063867737390965">Адміністратор вимкнув налаштування мережі.</translation>
 <translation id="5331975486040154427">Пристрій, під’єднаний до порту USB-C (ліворуч на задній панелі)</translation>
+<translation id="5431825016875453137">OpenVPN або L2TP</translation>
 <translation id="544691375626129091">Усіх доступних користувачів уже додано до цього сеансу.</translation>
 <translation id="5507786745520522457">Налаштувати мобільне передавання даних</translation>
 <translation id="5543001071567407895">SMS</translation>
@@ -177,6 +176,7 @@
 <translation id="5978382165065462689">Спільний доступ до екрана через віддалену допомогу.</translation>
 <translation id="5980301590375426705">Завершити сеанс у режимі гостя</translation>
 <translation id="6041154455840261787">Увімкнено режим високого контрасту. Щоб вимкнути його, знову натисніть Search+Shift+H.</translation>
+<translation id="6043212731627905357">Ваш пристрій <ph name="DEVICE_TYPE" /> не підтримує цей монітор.</translation>
 <translation id="6043994281159824495">Вийти зараз</translation>
 <translation id="6047696787498798094">Якщо змінити користувача, спільний доступ до екрана буде скасовано. Продовжити?</translation>
 <translation id="6062360702481658777">Ви автоматично вийдете за <ph name="LOGOUT_TIME_LEFT" />.</translation>
@@ -185,7 +185,6 @@
 <translation id="6144938890088808325">Допоможіть нам покращити Chromebook</translation>
 <translation id="615957422585914272">Показувати екранну клавіатуру</translation>
 <translation id="6165508094623778733">Докладніше</translation>
-<translation id="6203030746557259519">Віртуальний дисплей</translation>
 <translation id="6248847161401822652">Двічі натисніть комбінацію клавіш Control Shift Q, щоб вийти.</translation>
 <translation id="6267036997247669271"><ph name="NAME" />: активація…</translation>
 <translation id="6297287540776456956">Виберіть область за допомогою стилуса</translation>
@@ -208,6 +207,7 @@
 <translation id="6700713906295497288">Кнопка меню IME</translation>
 <translation id="6713285437468012787">Пристрій Bluetooth "<ph name="DEVICE_NAME" />" підключено. Він доступний для всіх користувачів. Відключити пристрій можна в Налаштуваннях.</translation>
 <translation id="6785414152754474415">Акумулятор заряджений на <ph name="PERCENTAGE" />% і заряджається.</translation>
+<translation id="6803622936009808957">Не вдалося дублювати зображення екранів, оскільки не знайдено підтримувані значення роздільної здатності. Натомість запущено режим розширеного робочого столу.</translation>
 <translation id="683971173229319003">Search (Пошук)+L</translation>
 <translation id="6857811139397017780">Активувати <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Під’єднатися до іншої...</translation>
@@ -253,13 +253,14 @@
 <translation id="8000066093800657092">Немає мережі</translation>
 <translation id="8054466585765276473">Обчислення часу роботи акумулятора.</translation>
 <translation id="8077816382010018681">Заголовок сповіщення функції швидкого розблокування</translation>
+<translation id="8098591350844501178">Зупинити трансляцію екрана на пристрій "<ph name="RECEIVER_NAME" />"</translation>
 <translation id="8103386449138765447">SMS повідомлень: <ph name="MESSAGE_COUNT" /></translation>
 <translation id="8132793192354020517">З'єднано з <ph name="NAME" /></translation>
+<translation id="8180896103888046100">Зупинити трансляцію на невідомий пристрій</translation>
 <translation id="8185286464235484130">Поділіться з нами своїми враженнями, відповівши на кілька запитань.</translation>
 <translation id="8190698733819146287">Налаштувати мови та введення тексту...</translation>
 <translation id="8206859287963243715">Мобільний</translation>
 <translation id="8308637677604853869">Попереднє меню</translation>
-<translation id="8356164830168736643">Закрити вікно <ph name="WINDOW_TITLE" /></translation>
 <translation id="8428213095426709021">Налаштування</translation>
 <translation id="8454013096329229812">Wi-Fi увімкнено.</translation>
 <translation id="8484916590211895857"><ph name="NAME" />: під’єднання…</translation>
@@ -275,7 +276,6 @@
 <translation id="8878886163241303700">Розширення екрана</translation>
 <translation id="8938800817013097409">Пристрій, під’єднаний до порту USB-C (праворуч на задній панелі)</translation>
 <translation id="8940956008527784070">Низький заряд акумулятора (<ph name="PERCENTAGE" />%)</translation>
-<translation id="9008540565042607572">Цей монітор не підтримується. Натисніть, щоб надіслати відгук.</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9080206825613744995">Мікрофон використовується.</translation>
 <translation id="9089416786594320554">Методи введення</translation>
@@ -285,5 +285,6 @@
 <translation id="923686485342484400">Щоб вийти, двічі натисніть Control Shift Q.</translation>
 <translation id="938582441709398163">Розкладка клавіатури</translation>
 <translation id="939252827960237676">Не вдалося зберегти знімок екрана</translation>
+<translation id="945522503751344254">Надіслати відгук</translation>
 <translation id="952992212772159698">Не активовано</translation>
 </translationbundle>

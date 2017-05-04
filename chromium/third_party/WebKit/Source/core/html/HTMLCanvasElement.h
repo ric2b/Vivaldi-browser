@@ -73,13 +73,15 @@ class
 typedef CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContext
     RenderingContext;
 
-class CORE_EXPORT HTMLCanvasElement final : public HTMLElement,
-                                            public ContextLifecycleObserver,
-                                            public PageVisibilityObserver,
-                                            public CanvasImageSource,
-                                            public ImageBufferClient,
-                                            public ImageBitmapSource,
-                                            public OffscreenCanvasPlaceholder {
+class CORE_EXPORT HTMLCanvasElement final
+    : public HTMLElement,
+      public ContextLifecycleObserver,
+      public PageVisibilityObserver,
+      public CanvasImageSource,
+      public CanvasSurfaceLayerBridgeObserver,
+      public ImageBufferClient,
+      public ImageBitmapSource,
+      public OffscreenCanvasPlaceholder {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(HTMLCanvasElement);
   USING_PRE_FINALIZER(HTMLCanvasElement, dispose);
@@ -99,7 +101,7 @@ class CORE_EXPORT HTMLCanvasElement final : public HTMLElement,
   void setWidth(int, ExceptionState&);
   void setHeight(int, ExceptionState&);
 
-  void setSize(const IntSize& newSize) override;
+  void setSize(const IntSize& newSize);
 
   // Called by Document::getCSSCanvasContext as well as above getContext().
   CanvasRenderingContext* getCanvasRenderingContext(
@@ -143,7 +145,9 @@ class CORE_EXPORT HTMLCanvasElement final : public HTMLElement,
 
   void ensureUnacceleratedImageBuffer();
   ImageBuffer* buffer() const;
-  PassRefPtr<Image> copiedImage(SourceDrawingBuffer, AccelerationHint) const;
+  PassRefPtr<Image> copiedImage(SourceDrawingBuffer,
+                                AccelerationHint,
+                                SnapshotReason) const;
   void clearCopiedImage();
 
   SecurityOrigin* getSecurityOrigin() const;
@@ -166,8 +170,8 @@ class CORE_EXPORT HTMLCanvasElement final : public HTMLElement,
 
   InsertionNotificationRequest insertedInto(ContainerNode*) override;
 
-  // ContextLifecycleObserver (and PageVisibilityObserver!!!) implementation
-  void contextDestroyed() override;
+  // ContextLifecycleObserver and PageVisibilityObserver implementation
+  void contextDestroyed(ExecutionContext*) override;
 
   // PageVisibilityObserver implementation
   void pageVisibilityChanged() override;
@@ -184,6 +188,9 @@ class CORE_EXPORT HTMLCanvasElement final : public HTMLElement,
   bool isAccelerated() const override;
   int sourceWidth() override { return m_size.width(); }
   int sourceHeight() override { return m_size.height(); }
+
+  // CanvasSurfaceLayerBridgeObserver implementation
+  void OnWebLayerReplaced() override;
 
   // ImageBufferClient implementation
   void notifySurfaceInvalid() override;
@@ -227,9 +234,11 @@ class CORE_EXPORT HTMLCanvasElement final : public HTMLElement,
   CanvasSurfaceLayerBridge* surfaceLayerBridge() const {
     return m_surfaceLayerBridge.get();
   }
-  bool createSurfaceLayer();
+  void createLayer();
 
   void detachContext() { m_context = nullptr; }
+
+  void willDrawImageTo2DContext(CanvasImageSource*);
 
  protected:
   void didMoveToNewDocument(Document& oldDocument) override;
@@ -243,30 +252,29 @@ class CORE_EXPORT HTMLCanvasElement final : public HTMLElement,
   static ContextFactoryVector& renderingContextFactories();
   static CanvasRenderingContextFactory* getRenderingContextFactory(int);
 
-  bool shouldAccelerate(const IntSize&) const;
+  enum AccelerationCriteria {
+    NormalAccelerationCriteria,
+    IgnoreResourceLimitCriteria,
+  };
+  bool shouldAccelerate(AccelerationCriteria) const;
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   LayoutObject* createLayoutObject(const ComputedStyle&) override;
   bool areAuthorShadowsAllowed() const override { return false; }
 
   void reset();
 
   std::unique_ptr<ImageBufferSurface> createWebGLImageBufferSurface(
-      const IntSize& deviceSize,
       OpacityMode);
   std::unique_ptr<ImageBufferSurface> createAcceleratedImageBufferSurface(
-      const IntSize& deviceSize,
       OpacityMode,
       int* msaaSampleCount);
   std::unique_ptr<ImageBufferSurface> createUnacceleratedImageBufferSurface(
-      const IntSize& deviceSize,
       OpacityMode);
   void createImageBuffer();
   void createImageBufferInternal(
       std::unique_ptr<ImageBufferSurface> externalSurface);
-  bool shouldUseDisplayList(const IntSize& deviceSize);
+  bool shouldUseDisplayList();
 
   void setSurfaceSize(const IntSize&);
 

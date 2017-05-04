@@ -48,6 +48,30 @@ config("core_include_dirs") {
   }
 }
 
+import("//build/config/pch.gni")
+
+config("blink_core_pch") {
+  if (enable_precompiled_headers && (!defined(is_vivaldi) || !is_vivaldi || !is_win)) {
+    if (is_win) {
+      # This is a string rather than a file GN knows about. It has to match
+      # exactly what's in the /FI flag below, and what might appear in the
+      # source code in quotes for an #include directive.
+      precompiled_header = rebase_path("win/Precompile-core.h", root_build_dir)
+
+      # This is a file that GN will compile with the above header. It will be
+      # implicitly added to the sources (potentially multiple times, with one
+      # variant for each language used in the target).
+      precompiled_source =
+          "//third_party/WebKit/Source/core/win/Precompile-core.cpp"
+
+      # Force include the header.
+      cflags = [ "/FI$precompiled_header" ]
+    }
+  }
+}
+
+core_config_add += [ ":blink_core_pch" ]
+
 source_set("generated") {
   deps = [
     ":core_generated",
@@ -201,8 +225,9 @@ component("core") {
 
 source_set("testing") {
   configs += [
-    "//third_party/WebKit/Source:inside_blink",
+    ":blink_core_pch",
     "//third_party/WebKit/Source:config",
+    "//third_party/WebKit/Source:inside_blink",
   ]
 
   deps = [
@@ -240,8 +265,6 @@ source_set("testing") {
     "testing/OriginTrialsTest.cpp",
     "testing/OriginTrialsTest.h",
     "testing/OriginTrialsTestPartial.h",
-    "testing/PrivateScriptTest.cpp",
-    "testing/PrivateScriptTest.h",
     "testing/TypeConversions.h",
     "testing/UnionTypesTest.cpp",
     "testing/UnionTypesTest.h",
@@ -319,14 +342,14 @@ action("generated_settings_macros") {
   inputs = scripts_for_in_files + [
              "../build/scripts/make_settings.py",
              "../build/scripts/templates/SettingsMacros.h.tmpl",
-             "frame/Settings.in",
+             "frame/Settings.json5",
            ]
   outputs = [
     "$blink_core_output_dir/SettingsMacros.h",
   ]
 
   args = [
-    rebase_path("frame/Settings.in", root_build_dir),
+    rebase_path("frame/Settings.json5", root_build_dir),
     "--output_dir",
     rel_blink_core_gen_dir,
   ]
@@ -340,7 +363,7 @@ action("generated_testing_idls_settings") {
              "../build/scripts/templates/InternalSettingsGenerated.idl.tmpl",
              "../build/scripts/templates/InternalSettingsGenerated.cpp.tmpl",
              "../build/scripts/templates/InternalSettingsGenerated.h.tmpl",
-             "frame/Settings.in",
+             "frame/Settings.json5",
            ]
   outputs = [
     "$blink_core_output_dir/testing/InternalSettingsGenerated.idl",
@@ -349,7 +372,7 @@ action("generated_testing_idls_settings") {
   ]
 
   args = [
-    rebase_path("frame/Settings.in", root_build_dir),
+    rebase_path("frame/Settings.json5", root_build_dir),
     "--output_dir",
     "$rel_blink_core_gen_dir/testing",
   ]
@@ -387,6 +410,17 @@ css_properties("make_core_generated_computed_style_base") {
     "$blink_core_output_dir/ComputedStyleBase.cpp",
     "$blink_core_output_dir/ComputedStyleBase.h",
     "$blink_core_output_dir/ComputedStyleBaseConstants.h",
+  ]
+}
+
+css_properties("make_core_generated_css_property_apis") {
+  script = "../build/scripts/make_css_property_apis.py"
+  other_inputs = [
+    "../build/scripts/templates/CSSPropertyDescriptor.cpp.tmpl",
+    "../build/scripts/templates/CSSPropertyAPIFiles.h.tmpl",
+  ]
+  outputs = [
+    "$blink_core_output_dir/css/properties/CSSPropertyDescriptor.cpp",
   ]
 }
 
@@ -460,8 +494,8 @@ process_in_files("make_core_generated_css_value_keywords") {
   script = "../build/scripts/make_css_value_keywords.py"
 
   in_files = [
-    "css/CSSValueKeywords.in",
-    "css/SVGCSSValueKeywords.in",
+    "css/CSSValueKeywords.json5",
+    "css/SVGCSSValueKeywords.json5",
   ]
   outputs = [
     "$blink_core_output_dir/CSSValueKeywords.cpp",
@@ -654,49 +688,6 @@ make_qualified_names("make_core_generated_xml_names") {
 
 # One-off scripts --------------------------------------------------------------
 
-# FIXME: The implementation of Blink-in-JS is not yet mature.
-# You can use Blink-in-JS in your local experiment, but don't ship it.
-# crbug.com/341031
-action("make_core_generated_private_script") {
-  visibility = []  # Allow re-assignment of list.
-  visibility = [ ":*" ]
-  script = "../build/scripts/make_private_script_source.py"
-
-  inputs = [
-    "../bindings/core/v8/PrivateScriptRunner.js",
-    "html/HTMLMarqueeElement.js",
-    "xml/DocumentXMLTreeViewer.js",
-  ]
-  outputs = [
-    "$blink_core_output_dir/PrivateScriptSources.h",
-  ]
-
-  args = rebase_path(outputs, root_build_dir)
-  args += rebase_path(inputs, root_build_dir)
-
-  deps = make_core_generated_deps
-}
-
-action("make_core_generated_private_script_for_testing") {
-  visibility = []  # Allow re-assignment of list.
-  visibility = [ ":*" ]
-  script = "../build/scripts/make_private_script_source.py"
-
-  inputs = [
-    "testing/PartialPrivateScriptTest.js",
-    "testing/PrivateScriptTest.js",
-  ]
-  outputs = [
-    "$blink_core_output_dir/PrivateScriptSourcesForTesting.h",
-  ]
-
-  args = [ "--for-testing" ]
-  args += rebase_path(outputs, root_build_dir)
-  args += rebase_path(inputs, root_build_dir)
-
-  deps = make_core_generated_deps
-}
-
 action("make_minimized_css") {
   script = "../build/scripts/minimize_css.py"
 
@@ -723,7 +714,7 @@ action("make_core_generated_html_entity_table") {
   script = "html/parser/create-html-entity-table"
 
   inputs = [
-    "html/parser/HTMLEntityNames.in",
+    "html/parser/HTMLEntityNames.csv",
   ]
   outputs = [
     "$blink_core_output_dir/HTMLEntityTable.cpp",
@@ -874,6 +865,7 @@ targets_generating_sources = [
   ":make_core_generated_css_primitive_value_unit_trie",
   ":make_core_generated_css_property_metadata",
   ":make_core_generated_computed_style_base",
+  ":make_core_generated_css_property_apis",
   ":make_core_generated_css_property_names",
   ":make_core_generated_cssom_types",
   ":make_core_generated_event_factory",
@@ -897,12 +889,10 @@ targets_generating_sources = [
   ":make_core_generated_xlink_names",
   ":make_core_generated_xml_names",
   ":make_core_generated_xml_ns_names",
-  ":make_core_generated_private_script",
   ":make_core_generated_html_element_type_helpers",
   ":make_core_generated_css_value_keywords",
   ":make_core_generated_media_features",
   ":make_core_generated_svg_element_type_helpers",
-  ":make_core_generated_private_script_for_testing",
 ]
 
 group("all_generators") {
@@ -998,7 +988,6 @@ source_set("unit_tests") {
     "animation/AnimationClockTest.cpp",
     "animation/AnimationEffectReadOnlyTest.cpp",
     "animation/AnimationInputHelpersTest.cpp",
-    "animation/AnimationStackTest.cpp",
     "animation/AnimationTest.cpp",
     "animation/AnimationTestHelper.cpp",
     "animation/AnimationTestHelper.h",
@@ -1006,6 +995,7 @@ source_set("unit_tests") {
     "animation/CompositorAnimationsTest.cpp",
     "animation/DocumentTimelineTest.cpp",
     "animation/EffectInputTest.cpp",
+    "animation/EffectStackTest.cpp",
     "animation/InterpolableValueTest.cpp",
     "animation/InterpolationEffectTest.cpp",
     "animation/KeyframeEffectModelTest.cpp",
@@ -1031,7 +1021,6 @@ source_set("unit_tests") {
     "css/CSSPageRuleTest.cpp",
     "css/CSSSelectorTest.cpp",
     "css/CSSStyleDeclarationTest.cpp",
-    "css/CSSStyleSheetResourceTest.cpp",
     "css/CSSTestHelper.cpp",
     "css/CSSTestHelper.h",
     "css/CSSValueTestHelper.h",
@@ -1063,8 +1052,8 @@ source_set("unit_tests") {
     "css/parser/SizesCalcParserTest.cpp",
     "css/resolver/FontBuilderTest.cpp",
     "css/resolver/MatchResultTest.cpp",
+    "css/resolver/ScopedStyleResolverTest.cpp",
     "css/resolver/SharedStyleFinderTest.cpp",
-    "dom/ActiveDOMObjectTest.cpp",
     "dom/AttrTest.cpp",
     "dom/CSSSelectorWatchTest.cpp",
     "dom/DOMImplementationTest.cpp",
@@ -1075,17 +1064,20 @@ source_set("unit_tests") {
     "dom/ElementTest.cpp",
     "dom/ElementVisibilityObserverTest.cpp",
     "dom/ExecutionContextTaskTest.cpp",
-    "dom/MainThreadTaskRunnerTest.cpp",
+    "dom/IdleDeadlineTest.cpp",
+    "dom/ModulatorTest.cpp",
+    "dom/MutationObserverTest.cpp",
     "dom/NodeTest.cpp",
     "dom/NthIndexCacheTest.cpp",
     "dom/RangeTest.cpp",
     "dom/ScriptRunnerTest.cpp",
+    "dom/ScriptedAnimationControllerTest.cpp",
     "dom/SelectorQueryTest.cpp",
     "dom/StaticRangeTest.cpp",
     "dom/StyleElementTest.cpp",
     "dom/StyleEngineTest.cpp",
+    "dom/SuspendableObjectTest.cpp",
     "dom/TextTest.cpp",
-    "dom/TreeScopeStyleSheetCollectionTest.cpp",
     "dom/TreeScopeTest.cpp",
     "dom/URLSearchParamsTest.cpp",
     "dom/custom/CustomElementDefinitionTest.cpp",
@@ -1100,57 +1092,19 @@ source_set("unit_tests") {
     "dom/custom/CustomElementUpgradeSorterTest.cpp",
     "dom/shadow/FlatTreeTraversalTest.cpp",
     "dom/shadow/SlotScopedTraversalTest.cpp",
-    "editing/CompositionUnderlineTest.cpp",
-    "editing/EditingCommandTest.cpp",
-    "editing/EditingStrategyTest.cpp",
-    "editing/EditingStyleTest.cpp",
-    "editing/EditingTestBase.cpp",
-    "editing/EditingTestBase.h",
-    "editing/EditingUtilitiesTest.cpp",
-    "editing/EditorTest.cpp",
-    "editing/EphemeralRangeTest.cpp",
-    "editing/FrameSelectionTest.cpp",
-    "editing/GranularityStrategyTest.cpp",
-    "editing/InputMethodControllerTest.cpp",
-    "editing/PositionTest.cpp",
-    "editing/RelocatablePositionTest.cpp",
-    "editing/SelectionAdjusterTest.cpp",
-    "editing/SelectionControllerTest.cpp",
-    "editing/SelectionTemplateTest.cpp",
-    "editing/SurroundingTextTest.cpp",
-    "editing/VisiblePositionTest.cpp",
-    "editing/VisibleSelectionTest.cpp",
-    "editing/VisibleUnitsTest.cpp",
-    "editing/commands/ApplyBlockElementCommandTest.cpp",
-    "editing/commands/InsertListCommandTest.cpp",
-    "editing/commands/ReplaceSelectionCommandTest.cpp",
-    "editing/iterators/BackwardsTextBufferTest.cpp",
-    "editing/iterators/CharacterIteratorTest.cpp",
-    "editing/iterators/ForwardsTextBufferTest.cpp",
-    "editing/iterators/SearchBufferTest.cpp",
-    "editing/iterators/SimplifiedBackwardsTextIteratorTest.cpp",
-    "editing/iterators/TextIteratorTest.cpp",
-    "editing/iterators/TextSearcherICUTest.cpp",
-    "editing/markers/DocumentMarkerControllerTest.cpp",
-    "editing/serializers/StyledMarkupSerializerTest.cpp",
-    "editing/spellcheck/SpellCheckerTest.cpp",
-    "editing/state_machines/BackspaceStateMachineTest.cpp",
-    "editing/state_machines/BackwardGraphemeBoundaryStateMachineTest.cpp",
-    "editing/state_machines/ForwardGraphemeBoundaryStateMachineTest.cpp",
-    "editing/state_machines/StateMachineTestUtil.cpp",
-    "editing/state_machines/StateMachineUtilTest.cpp",
     "events/EventPathTest.cpp",
     "events/EventTargetTest.cpp",
     "events/PointerEventFactoryTest.cpp",
-    "fetch/CachingCorrectnessTest.cpp",
     "fetch/ClientHintsPreferencesTest.cpp",
     "fetch/CrossOriginAccessControlTest.cpp",
     "fetch/FetchUtilsTest.cpp",
-    "fetch/ImageResourceTest.cpp",
+    "fetch/MemoryCacheCorrectnessTest.cpp",
     "fetch/MemoryCacheTest.cpp",
     "fetch/MockFetchContext.h",
-    "fetch/MockResourceClients.cpp",
-    "fetch/MultipartImageResourceParserTest.cpp",
+    "fetch/MockResource.cpp",
+    "fetch/MockResource.h",
+    "fetch/MockResourceClient.cpp",
+    "fetch/MockResourceClient.h",
     "fetch/RawResourceTest.cpp",
     "fetch/ResourceFetcherTest.cpp",
     "fetch/ResourceLoaderOptionsTest.cpp",
@@ -1170,8 +1124,9 @@ source_set("unit_tests") {
     "frame/csp/CSPDirectiveListTest.cpp",
     "frame/csp/CSPSourceTest.cpp",
     "frame/csp/ContentSecurityPolicyTest.cpp",
+    "frame/csp/MediaListDirectiveTest.cpp",
     "frame/csp/SourceListDirectiveTest.cpp",
-    "html/AutoplayExperimentTest.cpp",
+    "html/AutoplayUmaHelperTest.cpp",
     "html/FormDataTest.cpp",
     "html/HTMLDimensionTest.cpp",
     "html/HTMLEmbedElementTest.cpp",
@@ -1181,6 +1136,7 @@ source_set("unit_tests") {
     "html/HTMLImageElementTest.cpp",
     "html/HTMLInputElementTest.cpp",
     "html/HTMLLinkElementSizesAttributeTest.cpp",
+    "html/HTMLLinkElementTest.cpp",
     "html/HTMLMediaElementTest.cpp",
     "html/HTMLOutputElementTest.cpp",
     "html/HTMLSelectElementTest.cpp",
@@ -1209,7 +1165,11 @@ source_set("unit_tests") {
     "html/parser/HTMLResourcePreloaderTest.cpp",
     "html/parser/HTMLSrcsetParserTest.cpp",
     "html/parser/HTMLTokenizerTest.cpp",
+    "html/parser/HTMLTreeBuilderSimulatorTest.cpp",
+    "html/parser/HTMLViewSourceParserTest.cpp",
     "html/parser/TextResourceDecoderTest.cpp",
+    "html/shadow/MediaControlsLeakTest.cpp",
+    "html/shadow/MediaControlsOrientationLockDelegateTest.cpp",
     "html/shadow/MediaControlsTest.cpp",
     "html/track/TextTrackListTest.cpp",
     "html/track/vtt/BufferedLineReaderTest.cpp",
@@ -1217,7 +1177,6 @@ source_set("unit_tests") {
     "input/EventHandlerTest.cpp",
     "inspector/ProtocolParserTest.cpp",
     "layout/ImageQualityControllerTest.cpp",
-    "layout/InlineTextBoxTest.cpp",
     "layout/LayoutBlockTest.cpp",
     "layout/LayoutBoxModelObjectTest.cpp",
     "layout/LayoutBoxTest.cpp",
@@ -1243,10 +1202,13 @@ source_set("unit_tests") {
     "layout/VisualRectMappingTest.cpp",
     "layout/compositing/CompositedLayerMappingTest.cpp",
     "layout/compositing/CompositingReasonFinderTest.cpp",
+    "layout/line/InlineBoxTest.cpp",
+    "layout/line/InlineTextBoxTest.cpp",
+    "layout/ng/ng_absolute_utils_test.cc",
     "layout/ng/ng_block_layout_algorithm_test.cc",
-    "layout/ng/ng_box_test.cc",
+    "layout/ng/ng_block_node_test.cc",
     "layout/ng/ng_constraint_space_test.cc",
-    "layout/ng/ng_inline_box_test.cc",
+    "layout/ng/ng_inline_node_test.cc",
     "layout/ng/ng_layout_inline_items_builder_test.cc",
     "layout/ng/ng_length_utils_test.cc",
     "layout/ng/ng_units_test.cc",
@@ -1260,7 +1222,14 @@ source_set("unit_tests") {
     "loader/ProgressTrackerTest.cpp",
     "loader/TextResourceDecoderBuilderTest.cpp",
     "loader/ThreadableLoaderTest.cpp",
+    "loader/resource/CSSStyleSheetResourceTest.cpp",
     "loader/resource/FontResourceTest.cpp",
+    "loader/resource/ImageResourceTest.cpp",
+    "loader/resource/MockFontResourceClient.cpp",
+    "loader/resource/MockFontResourceClient.h",
+    "loader/resource/MockImageResourceClient.cpp",
+    "loader/resource/MockImageResourceClient.h",
+    "loader/resource/MultipartImageResourceParserTest.cpp",
     "origin_trials/OriginTrialContextTest.cpp",
     "page/ChromeClientTest.cpp",
     "page/ContextMenuControllerTest.cpp",
@@ -1286,7 +1255,9 @@ source_set("unit_tests") {
     "paint/PaintLayerScrollableAreaTest.cpp",
     "paint/PaintLayerTest.cpp",
     "paint/PaintPropertyTreeBuilderTest.cpp",
+    "paint/PaintPropertyTreeBuilderTest.h",
     "paint/PaintPropertyTreePrinterTest.cpp",
+    "paint/PaintPropertyTreeUpdateTests.cpp",
     "paint/PrePaintTreeWalkTest.cpp",
     "paint/SVGInlineTextBoxPainterTest.cpp",
     "paint/StubChromeClientForSPv2.h",
@@ -1301,12 +1272,13 @@ source_set("unit_tests") {
     "svg/SVGPathParserTest.cpp",
     "svg/UnsafeSVGAttributeSanitizationTest.cpp",
     "svg/graphics/SVGImageTest.cpp",
-    "testing/PrivateScriptTestTest.cpp",
     "timing/MemoryInfoTest.cpp",
     "timing/PerformanceBaseTest.cpp",
     "timing/PerformanceObserverTest.cpp",
     "timing/PerformanceTest.cpp",
     "workers/DedicatedWorkerTest.cpp",
+    "workers/MainThreadWorkletTest.cpp",
+    "workers/ThreadedWorkletTest.cpp",
     "workers/WorkerThreadTest.cpp",
     "workers/WorkerThreadTestHelper.h",
     "xml/XPathFunctionsTest.cpp",
@@ -1314,6 +1286,7 @@ source_set("unit_tests") {
   ]
 
   configs += [
+    ":blink_core_pch",
     "//third_party/WebKit/Source:config",
     "//third_party/WebKit/Source:inside_blink",
   ]
@@ -1322,6 +1295,7 @@ source_set("unit_tests") {
     ":core",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/WebKit/Source/core/editing:unit_tests",
   ]
 }
 

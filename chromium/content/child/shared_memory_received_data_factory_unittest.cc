@@ -72,14 +72,12 @@ TEST_F(SharedMemoryReceivedDataFactoryTest, Create) {
   EXPECT_CALL(*sender_, SendAck(request_id_));
   EXPECT_CALL(checkpoint, Call(1));
 
-  std::unique_ptr<ReceivedData> data = factory_->Create(12, 34, 56, 30);
+  std::unique_ptr<ReceivedData> data = factory_->Create(12, 34);
   const char* memory_start = static_cast<const char*>(memory_->memory());
 
   ASSERT_TRUE(data);
   EXPECT_EQ(memory_start + 12, data->payload());
   EXPECT_EQ(34, data->length());
-  EXPECT_EQ(56, data->encoded_data_length());
-  EXPECT_EQ(30, data->encoded_body_length());
 
   checkpoint.Call(0);
   data.reset();
@@ -97,9 +95,9 @@ TEST_F(SharedMemoryReceivedDataFactoryTest, CreateMultiple) {
   EXPECT_CALL(*sender_, SendAck(request_id_));
   EXPECT_CALL(checkpoint, Call(3));
 
-  std::unique_ptr<ReceivedData> data1 = factory_->Create(0, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data2 = factory_->Create(1, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data3 = factory_->Create(2, 1, 1, 1);
+  std::unique_ptr<ReceivedData> data1 = factory_->Create(0, 1);
+  std::unique_ptr<ReceivedData> data2 = factory_->Create(1, 1);
+  std::unique_ptr<ReceivedData> data3 = factory_->Create(2, 1);
 
   EXPECT_TRUE(data1);
   EXPECT_TRUE(data2);
@@ -125,9 +123,9 @@ TEST_F(SharedMemoryReceivedDataFactoryTest, ReclaimOutOfOrder) {
   EXPECT_CALL(*sender_, SendAck(request_id_));
   EXPECT_CALL(checkpoint, Call(3));
 
-  std::unique_ptr<ReceivedData> data1 = factory_->Create(0, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data2 = factory_->Create(1, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data3 = factory_->Create(2, 1, 1, 1);
+  std::unique_ptr<ReceivedData> data1 = factory_->Create(0, 1);
+  std::unique_ptr<ReceivedData> data2 = factory_->Create(1, 1);
+  std::unique_ptr<ReceivedData> data3 = factory_->Create(2, 1);
 
   EXPECT_TRUE(data1);
   EXPECT_TRUE(data2);
@@ -157,12 +155,12 @@ TEST_F(SharedMemoryReceivedDataFactoryTest, ReclaimOutOfOrderPartially) {
   EXPECT_CALL(*sender_, SendAck(request_id_));
   EXPECT_CALL(checkpoint, Call(4));
 
-  std::unique_ptr<ReceivedData> data1 = factory_->Create(0, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data2 = factory_->Create(1, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data3 = factory_->Create(2, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data4 = factory_->Create(3, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data5 = factory_->Create(4, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data6 = factory_->Create(5, 1, 1, 1);
+  std::unique_ptr<ReceivedData> data1 = factory_->Create(0, 1);
+  std::unique_ptr<ReceivedData> data2 = factory_->Create(1, 1);
+  std::unique_ptr<ReceivedData> data3 = factory_->Create(2, 1);
+  std::unique_ptr<ReceivedData> data4 = factory_->Create(3, 1);
+  std::unique_ptr<ReceivedData> data5 = factory_->Create(4, 1);
+  std::unique_ptr<ReceivedData> data6 = factory_->Create(5, 1);
 
   EXPECT_TRUE(data1);
   EXPECT_TRUE(data2);
@@ -195,12 +193,12 @@ TEST_F(SharedMemoryReceivedDataFactoryTest, Stop) {
   EXPECT_CALL(checkpoint, Call(2));
   EXPECT_CALL(checkpoint, Call(3));
 
-  std::unique_ptr<ReceivedData> data1 = factory_->Create(0, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data2 = factory_->Create(1, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data3 = factory_->Create(2, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data4 = factory_->Create(3, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data5 = factory_->Create(4, 1, 1, 1);
-  std::unique_ptr<ReceivedData> data6 = factory_->Create(5, 1, 1, 1);
+  std::unique_ptr<ReceivedData> data1 = factory_->Create(0, 1);
+  std::unique_ptr<ReceivedData> data2 = factory_->Create(1, 1);
+  std::unique_ptr<ReceivedData> data3 = factory_->Create(2, 1);
+  std::unique_ptr<ReceivedData> data4 = factory_->Create(3, 1);
+  std::unique_ptr<ReceivedData> data5 = factory_->Create(4, 1);
+  std::unique_ptr<ReceivedData> data6 = factory_->Create(5, 1);
 
   EXPECT_TRUE(data1);
   EXPECT_TRUE(data2);

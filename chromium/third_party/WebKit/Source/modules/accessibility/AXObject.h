@@ -45,7 +45,6 @@ class SkMatrix44;
 namespace blink {
 
 class AXObject;
-class AXObjectCache;
 class AXObjectCacheImpl;
 class Element;
 class FrameView;
@@ -92,8 +91,9 @@ enum AccessibilityRole {
   DivRole,                 // No mapping to ARIA role.
   DocumentRole,
   EmbeddedObjectRole,  // No mapping to ARIA role.
-  FigcaptionRole,      // No mapping to ARIA role.
-  FigureRole,          // No mapping to ARIA role.
+  FeedRole,
+  FigcaptionRole,  // No mapping to ARIA role.
+  FigureRole,
   FooterRole,
   FormRole,
   GridRole,
@@ -167,6 +167,7 @@ enum AccessibilityRole {
   TabRole,
   TableHeaderContainerRole,  // No mapping to ARIA role.
   TableRole,
+  TermRole,
   TextFieldRole,
   TimeRole,  // No mapping to ARIA role.
   TimerRole,
@@ -244,6 +245,18 @@ enum AXObjectInclusion {
   IncludeObject,
   IgnoreObject,
   DefaultBehavior,
+};
+
+enum class AXSupportedAction {
+  None = 0,
+  Activate,
+  Check,
+  Click,
+  Jump,
+  Open,
+  Press,
+  Select,
+  Uncheck
 };
 
 enum AccessibilityButtonState {
@@ -348,7 +361,6 @@ enum AXDescriptionFrom {
   AXDescriptionFromUninitialized = -1,
   AXDescriptionFromAttribute = 0,
   AXDescriptionFromContents,
-  AXDescriptionFromPlaceholder,
   AXDescriptionFromRelatedElement,
 };
 
@@ -717,9 +729,7 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   // Takes the result of nameFrom and descriptionFrom from calling |name| and
   // |description|, above, and retrieves the placeholder of the object, if
   // present and if it wasn't already exposed by one of the two functions above.
-  virtual String placeholder(AXNameFrom, AXDescriptionFrom) const {
-    return String();
-  }
+  virtual String placeholder(AXNameFrom) const { return String(); }
 
   // Internal functions used by name and description, above.
   typedef HeapHashSet<Member<const AXObject>> AXObjectSet;
@@ -765,6 +775,10 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   virtual int headingLevel() const { return 0; }
   // Value should be 1-based. 0 means not supported.
   virtual unsigned hierarchicalLevel() const { return 0; }
+  // Return the content of an image or canvas as an image data url in
+  // PNG format. If |maxSize| is not empty and if the image is larger than
+  // those dimensions, the image will be resized proportionally first to fit.
+  virtual String imageDataUrl(const IntSize& maxSize) const { return nullAtom; }
   virtual AccessibilityOrientation orientation() const;
   virtual String text() const { return String(); }
   virtual AccessibilityTextDirection textDirection() const {
@@ -795,7 +809,7 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
   virtual void wordBoundaries(Vector<AXRange>&) const {}
 
   // Properties of interactive elements.
-  String actionVerb() const;
+  AXSupportedAction action() const;
   virtual AccessibilityButtonState checkboxOrRadioValue() const;
   virtual AriaCurrentState ariaCurrentState() const {
     return AriaCurrentStateUndefined;
@@ -937,7 +951,7 @@ class MODULES_EXPORT AXObject : public GarbageCollectedFinalized<AXObject> {
 
   // Scrollable containers.
   bool isScrollableContainer() const;
-  IntPoint scrollOffset() const;
+  IntPoint getScrollOffset() const;
   IntPoint minimumScrollOffset() const;
   IntPoint maximumScrollOffset() const;
   void setScrollOffset(const IntPoint&) const;

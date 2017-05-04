@@ -40,7 +40,7 @@
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/WebGraphicsContext3DProviderWrapper.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebExternalBitmap.h"
@@ -142,7 +142,7 @@ DrawingBuffer::DrawingBuffer(
     : m_client(client),
       m_preserveDrawingBuffer(preserve),
       m_webGLVersion(webGLVersion),
-      m_contextProvider(wrapUnique(
+      m_contextProvider(WTF::wrapUnique(
           new WebGraphicsContext3DProviderWrapper(std::move(contextProvider)))),
       m_gl(this->contextProvider()->contextGL()),
       m_extensionsUtil(std::move(extensionsUtil)),
@@ -164,9 +164,13 @@ DrawingBuffer::~DrawingBuffer() {
   m_contextProvider.reset();
 }
 
-void DrawingBuffer::markContentsChanged() {
-  m_contentsChanged = true;
-  m_contentsChangeCommitted = false;
+bool DrawingBuffer::markContentsChanged() {
+  if (m_contentsChangeCommitted || !m_contentsChanged) {
+    m_contentsChangeCommitted = false;
+    m_contentsChanged = true;
+    return true;
+  }
+  return false;
 }
 
 bool DrawingBuffer::bufferClearNeeded() const {
@@ -230,7 +234,7 @@ std::unique_ptr<cc::SharedBitmap> DrawingBuffer::createOrRecycleBitmap() {
   m_recycledBitmaps.shrink(it - m_recycledBitmaps.begin());
 
   if (!m_recycledBitmaps.isEmpty()) {
-    RecycledBitmap recycled = std::move(m_recycledBitmaps.last());
+    RecycledBitmap recycled = std::move(m_recycledBitmaps.back());
     m_recycledBitmaps.pop_back();
     DCHECK(recycled.size == m_size);
     return std::move(recycled.bitmap);
@@ -352,8 +356,8 @@ bool DrawingBuffer::finishPrepareTextureMailboxGpu(
     // in the mailbox, and copy backbuffer's contents there.
     colorBufferForMailbox = createOrRecycleColorBuffer();
     m_gl->CopySubTextureCHROMIUM(
-        m_backColorBuffer->textureId, colorBufferForMailbox->textureId, 0, 0, 0,
-        0, m_size.width(), m_size.height(), GL_FALSE, GL_FALSE, GL_FALSE);
+        m_backColorBuffer->textureId, 0, colorBufferForMailbox->textureId, 0, 0,
+        0, 0, 0, m_size.width(), m_size.height(), GL_FALSE, GL_FALSE, GL_FALSE);
   }
 
   // Put colorBufferForMailbox into its mailbox, and populate its
@@ -435,7 +439,7 @@ void DrawingBuffer::mailboxReleasedSoftware(
     return;  // Just delete the bitmap.
 
   RecycledBitmap recycled = {std::move(bitmap), m_size};
-  m_recycledBitmaps.append(std::move(recycled));
+  m_recycledBitmaps.push_back(std::move(recycled));
 }
 
 PassRefPtr<StaticBitmapImage> DrawingBuffer::transferToStaticBitmapImage() {
@@ -709,7 +713,11 @@ bool DrawingBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl,
     m_gl->GenSyncTokenCHROMIUM(fenceSync, produceSyncToken.GetData());
   }
 
-  DCHECK(produceSyncToken.HasData());
+  if (!produceSyncToken.HasData()) {
+    // This should only happen if the context has been lost.
+    return false;
+  }
+
   gl->WaitSyncTokenCHROMIUM(produceSyncToken.GetConstData());
   GLuint sourceTexture =
       gl->CreateAndConsumeTextureCHROMIUM(target, mailbox.name);
@@ -722,8 +730,8 @@ bool DrawingBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl,
     unpackPremultiplyAlphaNeeded = GL_TRUE;
 
   gl->CopySubTextureCHROMIUM(
-      sourceTexture, texture, destTextureOffset.x(), destTextureOffset.y(),
-      sourceSubRectangle.x(), sourceSubRectangle.y(),
+      sourceTexture, 0, texture, 0, destTextureOffset.x(),
+      destTextureOffset.y(), sourceSubRectangle.x(), sourceSubRectangle.y(),
       sourceSubRectangle.width(), sourceSubRectangle.height(), flipY,
       unpackPremultiplyAlphaNeeded, unpackUnpremultiplyAlphaNeeded);
 
@@ -983,6 +991,7 @@ void DrawingBuffer::resolveMultisampleFramebufferInternal() {
             .disable_multisampling_color_mask_usage) {
       m_gl->ClearColor(0, 0, 0, 1);
       m_gl->ColorMask(false, false, false, true);
+      m_gl->Clear(GL_COLOR_BUFFER_BIT);
     }
   }
 

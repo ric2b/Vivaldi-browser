@@ -39,11 +39,6 @@ namespace bookmarks {
 class BookmarkBubbleObserver;
 }
 
-namespace extensions {
-class Command;
-class Extension;
-}
-
 // The Browser Window's toolbar.
 class ToolbarView : public views::AccessiblePaneView,
                     public views::MenuButtonListener,
@@ -131,10 +126,7 @@ class ToolbarView : public views::AccessiblePaneView,
       ExtensionAction* action) override;
   ContentSettingBubbleModelDelegate* GetContentSettingBubbleModelDelegate()
       override;
-  void ShowWebsiteSettings(
-      content::WebContents* web_contents,
-      const GURL& virtual_url,
-      const security_state::SecurityInfo& security_info) override;
+  void ShowWebsiteSettings(content::WebContents* web_contents) override;
 
   // CommandObserver:
   void EnabledStateChangedForCommand(int id, bool enabled) override;

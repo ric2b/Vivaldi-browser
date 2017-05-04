@@ -6,13 +6,28 @@ module app_list.mojom;
 
 import "services/ui/public/interfaces/window_manager_constants.mojom";
 
+// TODO(msw): Rename this file to app_list.mojom; move to ash?
+// TODO(msw): Ash should implement the app list and presenter; chrome should
+//            just push data about its apps into the app list interface.
+
+// Implemented by ash. Used by chrome to set the presenter interface.
+interface AppList {
+  // Set the app list presenter interface, to let ash trigger Chrome's app list.
+  SetAppListPresenter(AppListPresenter presenter);
+
+  // Notify the app list that the presenter's [target] visibility changed.
+  OnTargetVisibilityChanged(bool visible);
+  OnVisibilityChanged(bool visible);
+};
+
+// Implemented by chrome. Used by ash to actually show and dismiss the app list.
 interface AppListPresenter {
   // Show the app list on the specified display.
   Show(int64 display_id);
 
   // Dismiss the app list.
   Dismiss();
-  
+
   // Show the app list (on the specified display) if it is hidden; hide the
   // app list if it is shown.
   ToggleAppList(int64 display_id);

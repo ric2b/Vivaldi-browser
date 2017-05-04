@@ -27,8 +27,7 @@
 #ifndef CaretBase_h
 #define CaretBase_h
 
-#include "core/CoreExport.h"
-#include "core/editing/VisiblePosition.h"
+#include "core/editing/PositionWithAffinity.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/paint/DisplayItem.h"
@@ -36,49 +35,36 @@
 
 namespace blink {
 
-class DisplayItemClient;
 class GraphicsContext;
 class LayoutBlock;
 
-class CORE_EXPORT CaretBase : public GarbageCollectedFinalized<CaretBase>,
-                              public DisplayItemClient {
+class CaretBase final : public DisplayItemClient {
   WTF_MAKE_NONCOPYABLE(CaretBase);
 
  public:
   CaretBase();
   virtual ~CaretBase();
 
-  void invalidateCaretRect(Node*);
-  void clearCaretRect();
+  void invalidateCaretRect(Node*, const LayoutRect&);
   // Creating VisiblePosition causes synchronous layout so we should use the
   // PositionWithAffinity version if possible.
   // A position in HTMLTextFromControlElement is a typical example.
-  void updateCaretRect(const PositionWithAffinity& caretPosition);
-  void updateCaretRect(const VisiblePosition& caretPosition);
-  IntRect absoluteBoundsForLocalRect(Node*, const LayoutRect&) const;
-  bool shouldRepaintCaret(Node&) const;
+  static LayoutRect computeCaretRect(const PositionWithAffinity& caretPosition);
+
   void paintCaret(Node*,
                   GraphicsContext&,
+                  const LayoutRect& caretLocalRect,
                   const LayoutPoint&,
-                  DisplayItem::Type) const;
-
-  const LayoutRect& localCaretRectWithoutUpdate() const {
-    return m_caretLocalRect;
-  }
+                  DisplayItem::Type);
 
   static LayoutBlock* caretLayoutObject(Node*);
   void invalidateLocalCaretRect(Node*, const LayoutRect&);
 
   // DisplayItemClient methods.
-  LayoutRect visualRect() const override;
+  LayoutRect visualRect() const final;
   String debugName() const final;
 
-  DECLARE_VIRTUAL_TRACE();
-
  private:
-  // caret rect in coords local to the layoutObject responsible for painting the
-  // caret
-  LayoutRect m_caretLocalRect;
   LayoutRect m_visualRect;
 };
 

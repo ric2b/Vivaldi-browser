@@ -36,7 +36,6 @@ class WebFrame;
 class WebLocalFrame;
 class WebString;
 class WebView;
-class WebWidget;
 }
 
 namespace gin {
@@ -107,8 +106,6 @@ class TestRunner : public WebTestRunner {
   // Methods used by WebViewTestClient and WebFrameTestClient.
   void OnNavigationBegin(blink::WebFrame* frame);
   void OnNavigationEnd() { will_navigate_ = false; }
-  void OnAnimationScheduled(blink::WebWidget* widget);
-  void OnAnimationBegun(blink::WebWidget* widget);
   std::string GetAcceptLanguages() const;
   bool shouldStayOnPageAfterHandlingBeforeUnload() const;
   MockScreenOrientationClient* getMockScreenOrientationClient();
@@ -120,6 +117,7 @@ class TestRunner : public WebTestRunner {
   void ShowDevTools(const std::string& settings,
                     const std::string& frontend_url);
   void ClearDevToolsLocalStorage();
+  void SetV8CacheDisabled(bool);
   void setShouldDumpAsText(bool);
   void setShouldDumpAsMarkup(bool);
   void setCustomTextOutput(const std::string& text);
@@ -157,6 +155,7 @@ class TestRunner : public WebTestRunner {
   // pending load requests in WorkQueue).
   bool tryToClearTopLoadingFrame(blink::WebFrame*);
 
+  blink::WebFrame* mainFrame() const;
   blink::WebFrame* topLoadingFrame() const;
   void policyDelegateDone();
   bool policyDelegateEnabled() const;
@@ -328,10 +327,6 @@ class TestRunner : public WebTestRunner {
 
   // Enable or disable plugins.
   void SetPluginsEnabled(bool enabled);
-
-  // Returns |true| if an animation has been scheduled in one or more WebViews
-  // participating in the layout test.
-  bool GetAnimationScheduled() const;
 
   ///////////////////////////////////////////////////////////////////////////
   // Methods that modify the state of TestRunner
@@ -658,13 +653,14 @@ class TestRunner : public WebTestRunner {
   // is ok, because this is taken care of in WebTestDelegate::SetFocus).
   blink::WebView* previously_focused_view_;
 
-  std::set<blink::WebWidget*> widgets_with_scheduled_animations_;
-
   // True if we run a test in LayoutTests/imported/{csswg-test,wpt}/.
   bool is_web_platform_tests_mode_;
 
   // An effective connection type settable by layout tests.
   blink::WebEffectiveConnectionType effective_connection_type_;
+
+  // Forces v8 compilation cache to be disabled (used for inspector tests).
+  bool disable_v8_cache_ = false;
 
   base::WeakPtrFactory<TestRunner> weak_factory_;
 

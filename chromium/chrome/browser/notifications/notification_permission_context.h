@@ -8,7 +8,6 @@
 #include "base/gtest_prod_util.h"
 #include "chrome/browser/permissions/permission_context_base.h"
 #include "components/content_settings/core/common/content_settings.h"
-#include "notifications/notification_permission_context_extensions.h"
 
 class GURL;
 class Profile;
@@ -20,7 +19,7 @@ class NotificationPermissionContext : public PermissionContextBase {
   ~NotificationPermissionContext() override;
 
   // PermissionContextBase implementation.
-  ContentSetting GetPermissionStatus(
+  ContentSetting GetPermissionStatusInternal(
       const GURL& requesting_origin,
       const GURL& embedding_origin) const override;
   void ResetPermission(const GURL& requesting_origin,
@@ -42,9 +41,6 @@ class NotificationPermissionContext : public PermissionContextBase {
                             const GURL& embedder_origin,
                             ContentSetting content_setting) override;
   bool IsRestrictedToSecureOrigins() const override;
-
-  // This must only be accessed from the UI thread.
-  NotificationPermissionContextExtensions extensions_context_;
 
   base::WeakPtrFactory<NotificationPermissionContext> weak_factory_ui_thread_;
 };

@@ -7,6 +7,8 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -34,6 +36,19 @@
 #include "ui/base/resource/resource_bundle.h"
 
 namespace {
+
+constexpr char kIsUserSignedInKey[] = "isUserSignedIn";
+constexpr char kShowMenuPromoKey[] = "showMenuPromo";
+
+bool IsUserSignedIn(Profile* profile) {
+  SigninManagerBase* signin_manager =
+      SigninManagerFactory::GetForProfile(profile);
+  return signin_manager && signin_manager->IsAuthenticated();
+}
+
+bool MenuPromoShown(Profile* profile) {
+  return profile->GetPrefs()->GetBoolean(prefs::kMdHistoryMenuPromoShown);
+}
 
 content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile,
                                                       bool use_test_title) {
@@ -117,8 +132,7 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile,
       prefs->GetBoolean(prefs::kAllowDeletingBrowserHistory);
   source->AddBoolean("allowDeletingHistory", allow_deleting_history);
 
-  source->AddBoolean("showMenuPromo",
-      !prefs->GetBoolean(prefs::kMdHistoryMenuPromoShown));
+  source->AddBoolean(kShowMenuPromoKey, !MenuPromoShown(profile));
 
   bool group_by_domain = base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kHistoryEnableGroupByDomain) || profile->IsSupervised();
@@ -126,19 +140,61 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile,
 
   source->AddBoolean("isGuestSession", profile->IsGuestSession());
 
-  SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfile(profile);
-  bool is_authenticated = signin_manager != nullptr &&
-      signin_manager->IsAuthenticated();
-  source->AddBoolean("isUserSignedIn", is_authenticated);
+  source->AddBoolean(kIsUserSignedInKey, IsUserSignedIn(profile));
 
-  source->AddResourcePath("constants.html", IDR_MD_HISTORY_CONSTANTS_HTML);
-  source->AddResourcePath("constants.js", IDR_MD_HISTORY_CONSTANTS_JS);
-  source->AddResourcePath("images/100/sign_in_promo.png",
-                          IDR_MD_HISTORY_IMAGES_100_SIGN_IN_PROMO_PNG);
-  source->AddResourcePath("images/200/sign_in_promo.png",
-                          IDR_MD_HISTORY_IMAGES_200_SIGN_IN_PROMO_PNG);
-  source->AddResourcePath("history.js", IDR_MD_HISTORY_HISTORY_JS);
+  struct UncompressedResource {
+    const char* path;
+    int idr;
+  };
+  const UncompressedResource uncompressed_resources[] = {
+    {"constants.html", IDR_MD_HISTORY_CONSTANTS_HTML},
+    {"constants.js", IDR_MD_HISTORY_CONSTANTS_JS},
+    {"history.js", IDR_MD_HISTORY_HISTORY_JS},
+    {"images/100/sign_in_promo.jpg",
+     IDR_MD_HISTORY_IMAGES_100_SIGN_IN_PROMO_JPG},
+    {"images/200/sign_in_promo.jpg",
+     IDR_MD_HISTORY_IMAGES_200_SIGN_IN_PROMO_JPG},
+#if !BUILDFLAG(USE_VULCANIZE)
+    {"app.html", IDR_MD_HISTORY_APP_HTML},
+    {"app.js", IDR_MD_HISTORY_APP_JS},
+    {"browser_service.html", IDR_MD_HISTORY_BROWSER_SERVICE_HTML},
+    {"browser_service.js", IDR_MD_HISTORY_BROWSER_SERVICE_JS},
+    {"grouped_list.html", IDR_MD_HISTORY_GROUPED_LIST_HTML},
+    {"grouped_list.js", IDR_MD_HISTORY_GROUPED_LIST_JS},
+    {"history_item.html", IDR_MD_HISTORY_HISTORY_ITEM_HTML},
+    {"history_item.js", IDR_MD_HISTORY_HISTORY_ITEM_JS},
+    {"history_list.html", IDR_MD_HISTORY_HISTORY_LIST_HTML},
+    {"history_list.js", IDR_MD_HISTORY_HISTORY_LIST_JS},
+    {"history_list_behavior.html", IDR_MD_HISTORY_HISTORY_LIST_BEHAVIOR_HTML},
+    {"history_list_behavior.js", IDR_MD_HISTORY_HISTORY_LIST_BEHAVIOR_JS},
+    {"history_toolbar.html", IDR_MD_HISTORY_HISTORY_TOOLBAR_HTML},
+    {"history_toolbar.js", IDR_MD_HISTORY_HISTORY_TOOLBAR_JS},
+    {"icons.html", IDR_MD_HISTORY_ICONS_HTML},
+    {"lazy_load.html", IDR_MD_HISTORY_LAZY_LOAD_HTML},
+    {"list_container.html", IDR_MD_HISTORY_LIST_CONTAINER_HTML},
+    {"list_container.js", IDR_MD_HISTORY_LIST_CONTAINER_JS},
+    {"router.html", IDR_MD_HISTORY_ROUTER_HTML},
+    {"router.js", IDR_MD_HISTORY_ROUTER_JS},
+    {"searched_label.html", IDR_MD_HISTORY_SEARCHED_LABEL_HTML},
+    {"searched_label.js", IDR_MD_HISTORY_SEARCHED_LABEL_JS},
+    {"shared_style.html", IDR_MD_HISTORY_SHARED_STYLE_HTML},
+    {"shared_vars.html", IDR_MD_HISTORY_SHARED_VARS_HTML},
+    {"side_bar.html", IDR_MD_HISTORY_SIDE_BAR_HTML},
+    {"side_bar.js", IDR_MD_HISTORY_SIDE_BAR_JS},
+    {"synced_device_card.html", IDR_MD_HISTORY_SYNCED_DEVICE_CARD_HTML},
+    {"synced_device_card.js", IDR_MD_HISTORY_SYNCED_DEVICE_CARD_JS},
+    {"synced_device_manager.html", IDR_MD_HISTORY_SYNCED_DEVICE_MANAGER_HTML},
+    {"synced_device_manager.js", IDR_MD_HISTORY_SYNCED_DEVICE_MANAGER_JS},
+#endif
+  };
+
+  std::unordered_set<std::string> exclude_from_gzip;
+  for (size_t i = 0; i < arraysize(uncompressed_resources); ++i) {
+    const UncompressedResource& resource = uncompressed_resources[i];
+    source->AddResourcePath(resource.path, resource.idr);
+    exclude_from_gzip.insert(resource.path);
+  }
+  source->UseGzip(exclude_from_gzip);
 
 #if BUILDFLAG(USE_VULCANIZE)
   source->AddResourcePath("app.html",
@@ -149,59 +205,7 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile,
                           IDR_MD_HISTORY_LAZY_LOAD_VULCANIZED_HTML);
   source->AddResourcePath("lazy_load.crisper.js",
                           IDR_MD_HISTORY_LAZY_LOAD_CRISPER_JS);
-#else
-  source->AddResourcePath("app.html", IDR_MD_HISTORY_APP_HTML);
-  source->AddResourcePath("app.js", IDR_MD_HISTORY_APP_JS);
-  source->AddResourcePath("browser_service.html",
-                          IDR_MD_HISTORY_BROWSER_SERVICE_HTML);
-  source->AddResourcePath("browser_service.js",
-                          IDR_MD_HISTORY_BROWSER_SERVICE_JS);
-  source->AddResourcePath("grouped_list.html",
-                          IDR_MD_HISTORY_GROUPED_LIST_HTML);
-  source->AddResourcePath("grouped_list.js", IDR_MD_HISTORY_GROUPED_LIST_JS);
-  source->AddResourcePath("history_item.html",
-                          IDR_MD_HISTORY_HISTORY_ITEM_HTML);
-  source->AddResourcePath("history_item.js", IDR_MD_HISTORY_HISTORY_ITEM_JS);
-  source->AddResourcePath("history_list.html",
-                          IDR_MD_HISTORY_HISTORY_LIST_HTML);
-  source->AddResourcePath("history_list.js", IDR_MD_HISTORY_HISTORY_LIST_JS);
-  source->AddResourcePath("history_list_behavior.html",
-                          IDR_MD_HISTORY_HISTORY_LIST_BEHAVIOR_HTML);
-  source->AddResourcePath("history_list_behavior.js",
-                          IDR_MD_HISTORY_HISTORY_LIST_BEHAVIOR_JS);
-  source->AddResourcePath("history_toolbar.html",
-                          IDR_MD_HISTORY_HISTORY_TOOLBAR_HTML);
-  source->AddResourcePath("history_toolbar.js",
-                          IDR_MD_HISTORY_HISTORY_TOOLBAR_JS);
-  source->AddResourcePath("icons.html", IDR_MD_HISTORY_ICONS_HTML);
-  source->AddResourcePath("lazy_load.html", IDR_MD_HISTORY_LAZY_LOAD_HTML);
-  source->AddResourcePath("list_container.html",
-                          IDR_MD_HISTORY_LIST_CONTAINER_HTML);
-  source->AddResourcePath("list_container.js",
-                          IDR_MD_HISTORY_LIST_CONTAINER_JS);
-  source->AddResourcePath("router.html",
-                          IDR_MD_HISTORY_ROUTER_HTML);
-  source->AddResourcePath("router.js",
-                          IDR_MD_HISTORY_ROUTER_JS);
-  source->AddResourcePath("searched_label.html",
-                          IDR_MD_HISTORY_SEARCHED_LABEL_HTML);
-  source->AddResourcePath("searched_label.js",
-                          IDR_MD_HISTORY_SEARCHED_LABEL_JS);
-  source->AddResourcePath("shared_style.html",
-                          IDR_MD_HISTORY_SHARED_STYLE_HTML);
-  source->AddResourcePath("shared_vars.html",
-                          IDR_MD_HISTORY_SHARED_VARS_HTML);
-  source->AddResourcePath("side_bar.html", IDR_MD_HISTORY_SIDE_BAR_HTML);
-  source->AddResourcePath("side_bar.js", IDR_MD_HISTORY_SIDE_BAR_JS);
-  source->AddResourcePath("synced_device_card.html",
-                          IDR_MD_HISTORY_SYNCED_DEVICE_CARD_HTML);
-  source->AddResourcePath("synced_device_card.js",
-                          IDR_MD_HISTORY_SYNCED_DEVICE_CARD_JS);
-  source->AddResourcePath("synced_device_manager.html",
-                          IDR_MD_HISTORY_SYNCED_DEVICE_MANAGER_HTML);
-  source->AddResourcePath("synced_device_manager.js",
-                          IDR_MD_HISTORY_SYNCED_DEVICE_MANAGER_JS);
-#endif  // BUILDFLAG(USE_VULCANIZE)
+#endif
 
   source->SetDefaultResource(IDR_MD_HISTORY_HISTORY_HTML);
   source->SetJsonPath("strings.js");
@@ -214,16 +218,20 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile,
 bool MdHistoryUI::use_test_title_ = false;
 
 MdHistoryUI::MdHistoryUI(content::WebUI* web_ui) : WebUIController(web_ui) {
-  web_ui->AddMessageHandler(new BrowsingHistoryHandler());
-  web_ui->AddMessageHandler(new MetricsHandler());
+  Profile* profile = Profile::FromWebUI(web_ui);
+  content::WebUIDataSource* data_source =
+      CreateMdHistoryUIHTMLSource(profile, use_test_title_);
+  content::WebUIDataSource::Add(profile, data_source);
+
+  web_ui->AddMessageHandler(base::MakeUnique<BrowsingHistoryHandler>());
+  web_ui->AddMessageHandler(base::MakeUnique<MetricsHandler>());
 
   if (search::IsInstantExtendedAPIEnabled()) {
-    web_ui->AddMessageHandler(new browser_sync::ForeignSessionHandler());
-    web_ui->AddMessageHandler(new HistoryLoginHandler(
-        base::Bind(&MdHistoryUI::CreateDataSource, base::Unretained(this))));
+    web_ui->AddMessageHandler(
+        base::MakeUnique<browser_sync::ForeignSessionHandler>());
+    web_ui->AddMessageHandler(base::MakeUnique<HistoryLoginHandler>(
+        base::Bind(&MdHistoryUI::UpdateDataSource, base::Unretained(this))));
   }
-
-  CreateDataSource();
 
   web_ui->RegisterMessageCallback("menuPromoShown",
       base::Bind(&MdHistoryUI::HandleMenuPromoShown, base::Unretained(this)));
@@ -240,17 +248,6 @@ bool MdHistoryUI::IsEnabled(Profile* profile) {
 }
 
 // static
-void MdHistoryUI::SetEnabledForTesting(bool enabled) {
-  std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-
-  const std::string& name = features::kMaterialDesignHistory.name;
-  feature_list->InitializeFromCommandLine(enabled ? name : "",
-                                          enabled ? "" : name);
-  base::FeatureList::ClearInstanceForTesting();
-  base::FeatureList::SetInstance(std::move(feature_list));
-}
-
-// static
 base::RefCountedMemory* MdHistoryUI::GetFaviconResourceBytes(
     ui::ScaleFactor scale_factor) {
   return ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
@@ -263,17 +260,21 @@ void MdHistoryUI::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }
 
-// TODO(lshang): Change to not re-create data source every time after we use
-// unique_ptr instead of raw pointers for data source.
-void MdHistoryUI::CreateDataSource() {
+void MdHistoryUI::UpdateDataSource() {
+  CHECK(web_ui());
+
   Profile* profile = Profile::FromWebUI(web_ui());
-  content::WebUIDataSource* data_source =
-      CreateMdHistoryUIHTMLSource(profile, use_test_title_);
-  content::WebUIDataSource::Add(profile, data_source);
+
+  std::unique_ptr<base::DictionaryValue> update(new base::DictionaryValue);
+  update->SetBoolean(kIsUserSignedInKey, IsUserSignedIn(profile));
+  update->SetBoolean(kShowMenuPromoKey, !MenuPromoShown(profile));
+
+  content::WebUIDataSource::Update(profile, chrome::kChromeUIHistoryHost,
+                                   std::move(update));
 }
 
 void MdHistoryUI::HandleMenuPromoShown(const base::ListValue* args) {
   Profile::FromWebUI(web_ui())->GetPrefs()->SetBoolean(
       prefs::kMdHistoryMenuPromoShown, true);
-  CreateDataSource();
+  UpdateDataSource();
 }

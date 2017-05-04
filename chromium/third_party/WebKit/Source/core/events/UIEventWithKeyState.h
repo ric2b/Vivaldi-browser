@@ -27,6 +27,7 @@
 #include "core/CoreExport.h"
 #include "core/events/EventModifierInit.h"
 #include "core/events/UIEvent.h"
+#include "platform/PlatformEvent.h"
 
 namespace blink {
 
@@ -71,7 +72,7 @@ class CORE_EXPORT UIEventWithKeyState : public UIEvent {
                       AbstractView*,
                       int detail,
                       PlatformEvent::Modifiers,
-                      double platformTimeStamp,
+                      TimeTicks platformTimeStamp,
                       InputDeviceCapabilities* sourceCapabilities = nullptr);
   UIEventWithKeyState(const AtomicString& type,
                       const EventModifierInit& initializer);

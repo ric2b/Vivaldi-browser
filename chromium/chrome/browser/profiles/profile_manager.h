@@ -29,7 +29,6 @@
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 
-class NewProfileLauncher;
 class ProfileAttributesStorage;
 class ProfileInfoCache;
 
@@ -211,6 +210,10 @@ class ProfileManager : public base::NonThreadSafe,
   // Checks if any ephemeral profiles are left behind (e.g. because of a browser
   // crash) and schedule them for deletion.
   void CleanUpEphemeralProfiles();
+
+  // Checks if files of deleted profiles are left behind (e.g. because of a
+  // browser crash) and delete them in case they still exist.
+  void CleanUpDeletedProfiles();
 
   // Initializes user prefs of |profile|. This includes profile name and
   // avatar values.

@@ -17,10 +17,9 @@
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/resources/single_release_callback.h"
+#include "cc/surfaces/sequence_surface_reference_factory.h"
 #include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_factory.h"
 #include "cc/surfaces/surface_id_allocator.h"
-#include "cc/surfaces/surface_manager.h"
 #include "components/exo/buffer.h"
 #include "components/exo/surface_delegate.h"
 #include "components/exo/surface_observer.h"
@@ -141,73 +140,29 @@ class CustomWindowTargeter : public aura::WindowTargeter {
   DISALLOW_COPY_AND_ASSIGN(CustomWindowTargeter);
 };
 
-void SatisfyCallback(cc::SurfaceManager* manager,
-                     const cc::SurfaceSequence& sequence) {
-  std::vector<uint32_t> sequences;
-  sequences.push_back(sequence.sequence);
-  manager->DidSatisfySequences(sequence.frame_sink_id, &sequences);
-}
-
-void RequireCallback(cc::SurfaceManager* manager,
-                     const cc::SurfaceId& id,
-                     const cc::SurfaceSequence& sequence) {
-  cc::Surface* surface = manager->GetSurfaceForId(id);
-  if (!surface) {
-    LOG(ERROR) << "Attempting to require callback on nonexistent surface";
-    return;
-  }
-  surface->AddDestructionDependency(sequence);
-}
-
 }  // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-// SurfaceFactoryOwner, public:
-
-SurfaceFactoryOwner::SurfaceFactoryOwner() {}
-
-////////////////////////////////////////////////////////////////////////////////
-// cc::SurfaceFactoryClient overrides:
-
-void SurfaceFactoryOwner::ReturnResources(
-    const cc::ReturnedResourceArray& resources) {
-  scoped_refptr<SurfaceFactoryOwner> holder(this);
-  for (auto& resource : resources) {
-    auto it = release_callbacks_.find(resource.id);
-    DCHECK(it != release_callbacks_.end());
-    it->second.second->Run(resource.sync_token, resource.lost);
-    release_callbacks_.erase(it);
-  }
-}
-
-void SurfaceFactoryOwner::WillDrawSurface(const cc::LocalFrameId& id,
-                                          const gfx::Rect& damage_rect) {
-  if (surface_)
-    surface_->WillDraw();
-}
-
-void SurfaceFactoryOwner::SetBeginFrameSource(
-    cc::BeginFrameSource* begin_frame_source) {
-  if (surface_)
-    surface_->SetBeginFrameSource(begin_frame_source);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// SurfaceFactoryOwner, private:
-
-SurfaceFactoryOwner::~SurfaceFactoryOwner() {
-  if (surface_factory_->manager())
-    surface_factory_->manager()->InvalidateFrameSinkId(frame_sink_id_);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Surface, public:
 
+// TODO(fsamuel): exo should not use context_factory_private. Instead, we should
+// request a CompositorFrameSink from the aura::Window. Setting up the
+// BeginFrame hierarchy should be an internal implementation detail of aura or
+// mus in aura-mus.
 Surface::Surface()
     : window_(new aura::Window(new CustomWindowDelegate(this))),
-      surface_manager_(
-          aura::Env::GetInstance()->context_factory()->GetSurfaceManager()),
-      factory_owner_(new SurfaceFactoryOwner) {
+      frame_sink_id_(aura::Env::GetInstance()
+                         ->context_factory_private()
+                         ->AllocateFrameSinkId()) {
+  compositor_frame_sink_holder_ = new CompositorFrameSinkHolder(
+      this, frame_sink_id_,
+      aura::Env::GetInstance()->context_factory_private()->GetSurfaceManager());
+  // TODO(samans): exo::Surface should not be using
+  // DirectSurfaceReferenceFactory (crbug.com/688573).
+  surface_reference_factory_ = aura::Env::GetInstance()
+                                   ->context_factory_private()
+                                   ->GetSurfaceManager()
+                                   ->reference_factory();
   window_->SetType(ui::wm::WINDOW_TYPE_CONTROL);
   window_->SetName("ExoSurface");
   window_->SetProperty(kSurfaceKey, this);
@@ -215,15 +170,6 @@ Surface::Surface()
   window_->SetEventTargeter(base::WrapUnique(new CustomWindowTargeter));
   window_->set_owned_by_parent(false);
   window_->AddObserver(this);
-  factory_owner_->surface_ = this;
-  factory_owner_->frame_sink_id_ =
-      aura::Env::GetInstance()->context_factory()->AllocateFrameSinkId();
-  factory_owner_->id_allocator_.reset(new cc::SurfaceIdAllocator());
-  surface_manager_->RegisterFrameSinkId(factory_owner_->frame_sink_id_);
-  surface_manager_->RegisterSurfaceFactoryClient(factory_owner_->frame_sink_id_,
-                                                 factory_owner_.get());
-  factory_owner_->surface_factory_.reset(new cc::SurfaceFactory(
-      factory_owner_->frame_sink_id_, surface_manager_, factory_owner_.get()));
   aura::Env::GetInstance()->context_factory()->AddObserver(this);
 }
 
@@ -233,26 +179,30 @@ Surface::~Surface() {
     observer.OnSurfaceDestroying(this);
 
   window_->RemoveObserver(this);
+  if (window_->layer()->GetCompositor())
+    window_->layer()->GetCompositor()->vsync_manager()->RemoveObserver(this);
   window_->layer()->SetShowSolidColorContent();
 
-  factory_owner_->surface_ = nullptr;
-
-  // Call pending frame callbacks with a null frame time to indicate that they
-  // have been cancelled.
   frame_callbacks_.splice(frame_callbacks_.end(), pending_frame_callbacks_);
   active_frame_callbacks_.splice(active_frame_callbacks_.end(),
                                  frame_callbacks_);
+  // Call all frame callbacks with a null frame time to indicate that they
+  // have been cancelled.
   for (const auto& frame_callback : active_frame_callbacks_)
     frame_callback.Run(base::TimeTicks());
 
-  if (begin_frame_source_ && needs_begin_frame_)
-    begin_frame_source_->RemoveObserver(this);
+  presentation_callbacks_.splice(presentation_callbacks_.end(),
+                                 pending_presentation_callbacks_);
+  swapping_presentation_callbacks_.splice(
+      swapping_presentation_callbacks_.end(), presentation_callbacks_);
+  swapped_presentation_callbacks_.splice(swapped_presentation_callbacks_.end(),
+                                         swapping_presentation_callbacks_);
+  // Call all presentation callbacks with a null presentation time to indicate
+  // that they have been cancelled.
+  for (const auto& presentation_callback : swapped_presentation_callbacks_)
+    presentation_callback.Run(base::TimeTicks(), base::TimeDelta());
 
-  if (local_frame_id_.is_valid())
-    factory_owner_->surface_factory_->Destroy(local_frame_id_);
-
-  surface_manager_->UnregisterSurfaceFactoryClient(
-      factory_owner_->frame_sink_id_);
+  compositor_frame_sink_holder_->GetCompositorFrameSink()->EvictFrame();
 }
 
 // static
@@ -261,7 +211,7 @@ Surface* Surface::AsSurface(const aura::Window* window) {
 }
 
 cc::SurfaceId Surface::GetSurfaceId() const {
-  return cc::SurfaceId(factory_owner_->frame_sink_id_, local_frame_id_);
+  return cc::SurfaceId(frame_sink_id_, local_frame_id_);
 }
 
 void Surface::Attach(Buffer* buffer) {
@@ -282,6 +232,13 @@ void Surface::RequestFrameCallback(const FrameCallback& callback) {
   TRACE_EVENT0("exo", "Surface::RequestFrameCallback");
 
   pending_frame_callbacks_.push_back(callback);
+}
+
+void Surface::RequestPresentationCallback(
+    const PresentationCallback& callback) {
+  TRACE_EVENT0("exo", "Surface::RequestPresentationCallback");
+
+  pending_presentation_callbacks_.push_back(callback);
 }
 
 void Surface::SetOpaqueRegion(const SkRegion& region) {
@@ -318,7 +275,7 @@ void Surface::AddSubSurface(Surface* sub_surface) {
 }
 
 void Surface::RemoveSubSurface(Surface* sub_surface) {
-  TRACE_EVENT1("exo", "Surface::AddSubSurface", "sub_surface",
+  TRACE_EVENT1("exo", "Surface::RemoveSubSurface", "sub_surface",
                sub_surface->AsTracedValue());
 
   window_->RemoveChild(sub_surface->window());
@@ -420,8 +377,9 @@ void Surface::SetOnlyVisibleOnSecureOutput(bool only_visible_on_secure_output) {
   pending_state_.only_visible_on_secure_output = only_visible_on_secure_output;
 }
 
-void Surface::SetBlendMode(SkXfermode::Mode blend_mode) {
-  TRACE_EVENT1("exo", "Surface::SetBlendMode", "blend_mode", blend_mode);
+void Surface::SetBlendMode(SkBlendMode blend_mode) {
+  TRACE_EVENT1("exo", "Surface::SetBlendMode", "blend_mode",
+               static_cast<int>(blend_mode));
 
   pending_state_.blend_mode = blend_mode;
 }
@@ -477,17 +435,10 @@ void Surface::CommitSurfaceHierarchy() {
   cc::LocalFrameId old_local_frame_id = local_frame_id_;
   if (needs_commit_to_new_surface_ || !local_frame_id_.is_valid()) {
     needs_commit_to_new_surface_ = false;
-    local_frame_id_ = factory_owner_->id_allocator_->GenerateId();
-    factory_owner_->surface_factory_->Create(local_frame_id_);
+    local_frame_id_ = id_allocator_.GenerateId();
   }
 
-  UpdateSurface(true);
-
-  if (old_local_frame_id.is_valid() && old_local_frame_id != local_frame_id_) {
-    factory_owner_->surface_factory_->SetPreviousFrameSurface(
-        local_frame_id_, old_local_frame_id);
-    factory_owner_->surface_factory_->Destroy(old_local_frame_id);
-  }
+  UpdateSurface(false);
 
   if (old_local_frame_id != local_frame_id_) {
     float contents_surface_to_layer_scale = 1.0;
@@ -496,13 +447,13 @@ void Surface::CommitSurfaceHierarchy() {
     // mirror layer to update its surface using the latest bounds.
     window_->layer()->SetBounds(
         gfx::Rect(window_->layer()->bounds().origin(), content_size_));
+    cc::SurfaceId surface_id(frame_sink_id_, local_frame_id_);
     window_->layer()->SetShowSurface(
-        cc::SurfaceId(factory_owner_->frame_sink_id_, local_frame_id_),
-        base::Bind(&SatisfyCallback, base::Unretained(surface_manager_)),
-        base::Bind(&RequireCallback, base::Unretained(surface_manager_)),
-        content_size_, contents_surface_to_layer_scale, content_size_);
+        cc::SurfaceInfo(surface_id, contents_surface_to_layer_scale,
+                        content_size_),
+        surface_reference_factory_);
     window_->layer()->SetFillsBoundsOpaquely(
-        state_.blend_mode == SkXfermode::kSrc_Mode ||
+        state_.blend_mode == SkBlendMode::kSrc ||
         state_.opaque_region.contains(
             gfx::RectToSkIRect(gfx::Rect(content_size_))));
   }
@@ -511,10 +462,15 @@ void Surface::CommitSurfaceHierarchy() {
   pending_damage_.setEmpty();
 
   DCHECK(!current_resource_.id ||
-         factory_owner_->release_callbacks_.count(current_resource_.id));
+         compositor_frame_sink_holder_->HasReleaseCallbackForResource(
+             current_resource_.id));
 
   // Move pending frame callbacks to the end of frame_callbacks_.
   frame_callbacks_.splice(frame_callbacks_.end(), pending_frame_callbacks_);
+
+  // Move pending presentation callbacks to the end of presentation_callbacks_.
+  presentation_callbacks_.splice(presentation_callbacks_.end(),
+                                 pending_presentation_callbacks_);
 
   // Synchronize window hierarchy. This will position and update the stacking
   // order of all sub-surfaces after committing all pending state of sub-surface
@@ -618,16 +574,19 @@ std::unique_ptr<base::trace_event::TracedValue> Surface::AsTracedValue() const {
 void Surface::WillDraw() {
   active_frame_callbacks_.splice(active_frame_callbacks_.end(),
                                  frame_callbacks_);
-  UpdateNeedsBeginFrame();
+  swapping_presentation_callbacks_.splice(
+      swapping_presentation_callbacks_.end(), presentation_callbacks_);
 }
 
-void Surface::SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source) {
-  if (begin_frame_source_ && needs_begin_frame_) {
-    begin_frame_source_->RemoveObserver(this);
-    needs_begin_frame_ = false;
+bool Surface::NeedsBeginFrame() const {
+  return !active_frame_callbacks_.empty();
+}
+
+void Surface::BeginFrame(base::TimeTicks frame_time) {
+  while (!active_frame_callbacks_.empty()) {
+    active_frame_callbacks_.front().Run(frame_time);
+    active_frame_callbacks_.pop_front();
   }
-  begin_frame_source_ = begin_frame_source;
-  UpdateNeedsBeginFrame();
 }
 
 void Surface::CheckIfSurfaceHierarchyNeedsCommitToNewSurfaces() {
@@ -635,36 +594,55 @@ void Surface::CheckIfSurfaceHierarchyNeedsCommitToNewSurfaces() {
     SetSurfaceHierarchyNeedsCommitToNewSurfaces();
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// ui::ContextFactoryObserver overrides:
+
 void Surface::OnLostResources() {
   if (!local_frame_id_.is_valid())
     return;
 
   UpdateResource(false);
-  UpdateSurface(false);
+  UpdateSurface(true);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// aura::WindowObserver overrides:
+
 void Surface::OnWindowAddedToRootWindow(aura::Window* window) {
-  window->layer()->GetCompositor()->AddFrameSink(
-      factory_owner_->frame_sink_id_);
+  window->layer()->GetCompositor()->AddFrameSink(frame_sink_id_);
+  window->layer()->GetCompositor()->vsync_manager()->AddObserver(this);
 }
 
 void Surface::OnWindowRemovingFromRootWindow(aura::Window* window,
                                              aura::Window* new_root) {
-  window->layer()->GetCompositor()->RemoveFrameSink(
-      factory_owner_->frame_sink_id_);
+  window->layer()->GetCompositor()->RemoveFrameSink(frame_sink_id_);
+  window->layer()->GetCompositor()->vsync_manager()->RemoveObserver(this);
 }
 
-void Surface::OnBeginFrame(const cc::BeginFrameArgs& args) {
-  while (!active_frame_callbacks_.empty()) {
-    active_frame_callbacks_.front().Run(args.frame_time);
-    active_frame_callbacks_.pop_front();
+////////////////////////////////////////////////////////////////////////////////
+// ui::CompositorVSyncManager::Observer overrides:
+
+void Surface::OnUpdateVSyncParameters(base::TimeTicks timebase,
+                                      base::TimeDelta interval) {
+  // Use current time if platform doesn't provide an accurate timebase.
+  if (timebase.is_null())
+    timebase = base::TimeTicks::Now();
+
+  while (!swapped_presentation_callbacks_.empty()) {
+    swapped_presentation_callbacks_.front().Run(timebase, interval);
+    swapped_presentation_callbacks_.pop_front();
   }
-  last_begin_frame_args_ = args;
+
+  // VSync parameters updates are generated at the start of a new swap. Move
+  // the swapping presentation callbacks to swapped callbacks so they fire
+  // at the next VSync parameters update as that will contain the presentation
+  // time for the previous frame.
+  swapped_presentation_callbacks_.splice(swapped_presentation_callbacks_.end(),
+                                         swapping_presentation_callbacks_);
 }
 
-const cc::BeginFrameArgs& Surface::LastUsedBeginFrameArgs() const {
-  return last_begin_frame_args_;
-}
+////////////////////////////////////////////////////////////////////////////////
+// Buffer, private:
 
 Surface::State::State() : input_region(SkIRect::MakeLargest()) {}
 
@@ -729,32 +707,11 @@ void Surface::SetSurfaceHierarchyNeedsCommitToNewSurfaces() {
 }
 
 void Surface::UpdateResource(bool client_usage) {
-  std::unique_ptr<cc::SingleReleaseCallback> texture_mailbox_release_callback;
-
-  cc::TextureMailbox texture_mailbox;
-  if (current_buffer_.buffer()) {
-    texture_mailbox_release_callback =
-        current_buffer_.buffer()->ProduceTextureMailbox(
-            &texture_mailbox, state_.only_visible_on_secure_output,
-            client_usage);
-  }
-
-  if (texture_mailbox_release_callback) {
-    cc::TransferableResource resource;
-    resource.id = next_resource_id_++;
-    resource.format = cc::RGBA_8888;
-    resource.filter =
-        texture_mailbox.nearest_neighbor() ? GL_NEAREST : GL_LINEAR;
-    resource.size = texture_mailbox.size_in_pixels();
-    resource.mailbox_holder = gpu::MailboxHolder(texture_mailbox.mailbox(),
-                                                 texture_mailbox.sync_token(),
-                                                 texture_mailbox.target());
-    resource.is_overlay_candidate = texture_mailbox.is_overlay_candidate();
-
-    factory_owner_->release_callbacks_[resource.id] = std::make_pair(
-        factory_owner_, std::move(texture_mailbox_release_callback));
-    current_resource_ = resource;
-  } else {
+  if (!current_buffer_.buffer() ||
+      !current_buffer_.buffer()->ProduceTransferableResource(
+          compositor_frame_sink_holder_.get(), next_resource_id_++,
+          state_.only_visible_on_secure_output, client_usage,
+          &current_resource_)) {
     current_resource_.id = 0;
     current_resource_.size = gfx::Size();
   }
@@ -800,9 +757,10 @@ void Surface::UpdateSurface(bool full_damage) {
                               ? gfx::Rect(contents_surface_size)
                               : gfx::SkIRectToRect(pending_damage_.getBounds());
 
+  const int kRenderPassId = 1;
   std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
-  render_pass->SetAll(cc::RenderPassId(1, 1), gfx::Rect(contents_surface_size),
-                      damage_rect, gfx::Transform(), true);
+  render_pass->SetNew(kRenderPassId, gfx::Rect(contents_surface_size),
+                      damage_rect, gfx::Transform());
 
   gfx::Rect quad_rect = gfx::Rect(contents_surface_size);
   cc::SharedQuadState* quad_state =
@@ -811,8 +769,7 @@ void Surface::UpdateSurface(bool full_damage) {
   quad_state->visible_quad_layer_rect = quad_rect;
   quad_state->opacity = state_.alpha;
 
-  std::unique_ptr<cc::DelegatedFrameData> delegated_frame(
-      new cc::DelegatedFrameData);
+  cc::CompositorFrame frame;
   if (current_resource_.id) {
     // Texture quad is only needed if buffer is not fully transparent.
     if (state_.alpha) {
@@ -820,7 +777,7 @@ void Surface::UpdateSurface(bool full_damage) {
           render_pass->CreateAndAppendDrawQuad<cc::TextureDrawQuad>();
       float vertex_opacity[4] = {1.0, 1.0, 1.0, 1.0};
       gfx::Rect opaque_rect;
-      if (state_.blend_mode == SkXfermode::kSrc_Mode ||
+      if (state_.blend_mode == SkBlendMode::kSrc ||
           state_.opaque_region.contains(gfx::RectToSkIRect(quad_rect))) {
         opaque_rect = quad_rect;
       } else if (state_.opaque_region.isRect()) {
@@ -833,7 +790,7 @@ void Surface::UpdateSurface(bool full_damage) {
                            false, false, state_.only_visible_on_secure_output);
       if (current_resource_.is_overlay_candidate)
         texture_quad->set_resource_size_in_pixels(current_resource_.size);
-      delegated_frame->resource_list.push_back(current_resource_);
+      frame.resource_list.push_back(current_resource_);
     }
   } else {
     cc::SolidColorDrawQuad* solid_quad =
@@ -841,27 +798,9 @@ void Surface::UpdateSurface(bool full_damage) {
     solid_quad->SetNew(quad_state, quad_rect, quad_rect, SK_ColorBLACK, false);
   }
 
-  delegated_frame->render_pass_list.push_back(std::move(render_pass));
-  cc::CompositorFrame frame;
-  frame.delegated_frame_data = std::move(delegated_frame);
-
-  factory_owner_->surface_factory_->SubmitCompositorFrame(
-      local_frame_id_, std::move(frame), cc::SurfaceFactory::DrawCallback());
-}
-
-void Surface::UpdateNeedsBeginFrame() {
-  if (!begin_frame_source_)
-    return;
-
-  bool needs_begin_frame = !active_frame_callbacks_.empty();
-  if (needs_begin_frame == needs_begin_frame_)
-    return;
-
-  needs_begin_frame_ = needs_begin_frame;
-  if (needs_begin_frame)
-    begin_frame_source_->AddObserver(this);
-  else
-    begin_frame_source_->RemoveObserver(this);
+  frame.render_pass_list.push_back(std::move(render_pass));
+  compositor_frame_sink_holder_->GetCompositorFrameSink()
+      ->SubmitCompositorFrame(local_frame_id_, std::move(frame));
 }
 
 int64_t Surface::SetPropertyInternal(const void* key,

@@ -5,6 +5,7 @@
 #include "chrome/common/chrome_features.h"
 
 #include "extensions/features/features.h"
+#include "ppapi/features/features.h"
 
 namespace features {
 
@@ -58,10 +59,6 @@ const base::Feature kBackspaceGoesBackFeature {
 const base::Feature kBlockPromptsIfDismissedOften{
     "BlockPromptsIfDismissedOften", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Experiment to disable small cross-origin content. (http://crbug.com/608886)
-const base::Feature kBlockSmallContent{"BlockSmallPluginContent",
-                                       base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Fixes for browser hang bugs are deployed in a field trial in order to measure
 // their impact. See crbug.com/478209.
 const base::Feature kBrowserHangFixesExperiment{
@@ -110,6 +107,11 @@ const base::Feature kLinuxObsoleteSystemIsEndOfTheLine{
     "LinuxObsoleteSystemIsEndOfTheLine", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
+// Enables or disables the Location Settings Dialog (LSD). The LSD is an Android
+// system-level geolocation permission prompt.
+const base::Feature kLsdPermissionPrompt{"LsdPermissionPrompt",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables or disables the Material Design version of chrome://bookmarks.
 const base::Feature kMaterialDesignBookmarks{"MaterialDesignBookmarks",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
@@ -129,9 +131,25 @@ const base::Feature kMaterialDesignHistory{"MaterialDesignHistory",
 const base::Feature kMaterialDesignSettings{"MaterialDesignSettings",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+// Enables media content bitstream remoting, an optimization that can activate
+// during Cast Tab Mirroring. When kMediaRemotingEncrypted is disabled, the
+// feature will not activate for encrypted content.
+const base::Feature kMediaRemoting{"MediaRemoting",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kMediaRemotingEncrypted{"MediaRemotingEncrypted",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
+
 // Enables or disables modal permission prompts.
 const base::Feature kModalPermissionPrompts{"ModalPermissionPrompts",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if defined(OS_WIN)
+// Enables or disables the ModuleDatabase backend for the conflicts UI.
+const base::Feature kModuleDatabase{"ModuleDatabase",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 // Enables the use of native notification centers instead of using the Message
 // Center for displaying the toasts.
@@ -149,15 +167,29 @@ const base::Feature kOfflinePageDownloadSuggestionsFeature{
 const base::Feature kOverrideYouTubeFlashEmbed{
     "OverrideYouTubeFlashEmbed", base::FEATURE_ENABLED_BY_DEFAULT};
 
-#if defined(ENABLE_PLUGINS)
+// Enables Permissions Blacklisting via Safe Browsing.
+const base::Feature kPermissionsBlacklist{
+    "PermissionsBlacklist", base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if BUILDFLAG(ENABLE_PLUGINS)
 // Prefer HTML content by hiding Flash from the list of plugins.
 // https://crbug.com/626728
 const base::Feature kPreferHtmlOverPlugins{"PreferHtmlOverPlugins",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
+#if defined(OS_CHROMEOS)
+// The lock screen will be preloaded so it is instantly available when the user
+// locks the Chromebook device.
+const base::Feature kPreloadLockScreen{"PreloadLockScreen",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 // Enables the Print Scaling feature in print preview.
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+const base::Feature kPrintPdfAsImage{"PrintPdfAsImage",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kPrintScaling{"PrintScaling",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
@@ -174,7 +206,7 @@ const base::Feature kRuntimeMemoryLeakDetector{
     "RuntimeMemoryLeakDetector", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 // Disables Plugin Power Saver when Flash is in ALLOW mode.
 const base::Feature kRunAllFlashInAllowMode{"RunAllFlashInAllowMode",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
@@ -182,12 +214,6 @@ const base::Feature kRunAllFlashInAllowMode{"RunAllFlashInAllowMode",
 
 const base::Feature kSafeSearchUrlReporting{"SafeSearchUrlReporting",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
-
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
-// Sets the visibility and animation of the security chip.
-const base::Feature kSecurityChip{"SecurityChip",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
 
 // A new user experience for transitioning into fullscreen and mouse pointer
 // lock states.
@@ -214,15 +240,15 @@ const base::Feature kOptInImeMenu{"OptInImeMenu",
 
 // Enables or disables PIN quick unlock settings integration.
 const base::Feature kQuickUnlockPin{"QuickUnlockPin",
-                                    base::FEATURE_DISABLED_BY_DEFAULT};
+                                    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables emoji, handwriting and voice input on opt-in IME menu.
 const base::Feature kEHVInputOnImeMenu{"EmojiHandwritingVoiceInput",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables flash component updates on Chrome OS.
 const base::Feature kCrosCompUpdates{"CrosCompUpdates",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
 
 }  // namespace features

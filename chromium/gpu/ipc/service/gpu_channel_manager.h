@@ -10,9 +10,9 @@
 #include <deque>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -133,6 +133,12 @@ class GPU_EXPORT GpuChannelManager {
     return exiting_for_lost_context_;
   }
 
+  gles2::MailboxManager* mailbox_manager() const {
+    return mailbox_manager_.get();
+  }
+
+  gl::GLShareGroup* share_group() const { return share_group_.get(); }
+
  protected:
   virtual std::unique_ptr<GpuChannel> CreateGpuChannel(
       int client_id,
@@ -145,22 +151,17 @@ class GPU_EXPORT GpuChannelManager {
     return sync_point_manager_;
   }
 
-  gl::GLShareGroup* share_group() const { return share_group_.get(); }
-  gles2::MailboxManager* mailbox_manager() const {
-    return mailbox_manager_.get();
-  }
-  PreemptionFlag* preemption_flag() const {
-    return preemption_flag_.get();
-  }
+  PreemptionFlag* preemption_flag() const { return preemption_flag_.get(); }
+
   gpu::GpuWatchdogThread* watchdog() {return watchdog_;}
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
 
-  // These objects manage channels to individual renderer processes there is
+  // These objects manage channels to individual renderer processes. There is
   // one channel for each renderer process that has connected to this GPU
   // process.
-  base::ScopedPtrHashMap<int32_t, std::unique_ptr<GpuChannel>> gpu_channels_;
+  std::unordered_map<int32_t, std::unique_ptr<GpuChannel>> gpu_channels_;
 
  private:
   void InternalDestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id, int client_id);

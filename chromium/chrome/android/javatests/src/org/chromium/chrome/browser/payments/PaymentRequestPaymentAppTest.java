@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.payments;
 
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
@@ -30,7 +30,7 @@ public class PaymentRequestPaymentAppTest extends PaymentRequestTestBase {
     @Feature({"Payments"})
     public void testNoSupportedPaymentMethods() throws InterruptedException, ExecutionException,
             TimeoutException {
-        triggerUIAndWait(mShowFailed);
+        openPageAndClickBuyAndWait(mShowFailed);
         expectResultContains(
                 new String[]{"show() rejected", "The payment method is not supported"});
     }
@@ -44,7 +44,7 @@ public class PaymentRequestPaymentAppTest extends PaymentRequestTestBase {
     public void testNoInstrumentsInFastBobPay() throws InterruptedException, ExecutionException,
             TimeoutException {
         installPaymentApp(NO_INSTRUMENTS, IMMEDIATE_RESPONSE);
-        triggerUIAndWait(mShowFailed);
+        openPageAndClickBuyAndWait(mShowFailed);
         expectResultContains(
                 new String[]{"show() rejected", "The payment method is not supported"});
     }
@@ -58,7 +58,7 @@ public class PaymentRequestPaymentAppTest extends PaymentRequestTestBase {
     public void testNoInstrumentsInSlowBobPay() throws InterruptedException, ExecutionException,
             TimeoutException {
         installPaymentApp(NO_INSTRUMENTS, DELAYED_RESPONSE);
-        triggerUIAndWait(mShowFailed);
+        openPageAndClickBuyAndWait(mShowFailed);
         expectResultContains(
                 new String[]{"show() rejected", "The payment method is not supported"});
     }
@@ -91,7 +91,7 @@ public class PaymentRequestPaymentAppTest extends PaymentRequestTestBase {
     public void testPaymentAppNoInstrumentsResponseAfterDismissShouldNotCrash()
             throws InterruptedException, ExecutionException, TimeoutException {
         final TestPay app = installPaymentApp(NO_INSTRUMENTS, IMMEDIATE_RESPONSE);
-        triggerUIAndWait(mShowFailed);
+        openPageAndClickBuyAndWait(mShowFailed);
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
@@ -128,5 +128,35 @@ public class PaymentRequestPaymentAppTest extends PaymentRequestTestBase {
         triggerUIAndWait(mReadyToPay);
         clickAndWait(R.id.button_primary, mDismissed);
         expectResultContains(new String[]{"https://bobpay.com", "\"transaction\"", "1337"});
+    }
+
+    /**
+     * Test payment with a Bob Pay that is created with a delay, but responds immediately
+     * to getInstruments.
+     */
+    @MediumTest
+    @Feature({"Payments"})
+    public void testPayViaDelayedFastBobPay()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        installPaymentApp(
+                "https://bobpay.com", HAVE_INSTRUMENTS, IMMEDIATE_RESPONSE, DELAYED_CREATION);
+        triggerUIAndWait(mReadyToPay);
+        clickAndWait(R.id.button_primary, mDismissed);
+        expectResultContains(new String[] {"https://bobpay.com", "\"transaction\"", "1337"});
+    }
+
+    /**
+     * Test payment with a Bob Pay that is created with a delay, and responds slowly to
+     * getInstruments.
+     */
+    @MediumTest
+    @Feature({"Payments"})
+    public void testPayViaDelayedSlowBobPay()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        installPaymentApp(
+                "https://bobpay.com", HAVE_INSTRUMENTS, DELAYED_RESPONSE, DELAYED_CREATION);
+        triggerUIAndWait(mReadyToPay);
+        clickAndWait(R.id.button_primary, mDismissed);
+        expectResultContains(new String[] {"https://bobpay.com", "\"transaction\"", "1337"});
     }
 }

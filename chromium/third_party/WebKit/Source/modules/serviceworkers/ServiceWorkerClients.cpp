@@ -20,6 +20,7 @@
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 #include <memory>
+#include <utility>
 
 namespace blink {
 
@@ -35,9 +36,9 @@ class ClientArray {
     for (size_t i = 0; i < webClients.clients.size(); ++i) {
       const WebServiceWorkerClientInfo& client = webClients.clients[i];
       if (client.clientType == WebServiceWorkerClientTypeWindow)
-        clients.append(ServiceWorkerWindowClient::create(client));
+        clients.push_back(ServiceWorkerWindowClient::create(client));
       else
-        clients.append(ServiceWorkerClient::create(client));
+        clients.push_back(ServiceWorkerClient::create(client));
     }
     return clients;
   }
@@ -69,9 +70,9 @@ class GetCallback : public WebServiceWorkerClientCallbacks {
   void onSuccess(
       std::unique_ptr<WebServiceWorkerClientInfo> webClient) override {
     std::unique_ptr<WebServiceWorkerClientInfo> client =
-        wrapUnique(webClient.release());
+        WTF::wrapUnique(webClient.release());
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     if (!client) {
       // Resolve the promise with undefined.
@@ -84,7 +85,7 @@ class GetCallback : public WebServiceWorkerClientCallbacks {
 
   void onError(const WebServiceWorkerError& error) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     m_resolver->reject(ServiceWorkerError::take(m_resolver.get(), error));
   }
@@ -114,7 +115,7 @@ ScriptPromise ServiceWorkerClients::get(ScriptState* scriptState,
   ScriptPromise promise = resolver->promise();
 
   ServiceWorkerGlobalScopeClient::from(executionContext)
-      ->getClient(id, new GetCallback(resolver));
+      ->getClient(id, WTF::makeUnique<GetCallback>(resolver));
   return promise;
 }
 
@@ -134,7 +135,8 @@ ScriptPromise ServiceWorkerClients::matchAll(
   webOptions.includeUncontrolled = options.includeUncontrolled();
   ServiceWorkerGlobalScopeClient::from(executionContext)
       ->getClients(webOptions,
-                   new CallbackPromiseAdapter<ClientArray, ServiceWorkerError>(
+                   WTF::makeUnique<
+                       CallbackPromiseAdapter<ClientArray, ServiceWorkerError>>(
                        resolver));
   return promise;
 }
@@ -149,9 +151,11 @@ ScriptPromise ServiceWorkerClients::claim(ScriptState* scriptState) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   ScriptPromise promise = resolver->promise();
 
-  WebServiceWorkerClientsClaimCallbacks* callbacks =
-      new CallbackPromiseAdapter<void, ServiceWorkerError>(resolver);
-  ServiceWorkerGlobalScopeClient::from(executionContext)->claim(callbacks);
+  auto callbacks =
+      WTF::makeUnique<CallbackPromiseAdapter<void, ServiceWorkerError>>(
+          resolver);
+  ServiceWorkerGlobalScopeClient::from(executionContext)
+      ->claim(std::move(callbacks));
   return promise;
 }
 
@@ -183,7 +187,7 @@ ScriptPromise ServiceWorkerClients::openWindow(ScriptState* scriptState,
   context->consumeWindowInteraction();
 
   ServiceWorkerGlobalScopeClient::from(context)->openWindow(
-      parsedUrl, new NavigateClientCallback(resolver));
+      parsedUrl, WTF::makeUnique<NavigateClientCallback>(resolver));
   return promise;
 }
 

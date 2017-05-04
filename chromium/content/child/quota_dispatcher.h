@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <set>
 
 #include "base/id_map.h"
@@ -62,15 +63,15 @@ class QuotaDispatcher : public WorkerThread::Observer {
 
   void QueryStorageUsageAndQuota(const GURL& gurl,
                                  storage::StorageType type,
-                                 Callback* callback);
-  void RequestStorageQuota(int render_view_id,
+                                 std::unique_ptr<Callback> callback);
+  void RequestStorageQuota(int render_frame_id,
                            const GURL& gurl,
                            storage::StorageType type,
                            uint64_t requested_size,
-                           Callback* callback);
+                           std::unique_ptr<Callback> callback);
 
   // Creates a new Callback instance for WebStorageQuotaCallbacks.
-  static Callback* CreateWebStorageQuotaCallbacksWrapper(
+  static std::unique_ptr<Callback> CreateWebStorageQuotaCallbacksWrapper(
       blink::WebStorageQuotaCallbacks callbacks);
 
  private:
@@ -83,7 +84,7 @@ class QuotaDispatcher : public WorkerThread::Observer {
                             int64_t granted_quota);
   void DidFail(int request_id, storage::QuotaStatusCode error);
 
-  IDMap<Callback, IDMapOwnPointer> pending_quota_callbacks_;
+  IDMap<std::unique_ptr<Callback>> pending_quota_callbacks_;
 
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
   scoped_refptr<QuotaMessageFilter> quota_message_filter_;

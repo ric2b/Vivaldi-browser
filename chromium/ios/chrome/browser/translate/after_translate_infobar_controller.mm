@@ -4,14 +4,14 @@
 
 #include "ios/chrome/browser/translate/after_translate_infobar_controller.h"
 
+#include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/translate/core/browser/translate_infobar_delegate.h"
 #include "ios/chrome/browser/translate/translate_infobar_tags.h"
-#include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#import "ios/public/provider/chrome/browser/ui/infobar_view_delegate.h"
-#import "ios/public/provider/chrome/browser/ui/infobar_view_protocol.h"
+#import "ios/chrome/browser/ui/infobars/infobar_view.h"
+#import "ios/chrome/browser/ui/infobars/infobar_view_delegate.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
 
@@ -29,14 +29,13 @@
 #pragma mark -
 #pragma mark InfoBarControllerProtocol
 
-- (base::scoped_nsobject<UIView<InfoBarViewProtocol>>)
-    viewForDelegate:(infobars::InfoBarDelegate*)delegate
-              frame:(CGRect)frame {
-  base::scoped_nsobject<UIView<InfoBarViewProtocol>> infoBarView;
+- (InfoBarView*)viewForDelegate:(infobars::InfoBarDelegate*)delegate
+                          frame:(CGRect)frame {
+  base::scoped_nsobject<InfoBarView> infoBarView;
   _translateInfoBarDelegate = delegate->AsTranslateInfoBarDelegate();
   DCHECK(_translateInfoBarDelegate);
   infoBarView.reset(
-      ios::GetChromeBrowserProvider()->CreateInfoBarView(frame, self.delegate));
+      [[InfoBarView alloc] initWithFrame:frame delegate:self.delegate]);
   // Icon
   gfx::Image icon = _translateInfoBarDelegate->GetIcon();
   if (!icon.IsEmpty())
@@ -89,7 +88,7 @@
                     target:self
                     action:@selector(infoBarSwitchDidPress:)];
   }
-  return infoBarView;
+  return [[infoBarView retain] autorelease];
 }
 
 #pragma mark - Handling of User Events

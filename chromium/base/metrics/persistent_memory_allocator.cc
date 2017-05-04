@@ -49,6 +49,11 @@ enum : int {
   kFlagFull    = 1 << 1
 };
 
+// Errors that are logged in "errors" histogram.
+enum AllocatorError : int {
+  kMemoryIsCorrupt = 1,
+};
+
 bool CheckFlag(const volatile std::atomic<uint32_t>* flags, int flag) {
   uint32_t loaded_flags = flags->load(std::memory_order_relaxed);
   return (loaded_flags & flag) != 0;
@@ -59,8 +64,13 @@ void SetFlag(volatile std::atomic<uint32_t>* flags, int flag) {
   for (;;) {
     uint32_t new_flags = (loaded_flags & ~flag) | flag;
     // In the failue case, actual "flags" value stored in loaded_flags.
-    if (flags->compare_exchange_weak(loaded_flags, new_flags))
+    // These access are "relaxed" because they are completely independent
+    // of all other values.
+    if (flags->compare_exchange_weak(loaded_flags, new_flags,
+                                     std::memory_order_relaxed,
+                                     std::memory_order_relaxed)) {
       break;
+    }
   }
 }
 
@@ -214,7 +224,8 @@ PersistentMemoryAllocator::Iterator::GetNext(uint32_t* type_return) {
     // is no need to do another such load when the while-loop restarts. A
     // "strong" compare-exchange is used because failing unnecessarily would
     // mean repeating some fairly costly validations above.
-    if (last_record_.compare_exchange_strong(last, next)) {
+    if (last_record_.compare_exchange_strong(
+            last, next, std::memory_order_acq_rel, std::memory_order_acquire)) {
       *type_return = block->type_id.load(std::memory_order_relaxed);
       break;
     }
@@ -294,7 +305,16 @@ PersistentMemoryAllocator::PersistentMemoryAllocator(Memory memory,
       readonly_(readonly),
       corrupt_(0),
       allocs_histogram_(nullptr),
-      used_histogram_(nullptr) {
+      used_histogram_(nullptr),
+      errors_histogram_(nullptr) {
+  // These asserts ensure that the structures are 32/64-bit agnostic and meet
+  // all the requirements of use within the allocator. They access private
+  // definitions and so cannot be moved to the global scope.
+  static_assert(sizeof(PersistentMemoryAllocator::BlockHeader) == 16,
+                "struct is not portable across different natural word widths");
+  static_assert(sizeof(PersistentMemoryAllocator::SharedMetadata) == 56,
+                "struct is not portable across different natural word widths");
+
   static_assert(sizeof(BlockHeader) % kAllocAlignment == 0,
                 "BlockHeader is not a multiple of kAllocAlignment");
   static_assert(sizeof(SharedMetadata) % kAllocAlignment == 0,
@@ -360,7 +380,7 @@ PersistentMemoryAllocator::PersistentMemoryAllocator(Memory memory,
     if (!name.empty()) {
       const size_t name_length = name.length() + 1;
       shared_meta()->name = Allocate(name_length, 0);
-      char* name_cstr = GetAsObject<char>(shared_meta()->name, 0);
+      char* name_cstr = GetAsArray<char>(shared_meta()->name, 0, name_length);
       if (name_cstr)
         memcpy(name_cstr, name.data(), name.length());
     }
@@ -408,7 +428,8 @@ uint64_t PersistentMemoryAllocator::Id() const {
 
 const char* PersistentMemoryAllocator::Name() const {
   Reference name_ref = shared_meta()->name;
-  const char* name_cstr = GetAsObject<char>(name_ref, 0);
+  const char* name_cstr =
+      GetAsArray<char>(name_ref, 0, PersistentMemoryAllocator::kSizeAny);
   if (!name_cstr)
     return "";
 
@@ -426,22 +447,45 @@ void PersistentMemoryAllocator::CreateTrackingHistograms(
     base::StringPiece name) {
   if (name.empty() || readonly_)
     return;
-
   std::string name_string = name.as_string();
+
+  DCHECK(!allocs_histogram_);
+  allocs_histogram_ = Histogram::FactoryGet(
+      "UMA.PersistentAllocator." + name_string + ".Allocs", 1, 10000, 50,
+      HistogramBase::kUmaTargetedHistogramFlag);
+
   DCHECK(!used_histogram_);
   used_histogram_ = LinearHistogram::FactoryGet(
       "UMA.PersistentAllocator." + name_string + ".UsedPct", 1, 101, 21,
       HistogramBase::kUmaTargetedHistogramFlag);
 
-  DCHECK(!allocs_histogram_);
-  allocs_histogram_ = Histogram::FactoryGet(
-      "UMA.PersistentAllocator." + name_string + ".Allocs", 1, 10000, 50,
+  DCHECK(!errors_histogram_);
+  errors_histogram_ = SparseHistogram::FactoryGet(
+      "UMA.PersistentAllocator." + name_string + ".Errors",
       HistogramBase::kUmaTargetedHistogramFlag);
 }
 
 size_t PersistentMemoryAllocator::used() const {
   return std::min(shared_meta()->freeptr.load(std::memory_order_relaxed),
                   mem_size_);
+}
+
+PersistentMemoryAllocator::Reference PersistentMemoryAllocator::GetAsReference(
+    const void* memory,
+    uint32_t type_id) const {
+  uintptr_t address = reinterpret_cast<uintptr_t>(memory);
+  if (address < reinterpret_cast<uintptr_t>(mem_base_))
+    return kReferenceNull;
+
+  uintptr_t offset = address - reinterpret_cast<uintptr_t>(mem_base_);
+  if (offset >= mem_size_ || offset < sizeof(BlockHeader))
+    return kReferenceNull;
+
+  Reference ref = static_cast<Reference>(offset) - sizeof(BlockHeader);
+  if (!GetBlockData(ref, type_id, kSizeAny))
+    return kReferenceNull;
+
+  return ref;
 }
 
 size_t PersistentMemoryAllocator::GetAllocSize(Reference ref) const {
@@ -474,8 +518,12 @@ bool PersistentMemoryAllocator::ChangeType(Reference ref,
     return false;
 
   // This is a "strong" exchange because there is no loop that can retry in
-  // the wake of spurious failures possible with "weak" exchanges.
-  return block->type_id.compare_exchange_strong(from_type_id, to_type_id);
+  // the wake of spurious failures possible with "weak" exchanges. Make this
+  // an "acquire-release" so no memory accesses can be reordered either before
+  // or after since changes based on type could happen on either side.
+  return block->type_id.compare_exchange_strong(from_type_id, to_type_id,
+                                                std::memory_order_acq_rel,
+                                                std::memory_order_acquire);
 }
 
 PersistentMemoryAllocator::Reference PersistentMemoryAllocator::Allocate(
@@ -554,8 +602,9 @@ PersistentMemoryAllocator::Reference PersistentMemoryAllocator::AllocateImpl(
         return kReferenceNull;
       }
       const uint32_t new_freeptr = freeptr + page_free;
-      if (shared_meta()->freeptr.compare_exchange_strong(freeptr,
-                                                         new_freeptr)) {
+      if (shared_meta()->freeptr.compare_exchange_strong(
+              freeptr, new_freeptr, std::memory_order_acq_rel,
+              std::memory_order_acquire)) {
         block->size = page_free;
         block->cookie = kBlockCookieWasted;
       }
@@ -578,8 +627,11 @@ PersistentMemoryAllocator::Reference PersistentMemoryAllocator::AllocateImpl(
     // while we were processing. A "weak" exchange would be permissable here
     // because the code will just loop and try again but the above processing
     // is significant so make the extra effort of a "strong" exchange.
-    if (!shared_meta()->freeptr.compare_exchange_strong(freeptr, new_freeptr))
+    if (!shared_meta()->freeptr.compare_exchange_strong(
+            freeptr, new_freeptr, std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
       continue;
+    }
 
     // Given that all memory was zeroed before ever being given to an instance
     // of this class and given that we only allocate in a monotomic fashion
@@ -595,6 +647,10 @@ PersistentMemoryAllocator::Reference PersistentMemoryAllocator::AllocateImpl(
       return kReferenceNull;
     }
 
+    // Load information into the block header. There is no "release" of the
+    // data here because this memory can, currently, be seen only by the thread
+    // performing the allocation. When it comes time to share this, the thread
+    // will call MakeIterable() which does the release operation.
     block->size = size;
     block->cookie = kBlockCookieAllocated;
     block->type_id.store(type_id, std::memory_order_relaxed);
@@ -607,7 +663,7 @@ void PersistentMemoryAllocator::GetMemoryInfo(MemoryInfo* meminfo) const {
       mem_size_ - shared_meta()->freeptr.load(std::memory_order_relaxed),
       (uint32_t)sizeof(BlockHeader));
   meminfo->total = mem_size_;
-  meminfo->free = IsCorrupt() ? 0 : remaining - sizeof(BlockHeader);
+  meminfo->free = remaining - sizeof(BlockHeader);
 }
 
 void PersistentMemoryAllocator::MakeIterable(Reference ref) {
@@ -675,9 +731,15 @@ void PersistentMemoryAllocator::MakeIterable(Reference ref) {
 // case, it's safe to discard the constness and modify the local flag and
 // maybe even the shared flag if the underlying data isn't actually read-only.
 void PersistentMemoryAllocator::SetCorrupt() const {
-  LOG(ERROR) << "Corruption detected in shared-memory segment.";
-  const_cast<std::atomic<bool>*>(&corrupt_)->store(true,
-                                                   std::memory_order_relaxed);
+  if (!corrupt_.load(std::memory_order_relaxed) &&
+      !CheckFlag(
+          const_cast<volatile std::atomic<uint32_t>*>(&shared_meta()->flags),
+          kFlagCorrupt)) {
+    LOG(ERROR) << "Corruption detected in shared-memory segment.";
+    RecordError(kMemoryIsCorrupt);
+  }
+
+  corrupt_.store(true, std::memory_order_relaxed);
   if (!readonly_) {
     SetFlag(const_cast<volatile std::atomic<uint32_t>*>(&shared_meta()->flags),
             kFlagCorrupt);
@@ -707,9 +769,9 @@ PersistentMemoryAllocator::GetBlock(Reference ref, uint32_t type_id,
                                     uint32_t size, bool queue_ok,
                                     bool free_ok) const {
   // Validation of parameters.
-  if (ref % kAllocAlignment != 0)
-    return nullptr;
   if (ref < (queue_ok ? kReferenceQueue : sizeof(SharedMetadata)))
+    return nullptr;
+  if (ref % kAllocAlignment != 0)
     return nullptr;
   size += sizeof(BlockHeader);
   if (ref + size > mem_size_)
@@ -737,6 +799,11 @@ PersistentMemoryAllocator::GetBlock(Reference ref, uint32_t type_id,
 
   // Return pointer to block data.
   return reinterpret_cast<const volatile BlockHeader*>(mem_base_ + ref);
+}
+
+void PersistentMemoryAllocator::RecordError(int error) const {
+  if (errors_histogram_)
+    errors_histogram_->Add(error);
 }
 
 const volatile void* PersistentMemoryAllocator::GetBlockData(

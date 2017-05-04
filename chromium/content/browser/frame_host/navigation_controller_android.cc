@@ -147,21 +147,14 @@ void NavigationControllerAndroid::ContinuePendingReload(
 void NavigationControllerAndroid::Reload(JNIEnv* env,
                                          const JavaParamRef<jobject>& obj,
                                          jboolean check_for_repost) {
-  navigation_controller_->Reload(check_for_repost);
-}
-
-void NavigationControllerAndroid::ReloadToRefreshContent(
-    JNIEnv* env,
-    jobject obj,
-    jboolean check_for_repost) {
-  navigation_controller_->ReloadToRefreshContent(check_for_repost);
+  navigation_controller_->Reload(ReloadType::NORMAL, check_for_repost);
 }
 
 void NavigationControllerAndroid::ReloadBypassingCache(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jboolean check_for_repost) {
-  navigation_controller_->ReloadBypassingCache(check_for_repost);
+  navigation_controller_->Reload(ReloadType::BYPASSING_CACHE, check_for_repost);
 }
 
 void NavigationControllerAndroid::RequestRestoreLoad(
@@ -347,7 +340,7 @@ void NavigationControllerAndroid::SetUseDesktopUserAgent(
   if (reload_on_state_change) {
     // Reloading the page will send the override down as part of the
     // navigation IPC message.
-    navigation_controller_->ReloadOriginalRequestURL(false);
+    navigation_controller_->Reload(ReloadType::ORIGINAL_REQUEST_URL, true);
   }
 }
 

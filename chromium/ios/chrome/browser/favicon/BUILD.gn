@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("favicon") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "favicon_attributes.h",
     "favicon_attributes.mm",
@@ -29,12 +30,13 @@ source_set("favicon") {
     "//components/favicon_base",
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
+    "//components/resources",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/history",
-    "//ios/public/provider/chrome/browser",
     "//ios/web",
     "//skia",
+    "//ui/base",
     "//ui/gfx",
     "//url",
   ]

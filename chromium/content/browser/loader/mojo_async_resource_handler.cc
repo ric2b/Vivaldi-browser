@@ -5,6 +5,7 @@
 #include "content/browser/loader/mojo_async_resource_handler.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/containers/hash_tables.h"
@@ -12,17 +13,17 @@
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
+#include "content/browser/loader/downloaded_temp_file_impl.h"
 #include "content/browser/loader/netlog_observer.h"
+#include "content/browser/loader/resource_controller.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/common/resource_request_completion_status.h"
 #include "content/public/browser/global_request_id.h"
-#include "content/public/browser/resource_controller.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/common/resource_response.h"
 #include "mojo/public/c/system/data_pipe.h"
 #include "mojo/public/cpp/bindings/message.h"
-#include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
 #include "net/base/mime_sniffer.h"
@@ -111,13 +112,17 @@ MojoAsyncResourceHandler::MojoAsyncResourceHandler(
     : ResourceHandler(request),
       rdh_(rdh),
       binding_(this, std::move(mojo_request)),
-      url_loader_client_(std::move(url_loader_client)) {
+      url_loader_client_(std::move(url_loader_client)),
+      weak_factory_(this) {
   DCHECK(url_loader_client_);
   InitializeResourceBufferConstants();
   // This unretained pointer is safe, because |binding_| is owned by |this| and
   // the callback will never be called after |this| is destroyed.
   binding_.set_connection_error_handler(
       base::Bind(&MojoAsyncResourceHandler::Cancel, base::Unretained(this)));
+
+  GetRequestInfo()->set_on_transfer(base::Bind(
+      &MojoAsyncResourceHandler::OnTransfer, weak_factory_.GetWeakPtr()));
 }
 
 MojoAsyncResourceHandler::~MojoAsyncResourceHandler() {
@@ -159,11 +164,31 @@ bool MojoAsyncResourceHandler::OnResponseStarted(ResourceResponse* response,
   }
 
   NetLogObserver::PopulateResponseInfo(request(), response);
+  response->head.encoded_data_length = request()->raw_header_size();
+  reported_total_received_bytes_ = response->head.encoded_data_length;
 
   response->head.request_start = request()->creation_time();
   response->head.response_start = base::TimeTicks::Now();
   sent_received_response_message_ = true;
-  url_loader_client_->OnReceiveResponse(response->head);
+
+  mojom::DownloadedTempFilePtr downloaded_file_ptr;
+  if (!response->head.download_file_path.empty()) {
+    downloaded_file_ptr = DownloadedTempFileImpl::Create(info->GetChildID(),
+                                                         info->GetRequestID());
+    rdh_->RegisterDownloadedTempFile(info->GetChildID(), info->GetRequestID(),
+                                     response->head.download_file_path);
+  }
+
+  url_loader_client_->OnReceiveResponse(response->head,
+                                        std::move(downloaded_file_ptr));
+
+  net::IOBufferWithSize* metadata = GetResponseMetadata(request());
+  if (metadata) {
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(metadata->data());
+
+    url_loader_client_->OnReceiveCachedMetadata(
+        std::vector<uint8_t>(data, data + metadata->size()));
+  }
   return true;
 }
 
@@ -187,11 +212,10 @@ bool MojoAsyncResourceHandler::OnWillRead(scoped_refptr<net::IOBuffer>* buf,
     options.capacity_num_bytes = g_allocation_size;
     mojo::DataPipe data_pipe(options);
 
-    url_loader_client_->OnStartLoadingResponseBody(
-        std::move(data_pipe.consumer_handle));
-    if (!data_pipe.producer_handle.is_valid())
-      return false;
+    DCHECK(data_pipe.producer_handle.is_valid());
+    DCHECK(data_pipe.consumer_handle.is_valid());
 
+    response_body_consumer_handle_ = std::move(data_pipe.consumer_handle);
     shared_writer_ = new SharedWriter(std::move(data_pipe.producer_handle));
     handle_watcher_.Start(shared_writer_->writer(), MOJO_HANDLE_SIGNAL_WRITABLE,
                           base::Bind(&MojoAsyncResourceHandler::OnWritable,
@@ -230,6 +254,20 @@ bool MojoAsyncResourceHandler::OnReadCompleted(int bytes_read, bool* defer) {
   if (!bytes_read)
     return true;
 
+  const ResourceRequestInfoImpl* info = GetRequestInfo();
+  if (info->ShouldReportRawHeaders()) {
+    auto transfer_size_diff = CalculateRecentlyReceivedBytes();
+    if (transfer_size_diff > 0)
+      url_loader_client_->OnTransferSizeUpdated(transfer_size_diff);
+  }
+
+  if (response_body_consumer_handle_.is_valid()) {
+    // Send the data pipe on the first OnReadCompleted call.
+    url_loader_client_->OnStartLoadingResponseBody(
+        std::move(response_body_consumer_handle_));
+    response_body_consumer_handle_.reset();
+  }
+
   if (is_using_io_buffer_not_from_writer_) {
     // Couldn't allocate a buffer on the data pipe in OnWillRead.
     DCHECK_EQ(0u, buffer_bytes_read_);
@@ -257,13 +295,8 @@ bool MojoAsyncResourceHandler::OnReadCompleted(int bytes_read, bool* defer) {
 }
 
 void MojoAsyncResourceHandler::OnDataDownloaded(int bytes_downloaded) {
-  int64_t total_received_bytes = request()->GetTotalReceivedBytes();
-  int64_t bytes_to_report =
-      total_received_bytes - reported_total_received_bytes_;
-  reported_total_received_bytes_ = total_received_bytes;
-  DCHECK_LE(0, bytes_to_report);
-
-  url_loader_client_->OnDataDownloaded(bytes_downloaded, bytes_to_report);
+  url_loader_client_->OnDataDownloaded(bytes_downloaded,
+                                       CalculateRecentlyReceivedBytes());
 }
 
 void MojoAsyncResourceHandler::FollowRedirect() {
@@ -304,6 +337,11 @@ MojoResult MojoAsyncResourceHandler::EndWrite(uint32_t written) {
   return mojo::EndWriteDataRaw(shared_writer_->writer(), written);
 }
 
+net::IOBufferWithSize* MojoAsyncResourceHandler::GetResponseMetadata(
+    net::URLRequest* request) {
+  return request->response_info().metadata.get();
+}
+
 void MojoAsyncResourceHandler::OnResponseCompleted(
     const net::URLRequestStatus& status,
     bool* defer) {
@@ -337,6 +375,7 @@ void MojoAsyncResourceHandler::OnResponseCompleted(
   request_complete_data.completion_time = base::TimeTicks::Now();
   request_complete_data.encoded_data_length =
       request()->GetTotalReceivedBytes();
+  request_complete_data.encoded_body_length = request()->GetRawBodyBytes();
 
   url_loader_client_->OnComplete(request_complete_data);
 }
@@ -434,8 +473,27 @@ void MojoAsyncResourceHandler::Cancel() {
       GlobalRequestID(info->GetChildID(), info->GetRequestID()));
 }
 
+int64_t MojoAsyncResourceHandler::CalculateRecentlyReceivedBytes() {
+  int64_t total_received_bytes = request()->GetTotalReceivedBytes();
+  int64_t bytes_to_report =
+      total_received_bytes - reported_total_received_bytes_;
+  reported_total_received_bytes_ = total_received_bytes;
+  DCHECK_LE(0, bytes_to_report);
+  return bytes_to_report;
+}
+
 void MojoAsyncResourceHandler::ReportBadMessage(const std::string& error) {
   mojo::ReportBadMessage(error);
+}
+
+void MojoAsyncResourceHandler::OnTransfer(
+    mojom::URLLoaderAssociatedRequest mojo_request,
+    mojom::URLLoaderClientAssociatedPtr url_loader_client) {
+  binding_.Unbind();
+  binding_.Bind(std::move(mojo_request));
+  binding_.set_connection_error_handler(
+      base::Bind(&MojoAsyncResourceHandler::Cancel, base::Unretained(this)));
+  url_loader_client_ = std::move(url_loader_client);
 }
 
 }  // namespace content

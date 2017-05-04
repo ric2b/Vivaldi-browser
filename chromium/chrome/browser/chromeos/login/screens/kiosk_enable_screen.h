@@ -24,10 +24,8 @@ class KioskEnableScreen : public BaseScreen,
   ~KioskEnableScreen() override;
 
   // BaseScreen implementation:
-  void PrepareToShow() override {}
   void Show() override;
   void Hide() override {}
-  std::string GetName() const override;
 
   // KioskEnableScreenActor::Delegate implementation:
   void OnExit() override;

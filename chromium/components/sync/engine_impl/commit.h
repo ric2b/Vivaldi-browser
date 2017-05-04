@@ -25,7 +25,6 @@ namespace syncer {
 class CommitProcessor;
 class StatusController;
 class SyncCycle;
-class Syncer;
 
 // This class wraps the actions related to building and executing a single
 // commit operation.
@@ -47,6 +46,7 @@ class Commit {
   // This destructor will DCHECK if CleanUp() has not been called.
   ~Commit();
 
+  // |extensions_activity| may be null.
   static Commit* Init(ModelTypeSet requested_types,
                       ModelTypeSet enabled_types,
                       size_t max_entries,
@@ -57,6 +57,7 @@ class Commit {
                       CommitProcessor* commit_processor,
                       ExtensionsActivity* extensions_activity);
 
+  // |extensions_activity| may be null.
   SyncerError PostAndProcessResponse(NudgeTracker* nudge_tracker,
                                      SyncCycle* cycle,
                                      StatusController* status,

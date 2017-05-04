@@ -62,12 +62,12 @@ class MockImageDecoder : public ImageDecoder {
  public:
   static std::unique_ptr<MockImageDecoder> create(
       MockImageDecoderClient* client) {
-    return makeUnique<MockImageDecoder>(client);
+    return WTF::makeUnique<MockImageDecoder>(client);
   }
 
   MockImageDecoder(MockImageDecoderClient* client)
       : ImageDecoder(AlphaPremultiplied,
-                     ColorSpaceApplied,
+                     ColorBehavior::transformToTargetForTesting(),
                      noDecodedImageByteLimit),
         m_client(client) {}
 
@@ -112,7 +112,7 @@ class MockImageDecoder : public ImageDecoder {
 
   void initializeNewFrame(size_t index) override {
     m_frameBufferCache[index].setSizeAndColorSpace(
-        size().width(), size().height(), colorSpace());
+        size().width(), size().height(), colorSpaceForSkImages());
     m_frameBufferCache[index].setHasAlpha(false);
   }
 
@@ -124,14 +124,14 @@ class MockImageDecoderFactory : public ImageDecoderFactory {
   static std::unique_ptr<MockImageDecoderFactory> create(
       MockImageDecoderClient* client,
       const SkISize& decodedSize) {
-    return wrapUnique(new MockImageDecoderFactory(
+    return WTF::wrapUnique(new MockImageDecoderFactory(
         client, IntSize(decodedSize.width(), decodedSize.height())));
   }
 
   static std::unique_ptr<MockImageDecoderFactory> create(
       MockImageDecoderClient* client,
       const IntSize& decodedSize) {
-    return wrapUnique(new MockImageDecoderFactory(client, decodedSize));
+    return WTF::wrapUnique(new MockImageDecoderFactory(client, decodedSize));
   }
 
   std::unique_ptr<ImageDecoder> create() override {

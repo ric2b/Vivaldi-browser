@@ -304,7 +304,15 @@ void ModelTypeWorker::OnCommitResponse(CommitResponseDataList* response_list) {
       continue;
     }
 
+    // Remember if entity was deleted. After ReceiveCommitResponse this flag
+    // will not be available.
+    bool is_deletion = entity->PendingCommitIsDeletion();
+
     entity->ReceiveCommitResponse(&response);
+
+    if (is_deletion) {
+      entities_.erase(response.client_tag_hash);
+    }
   }
 
   // Send the responses back to the model thread. It needs to know which
@@ -347,7 +355,7 @@ void ModelTypeWorker::AdjustCommitProto(sync_pb::SyncEntity* sync_entity) {
 
   // Initial commits need our help to generate a client ID.
   if (sync_entity->version() == kUncommittedVersion) {
-    DCHECK(!sync_entity->has_id_string());
+    DCHECK(sync_entity->id_string().empty());
     // TODO(crbug.com/516866): This is incorrect for bookmarks for two reasons:
     // 1) Won't be able to match previously committed bookmarks to the ones
     //    with server ID.
@@ -358,7 +366,7 @@ void ModelTypeWorker::AdjustCommitProto(sync_pb::SyncEntity* sync_entity) {
     sync_entity->set_id_string(base::GenerateGUID());
     sync_entity->set_version(0);
   } else {
-    DCHECK(sync_entity->has_id_string());
+    DCHECK(!sync_entity->id_string().empty());
   }
 
   // Encrypt the specifics and hide the title if necessary.

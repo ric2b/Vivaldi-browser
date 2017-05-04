@@ -13,8 +13,8 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/signin/easy_unlock_service.h"
+#include "components/cryptauth/cryptauth_device_manager.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "components/proximity_auth/cryptauth/cryptauth_device_manager.h"
 #include "components/proximity_auth/screenlock_bridge.h"
 #include "google_apis/gaia/oauth2_token_service.h"
 
@@ -28,20 +28,18 @@ class ListValue;
 }
 
 namespace cryptauth {
-class ToggleEasyUnlockResponse;
-}
-
-namespace proximity_auth {
 class CryptAuthClient;
 class CryptAuthDeviceManager;
 class CryptAuthEnrollmentManager;
 class CryptAuthGCMManager;
+class ToggleEasyUnlockResponse;
+}
+
+namespace proximity_auth {
 class ProximityAuthPrefManager;
 class RemoteDeviceLoader;
 }
 
-class EasyUnlockAppManager;
-class EasyUnlockToggleFlow;
 class Profile;
 
 // EasyUnlockService instance that should be used for regular, non-signin
@@ -49,7 +47,7 @@ class Profile;
 class EasyUnlockServiceRegular
     : public EasyUnlockService,
       public proximity_auth::ScreenlockBridge::Observer,
-      public proximity_auth::CryptAuthDeviceManager::Observer,
+      public cryptauth::CryptAuthDeviceManager::Observer,
       public OAuth2TokenService::Observer {
  public:
   explicit EasyUnlockServiceRegular(Profile* profile);
@@ -57,11 +55,11 @@ class EasyUnlockServiceRegular
 
   // Returns the CryptAuthEnrollmentManager, which manages the profile's
   // CryptAuth enrollment.
-  proximity_auth::CryptAuthEnrollmentManager* GetCryptAuthEnrollmentManager();
+  cryptauth::CryptAuthEnrollmentManager* GetCryptAuthEnrollmentManager();
 
   // Returns the CryptAuthEnrollmentManager, which manages the profile's
   // synced devices from CryptAuth.
-  proximity_auth::CryptAuthDeviceManager* GetCryptAuthDeviceManager();
+  cryptauth::CryptAuthDeviceManager* GetCryptAuthDeviceManager();
 
   // Returns the ProximityAuthPrefManager, which manages the profile's
   // prefs for proximity_auth classes.
@@ -74,7 +72,7 @@ class EasyUnlockServiceRegular
 
   // Called when |remote_device_loader_| completes.
   void OnRemoteDevicesLoaded(
-      const std::vector<proximity_auth::RemoteDevice>& remote_devices);
+      const std::vector<cryptauth::RemoteDevice>& remote_devices);
 
   // EasyUnlockService implementation:
   EasyUnlockService::Type GetType() const override;
@@ -107,8 +105,8 @@ class EasyUnlockServiceRegular
 
   // CryptAuthDeviceManager::Observer:
   void OnSyncFinished(
-      proximity_auth::CryptAuthDeviceManager::SyncResult sync_result,
-      proximity_auth::CryptAuthDeviceManager::DeviceChangeResult
+      cryptauth::CryptAuthDeviceManager::SyncResult sync_result,
+      cryptauth::CryptAuthDeviceManager::DeviceChangeResult
           device_change_result) override;
 
   // proximity_auth::ScreenlockBridge::Observer implementation:
@@ -158,7 +156,7 @@ class EasyUnlockServiceRegular
   PrefChangeRegistrar registrar_;
 
   TurnOffFlowStatus turn_off_flow_status_;
-  std::unique_ptr<proximity_auth::CryptAuthClient> cryptauth_client_;
+  std::unique_ptr<cryptauth::CryptAuthClient> cryptauth_client_;
 
   AutoPairingResultCallback auto_pairing_callback_;
 
@@ -175,10 +173,10 @@ class EasyUnlockServiceRegular
 
   // Managers responsible for handling syncing and communications with
   // CryptAuth.
-  std::unique_ptr<proximity_auth::CryptAuthGCMManager> gcm_manager_;
-  std::unique_ptr<proximity_auth::CryptAuthEnrollmentManager>
+  std::unique_ptr<cryptauth::CryptAuthGCMManager> gcm_manager_;
+  std::unique_ptr<cryptauth::CryptAuthEnrollmentManager>
       enrollment_manager_;
-  std::unique_ptr<proximity_auth::CryptAuthDeviceManager> device_manager_;
+  std::unique_ptr<cryptauth::CryptAuthDeviceManager> device_manager_;
 
   // Manager responsible for handling the prefs used by proximity_auth classes.
   std::unique_ptr<proximity_auth::ProximityAuthPrefManager> pref_manager_;

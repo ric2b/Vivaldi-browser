@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.toolbar;
 
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
@@ -33,14 +33,14 @@ public class ToolbarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
         startMainActivityOnBlankPage();
     }
 
-    private void findInPageFromMenu() throws InterruptedException {
+    private void findInPageFromMenu() {
         MenuUtils.invokeCustomMenuActionSync(getInstrumentation(),
                 getActivity(), R.id.find_in_page_id);
 
         waitForFindInPageVisibility(true);
     }
 
-    private void waitForFindInPageVisibility(final boolean visible) throws InterruptedException {
+    private void waitForFindInPageVisibility(final boolean visible) {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
@@ -56,7 +56,7 @@ public class ToolbarTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     @MediumTest
     @Restriction(ChromeRestriction.RESTRICTION_TYPE_TABLET)
     @Feature({"Omnibox"})
-    public void testFindInPageDismissedOnOmniboxFocus() throws InterruptedException {
+    public void testFindInPageDismissedOnOmniboxFocus() {
         findInPageFromMenu();
 
         UrlBar urlBar = (UrlBar) getActivity().findViewById(R.id.url_bar);

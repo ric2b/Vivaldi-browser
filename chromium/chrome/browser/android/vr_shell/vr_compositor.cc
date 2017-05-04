@@ -35,6 +35,7 @@ void VrCompositor::OnSwapBuffersCompleted(int pending_swap_buffers) {}
 void VrCompositor::SetLayer(content::WebContents* web_contents) {
   assert(layer_ == nullptr);
   ui::ViewAndroid* view_android = web_contents->GetNativeView();
+
   // When we pass the layer for the ContentViewCore to the compositor it may be
   // removing it from its previous parent, so we remember that and restore it to
   // its previous parent on teardown.
@@ -46,20 +47,21 @@ void VrCompositor::SetLayer(content::WebContents* web_contents) {
     layer_->SetBackgroundColor(SK_ColorTRANSPARENT);
   }
   layer_parent_ = layer_->parent();
-  compositor_->SetRootLayer(view_android->GetLayer());
+  compositor_->SetRootLayer(layer_);
 }
 
 void VrCompositor::SurfaceDestroyed() {
   compositor_->SetSurface(nullptr);
 }
 
-void VrCompositor::SurfaceChanged(
-    int width,
-    int height,
-    const base::android::JavaParamRef<jobject>& surface) {
+void VrCompositor::SetWindowBounds(gfx::Size size) {
+  bounds_ = size;
+  compositor_->SetWindowBounds(bounds_);
+}
+
+void VrCompositor::SurfaceChanged(jobject surface) {
   DCHECK(surface);
   compositor_->SetSurface(surface);
-  compositor_->SetWindowBounds(gfx::Size(width, height));
 }
 
 }  // namespace vr_shell

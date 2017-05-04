@@ -109,21 +109,35 @@ void InlineFlowBoxPainter::paintFillLayer(const PaintInfo& paintInfo,
   }
 }
 
-void InlineFlowBoxPainter::paintBoxShadow(const PaintInfo& info,
-                                          const ComputedStyle& s,
-                                          ShadowStyle shadowStyle,
-                                          const LayoutRect& paintRect) {
-  if ((!m_inlineFlowBox.prevLineBox() && !m_inlineFlowBox.nextLineBox()) ||
-      !m_inlineFlowBox.parent()) {
-    BoxPainter::paintBoxShadow(info, paintRect, s, shadowStyle);
-  } else {
-    // FIXME: We can do better here in the multi-line case. We want to push a
-    // clip so that the shadow doesn't protrude incorrectly at the edges, and we
-    // want to possibly include shadows cast from the previous/following lines
-    BoxPainter::paintBoxShadow(info, paintRect, s, shadowStyle,
-                               m_inlineFlowBox.includeLogicalLeftEdge(),
-                               m_inlineFlowBox.includeLogicalRightEdge());
-  }
+inline bool InlineFlowBoxPainter::shouldForceIncludeLogicalEdges() const {
+  return (!m_inlineFlowBox.prevLineBox() && !m_inlineFlowBox.nextLineBox()) ||
+         !m_inlineFlowBox.parent();
+}
+
+inline bool InlineFlowBoxPainter::includeLogicalLeftEdgeForBoxShadow() const {
+  return shouldForceIncludeLogicalEdges() ||
+         m_inlineFlowBox.includeLogicalLeftEdge();
+}
+
+inline bool InlineFlowBoxPainter::includeLogicalRightEdgeForBoxShadow() const {
+  return shouldForceIncludeLogicalEdges() ||
+         m_inlineFlowBox.includeLogicalRightEdge();
+}
+
+void InlineFlowBoxPainter::paintNormalBoxShadow(const PaintInfo& info,
+                                                const ComputedStyle& s,
+                                                const LayoutRect& paintRect) {
+  BoxPainter::paintNormalBoxShadow(info, paintRect, s,
+                                   includeLogicalLeftEdgeForBoxShadow(),
+                                   includeLogicalRightEdgeForBoxShadow());
+}
+
+void InlineFlowBoxPainter::paintInsetBoxShadow(const PaintInfo& info,
+                                               const ComputedStyle& s,
+                                               const LayoutRect& paintRect) {
+  BoxPainter::paintInsetBoxShadow(info, paintRect, s,
+                                  includeLogicalLeftEdgeForBoxShadow(),
+                                  includeLogicalRightEdgeForBoxShadow());
 }
 
 static LayoutRect clipRectForNinePieceImageStrip(const InlineFlowBox& box,
@@ -167,7 +181,7 @@ LayoutRect InlineFlowBoxPainter::paintRectForImageStrip(
   // off.
   LayoutUnit logicalOffsetOnLine;
   LayoutUnit totalLogicalWidth;
-  if (direction == LTR) {
+  if (direction == TextDirection::kLtr) {
     for (const InlineFlowBox* curr = m_inlineFlowBox.prevLineBox(); curr;
          curr = curr->prevLineBox())
       logicalOffsetOnLine += curr->logicalWidth();
@@ -231,7 +245,7 @@ void InlineFlowBoxPainter::paintBoxDecorationBackground(
     const LayoutRect& cullRect) {
   DCHECK(paintInfo.phase == PaintPhaseForeground);
   if (m_inlineFlowBox.getLineLayoutItem().style()->visibility() !=
-      EVisibility::Visible)
+      EVisibility::kVisible)
     return;
 
   // You can use p::first-line to specify a background. If so, the root line
@@ -276,13 +290,13 @@ void InlineFlowBoxPainter::paintBoxDecorationBackground(
       getBorderPaintType(adjustedFrameRect, adjustedClipRect);
 
   // Shadow comes first and is behind the background and border.
-  paintBoxShadow(paintInfo, *styleToUse, Normal, adjustedFrameRect);
+  paintNormalBoxShadow(paintInfo, *styleToUse, adjustedFrameRect);
 
   Color backgroundColor = inlineFlowBoxLayoutObject->resolveColor(
       *styleToUse, CSSPropertyBackgroundColor);
   paintFillLayers(paintInfo, backgroundColor, styleToUse->backgroundLayers(),
                   adjustedFrameRect);
-  paintBoxShadow(paintInfo, *styleToUse, Inset, adjustedFrameRect);
+  paintInsetBoxShadow(paintInfo, *styleToUse, adjustedFrameRect);
 
   switch (borderPaintingType) {
     case DontPaintBorders:
@@ -301,8 +315,8 @@ void InlineFlowBoxPainter::paintBoxDecorationBackground(
       // FIXME: What the heck do we do with RTL here? The math we're using is
       // obviously not right, but it isn't even clear how this should work at
       // all.
-      LayoutRect imageStripPaintRect =
-          paintRectForImageStrip(adjustedPaintOffset, frameRect.size(), LTR);
+      LayoutRect imageStripPaintRect = paintRectForImageStrip(
+          adjustedPaintOffset, frameRect.size(), TextDirection::kLtr);
       GraphicsContextStateSaver stateSaver(paintInfo.context);
       paintInfo.context.clip(adjustedClipRect);
       BoxPainter::paintBorder(
@@ -318,7 +332,7 @@ void InlineFlowBoxPainter::paintBoxDecorationBackground(
 void InlineFlowBoxPainter::paintMask(const PaintInfo& paintInfo,
                                      const LayoutPoint& paintOffset) {
   if (m_inlineFlowBox.getLineLayoutItem().style()->visibility() !=
-          EVisibility::Visible ||
+          EVisibility::kVisible ||
       paintInfo.phase != PaintPhaseMask)
     return;
 
@@ -387,8 +401,8 @@ void InlineFlowBoxPainter::paintMask(const PaintInfo& paintInfo,
     // We have a mask image that spans multiple lines.
     // FIXME: What the heck do we do with RTL here? The math we're using is
     // obviously not right, but it isn't even clear how this should work at all.
-    LayoutRect imageStripPaintRect =
-        paintRectForImageStrip(adjustedPaintOffset, frameRect.size(), LTR);
+    LayoutRect imageStripPaintRect = paintRectForImageStrip(
+        adjustedPaintOffset, frameRect.size(), TextDirection::kLtr);
     FloatRect clipRect(clipRectForNinePieceImageStrip(
         m_inlineFlowBox, maskNinePieceImage, paintRect));
     GraphicsContextStateSaver stateSaver(paintInfo.context);

@@ -26,7 +26,7 @@
 
 #include "core/editing/EditingStyle.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/css/CSSColorValue.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
@@ -89,7 +89,7 @@ static const CSSPropertyID staticEditingProperties[] = {
     CSSPropertyWidows, CSSPropertyWordSpacing,
     CSSPropertyWebkitTextDecorationsInEffect, CSSPropertyWebkitTextFillColor,
     CSSPropertyWebkitTextStrokeColor, CSSPropertyWebkitTextStrokeWidth,
-};
+    CSSPropertyCaretColor};
 
 enum EditingPropertiesType {
   OnlyInheritableEditingProperties,
@@ -487,7 +487,7 @@ void EditingStyle::init(Node* node, PropertiesToInclude propertiesToInclude) {
 
   if (node && node->ensureComputedStyle()) {
     const ComputedStyle* computedStyle = node->ensureComputedStyle();
-    removeTextFillAndStrokeColorsIfNeeded(computedStyle);
+    removeInheritedColorsIfNeeded(computedStyle);
     replaceFontSizeByKeywordIfPossible(computedStyle, computedStyleAtPosition);
   }
 
@@ -495,15 +495,19 @@ void EditingStyle::init(Node* node, PropertiesToInclude propertiesToInclude) {
   extractFontSizeDelta();
 }
 
-void EditingStyle::removeTextFillAndStrokeColorsIfNeeded(
+void EditingStyle::removeInheritedColorsIfNeeded(
     const ComputedStyle* computedStyle) {
   // If a node's text fill color is currentColor, then its children use
   // their font-color as their text fill color (they don't
   // inherit it).  Likewise for stroke color.
+  // Similar thing happens for caret-color if it's auto or currentColor.
   if (computedStyle->textFillColor().isCurrentColor())
     m_mutableStyle->removeProperty(CSSPropertyWebkitTextFillColor);
   if (computedStyle->textStrokeColor().isCurrentColor())
     m_mutableStyle->removeProperty(CSSPropertyWebkitTextStrokeColor);
+  if (computedStyle->caretColor().isAutoColor() ||
+      computedStyle->caretColor().isCurrentColor())
+    m_mutableStyle->removeProperty(CSSPropertyCaretColor);
 }
 
 void EditingStyle::setProperty(CSSPropertyID propertyID,
@@ -854,11 +858,11 @@ bool EditingStyle::conflictsWithInlineStyleOfElement(
         inlineStyle->getPropertyCSSValue(textDecorationPropertyForEditing())) {
       if (!conflictingProperties)
         return true;
-      conflictingProperties->append(CSSPropertyTextDecoration);
+      conflictingProperties->push_back(CSSPropertyTextDecoration);
       // Because text-decoration expands to text-decoration-line when CSS3
       // Text Decoration is enabled, we also state it as conflicting.
       if (RuntimeEnabledFeatures::css3TextDecorationsEnabled())
-        conflictingProperties->append(CSSPropertyTextDecorationLine);
+        conflictingProperties->push_back(CSSPropertyTextDecorationLine);
       if (extractedStyle)
         extractedStyle->setProperty(
             textDecorationPropertyForEditing(),
@@ -875,7 +879,7 @@ bool EditingStyle::conflictsWithInlineStyleOfElement(
         inlineStyle->getPropertyCSSValue(CSSPropertyDirection)) {
       if (!conflictingProperties)
         return true;
-      conflictingProperties->append(CSSPropertyDirection);
+      conflictingProperties->push_back(CSSPropertyDirection);
       if (extractedStyle)
         extractedStyle->setProperty(
             propertyID, inlineStyle->getPropertyValue(propertyID),
@@ -885,7 +889,7 @@ bool EditingStyle::conflictsWithInlineStyleOfElement(
     if (!conflictingProperties)
       return true;
 
-    conflictingProperties->append(propertyID);
+    conflictingProperties->push_back(propertyID);
 
     if (extractedStyle)
       extractedStyle->setProperty(propertyID,
@@ -902,24 +906,24 @@ htmlElementEquivalents() {
                       HTMLElementEquivalents,
                       (new HeapVector<Member<HTMLElementEquivalent>>));
   if (!HTMLElementEquivalents.size()) {
-    HTMLElementEquivalents.append(HTMLElementEquivalent::create(
+    HTMLElementEquivalents.push_back(HTMLElementEquivalent::create(
         CSSPropertyFontWeight, CSSValueBold, HTMLNames::bTag));
-    HTMLElementEquivalents.append(HTMLElementEquivalent::create(
+    HTMLElementEquivalents.push_back(HTMLElementEquivalent::create(
         CSSPropertyFontWeight, CSSValueBold, HTMLNames::strongTag));
-    HTMLElementEquivalents.append(HTMLElementEquivalent::create(
+    HTMLElementEquivalents.push_back(HTMLElementEquivalent::create(
         CSSPropertyVerticalAlign, CSSValueSub, HTMLNames::subTag));
-    HTMLElementEquivalents.append(HTMLElementEquivalent::create(
+    HTMLElementEquivalents.push_back(HTMLElementEquivalent::create(
         CSSPropertyVerticalAlign, CSSValueSuper, HTMLNames::supTag));
-    HTMLElementEquivalents.append(HTMLElementEquivalent::create(
+    HTMLElementEquivalents.push_back(HTMLElementEquivalent::create(
         CSSPropertyFontStyle, CSSValueItalic, HTMLNames::iTag));
-    HTMLElementEquivalents.append(HTMLElementEquivalent::create(
+    HTMLElementEquivalents.push_back(HTMLElementEquivalent::create(
         CSSPropertyFontStyle, CSSValueItalic, HTMLNames::emTag));
 
-    HTMLElementEquivalents.append(HTMLTextDecorationEquivalent::create(
+    HTMLElementEquivalents.push_back(HTMLTextDecorationEquivalent::create(
         CSSValueUnderline, HTMLNames::uTag));
-    HTMLElementEquivalents.append(HTMLTextDecorationEquivalent::create(
+    HTMLElementEquivalents.push_back(HTMLTextDecorationEquivalent::create(
         CSSValueLineThrough, HTMLNames::sTag));
-    HTMLElementEquivalents.append(HTMLTextDecorationEquivalent::create(
+    HTMLElementEquivalents.push_back(HTMLTextDecorationEquivalent::create(
         CSSValueLineThrough, HTMLNames::strikeTag));
   }
 
@@ -958,15 +962,15 @@ htmlAttributeEquivalents() {
     // elementIsStyledSpanOrHTMLEquivalent depends on the fact each
     // HTMLAttriuteEquivalent matches exactly one attribute of exactly one
     // element except dirAttr.
-    HTMLAttributeEquivalents.append(HTMLAttributeEquivalent::create(
+    HTMLAttributeEquivalents.push_back(HTMLAttributeEquivalent::create(
         CSSPropertyColor, HTMLNames::fontTag, HTMLNames::colorAttr));
-    HTMLAttributeEquivalents.append(HTMLAttributeEquivalent::create(
+    HTMLAttributeEquivalents.push_back(HTMLAttributeEquivalent::create(
         CSSPropertyFontFamily, HTMLNames::fontTag, HTMLNames::faceAttr));
-    HTMLAttributeEquivalents.append(HTMLFontSizeEquivalent::create());
+    HTMLAttributeEquivalents.push_back(HTMLFontSizeEquivalent::create());
 
-    HTMLAttributeEquivalents.append(HTMLAttributeEquivalent::create(
+    HTMLAttributeEquivalents.push_back(HTMLAttributeEquivalent::create(
         CSSPropertyDirection, HTMLNames::dirAttr));
-    HTMLAttributeEquivalents.append(HTMLAttributeEquivalent::create(
+    HTMLAttributeEquivalents.push_back(HTMLAttributeEquivalent::create(
         CSSPropertyUnicodeBidi, HTMLNames::dirAttr));
   }
 
@@ -1025,7 +1029,7 @@ bool EditingStyle::extractConflictingImplicitStyleOfAttributes(
 
     if (extractedStyle)
       equivalent->addToStyle(element, extractedStyle);
-    conflictingAttributes.append(equivalent->attributeName());
+    conflictingAttributes.push_back(equivalent->attributeName());
     removed = true;
   }
 
@@ -1709,9 +1713,8 @@ static void reconcileTextDecorationProperties(MutableStylePropertySet* style) {
       style->getPropertyCSSValue(CSSPropertyWebkitTextDecorationsInEffect);
   const CSSValue* textDecoration =
       style->getPropertyCSSValue(textDecorationPropertyForEditing());
-  // We shouldn't have both text-decoration and
-  // -webkit-text-decorations-in-effect because that wouldn't make sense.
-  DCHECK(!textDecorationsInEffect || !textDecoration);
+  // "LayoutTests/editing/execCommand/insert-list-and-strikethrough.html" makes
+  // both |textDecorationsInEffect| and |textDecoration| non-null.
   if (textDecorationsInEffect) {
     style->setProperty(textDecorationPropertyForEditing(),
                        textDecorationsInEffect->cssText());

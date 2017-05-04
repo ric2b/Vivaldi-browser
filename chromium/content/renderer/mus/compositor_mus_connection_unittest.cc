@@ -82,7 +82,7 @@ class TestInputHandlerManager : public InputHandlerManager {
 
   // InputHandlerManager:
   void HandleInputEvent(int routing_id,
-                        ui::ScopedWebInputEvent input_event,
+                        blink::WebScopedInputEvent input_event,
                         const ui::LatencyInfo& latency_info,
                         const InputEventAckStateCallback& callback) override;
 
@@ -108,7 +108,7 @@ void TestInputHandlerManager::SetHandleInputEventResult(
 
 void TestInputHandlerManager::HandleInputEvent(
     int routing_id,
-    ui::ScopedWebInputEvent input_event,
+    blink::WebScopedInputEvent input_event,
     const ui::LatencyInfo& latency_info,
     const InputEventAckStateCallback& callback) {
   if (override_result_) {
@@ -135,11 +135,12 @@ class TestInputHandlerManagerClient : public InputHandlerManagerClient {
   void DidStopFlinging(int routing_id) override {}
   void DispatchNonBlockingEventToMainThread(
       int routing_id,
-      ui::ScopedWebInputEvent event,
+      blink::WebScopedInputEvent event,
       const ui::LatencyInfo& latency_info) override {}
 
   void NotifyInputEventHandled(int routing_id,
                                blink::WebInputEvent::Type type,
+                               blink::WebInputEventResult result,
                                InputEventAckState ack_result) override {}
   void ProcessRafAlignedInput(int routing_id) override {}
 
@@ -207,7 +208,7 @@ void TestRenderWidgetInputHandler::HandleInputEvent(
     InputEventDispatchType dispatch_type) {
   if (delegate_) {
     std::unique_ptr<InputEventAck> ack(new InputEventAck(
-        InputEventAckSource::COMPOSITOR_THREAD, input_event.type, state_));
+        InputEventAckSource::COMPOSITOR_THREAD, input_event.type(), state_));
     delegate_->OnInputEventAck(std::move(ack));
   }
 }

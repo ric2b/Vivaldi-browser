@@ -21,13 +21,13 @@
       </div>
     </div>
 
-    <div class="settings-box continuation single-column"
+    <div class="settings-box continuation single-column indent"
         hidden$="[[!nameservers_.length]]">
       <template is="dom-repeat" items="[[nameservers_]]">
         <paper-input-container no-label-float>
           <input id="nameserver[[index]]" is="iron-input" value="[[item]]"
               disabled="[[!canEdit_(editable, nameserversType_)]]"
-              on-blur="onValueChange_">
+              on-change="onValueChange_">
         </paper-input-container>
       </template>
     </div>

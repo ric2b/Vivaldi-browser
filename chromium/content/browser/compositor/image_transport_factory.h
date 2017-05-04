@@ -16,10 +16,6 @@
 #include "ui/events/latency_info.h"
 #include "ui/gfx/native_widget_types.h"
 
-namespace cc {
-class SurfaceManager;
-}
-
 namespace gfx {
 enum class SwapResult;
 }
@@ -27,6 +23,7 @@ enum class SwapResult;
 namespace ui {
 class Compositor;
 class ContextFactory;
+class ContextFactoryPrivate;
 }
 
 namespace display_compositor {
@@ -64,7 +61,10 @@ class CONTENT_EXPORT ImageTransportFactory {
   // Gets the image transport factory as a context factory for the compositor.
   virtual ui::ContextFactory* GetContextFactory() = 0;
 
-  virtual cc::SurfaceManager* GetSurfaceManager() = 0;
+  // Gets the image transport factory as the privileged context factory for the
+  // compositor. TODO(fsamuel): This interface should eventually go away once
+  // Mus subsumes this functionality.
+  virtual ui::ContextFactoryPrivate* GetContextFactoryPrivate() = 0;
 
   // Gets a GLHelper instance, associated with the shared context. This
   // GLHelper will get destroyed whenever the shared context is lost

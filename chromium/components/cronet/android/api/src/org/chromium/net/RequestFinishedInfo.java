@@ -13,6 +13,12 @@ import java.util.concurrent.Executor;
 /**
  * Information about a finished request. Passed to {@link RequestFinishedInfo.Listener}.
  *
+ * To associate the data with the original request, use
+ * {@link ExperimentalUrlRequest.Builder#addRequestAnnotation} or
+ * {@link ExperimentalBidirectionalStream.Builder#addRequestAnnotation} to add a unique identifier
+ * when creating the request, and call {@link #getAnnotations} when the {@link RequestFinishedInfo}
+ * is received to retrieve the identifier.
+ *
  * {@hide} as it's a prototype.
  */
 public abstract class RequestFinishedInfo {
@@ -232,14 +238,14 @@ public abstract class RequestFinishedInfo {
          * collected.
          */
         @Nullable
-        public abstract Long getSentBytesCount();
+        public abstract Long getSentByteCount();
 
         /**
          * Returns total bytes received over the network transport layer, or {@code null} if not
          * collected. Number of bytes does not include any previous redirects.
          */
         @Nullable
-        public abstract Long getReceivedBytesCount();
+        public abstract Long getReceivedByteCount();
     }
 
     /**
@@ -257,11 +263,22 @@ public abstract class RequestFinishedInfo {
      */
     public static final int CANCELED = 2;
 
-
-    /** Returns the request's original URL. */
+    /**
+     * Returns the request's original URL.
+     *
+     * @return the request's original URL
+     */
     public abstract String getUrl();
 
-    /** Returns the objects that the caller has supplied when initiating the request. */
+    /**
+     * Returns the objects that the caller has supplied when initiating the request, using
+     * {@link ExperimentalUrlRequest.Builder#addRequestAnnotation} or
+     * {@link ExperimentalBidirectionalStream.Builder#addRequestAnnotation}.
+     * Annotations can be used to associate a {@link RequestFinishedInfo} with the original request
+     * or type of request.
+     *
+     * @return annotations supplied when creating the request
+     */
     public abstract Collection<Object> getAnnotations();
 
     // TODO(klm): Collect and return a chain of Metrics objects for redirect responses.
@@ -294,11 +311,11 @@ public abstract class RequestFinishedInfo {
     public abstract UrlResponseInfo getResponseInfo();
 
     /**
-     * If the request failed, returns the same {@link UrlRequestException} provided to
+     * If the request failed, returns the same {@link CronetException} provided to
      * {@link UrlRequest.Callback#onFailed}.
      *
-     * @return the request's {@link UrlRequestException}, if the request failed
+     * @return the request's {@link CronetException}, if the request failed
      */
     @Nullable
-    public abstract UrlRequestException getException();
+    public abstract CronetException getException();
 }

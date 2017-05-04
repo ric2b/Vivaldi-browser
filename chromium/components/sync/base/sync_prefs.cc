@@ -5,7 +5,9 @@
 #include "components/sync/base/sync_prefs.h"
 
 #include "base/base64.h"
+#include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -86,6 +88,8 @@ void SyncPrefs::RegisterProfilePrefs(
       prefs::kSyncPassphraseEncryptionTransitionInProgress, false);
   registry->RegisterStringPref(prefs::kSyncNigoriStateForPassphraseTransition,
                                std::string());
+  registry->RegisterBooleanPref(prefs::kEnableLocalSyncBackend, false);
+  registry->RegisterFilePathPref(prefs::kLocalSyncBackendDir, base::FilePath());
 }
 
 void SyncPrefs::AddSyncPrefObserver(SyncPrefObserver* sync_pref_observer) {
@@ -320,6 +324,8 @@ const char* SyncPrefs::GetPrefNameForDataType(ModelType data_type) {
       return prefs::kSyncPrinters;
     case READING_LIST:
       return prefs::kSyncReadingList;
+    case NOTES:
+      return prefs::kSyncNotes;
     default:
       break;
   }
@@ -544,6 +550,30 @@ void SyncPrefs::GetNigoriSpecificsForPassphraseTransition(
   if (base::Base64Decode(encoded, &decoded)) {
     nigori_specifics->ParseFromString(decoded);
   }
+}
+
+bool SyncPrefs::IsLocalSyncEnabled() const {
+  return pref_service_->GetBoolean(prefs::kEnableLocalSyncBackend);
+}
+
+base::FilePath SyncPrefs::GetLocalSyncBackendDir() const {
+  base::FilePath local_sync_backend_folder =
+      pref_service_->GetFilePath(prefs::kLocalSyncBackendDir);
+
+#if defined(OS_WIN)
+  if (local_sync_backend_folder.empty()) {
+    // TODO(pastarmovj): Add DIR_ROAMING_USER_DATA to PathService to simplify
+    // this code and move the logic in its right place. See crbug/657810.
+    CHECK(
+        base::PathService::Get(base::DIR_APP_DATA, &local_sync_backend_folder));
+
+    // TODO(pastarmovj): Quick and dirty solution for stage 1 of crbug/694464
+    // for merging back into Chrome 57.
+    local_sync_backend_folder = local_sync_backend_folder.Append(
+        FILE_PATH_LITERAL("Google/Chrome/User Data"));
+  }
+#endif  // defined(OS_WIN)
+  return local_sync_backend_folder;
 }
 
 }  // namespace syncer

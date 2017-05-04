@@ -56,6 +56,9 @@ const char kSignedDataRoamingEnabled[] = "cros.signed.data_roaming_enabled";
 // True if auto-update was disabled by the system administrator.
 const char kUpdateDisabled[] = "cros.system.updateDisabled";
 
+// True if a target version prefix is set by the system administrator.
+const char kTargetVersionPrefix[] = "cros.system.targetVersionPrefix";
+
 // A list of strings which specifies allowed connection types for
 // update.
 const char kAllowedConnectionTypesForUpdate[] =
@@ -223,5 +226,9 @@ const char kLoginVideoCaptureAllowedUrls[] =
 
 // A list pref storing the apps to install on the login page.
 const char kLoginApps[] = "cros.device.login_apps";
+
+// A string pref storing the url and cryptographic hash of the image in JSON
+// format allowed to set a device-level wallpaper before any user logs in.
+const char kDeviceWallpaperImage[] = "cros.device_wallpaper_image";
 
 }  // namespace chromeos

@@ -11,48 +11,70 @@
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
+#include "components/reading_list/ios/offline_url_utils.h"
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/dom_distiller/distiller_viewer.h"
-#include "ios/chrome/browser/reading_list/offline_url_utils.h"
+#include "ios/chrome/browser/reading_list/reading_list_distiller_page.h"
+#include "ios/chrome/browser/reading_list/reading_list_distiller_page_factory.h"
 #include "ios/web/public/web_thread.h"
 #include "net/base/escape.h"
+#include "net/base/load_flags.h"
+#include "net/http/http_response_headers.h"
+#include "net/url_request/url_fetcher.h"
+#include "net/url_request/url_fetcher_delegate.h"
+#include "net/url_request/url_request_context_getter.h"
+#include "net/url_request/url_request_status.h"
 #include "url/gurl.h"
+
+namespace {
+// This script disables context menu on img elements.
+// The pages are stored locally and long pressing on them will trigger a context
+// menu on the file:// URL which cannot be opened. Disable the context menu.
+const char kDisableImageContextMenuScript[] =
+    "<script>"
+    "document.addEventListener('DOMContentLoaded', function (event) {"
+    "    var imgMenuDisabler = document.createElement('style');"
+    "    imgMenuDisabler.innerHTML = 'img { -webkit-touch-callout: none; }';"
+    "    document.head.appendChild(imgMenuDisabler);"
+    "}, false);"
+    "</script>";
+}  // namespace
 
 // URLDownloader
 
 URLDownloader::URLDownloader(
     dom_distiller::DomDistillerService* distiller_service,
+    reading_list::ReadingListDistillerPageFactory* distiller_page_factory,
     PrefService* prefs,
     base::FilePath chrome_profile_path,
+    net::URLRequestContextGetter* url_request_context_getter,
     const DownloadCompletion& download_completion,
     const SuccessCompletion& delete_completion)
     : distiller_service_(distiller_service),
+      distiller_page_factory_(distiller_page_factory),
       pref_service_(prefs),
       download_completion_(download_completion),
       delete_completion_(delete_completion),
       working_(false),
       base_directory_(chrome_profile_path),
+      mime_type_(),
+      url_request_context_getter_(url_request_context_getter),
       task_tracker_() {}
 
 URLDownloader::~URLDownloader() {
   task_tracker_.TryCancelAll();
 }
 
-void URLDownloader::OfflineURLExists(const GURL& url,
-                                     base::Callback<void(bool)> callback) {
+void URLDownloader::OfflinePathExists(const base::FilePath& path,
+                                      base::Callback<void(bool)> callback) {
   task_tracker_.PostTaskAndReplyWithResult(
       web::WebThread::GetTaskRunnerForThread(web::WebThread::FILE).get(),
-      FROM_HERE,
-      base::Bind(&base::PathExists,
-                 reading_list::OfflinePageAbsolutePath(base_directory_, url)),
-      callback);
+      FROM_HERE, base::Bind(&base::PathExists, path), callback);
 }
 
 void URLDownloader::RemoveOfflineURL(const GURL& url) {
   // Remove all download tasks for this url as it would be pointless work.
-  tasks_.erase(
-      std::remove(tasks_.begin(), tasks_.end(), std::make_pair(DOWNLOAD, url)),
-      tasks_.end());
+  CancelDownloadOfflineURL(url);
   tasks_.push_back(std::make_pair(DELETE, url));
   HandleNextTask();
 }
@@ -65,32 +87,41 @@ void URLDownloader::DownloadOfflineURL(const GURL& url) {
   }
 }
 
-void URLDownloader::DownloadCompletionHandler(const GURL& url,
-                                              const std::string& title,
-                                              SuccessState success) {
+void URLDownloader::CancelDownloadOfflineURL(const GURL& url) {
+  tasks_.erase(
+      std::remove(tasks_.begin(), tasks_.end(), std::make_pair(DOWNLOAD, url)),
+      tasks_.end());
+}
+
+void URLDownloader::DownloadCompletionHandler(
+    const GURL& url,
+    const std::string& title,
+    const base::FilePath& offline_path,
+    SuccessState success) {
   DCHECK(working_);
 
   auto post_delete = base::Bind(
       [](URLDownloader* _this, const GURL& url, const std::string& title,
-         SuccessState success) {
-        _this->download_completion_.Run(
-            url, success, reading_list::OfflinePagePath(url), title);
+         const base::FilePath& offline_path, SuccessState success) {
+        _this->download_completion_.Run(url, _this->distilled_url_, success,
+                                        offline_path, title);
         _this->distiller_.reset();
         _this->working_ = false;
         _this->HandleNextTask();
       },
-      base::Unretained(this), url, title, success);
+      base::Unretained(this), url, title, offline_path, success);
 
   // If downloading failed, clean up any partial download.
   if (success == ERROR_RETRY || success == ERROR_PERMANENT) {
+    base::FilePath directory_path =
+        reading_list::OfflineURLDirectoryAbsolutePath(base_directory_, url);
     task_tracker_.PostTaskAndReply(
         web::WebThread::GetTaskRunnerForThread(web::WebThread::FILE).get(),
         FROM_HERE, base::Bind(
                        [](const base::FilePath& offline_directory_path) {
                          base::DeleteFile(offline_directory_path, true);
                        },
-                       reading_list::OfflineURLDirectoryAbsolutePath(
-                           base_directory_, url)),
+                       directory_path),
         post_delete);
   } else {
     post_delete.Run();
@@ -113,32 +144,107 @@ void URLDownloader::HandleNextTask() {
   Task task = tasks_.front();
   tasks_.pop_front();
   GURL url = task.second;
+  base::FilePath directory_path =
+      reading_list::OfflineURLDirectoryAbsolutePath(base_directory_, url);
 
   if (task.first == DELETE) {
     task_tracker_.PostTaskAndReplyWithResult(
         web::WebThread::GetTaskRunnerForThread(web::WebThread::FILE).get(),
-        FROM_HERE, base::Bind(&base::DeleteFile,
-                              reading_list::OfflineURLDirectoryAbsolutePath(
-                                  base_directory_, url),
-                              true),
+        FROM_HERE, base::Bind(&base::DeleteFile, directory_path, true),
         base::Bind(&URLDownloader::DeleteCompletionHandler,
                    base::Unretained(this), url));
   } else if (task.first == DOWNLOAD) {
     DCHECK(!distiller_);
-    OfflineURLExists(url, base::Bind(&URLDownloader::DownloadURL,
-                                     base::Unretained(this), url));
+    OfflinePathExists(directory_path, base::Bind(&URLDownloader::DownloadURL,
+                                                 base::Unretained(this), url));
   }
 }
 
-void URLDownloader::DownloadURL(GURL url, bool offline_url_exists) {
+void URLDownloader::DownloadURL(const GURL& url, bool offline_url_exists) {
   if (offline_url_exists) {
-    DownloadCompletionHandler(url, std::string(), DOWNLOAD_EXISTS);
+    DownloadCompletionHandler(url, std::string(), base::FilePath(),
+                              DOWNLOAD_EXISTS);
     return;
   }
 
+  original_url_ = url;
+  distilled_url_ = url;
+  std::unique_ptr<reading_list::ReadingListDistillerPage>
+      reading_list_distiller_page =
+          distiller_page_factory_->CreateReadingListDistillerPage(this);
+
   distiller_.reset(new dom_distiller::DistillerViewer(
       distiller_service_, pref_service_, url,
-      base::Bind(&URLDownloader::DistillerCallback, base::Unretained(this))));
+      base::Bind(&URLDownloader::DistillerCallback, base::Unretained(this)),
+      std::move(reading_list_distiller_page)));
+}
+
+void URLDownloader::DistilledPageRedirectedToURL(const GURL& page_url,
+                                                 const GURL& redirected_url) {
+  DCHECK(original_url_ == page_url);
+  distilled_url_ = redirected_url;
+}
+
+void URLDownloader::DistilledPageHasMimeType(const GURL& original_url,
+                                             const std::string& mime_type) {
+  DCHECK(original_url_ == original_url);
+  mime_type_ = mime_type;
+}
+
+void URLDownloader::OnURLFetchComplete(const net::URLFetcher* source) {
+  DCHECK(source == fetcher_.get());
+  // At the moment, only pdf files are downloaded using URLFetcher.
+  DCHECK(mime_type_ == "application/pdf");
+  base::FilePath path = reading_list::OfflinePagePath(
+      original_url_, reading_list::OFFLINE_TYPE_PDF);
+  std::string mime_type;
+  if (fetcher_->GetResponseHeaders()) {
+    fetcher_->GetResponseHeaders()->GetMimeType(&mime_type);
+  }
+  if (!fetcher_->GetStatus().is_success() || mime_type != mime_type_) {
+    return DownloadCompletionHandler(original_url_, "", path, ERROR_RETRY);
+  }
+  base::FilePath temporary_path;
+  // Do not take ownership of the file until the file is moved. This ensures
+  // that the file is cleaned if there a problem before file is moved.
+  fetcher_->GetResponseAsFilePath(false, &temporary_path);
+
+  task_tracker_.PostTaskAndReplyWithResult(
+      web::WebThread::GetTaskRunnerForThread(web::WebThread::FILE).get(),
+      FROM_HERE, base::Bind(&URLDownloader::SavePDFFile, base::Unretained(this),
+                            temporary_path),
+      base::Bind(&URLDownloader::DownloadCompletionHandler,
+                 base::Unretained(this), source->GetOriginalURL(), "", path));
+}
+
+void URLDownloader::FetchPDFFile() {
+  const GURL& pdf_url =
+      distilled_url_.is_valid() ? distilled_url_ : original_url_;
+  fetcher_ = net::URLFetcher::Create(0, pdf_url, net::URLFetcher::GET, this);
+  fetcher_->SetRequestContext(url_request_context_getter_.get());
+  fetcher_->SetLoadFlags(net::LOAD_SKIP_CACHE_VALIDATION);
+  fetcher_->SaveResponseToTemporaryFile(
+      web::WebThread::GetTaskRunnerForThread(web::WebThread::FILE));
+  fetcher_->Start();
+}
+
+URLDownloader::SuccessState URLDownloader::SavePDFFile(
+    const base::FilePath& temporary_path) {
+  if (CreateOfflineURLDirectory(original_url_)) {
+    base::FilePath path = reading_list::OfflinePagePath(
+        original_url_, reading_list::OFFLINE_TYPE_PDF);
+    base::FilePath absolute_path =
+        reading_list::OfflineURLAbsolutePathFromRelativePath(base_directory_,
+                                                             path);
+
+    if (base::Move(temporary_path, absolute_path)) {
+      return DOWNLOAD_SUCCESS;
+    } else {
+      return ERROR_PERMANENT;
+    }
+  }
+
+  return ERROR_PERMANENT;
 }
 
 void URLDownloader::DistillerCallback(
@@ -148,7 +254,16 @@ void URLDownloader::DistillerCallback(
         images,
     const std::string& title) {
   if (html.empty()) {
-    DownloadCompletionHandler(page_url, std::string(), ERROR_RETRY);
+    // The page may not be HTML. Check the mime-type to see if another handler
+    // can save offline content
+    if (mime_type_ == "application/pdf") {
+      // PDF handler just downloads the PDF dfile
+      FetchPDFFile();
+      return;
+    }
+    // This content cannot be processed, return an error value to the client.
+    DownloadCompletionHandler(page_url, std::string(), base::FilePath(),
+                              ERROR_RETRY);
     return;
   }
 
@@ -160,7 +275,9 @@ void URLDownloader::DistillerCallback(
       base::Bind(&URLDownloader::SaveDistilledHTML, base::Unretained(this),
                  page_url, images_block, block_html),
       base::Bind(&URLDownloader::DownloadCompletionHandler,
-                 base::Unretained(this), page_url, title));
+                 base::Unretained(this), page_url, title,
+                 reading_list::OfflinePagePath(
+                     page_url, reading_list::OFFLINE_TYPE_HTML)));
 }
 
 URLDownloader::SuccessState URLDownloader::SaveDistilledHTML(
@@ -177,10 +294,10 @@ URLDownloader::SuccessState URLDownloader::SaveDistilledHTML(
 }
 
 bool URLDownloader::CreateOfflineURLDirectory(const GURL& url) {
-  base::FilePath path =
+  base::FilePath directory_path =
       reading_list::OfflineURLDirectoryAbsolutePath(base_directory_, url);
-  if (!DirectoryExists(path)) {
-    return CreateDirectoryAndGetError(path, nil);
+  if (!DirectoryExists(directory_path)) {
+    return CreateDirectoryAndGetError(directory_path, nil);
   }
   return true;
 }
@@ -191,9 +308,9 @@ bool URLDownloader::SaveImage(const GURL& url,
                               std::string* image_name) {
   std::string image_hash = base::MD5String(image_url.spec());
   *image_name = image_hash;
-  base::FilePath path =
-      reading_list::OfflineURLDirectoryAbsolutePath(base_directory_, url)
-          .Append(image_hash);
+  base::FilePath directory_path =
+      reading_list::OfflineURLDirectoryAbsolutePath(base_directory_, url);
+  base::FilePath path = directory_path.Append(image_hash);
   if (!base::PathExists(path)) {
     return base::WriteFile(path, data.c_str(), data.length()) > 0;
   }
@@ -206,20 +323,35 @@ std::string URLDownloader::SaveAndReplaceImagesInHTML(
     const std::vector<dom_distiller::DistillerViewerInterface::ImageInfo>&
         images) {
   std::string mutable_html = html;
+  bool local_images_found = false;
   for (size_t i = 0; i < images.size(); i++) {
-    base::FilePath local_image_path;
+    if (images[i].url.SchemeIs(url::kDataScheme)) {
+      // Data URI, the data part of the image is empty, no need to store it.
+      continue;
+    }
     std::string local_image_name;
-    if (!SaveImage(url, images[i].url, images[i].data, &local_image_name)) {
-      return std::string();
+    // Mixed content is HTTP images on HTTPS pages.
+    bool image_is_mixed_content = distilled_url_.SchemeIsCryptographic() &&
+                                  !images[i].url.SchemeIsCryptographic();
+    // Only save images if it is not mixed content.
+    if (!image_is_mixed_content) {
+      if (!SaveImage(url, images[i].url, images[i].data, &local_image_name)) {
+        return std::string();
+      }
     }
     std::string image_url = net::EscapeForHTML(images[i].url.spec());
     size_t image_url_size = image_url.size();
     size_t pos = mutable_html.find(image_url, 0);
     while (pos != std::string::npos) {
+      local_images_found = true;
       mutable_html.replace(pos, image_url_size, local_image_name);
       pos = mutable_html.find(image_url, pos + local_image_name.size());
     }
   }
+  if (local_images_found) {
+    mutable_html += kDisableImageContextMenuScript;
+  }
+
   return mutable_html;
 }
 
@@ -227,7 +359,8 @@ bool URLDownloader::SaveHTMLForURL(std::string html, const GURL& url) {
   if (html.empty()) {
     return false;
   }
-  base::FilePath path =
-      reading_list::OfflinePageAbsolutePath(base_directory_, url);
+  base::FilePath path = reading_list::OfflineURLAbsolutePathFromRelativePath(
+      base_directory_,
+      reading_list::OfflinePagePath(url, reading_list::OFFLINE_TYPE_HTML));
   return base::WriteFile(path, html.c_str(), html.length()) > 0;
 }

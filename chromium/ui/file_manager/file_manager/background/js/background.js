@@ -74,14 +74,18 @@ function FileBrowserBackground() {
   this.driveSyncHandler = new DriveSyncHandler(this.progressCenter);
 
   /**
+   * @type {!importer.DispositionChecker.CheckerFunction}
+   */
+  this.dispositionChecker_ = importer.DispositionChecker.createChecker(
+      this.historyLoader, this.tracker);
+
+  /**
    * Provides support for scaning media devices as part of Cloud Import.
    * @type {!importer.MediaScanner}
    */
   this.mediaScanner = new importer.DefaultMediaScanner(
       importer.createMetadataHashcode,
-      importer.DispositionChecker.createChecker(
-          this.historyLoader,
-          this.tracker),
+      this.dispositionChecker_,
       importer.DefaultDirectoryWatcher.create);
 
   /**
@@ -92,6 +96,7 @@ function FileBrowserBackground() {
   this.mediaImportHandler = new importer.MediaImportHandler(
       this.progressCenter,
       this.historyLoader,
+      this.dispositionChecker_,
       this.tracker);
 
   /**
@@ -462,6 +467,7 @@ FileBrowserBackground.prototype.onExecute_ = function(action, details) {
  * @override
  */
 FileBrowserBackground.prototype.onLaunched_ = function() {
+  metrics.startInterval('Load.BackgroundLaunch');
   this.initializationPromise_.then(function() {
     if (nextFileManagerWindowID == 0) {
       // The app just launched. Remove window state records that are not needed
@@ -475,7 +481,9 @@ FileBrowserBackground.prototype.onLaunched_ = function() {
         }
       });
     }
-    launchFileManager(null, undefined, LaunchType.FOCUS_ANY_OR_CREATE);
+    launchFileManager(
+        null, undefined, LaunchType.FOCUS_ANY_OR_CREATE,
+        function() { metrics.recordInterval('Load.BackgroundLaunch'); });
   });
 };
 
@@ -507,10 +515,13 @@ FileBrowserBackground.prototype.onRestarted_ = function() {
       if (items.hasOwnProperty(key)) {
         var match = key.match(FILES_ID_PATTERN);
         if (match) {
+          metrics.startInterval('Load.BackgroundRestart');
           var id = Number(match[1]);
           try {
             var appState = /** @type {Object} */ (JSON.parse(items[key]));
-            launchFileManager(appState, id);
+            launchFileManager(appState, id, undefined, function() {
+              metrics.recordInterval('Load.BackgroundRestart');
+            });
           } catch (e) {
             console.error('Corrupt launch data for ' + id);
           }
@@ -626,3 +637,4 @@ FileBrowserBackground.prototype.initContextMenu_ = function() {
  * @type {FileBrowserBackground}
  */
 window.background = new FileBrowserBackground();
+metrics.recordInterval('Load.BackgroundScript');

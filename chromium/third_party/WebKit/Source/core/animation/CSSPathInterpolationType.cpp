@@ -13,20 +13,19 @@
 
 namespace blink {
 
-void CSSPathInterpolationType::apply(
+void CSSPathInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue* nonInterpolableValue,
-    InterpolationEnvironment& environment) const {
+    StyleResolverState& state) const {
   DCHECK_EQ(cssProperty(), CSSPropertyD);
   std::unique_ptr<SVGPathByteStream> pathByteStream =
       PathInterpolationFunctions::appliedValue(interpolableValue,
                                                nonInterpolableValue);
   if (pathByteStream->isEmpty()) {
-    environment.state().style()->setD(nullptr);
+    state.style()->setD(nullptr);
     return;
   }
-  environment.state().style()->setD(
-      StylePath::create(std::move(pathByteStream)));
+  state.style()->setD(StylePath::create(std::move(pathByteStream)));
 }
 
 void CSSPathInterpolationType::composite(
@@ -55,7 +54,7 @@ class InheritedPathChecker : public InterpolationType::ConversionChecker {
  public:
   static std::unique_ptr<InheritedPathChecker> create(
       PassRefPtr<StylePath> stylePath) {
-    return wrapUnique(new InheritedPathChecker(std::move(stylePath)));
+    return WTF::wrapUnique(new InheritedPathChecker(std::move(stylePath)));
   }
 
  private:
@@ -78,7 +77,7 @@ InterpolationValue CSSPathInterpolationType::maybeConvertInherit(
   if (!state.parentStyle())
     return nullptr;
 
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedPathChecker::create(state.parentStyle()->svgStyle().d()));
   return PathInterpolationFunctions::convertValue(
       state.parentStyle()->svgStyle().d());
@@ -96,11 +95,12 @@ InterpolationValue CSSPathInterpolationType::maybeConvertValue(
       toCSSPathValue(value).byteStream());
 }
 
-InterpolationValue CSSPathInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
+InterpolationValue
+CSSPathInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const StyleResolverState& state) const {
   DCHECK_EQ(cssProperty(), CSSPropertyD);
   return PathInterpolationFunctions::convertValue(
-      environment.state().style()->svgStyle().d());
+      state.style()->svgStyle().d());
 }
 
 PairwiseInterpolationValue CSSPathInterpolationType::maybeMergeSingles(

@@ -4,9 +4,8 @@
 
 package org.chromium.chrome.browser.physicalweb;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.ObjectAnimator;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -26,13 +25,9 @@ import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 
-import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.widget.FadingShadow;
-import org.chromium.chrome.browser.widget.FadingShadowView;
 import org.chromium.components.location.LocationUtils;
 
 import java.util.ArrayList;
@@ -52,14 +47,6 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
     public static final int DIAGNOSTICS_REFERER = 4;
     public static final int REFERER_BOUNDARY = 5;
     private static final String TAG = "PhysicalWeb";
-    private static final String PREFS_VERSION_KEY =
-            "org.chromium.chrome.browser.physicalweb.VERSION";
-    private static final String PREFS_BOTTOM_BAR_KEY =
-            "org.chromium.chrome.browser.physicalweb.BOTTOM_BAR_DISPLAY_COUNT";
-    private static final int PREFS_VERSION = 1;
-    private static final int BOTTOM_BAR_DISPLAY_LIMIT = 1;
-    private static final int DURATION_SLIDE_UP_MS = 250;
-    private static final int DURATION_SLIDE_DOWN_MS = 250;
 
     private final List<PwsResult> mPwsResults = new ArrayList<>();
 
@@ -70,7 +57,6 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
     private TextView mEmptyListText;
     private ImageView mScanningImageView;
     private SwipeRefreshWidget mSwipeRefreshWidget;
-    private View mBottomBar;
     private boolean mIsInitialDisplayRecorded;
     private boolean mIsRefreshing;
     private boolean mIsRefreshUserInitiated;
@@ -81,8 +67,6 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
         super.onCreate(savedInstanceState);
         mContext = this;
         setContentView(R.layout.physical_web_list_urls_activity);
-
-        initSharedPreferences();
 
         mAdapter = new NearbyUrlsAdapter(this);
 
@@ -100,26 +84,10 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
                 (SwipeRefreshWidget) findViewById(R.id.physical_web_swipe_refresh_widget);
         mSwipeRefreshWidget.setOnRefreshListener(this);
 
-        mBottomBar = findViewById(R.id.physical_web_bottom_bar);
-
-        int shadowColor = ApiCompatibilityUtils.getColor(getResources(),
-                R.color.bottom_bar_shadow_color);
-        FadingShadowView shadow =
-                (FadingShadowView) findViewById(R.id.physical_web_bottom_bar_shadow);
-        shadow.init(shadowColor, FadingShadow.POSITION_BOTTOM);
-
-        View bottomBarClose = (View) findViewById(R.id.physical_web_bottom_bar_close);
-        bottomBarClose.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                hideBottomBar();
-            }
-        });
-
         mPwsClient = new PwsClientImpl(this);
         int referer = getIntent().getIntExtra(REFERER_KEY, 0);
         if (savedInstanceState == null) {  // Ensure this is a newly-created activity.
-            PhysicalWebUma.onActivityReferral(this, referer);
+            PhysicalWebUma.onActivityReferral(referer);
         }
         mIsInitialDisplayRecorded = false;
         mIsRefreshing = false;
@@ -176,12 +144,6 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
         super.onResume();
         mNearbyForegroundSubscription.subscribe();
         startRefresh(false, false);
-
-        int bottomBarDisplayCount = getBottomBarDisplayCount();
-        if (bottomBarDisplayCount < BOTTOM_BAR_DISPLAY_LIMIT) {
-            showBottomBar();
-            setBottomBarDisplayCount(bottomBarDisplayCount + 1);
-        }
     }
 
     @Override
@@ -209,9 +171,9 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
             public void onPwsResults(Collection<PwsResult> pwsResults) {
                 long duration = SystemClock.elapsedRealtime() - timestamp;
                 if (isUserInitiated) {
-                    PhysicalWebUma.onRefreshPwsResolution(ListUrlsActivity.this, duration);
+                    PhysicalWebUma.onRefreshPwsResolution(duration);
                 } else {
-                    PhysicalWebUma.onForegroundPwsResolution(ListUrlsActivity.this, duration);
+                    PhysicalWebUma.onForegroundPwsResolution(duration);
                 }
 
                 // filter out duplicate groups.
@@ -239,23 +201,25 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
      */
     @Override
     public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
-        PhysicalWebUma.onUrlSelected(this);
-        PwsResult minPwsResult = mAdapter.getItem(position);
-        String groupId = minPwsResult.groupId;
+        PhysicalWebUma.onUrlSelected();
+        UrlInfo nearestUrlInfo = null;
+        PwsResult nearestPwsResult = mAdapter.getItem(position);
+        String groupId = nearestPwsResult.groupId;
 
         // Make sure the PwsResult corresponds to the closest UrlDevice in the group.
         double minDistance = Double.MAX_VALUE;
         for (PwsResult pwsResult : mPwsResults) {
             if (pwsResult.groupId.equals(groupId)) {
-                double distance = UrlManager.getInstance()
-                        .getUrlInfoByUrl(pwsResult.requestUrl).getDistance();
+                UrlInfo urlInfo = UrlManager.getInstance().getUrlInfoByUrl(pwsResult.requestUrl);
+                double distance = urlInfo.getDistance();
                 if (distance < minDistance) {
                     minDistance = distance;
-                    minPwsResult = pwsResult;
+                    nearestPwsResult = pwsResult;
+                    nearestUrlInfo = urlInfo;
                 }
             }
         }
-        Intent intent = createNavigateToUrlIntent(minPwsResult);
+        Intent intent = createNavigateToUrlIntent(nearestPwsResult, nearestUrlInfo);
         mContext.startActivity(intent);
     }
 
@@ -322,9 +286,9 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
         // Record refresh-related UMA.
         if (!mIsInitialDisplayRecorded) {
             mIsInitialDisplayRecorded = true;
-            PhysicalWebUma.onUrlsDisplayed(this, mAdapter.getCount());
+            PhysicalWebUma.onUrlsDisplayed(mAdapter.getCount());
         } else if (mIsRefreshUserInitiated) {
-            PhysicalWebUma.onUrlsRefreshed(this, mAdapter.getCount());
+            PhysicalWebUma.onUrlsRefreshed(mAdapter.getCount());
         }
 
         mIsRefreshing = false;
@@ -339,62 +303,28 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
         });
     }
 
-    private void showBottomBar() {
-        mBottomBar.setTranslationY(mBottomBar.getHeight());
-        mBottomBar.setVisibility(View.VISIBLE);
-        Animator animator = createTranslationYAnimator(mBottomBar, 0f, DURATION_SLIDE_UP_MS);
-        animator.start();
-    }
-
-    private void hideBottomBar() {
-        Animator animator = createTranslationYAnimator(mBottomBar, mBottomBar.getHeight(),
-                DURATION_SLIDE_DOWN_MS);
-        animator.addListener(new AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(Animator animation) {
-                mBottomBar.setVisibility(View.GONE);
-            }
-        });
-        animator.start();
-    }
-
-    private static Animator createTranslationYAnimator(View view, float endValue,
-                long durationMillis) {
-        return ObjectAnimator.ofFloat(view, "translationY", view.getTranslationY(), endValue)
-                .setDuration(durationMillis);
-    }
-
-    private void initSharedPreferences() {
-        if (ContextUtils.getAppSharedPreferences().getInt(PREFS_VERSION_KEY, 0) == PREFS_VERSION) {
-            return;
-        }
-
-        // Stored preferences are old, upgrade to the current version.
-        ContextUtils.getAppSharedPreferences().edit()
-                .putInt(PREFS_VERSION_KEY, PREFS_VERSION)
-                .apply();
-    }
-
-    private int getBottomBarDisplayCount() {
-        return ContextUtils.getAppSharedPreferences().getInt(PREFS_BOTTOM_BAR_KEY, 0);
-    }
-
-    private void setBottomBarDisplayCount(int count) {
-        ContextUtils.getAppSharedPreferences().edit()
-                .putInt(PREFS_BOTTOM_BAR_KEY, count)
-                .apply();
-    }
-
-    private static Intent createNavigateToUrlIntent(PwsResult pwsResult) {
+    private static Intent createNavigateToUrlIntent(PwsResult pwsResult, UrlInfo urlInfo) {
         String url = pwsResult.siteUrl;
         if (url == null) {
             url = pwsResult.requestUrl;
         }
 
-        return new Intent(Intent.ACTION_VIEW)
+        Intent intent = new Intent(Intent.ACTION_VIEW)
                 .addCategory(Intent.CATEGORY_BROWSABLE)
                 .setData(Uri.parse(url))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (urlInfo != null && urlInfo.getDeviceAddress() != null) {
+            BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+            if (bluetoothAdapter != null) {
+                try {
+                    intent.putExtra(BluetoothDevice.EXTRA_DEVICE,
+                            bluetoothAdapter.getRemoteDevice(urlInfo.getDeviceAddress()));
+                } catch (IllegalArgumentException e) {
+                    Log.e(TAG, "Invalid device address: " + urlInfo.getDeviceAddress(), e);
+                }
+            }
+        }
+        return intent;
     }
 
     @VisibleForTesting

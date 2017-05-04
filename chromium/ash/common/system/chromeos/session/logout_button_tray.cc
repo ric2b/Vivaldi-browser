@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/system/chromeos/session/logout_confirmation_controller.h"
 #include "ash/common/system/tray/system_tray_controller.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
@@ -16,6 +17,7 @@
 #include "ash/common/system/user/login_status.h"
 #include "ash/common/wm_shell.h"
 #include "ash/public/cpp/shelf_types.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "base/logging.h"
 #include "grit/ash_resources.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -24,7 +26,6 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/bubble/tray_bubble_view.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/label_button_border.h"
@@ -116,7 +117,7 @@ LogoutButtonTray::LogoutButtonTray(WmShelf* wm_shelf)
     button->AdjustFontSize(2);
     button_ = button;
 
-    // Since |logout_button_tray| has a red background and it is distinguished
+    // Since LogoutButtonTray has a red background and it is distinguished
     // by itself, no separator is needed on its right side.
     set_separator_visibility(false);
   } else {
@@ -193,16 +194,15 @@ void LogoutButtonTray::UpdateButtonTextAndImage(LoginStatus login_status,
   const int button_size = MaterialDesignController::IsShelfMaterial()
                               ? kTrayItemSize
                               : GetTrayConstant(TRAY_ITEM_HEIGHT_LEGACY);
-  if (alignment == SHELF_ALIGNMENT_BOTTOM) {
+  if (IsHorizontalAlignment(alignment)) {
     button_->SetText(title);
     button_->SetImage(views::LabelButton::STATE_NORMAL, gfx::ImageSkia());
     button_->SetMinSize(gfx::Size(0, button_size));
   } else {
     button_->SetText(base::string16());
     button_->SetAccessibleName(title);
-    button_->SetImage(
-        views::LabelButton::STATE_NORMAL,
-        gfx::CreateVectorIcon(gfx::VectorIconId::SHELF_LOGOUT, kTrayIconColor));
+    button_->SetImage(views::LabelButton::STATE_NORMAL,
+                      gfx::CreateVectorIcon(kShelfLogoutIcon, kTrayIconColor));
     button_->SetMinSize(gfx::Size(button_size, button_size));
   }
   UpdateVisibility();

@@ -53,8 +53,8 @@ class CORE_EXPORT DOMTimer final : public GarbageCollectedFinalized<DOMTimer>,
 
   ~DOMTimer() override;
 
-  // ActiveDOMObject
-  void contextDestroyed() override;
+  // SuspendableObject
+  void contextDestroyed(ExecutionContext*) override;
 
   // Eager finalization is needed to promptly stop this Timer object.
   // Otherwise timer events might fire at an object that's slated for
@@ -83,7 +83,7 @@ class CORE_EXPORT DOMTimer final : public GarbageCollectedFinalized<DOMTimer>,
            int timeoutID);
   void fired() override;
 
-  WebTaskRunner* timerTaskRunner() const override;
+  RefPtr<WebTaskRunner> timerTaskRunner() const override;
 
   int m_timeoutID;
   int m_nestingLevel;

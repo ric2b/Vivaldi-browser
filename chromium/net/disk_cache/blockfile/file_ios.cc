@@ -14,7 +14,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/threading/worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "net/base/net_errors.h"
 #include "net/disk_cache/blockfile/in_flight_io.h"
 #include "net/disk_cache/disk_cache.h"
@@ -121,8 +121,12 @@ void FileInFlightIO::PostRead(disk_cache::File *file, void* buf, size_t buf_len,
       new FileBackgroundIO(file, buf, buf_len, offset, callback, this));
   file->AddRef();  // Balanced on OnOperationComplete()
 
-  base::WorkerPool::PostTask(FROM_HERE,
-      base::Bind(&FileBackgroundIO::Read, operation.get()), true);
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits()
+                     .WithShutdownBehavior(
+                         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                     .MayBlock(),
+      base::Bind(&FileBackgroundIO::Read, operation.get()));
   OnOperationPosted(operation.get());
 }
 
@@ -133,8 +137,12 @@ void FileInFlightIO::PostWrite(disk_cache::File* file, const void* buf,
       new FileBackgroundIO(file, buf, buf_len, offset, callback, this));
   file->AddRef();  // Balanced on OnOperationComplete()
 
-  base::WorkerPool::PostTask(FROM_HERE,
-      base::Bind(&FileBackgroundIO::Write, operation.get()), true);
+  base::PostTaskWithTraits(
+      FROM_HERE, base::TaskTraits()
+                     .WithShutdownBehavior(
+                         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                     .MayBlock(),
+      base::Bind(&FileBackgroundIO::Write, operation.get()));
   OnOperationPosted(operation.get());
 }
 
@@ -258,6 +266,8 @@ size_t File::GetLength() {
   DCHECK(base_file_.IsValid());
   int64_t len = base_file_.GetLength();
 
+  if (len < 0)
+    return 0;
   if (len > static_cast<int64_t>(std::numeric_limits<uint32_t>::max()))
     return std::numeric_limits<uint32_t>::max();
 

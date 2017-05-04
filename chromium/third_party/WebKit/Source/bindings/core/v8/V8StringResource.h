@@ -44,7 +44,7 @@ class WebCoreStringResourceBase {
  public:
   explicit WebCoreStringResourceBase(const String& string)
       : m_plainString(string) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     m_threadId = WTF::currentThread();
 #endif
     ASSERT(!string.isNull());
@@ -54,7 +54,7 @@ class WebCoreStringResourceBase {
 
   explicit WebCoreStringResourceBase(const AtomicString& string)
       : m_plainString(string.getString()), m_atomicString(string) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     m_threadId = WTF::currentThread();
 #endif
     ASSERT(!string.isNull());
@@ -63,7 +63,7 @@ class WebCoreStringResourceBase {
   }
 
   virtual ~WebCoreStringResourceBase() {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     ASSERT(m_threadId == WTF::currentThread());
 #endif
     int64_t reducedExternalMemory = m_plainString.charactersSizeInBytes();
@@ -77,7 +77,7 @@ class WebCoreStringResourceBase {
   const String& webcoreString() { return m_plainString; }
 
   const AtomicString& getAtomicString() {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     ASSERT(m_threadId == WTF::currentThread());
 #endif
     if (m_atomicString.isNull()) {
@@ -102,7 +102,7 @@ class WebCoreStringResourceBase {
   AtomicString m_atomicString;
 
  private:
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   WTF::ThreadIdentifier m_threadId;
 #endif
 };
@@ -187,32 +187,21 @@ class V8StringResource {
 
   void operator=(std::nullptr_t) { setString(String()); }
 
-  bool prepare() {
+  bool prepare() {  // DEPRECATED
     if (prepareFast())
       return true;
 
-    // TODO(bashi): Pass an isolate to this function and remove
-    // v8::Isolate::GetCurrent().
     return m_v8Object->ToString(v8::Isolate::GetCurrent()->GetCurrentContext())
         .ToLocal(&m_v8Object);
   }
 
-  bool prepare(ExceptionState& exceptionState) {
-    if (prepareFast())
-      return true;
+  bool prepare(v8::Isolate* isolate, ExceptionState& exceptionState) {
+    return prepareFast() || prepareSlow(isolate, exceptionState);
+  }
 
-    // TODO(bashi): Pass an isolate to this function and remove
-    // v8::Isolate::GetCurrent().
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    v8::TryCatch block(isolate);
-    // Handle the case where an exception is thrown as part of invoking toString
-    // on the object.
-    if (!m_v8Object->ToString(isolate->GetCurrentContext())
-             .ToLocal(&m_v8Object)) {
-      exceptionState.rethrowV8Exception(block.Exception());
-      return false;
-    }
-    return true;
+  bool prepare(ExceptionState& exceptionState) {  // DEPRECATED
+    return prepareFast() ||
+           prepareSlow(v8::Isolate::GetCurrent(), exceptionState);
   }
 
   operator String() const { return toString<String>(); }
@@ -238,6 +227,16 @@ class V8StringResource {
 
     m_mode = DoNotExternalize;
     return false;
+  }
+
+  bool prepareSlow(v8::Isolate* isolate, ExceptionState& exceptionState) {
+    v8::TryCatch tryCatch(isolate);
+    if (!m_v8Object->ToString(isolate->GetCurrentContext())
+             .ToLocal(&m_v8Object)) {
+      exceptionState.rethrowV8Exception(tryCatch.Exception());
+      return false;
+    }
+    return true;
   }
 
   bool isValid() const;

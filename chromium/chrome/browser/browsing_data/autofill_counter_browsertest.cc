@@ -8,7 +8,6 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/platform_thread.h"
 #include "chrome/browser/profiles/profile.h"
@@ -201,20 +200,6 @@ class AutofillCounterTest : public InProcessBrowserTest {
 
   DISALLOW_COPY_AND_ASSIGN(AutofillCounterTest);
 };
-
-// Tests that the counter does not count when the form data deletion preference
-// is false.
-IN_PROC_BROWSER_TEST_F(AutofillCounterTest, PrefIsFalse) {
-  SetAutofillDeletionPref(false);
-
-  Profile* profile = browser()->profile();
-  browsing_data::AutofillCounter counter(GetWebDataService());
-  counter.Init(profile->GetPrefs(), base::Bind(&AutofillCounterTest::Callback,
-                                               base::Unretained(this)));
-  counter.Restart();
-
-  EXPECT_FALSE(counter.HasPendingQuery());
-}
 
 // Tests that we count the correct number of autocomplete suggestions.
 IN_PROC_BROWSER_TEST_F(AutofillCounterTest, AutocompleteSuggestions) {

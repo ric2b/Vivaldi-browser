@@ -6,8 +6,7 @@
 
 #include <algorithm>
 
-using std::max;
-using std::min;
+#include "net/quic/platform/api/quic_logging.h"
 
 namespace net {
 
@@ -49,7 +48,7 @@ void HybridSlowStart::Restart() {
 }
 
 void HybridSlowStart::StartReceiveRound(QuicPacketNumber last_sent) {
-  DVLOG(1) << "Reset hybrid slow start @" << last_sent;
+  QUIC_DVLOG(1) << "Reset hybrid slow start @" << last_sent;
   end_packet_number_ = last_sent;
   current_min_rtt_ = QuicTime::Delta::Zero();
   rtt_sample_count_ = 0;
@@ -88,11 +87,11 @@ bool HybridSlowStart::ShouldExitSlowStart(QuicTime::Delta latest_rtt,
     int64_t min_rtt_increase_threshold_us =
         min_rtt.ToMicroseconds() >> kHybridStartDelayFactorExp;
     // Ensure the rtt threshold is never less than 2ms or more than 16ms.
-    min_rtt_increase_threshold_us =
-        min(min_rtt_increase_threshold_us, kHybridStartDelayMaxThresholdUs);
+    min_rtt_increase_threshold_us = std::min(min_rtt_increase_threshold_us,
+                                             kHybridStartDelayMaxThresholdUs);
     QuicTime::Delta min_rtt_increase_threshold =
-        QuicTime::Delta::FromMicroseconds(max(min_rtt_increase_threshold_us,
-                                              kHybridStartDelayMinThresholdUs));
+        QuicTime::Delta::FromMicroseconds(std::max(
+            min_rtt_increase_threshold_us, kHybridStartDelayMinThresholdUs));
 
     if (current_min_rtt_ > min_rtt + min_rtt_increase_threshold) {
       hystart_found_ = DELAY;

@@ -69,7 +69,9 @@ source_set("passwords") {
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/elements",
+    "//ios/chrome/browser/ui/infobars",
     "//ios/public/provider/chrome/browser",
+    "//ios/public/provider/chrome/browser/ui",
     "//ios/web",
     "//ui/base",
     "//url",
@@ -82,6 +84,7 @@ source_set("passwords") {
 }
 
 source_set("passwords_generation_utils") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "password_generation_utils.h",
     "password_generation_utils.mm",
@@ -94,6 +97,7 @@ source_set("passwords_generation_utils") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "credential_manager_js_unittest.mm",
@@ -135,4 +139,28 @@ js_compile_unchecked("injected_js") {
     "resources/credential_manager.js",
     "resources/password_controller.js",
   ]
+}
+
+source_set("passwords_internal") {
+  sources = [
+    "password_generation_prompt_view.h",
+    "password_generation_prompt_view.mm",
+    "password_generation_prompt_view_controller.h",
+    "password_generation_prompt_view_controller.mm",
+    "passwords_ui_delegate_impl.h",
+    "passwords_ui_delegate_impl.mm",
+  ]
+  deps = [
+    ":passwords",
+    "//base",
+    "//components/strings",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/app/theme",
+    "//ios/chrome/browser/ui",
+    "//ios/chrome/common",
+    "//ios/third_party/material_components_ios",
+    "//ios/third_party/material_roboto_font_loader_ios",
+    "//ui/base",
+  ]
+  libs = [ "UIKit.framework" ]
 }

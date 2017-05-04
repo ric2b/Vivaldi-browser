@@ -7,25 +7,38 @@
 #include "base/json/json_string_value_serializer.h"
 
 #include "notes/notes_attachment.h"
+#include "notes/notes_codec.h"
 
 namespace vivaldi {
 
-base::Value *Notes_attachment::WriteJSON() const {
+base::Value *Notes_attachment::Encode(NotesCodec *checksummer) const {
+  DCHECK(checksummer);
+
   base::DictionaryValue *attachment_value = new base::DictionaryValue();
   attachment_value->SetString("filename", filename);
+  checksummer->UpdateChecksum(filename);
   attachment_value->SetString("content-type", content_type);
+  checksummer->UpdateChecksum(content_type);
   attachment_value->SetString("content", content);
+  checksummer->UpdateChecksum(content);
 
   return attachment_value;
 }
 
-bool Notes_attachment::ReadJSON(const base::DictionaryValue &input) {
-  if (!input.GetString("filename", &filename))
+bool Notes_attachment::Decode(const base::DictionaryValue *input,
+                              NotesCodec *checksummer) {
+  DCHECK(input);
+  DCHECK(checksummer);
+
+  if (!input->GetString("filename", &filename))
     return false;
-  if (!input.GetString("content-type", &content_type))
+  if (!input->GetString("content-type", &content_type))
     return false;
-  if (!input.GetString("content", &content))
+  if (!input->GetString("content", &content))
     return false;
+  checksummer->UpdateChecksum(filename);
+  checksummer->UpdateChecksum(content_type);
+  checksummer->UpdateChecksum(content);
 
   return true;
 }

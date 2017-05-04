@@ -5,6 +5,7 @@
 #include "chrome/browser/printing/print_job_worker.h"
 
 #include <memory>
+#include <string>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -20,7 +21,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/printing/print_job.h"
-#include "chrome/common/features.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -32,7 +32,7 @@
 #include "printing/printing_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
 #include "chrome/browser/android/tab_android.h"
 #endif
 
@@ -218,7 +218,7 @@ void PrintJobWorker::GetSettingsWithUI(
     bool is_scripted) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
   if (is_scripted) {
     PrintingContextDelegate* printing_context_delegate =
         static_cast<PrintingContextDelegate*>(printing_context_delegate_.get());
@@ -259,10 +259,9 @@ void PrintJobWorker::StartPrinting(PrintedDocument* new_document) {
     return;
   }
 
-  base::string16 document_name =
-      printing::SimplifyDocumentTitle(document_->name());
+  base::string16 document_name = SimplifyDocumentTitle(document_->name());
   if (document_name.empty()) {
-    document_name = printing::SimplifyDocumentTitle(
+    document_name = SimplifyDocumentTitle(
         l10n_util::GetStringUTF16(IDS_DEFAULT_PRINT_DOCUMENT_TITLE));
   }
   PrintingContext::Result result =

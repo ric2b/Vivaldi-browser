@@ -19,12 +19,14 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_network_delegate.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
 #include "content/public/browser/resource_request_info.h"
+#include "content/public/common/previews_state.h"
 #include "net/base/load_flags.h"
 #include "net/base/network_delegate_impl.h"
 #include "net/http/http_request_headers.h"
@@ -32,6 +34,7 @@
 #include "net/proxy/proxy_retry_info.h"
 #include "net/socket/socket_test_util.h"
 #include "net/url_request/url_request.h"
+#include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -67,13 +70,9 @@ const Client kClient = Client::UNKNOWN;
 
 class ContentLoFiDeciderTest : public testing::Test {
  public:
-  ContentLoFiDeciderTest() : context_(true) {
-    context_.set_client_socket_factory(&mock_socket_factory_);
-    context_.Init();
-
+  ContentLoFiDeciderTest() : context_(false) {
     test_context_ = DataReductionProxyTestContext::Builder()
                         .WithClient(kClient)
-                        .WithMockClientSocketFactory(&mock_socket_factory_)
                         .WithURLRequestContext(&context_)
                         .Build();
 
@@ -88,7 +87,6 @@ class ContentLoFiDeciderTest : public testing::Test {
     data_reduction_proxy_network_delegate_->InitIODataAndUMA(
         test_context_->io_data(), test_context_->io_data()->bypass_stats());
 
-    context_.set_network_delegate(data_reduction_proxy_network_delegate_.get());
 
     std::unique_ptr<data_reduction_proxy::ContentLoFiDecider>
         data_reduction_proxy_lofi_decider(
@@ -99,14 +97,14 @@ class ContentLoFiDeciderTest : public testing::Test {
 
   void AllocateRequestInfoForTesting(net::URLRequest* request,
                                      content::ResourceType resource_type,
-                                     bool is_using_lofi) {
+                                     content::PreviewsState previews_state) {
     content::ResourceRequestInfo::AllocateForTesting(
         request, resource_type, NULL, -1, -1, -1,
         resource_type == content::RESOURCE_TYPE_MAIN_FRAME,
         false,  // parent_is_main_frame
         false,  // allow_download
         false,  // is_async
-        is_using_lofi);
+        previews_state);
   }
 
   std::unique_ptr<net::URLRequest> CreateRequest(bool is_main_frame,
@@ -116,7 +114,7 @@ class ContentLoFiDeciderTest : public testing::Test {
     AllocateRequestInfoForTesting(
         request.get(), (is_main_frame ? content::RESOURCE_TYPE_MAIN_FRAME
                                       : content::RESOURCE_TYPE_SUB_FRAME),
-        is_using_lofi);
+        is_using_lofi ? content::SERVER_LOFI_ON : content::PREVIEWS_OFF);
     return request;
   }
 
@@ -128,7 +126,20 @@ class ContentLoFiDeciderTest : public testing::Test {
         context_.CreateRequest(GURL(scheme_is_https ? "https://www.google.com/"
                                                     : "http://www.google.com/"),
                                net::IDLE, &delegate_);
-    AllocateRequestInfoForTesting(request.get(), resource_type, is_using_lofi);
+    AllocateRequestInfoForTesting(
+        request.get(), resource_type,
+        is_using_lofi ? content::SERVER_LOFI_ON : content::PREVIEWS_OFF);
+    return request;
+  }
+
+  std::unique_ptr<net::URLRequest> CreateNoTransformRequest(
+      bool is_main_frame) {
+    std::unique_ptr<net::URLRequest> request = context_.CreateRequest(
+        GURL("http://www.google.com/"), net::IDLE, &delegate_);
+    AllocateRequestInfoForTesting(
+        request.get(), (is_main_frame ? content::RESOURCE_TYPE_MAIN_FRAME
+                                      : content::RESOURCE_TYPE_SUB_FRAME),
+        content::PREVIEWS_NO_TRANSFORM);
     return request;
   }
 
@@ -225,7 +236,6 @@ class ContentLoFiDeciderTest : public testing::Test {
 
  protected:
   base::MessageLoopForIO message_loop_;
-  net::MockClientSocketFactory mock_socket_factory_;
   net::TestURLRequestContext context_;
   net::TestDelegate delegate_;
   std::unique_ptr<DataReductionProxyTestContext> test_context_;
@@ -281,9 +291,10 @@ TEST_F(ContentLoFiDeciderTest, LoFiFlags) {
 
     // The Lo-Fi flag is "always-on" and Lo-Fi is being used. Lo-Fi header
     // should be added.
-    AllocateRequestInfoForTesting(request.get(),
-                                  content::RESOURCE_TYPE_SUB_FRAME,
-                                  tests[i].is_using_lofi);
+    AllocateRequestInfoForTesting(
+        request.get(), content::RESOURCE_TYPE_SUB_FRAME,
+        tests[i].is_using_lofi ? content::SERVER_LOFI_ON
+                               : content::PREVIEWS_OFF);
     headers.Clear();
     NotifyBeforeSendHeaders(&headers, request.get(), true);
     VerifyLoFiHeader(!tests[i].is_using_lite_page, !tests[i].is_using_lofi,
@@ -687,4 +698,14 @@ TEST_F(ContentLoFiDeciderTest, MaybeIgnoreBlacklist) {
   EXPECT_EQ("Foo, exp=ignore_preview_blacklist", header_value);
 }
 
-}  // namespace data_reduction_roxy
+TEST_F(ContentLoFiDeciderTest, NoTransformDoesNotAddHeader) {
+  base::FieldTrialList field_trial_list(nullptr);
+  base::FieldTrialList::CreateFieldTrial(params::GetLoFiFieldTrialName(),
+                                         "Enabled");
+  std::unique_ptr<net::URLRequest> request = CreateNoTransformRequest(false);
+  net::HttpRequestHeaders headers;
+  NotifyBeforeSendHeaders(&headers, request.get(), true);
+  EXPECT_FALSE(headers.HasHeader(chrome_proxy_accept_transform_header()));
+}
+
+}  // namespace data_reduction_proxy

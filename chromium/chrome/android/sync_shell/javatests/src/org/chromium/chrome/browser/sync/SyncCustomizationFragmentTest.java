@@ -11,8 +11,8 @@ import android.preference.CheckBoxPreference;
 import android.preference.Preference;
 import android.preference.SwitchPreference;
 import android.preference.TwoStatePreference;
+import android.support.test.filters.SmallTest;
 import android.support.v7.app.AlertDialog;
-import android.test.suitebuilder.annotation.SmallTest;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -139,7 +139,7 @@ public class SyncCustomizationFragmentTest extends SyncTestBase {
      */
     @SmallTest
     @Feature({"Sync"})
-    public void testOpeningSettingsDoesntStartBackend() throws Exception {
+    public void testOpeningSettingsDoesntStartEngine() throws Exception {
         setUpTestAccountAndSignIn();
         stopSync();
         startSyncCustomizationFragment();
@@ -147,7 +147,7 @@ public class SyncCustomizationFragmentTest extends SyncTestBase {
             @Override
             public void run() {
                 assertFalse(mProfileSyncService.isSyncRequested());
-                assertFalse(mProfileSyncService.isBackendInitialized());
+                assertFalse(mProfileSyncService.isEngineInitialized());
             }
         });
     }
@@ -160,7 +160,7 @@ public class SyncCustomizationFragmentTest extends SyncTestBase {
         SyncCustomizationFragment fragment = startSyncCustomizationFragment();
         assertDefaultSyncOffState(fragment);
         togglePreference(getSyncSwitch(fragment));
-        SyncTestUtil.waitForBackendInitialized();
+        SyncTestUtil.waitForEngineInitialized();
         assertDefaultSyncOnState(fragment);
     }
 

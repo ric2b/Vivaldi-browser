@@ -46,8 +46,8 @@ class DataReductionProxySettingsTest
                                             bool expected_restricted,
                                             bool expected_fallback_restricted) {
     test_context_->SetDataReductionProxyEnabled(initially_enabled);
-    test_context_->config()->SetStateForTest(initially_enabled,
-                                             request_succeeded);
+    test_context_->config()->UpdateConfigForTesting(initially_enabled,
+                                                    request_succeeded);
     ExpectSetProxyPrefs(expected_enabled, false);
     settings_->MaybeActivateDataReductionProxy(false);
     test_context_->RunUntilIdle();
@@ -63,7 +63,7 @@ class DataReductionProxySettingsTest
 TEST_F(DataReductionProxySettingsTest, TestIsProxyEnabledOrManaged) {
   InitPrefMembers();
   // The proxy is disabled initially.
-  test_context_->config()->SetStateForTest(false, true);
+  test_context_->config()->UpdateConfigForTesting(false, true);
 
   EXPECT_FALSE(settings_->IsDataReductionProxyEnabled());
   EXPECT_FALSE(settings_->UpdateDataSavings(std::string(), 0, 0));
@@ -85,7 +85,7 @@ TEST_F(DataReductionProxySettingsTest, TestIsProxyEnabledOrManaged) {
 TEST_F(DataReductionProxySettingsTest, TestCanUseDataReductionProxy) {
   InitPrefMembers();
   // The proxy is disabled initially.
-  test_context_->config()->SetStateForTest(false, true);
+  test_context_->config()->UpdateConfigForTesting(false, true);
 
   GURL http_gurl("http://url.com/");
   EXPECT_FALSE(settings_->CanUseDataReductionProxy(http_gurl));
@@ -248,7 +248,7 @@ TEST(DataReductionProxySettingsStandaloneTest, TestOnProxyEnabledPrefChange) {
           .Build();
 
   // The proxy is enabled initially.
-  drp_test_context->config()->SetStateForTest(true, true);
+  drp_test_context->config()->UpdateConfigForTesting(true, true);
   drp_test_context->InitSettings();
 
   MockDataReductionProxyService* mock_service =
@@ -651,7 +651,7 @@ TEST_F(DataReductionProxySettingsTest, TestDaysSinceEnabledWithTestClock) {
   std::unique_ptr<base::SimpleTestClock> clock(new base::SimpleTestClock());
   base::SimpleTestClock* clock_ptr = clock.get();
   clock_ptr->Advance(base::TimeDelta::FromDays(1));
-  ResetSettings(std::move(clock), true, true, false, false);
+  ResetSettings(std::move(clock), false, false);
 
   base::Time last_enabled_time = clock_ptr->Now();
 
@@ -731,6 +731,32 @@ TEST_F(DataReductionProxySettingsTest, TestDaysSinceEnabledExistingUser) {
                    prefs::kDataReductionProxyLastEnabledTime));
 }
 
+TEST_F(DataReductionProxySettingsTest, TestDaysSinceSavingsCleared) {
+  std::unique_ptr<base::SimpleTestClock> clock(new base::SimpleTestClock());
+  base::SimpleTestClock* clock_ptr = clock.get();
+  clock_ptr->Advance(base::TimeDelta::FromDays(1));
+  ResetSettings(std::move(clock), false, false);
+
+  InitPrefMembers();
+  base::HistogramTester histogram_tester;
+  test_context_->pref_service()->SetInt64(
+      prefs::kDataReductionProxySavingsClearedNegativeSystemClock,
+      clock_ptr->Now().ToInternalValue());
+
+  settings_->data_reduction_proxy_service_->SetIOData(
+      test_context_->io_data()->GetWeakPtr());
+  test_context_->RunUntilIdle();
+
+  clock_ptr->Advance(base::TimeDelta::FromDays(100));
+
+  // Simulate Chromium startup with data reduction proxy already enabled.
+  settings_->spdy_proxy_auth_enabled_.SetValue(true);
+  settings_->MaybeActivateDataReductionProxy(true /* at_startup */);
+  test_context_->RunUntilIdle();
+  histogram_tester.ExpectUniqueSample(
+      "DataReductionProxy.DaysSinceSavingsCleared.NegativeSystemClock", 100, 1);
+}
+
 TEST_F(DataReductionProxySettingsTest, TestGetDailyContentLengths) {
   ContentLengthList result =
       settings_->GetDailyContentLengths(prefs::kDailyHttpOriginalContentLength);
@@ -743,29 +769,6 @@ TEST_F(DataReductionProxySettingsTest, TestGetDailyContentLengths) {
         static_cast<long>((kNumDaysInHistory - 1 - i) * 2);
     ASSERT_EQ(expected_length, result[i]);
   }
-}
-
-TEST_F(DataReductionProxySettingsTest, CheckInitMetricsWhenNotAllowed) {
-  // No call to |AddProxyToCommandLine()| was made, so the proxy feature
-  // should be unavailable.
-  // Clear the command line. Setting flags can force the proxy to be allowed.
-  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
-
-  ResetSettings(nullptr, false, false, false, false);
-  MockSettings* settings = static_cast<MockSettings*>(settings_.get());
-  EXPECT_FALSE(settings->allowed_);
-  EXPECT_CALL(*settings, RecordStartupState(PROXY_NOT_AVAILABLE));
-
-  settings_->InitDataReductionProxySettings(
-      test_context_->GetDataReductionProxyEnabledPrefName(),
-      test_context_->pref_service(), test_context_->io_data(),
-      test_context_->CreateDataReductionProxyService(settings_.get()));
-  settings_->SetCallbackToRegisterSyntheticFieldTrial(
-      base::Bind(&DataReductionProxySettingsTestBase::
-                 SyntheticFieldTrialRegistrationCallback,
-                 base::Unretained(this)));
-
-  test_context_->RunUntilIdle();
 }
 
 }  // namespace data_reduction_proxy

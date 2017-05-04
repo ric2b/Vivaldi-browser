@@ -145,7 +145,7 @@ public abstract class UrlRequest {
          * @param newLocationUrl Location where request is redirected.
          * @throws Exception if an error occurs while processing a redirect. {@link #onFailed}
          *         will be called with the thrown exception set as the cause of the
-         *         {@link UrlRequestException}.
+         *         {@link CallbackException}.
          */
         public abstract void onRedirectReceived(
                 UrlRequest request, UrlResponseInfo info, String newLocationUrl) throws Exception;
@@ -165,7 +165,7 @@ public abstract class UrlRequest {
          * @param info Response information.
          * @throws Exception if an error occurs while processing response start. {@link #onFailed}
          *         will be called with the thrown exception set as the cause of the
-         *         {@link UrlRequestException}.
+         *         {@link CallbackException}.
          */
         public abstract void onResponseStarted(UrlRequest request, UrlResponseInfo info)
                 throws Exception;
@@ -190,7 +190,7 @@ public abstract class UrlRequest {
          *         the received data. The buffer's limit is not changed.
          * @throws Exception if an error occurs while processing a read completion.
          *         {@link #onFailed} will be called with the thrown exception set as the cause of
-         *         the {@link UrlRequestException}.
+         *         the {@link CallbackException}.
          */
         public abstract void onReadCompleted(
                 UrlRequest request, UrlResponseInfo info, ByteBuffer byteBuffer) throws Exception;
@@ -215,7 +215,7 @@ public abstract class UrlRequest {
          * @param error information about error.
          */
         public abstract void onFailed(
-                UrlRequest request, UrlResponseInfo info, UrlRequestException error);
+                UrlRequest request, UrlResponseInfo info, CronetException error);
 
         /**
          * Invoked if request was canceled via {@link UrlRequest#cancel}. Once

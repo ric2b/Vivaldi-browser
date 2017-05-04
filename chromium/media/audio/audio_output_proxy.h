@@ -7,7 +7,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "media/audio/audio_io.h"
 #include "media/base/audio_parameters.h"
@@ -29,7 +29,7 @@ class MEDIA_EXPORT AudioOutputProxy
     public NON_EXPORTED_BASE(base::NonThreadSafe) {
  public:
   // Caller keeps ownership of |dispatcher|.
-  explicit AudioOutputProxy(AudioOutputDispatcher* dispatcher);
+  explicit AudioOutputProxy(base::WeakPtr<AudioOutputDispatcher> dispatcher);
 
   // AudioOutputStream interface.
   bool Open() override;
@@ -55,7 +55,7 @@ class MEDIA_EXPORT AudioOutputProxy
 
   ~AudioOutputProxy() override;
 
-  scoped_refptr<AudioOutputDispatcher> dispatcher_;
+  base::WeakPtr<AudioOutputDispatcher> dispatcher_;
   State state_;
 
   // Need to save volume here, so that we can restore it in case the stream

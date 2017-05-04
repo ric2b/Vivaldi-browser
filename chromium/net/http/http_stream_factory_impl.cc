@@ -5,9 +5,11 @@
 #include "net/http/http_stream_factory_impl.h"
 
 #include <string>
+#include <tuple>
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "net/http/http_network_session.h"
@@ -16,10 +18,12 @@
 #include "net/http/http_stream_factory_impl_job_controller.h"
 #include "net/http/http_stream_factory_impl_request.h"
 #include "net/http/transport_security_state.h"
+#include "net/proxy/proxy_info.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/spdy/bidirectional_stream_spdy_impl.h"
 #include "net/spdy/spdy_http_stream.h"
 #include "url/gurl.h"
+#include "url/scheme_host_port.h"
 #include "url/url_constants.h"
 
 namespace net {
@@ -84,6 +88,7 @@ class DefaultJobFactory : public HttpStreamFactoryImpl::JobFactory {
         alternative_proxy_server, net_log);
   }
 };
+
 }  // anonymous namespace
 
 HttpStreamFactoryImpl::HttpStreamFactoryImpl(HttpNetworkSession* session,
@@ -237,6 +242,88 @@ void HttpStreamFactoryImpl::OnJobControllerComplete(JobController* controller) {
     }
   }
   NOTREACHED();
+}
+
+HttpStreamFactoryImpl::PreconnectingProxyServer::PreconnectingProxyServer(
+    ProxyServer proxy_server,
+    PrivacyMode privacy_mode)
+    : proxy_server(proxy_server), privacy_mode(privacy_mode) {}
+
+bool HttpStreamFactoryImpl::PreconnectingProxyServer::operator<(
+    const PreconnectingProxyServer& other) const {
+  return std::tie(proxy_server, privacy_mode) <
+         std::tie(other.proxy_server, other.privacy_mode);
+}
+
+bool HttpStreamFactoryImpl::PreconnectingProxyServer::operator==(
+    const PreconnectingProxyServer& other) const {
+  return proxy_server == other.proxy_server &&
+         privacy_mode == other.privacy_mode;
+}
+
+bool HttpStreamFactoryImpl::OnInitConnection(const JobController& controller,
+                                             const ProxyInfo& proxy_info,
+                                             PrivacyMode privacy_mode) {
+  if (!controller.is_preconnect()) {
+    // Connection initialization can be skipped only for the preconnect jobs.
+    return false;
+  }
+
+  if (!session_->params().restrict_to_one_preconnect_for_proxies ||
+      !ProxyServerSupportsPriorities(proxy_info)) {
+    return false;
+  }
+
+  PreconnectingProxyServer preconnecting_proxy_server(proxy_info.proxy_server(),
+                                                      privacy_mode);
+
+  if (base::ContainsKey(preconnecting_proxy_servers_,
+                        preconnecting_proxy_server)) {
+    UMA_HISTOGRAM_EXACT_LINEAR("Net.PreconnectSkippedToProxyServers", 1, 2);
+    // Skip preconnect to the proxy server since we are already preconnecting
+    // (probably via some other job).
+    return true;
+  }
+
+  // Add the proxy server to the set of preconnecting proxy servers.
+  // The maximum size of |preconnecting_proxy_servers_|.
+  static const size_t kMaxPreconnectingServerSize = 3;
+  if (preconnecting_proxy_servers_.size() >= kMaxPreconnectingServerSize) {
+    // Erase the first entry. A better approach (at the cost of higher memory
+    // overhead) may be to erase the least recently used entry.
+    preconnecting_proxy_servers_.erase(preconnecting_proxy_servers_.begin());
+  }
+
+  preconnecting_proxy_servers_.insert(preconnecting_proxy_server);
+  DCHECK_GE(kMaxPreconnectingServerSize, preconnecting_proxy_servers_.size());
+  // The first preconnect should be allowed.
+  return false;
+}
+
+void HttpStreamFactoryImpl::OnStreamReady(const ProxyInfo& proxy_info,
+                                          PrivacyMode privacy_mode) {
+  if (proxy_info.is_empty())
+    return;
+  preconnecting_proxy_servers_.erase(
+      PreconnectingProxyServer(proxy_info.proxy_server(), privacy_mode));
+}
+
+bool HttpStreamFactoryImpl::ProxyServerSupportsPriorities(
+    const ProxyInfo& proxy_info) const {
+  if (proxy_info.is_empty() || !proxy_info.proxy_server().is_valid())
+    return false;
+
+  if (!proxy_info.proxy_server().is_https())
+    return false;
+
+  HostPortPair host_port_pair = proxy_info.proxy_server().host_port_pair();
+  DCHECK(!host_port_pair.IsEmpty());
+
+  url::SchemeHostPort scheme_host_port("https", host_port_pair.host(),
+                                       host_port_pair.port());
+
+  return session_->http_server_properties()->SupportsRequestPriority(
+      scheme_host_port);
 }
 
 }  // namespace net

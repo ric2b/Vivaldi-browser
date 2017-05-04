@@ -7,12 +7,12 @@
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/WebFrameScheduler.h"
 #include "platform/scheduler/base/virtual_time_domain.h"
 #include "platform/scheduler/child/scheduler_tqm_delegate.h"
 #include "platform/scheduler/renderer/auto_advancing_virtual_time_domain.h"
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
 #include "platform/scheduler/renderer/web_frame_scheduler_impl.h"
-#include "public/platform/WebFrameScheduler.h"
 
 namespace blink {
 namespace scheduler {
@@ -30,7 +30,7 @@ constexpr base::TimeDelta kDefaultMaxBackgroundThrottlingDelay =
     base::TimeDelta::FromMinutes(1);
 constexpr base::TimeDelta kDefaultInitialBackgroundBudget =
     base::TimeDelta::FromSeconds(1);
-constexpr base::TimeDelta kBackgroundBudgetThrottlingGracePeriod =
+constexpr base::TimeDelta kBackgroundThrottlingGracePeriod =
     base::TimeDelta::FromSeconds(10);
 
 // Values coming from WebViewSchedulerSettings are interpreted as follows:
@@ -83,6 +83,12 @@ base::TimeDelta GetInitialBudget(
   return base::TimeDelta::FromSecondsD(initial_budget);
 }
 
+std::string PointerToId(void* pointer) {
+  return base::StringPrintf(
+      "0x%" PRIx64,
+      static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pointer)));
+}
+
 }  // namespace
 
 WebViewSchedulerImpl::WebViewSchedulerImpl(
@@ -95,18 +101,20 @@ WebViewSchedulerImpl::WebViewSchedulerImpl(
       virtual_time_policy_(VirtualTimePolicy::ADVANCE),
       background_parser_count_(0),
       page_visible_(true),
+      should_throttle_frames_(false),
       disable_background_timer_throttling_(disable_background_timer_throttling),
       allow_virtual_time_to_advance_(true),
       have_seen_loading_task_(false),
       virtual_time_(false),
       is_audio_playing_(false),
       reported_background_throttling_since_navigation_(false),
+      has_active_connection_(false),
       background_time_budget_pool_(nullptr),
       settings_(settings) {
   renderer_scheduler->AddWebViewScheduler(this);
 
-  delayed_background_budget_throttling_enabler_.Reset(
-      base::Bind(&WebViewSchedulerImpl::EnableBackgroundBudgetThrottling,
+  delayed_background_throttling_enabler_.Reset(
+      base::Bind(&WebViewSchedulerImpl::EnableBackgroundThrottling,
                  base::Unretained(this)));
 }
 
@@ -128,11 +136,7 @@ void WebViewSchedulerImpl::setPageVisible(bool page_visible) {
 
   page_visible_ = page_visible;
 
-  for (WebFrameSchedulerImpl* frame_scheduler : frame_schedulers_) {
-    frame_scheduler->setPageVisible(page_visible_);
-  }
-
-  UpdateBackgroundBudgetThrottlingState();
+  UpdateBackgroundThrottlingState();
 }
 
 std::unique_ptr<WebFrameSchedulerImpl>
@@ -141,7 +145,7 @@ WebViewSchedulerImpl::createWebFrameSchedulerImpl(
   MaybeInitializeBackgroundTimeBudgetPool();
   std::unique_ptr<WebFrameSchedulerImpl> frame_scheduler(
       new WebFrameSchedulerImpl(renderer_scheduler_, this, blame_context));
-  frame_scheduler->setPageVisible(page_visible_);
+  frame_scheduler->setPageThrottled(should_throttle_frames_);
   frame_schedulers_.insert(frame_scheduler.get());
   return frame_scheduler;
 }
@@ -235,6 +239,10 @@ void WebViewSchedulerImpl::audioStateChanged(bool is_audio_playing) {
   renderer_scheduler_->OnAudioStateChanged();
 }
 
+bool WebViewSchedulerImpl::hasActiveConnectionForTest() const {
+  return has_active_connection_;
+}
+
 void WebViewSchedulerImpl::ApplyVirtualTimePolicy() {
   if (virtual_time_policy_ != VirtualTimePolicy::DETERMINISTIC_LOADING) {
     return;
@@ -250,6 +258,44 @@ void WebViewSchedulerImpl::ApplyVirtualTimePolicy() {
 
 bool WebViewSchedulerImpl::IsAudioPlaying() const {
   return is_audio_playing_;
+}
+
+void WebViewSchedulerImpl::OnConnectionUpdated() {
+  bool has_active_connection = false;
+  for (WebFrameSchedulerImpl* frame_scheduler : frame_schedulers_) {
+    has_active_connection |= frame_scheduler->has_active_connection();
+  }
+
+  if (has_active_connection_ != has_active_connection) {
+    has_active_connection_ = has_active_connection;
+    UpdateBackgroundThrottlingState();
+  }
+}
+
+void WebViewSchedulerImpl::AsValueInto(
+    base::trace_event::TracedValue* state) const {
+  state->SetDouble("pending_loads", pending_loads_.size());
+  state->SetString("virtual_time_policy",
+                   VirtualTimePolicyToString(virtual_time_policy_));
+  state->SetDouble("background_parser_count", background_parser_count_);
+  state->SetBoolean("page_visible", page_visible_);
+  state->SetBoolean("disable_background_timer_throttling",
+                    disable_background_timer_throttling_);
+  state->SetBoolean("allow_virtual_time_to_advance",
+                    allow_virtual_time_to_advance_);
+  state->SetBoolean("have_seen_loading_task", have_seen_loading_task_);
+  state->SetBoolean("virtual_time", virtual_time_);
+  state->SetBoolean("is_audio_playing", is_audio_playing_);
+  state->SetBoolean("reported_background_throttling_since_navigation",
+                    reported_background_throttling_since_navigation_);
+
+  state->BeginDictionary("frame_schedulers");
+  for (WebFrameSchedulerImpl* frame_scheduler : frame_schedulers_) {
+    state->BeginDictionaryWithCopiedName(PointerToId(frame_scheduler));
+    frame_scheduler->AsValueInto(state);
+    state->EndDictionary();
+  }
+  state->EndDictionary();
 }
 
 TaskQueueThrottler::TimeBudgetPool*
@@ -270,7 +316,7 @@ void WebViewSchedulerImpl::MaybeInitializeBackgroundTimeBudgetPool() {
           "background", GetMaxBudgetLevel(settings_),
           GetMaxThrottlingDelay(settings_));
 
-  UpdateBackgroundBudgetThrottlingState();
+  UpdateBackgroundThrottlingState();
 
   LazyNow lazy_now(renderer_scheduler_->tick_clock());
 
@@ -301,30 +347,61 @@ void WebViewSchedulerImpl::OnThrottlingReported(
   intervention_reporter_->ReportIntervention(WebString::fromUTF8(message));
 }
 
-void WebViewSchedulerImpl::EnableBackgroundBudgetThrottling() {
-  if (!background_time_budget_pool_)
-    return;
-
-  LazyNow lazy_now(renderer_scheduler_->tick_clock());
-
-  background_time_budget_pool_->EnableThrottling(&lazy_now);
+void WebViewSchedulerImpl::EnableBackgroundThrottling() {
+  should_throttle_frames_ = true;
+  for (WebFrameSchedulerImpl* frame_scheduler : frame_schedulers_) {
+    frame_scheduler->setPageThrottled(true);
+  }
+  UpdateBackgroundBudgetPoolThrottlingState();
 }
 
-void WebViewSchedulerImpl::UpdateBackgroundBudgetThrottlingState() {
+void WebViewSchedulerImpl::UpdateBackgroundThrottlingState() {
+  delayed_background_throttling_enabler_.Cancel();
+
+  if (page_visible_) {
+    should_throttle_frames_ = false;
+    for (WebFrameSchedulerImpl* frame_scheduler : frame_schedulers_) {
+      frame_scheduler->setPageThrottled(false);
+    }
+    UpdateBackgroundBudgetPoolThrottlingState();
+  } else {
+    if (has_active_connection_) {
+      // If connection is active, update state immediately to stop throttling.
+      UpdateBackgroundBudgetPoolThrottlingState();
+    } else {
+      // TODO(altimin): Consider moving this logic into PumpThrottledTasks.
+      renderer_scheduler_->ControlTaskRunner()->PostDelayedTask(
+          FROM_HERE, delayed_background_throttling_enabler_.callback(),
+          kBackgroundThrottlingGracePeriod);
+    }
+  }
+}
+
+void WebViewSchedulerImpl::UpdateBackgroundBudgetPoolThrottlingState() {
   if (!background_time_budget_pool_)
     return;
 
-  delayed_background_budget_throttling_enabler_.Cancel();
-
   LazyNow lazy_now(renderer_scheduler_->tick_clock());
-
-  if (page_visible_) {
+  if (page_visible_ || has_active_connection_) {
     background_time_budget_pool_->DisableThrottling(&lazy_now);
   } else {
-    // TODO(altimin): Consider moving this logic into PumpThrottledTasks.
-    renderer_scheduler_->ControlTaskRunner()->PostDelayedTask(
-        FROM_HERE, delayed_background_budget_throttling_enabler_.callback(),
-        kBackgroundBudgetThrottlingGracePeriod);
+    background_time_budget_pool_->EnableThrottling(&lazy_now);
+  }
+}
+
+// static
+const char* WebViewSchedulerImpl::VirtualTimePolicyToString(
+    VirtualTimePolicy virtual_time_policy) {
+  switch (virtual_time_policy) {
+    case VirtualTimePolicy::ADVANCE:
+      return "ADVANCE";
+    case VirtualTimePolicy::PAUSE:
+      return "PAUSE";
+    case VirtualTimePolicy::DETERMINISTIC_LOADING:
+      return "DETERMINISTIC_LOADING";
+    default:
+      NOTREACHED();
+      return nullptr;
   }
 }
 

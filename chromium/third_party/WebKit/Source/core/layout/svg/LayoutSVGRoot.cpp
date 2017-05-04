@@ -145,24 +145,38 @@ void LayoutSVGRoot::layout() {
   updateLogicalWidth();
   updateLogicalHeight();
 
-  buildLocalToBorderBoxTransform();
-  // TODO(fs): Temporarily, needing a layout implies that the local transform
-  // has changed. This should be updated to be more precise and factor in the
-  // actual (relevant) changes to the computed user-space transform.
-  m_didScreenScaleFactorChange = selfNeedsLayout();
+  // The local-to-border-box transform is a function with the following as
+  // input:
+  //
+  //  * effective zoom
+  //  * contentWidth/Height
+  //  * viewBox
+  //  * border + padding
+  //  * currentTranslate
+  //  * currentScale
+  //
+  // Which means that |transformChange| will notice a change to the scale from
+  // any of these.
+  SVGTransformChange transformChange = buildLocalToBorderBoxTransform();
+
+  // The scale factor from the local-to-border-box transform is all that our
+  // scale-dependent descendants care about.
+  m_didScreenScaleFactorChange = transformChange == SVGTransformChange::Full;
 
   SVGLayoutSupport::layoutResourcesIfNeeded(this);
 
   // selfNeedsLayout() will cover changes to one (or more) of viewBox,
-  // current{Scale,Translate} and decorations.
+  // current{Scale,Translate}, decorations and 'overflow'.
   const bool viewportMayHaveChanged = selfNeedsLayout() || oldSize != size();
 
-  // The scale of one or more of the SVG elements may have changed, or new
-  // content may have been exposed, so mark the entire subtree as needing paint
-  // invalidation checking. (It is only somewhat by coincidence that this
-  // condition happens to be the same as the one for viewport changes.)
-  if (viewportMayHaveChanged)
+  // The scale of one or more of the SVG elements may have changed, content
+  // (the entire SVG) could have moved or new content may have been exposed, so
+  // mark the entire subtree as needing paint invalidation checking.
+  if (transformChange != SVGTransformChange::None || viewportMayHaveChanged) {
     setMayNeedPaintInvalidationSubtree();
+    if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled())
+      setNeedsPaintPropertyUpdate();
+  }
 
   SVGSVGElement* svg = toSVGSVGElement(node());
   ASSERT(svg);
@@ -201,9 +215,9 @@ bool LayoutSVGRoot::shouldApplyViewportClip() const {
   // clipped. When the svg is stand-alone (isDocumentElement() == true) the
   // viewport clipping should always be applied, noting that the window
   // scrollbars should be hidden if overflow=hidden.
-  return style()->overflowX() == OverflowHidden ||
-         style()->overflowX() == OverflowAuto ||
-         style()->overflowX() == OverflowScroll || this->isDocumentElement();
+  return style()->overflowX() == EOverflow::Hidden ||
+         style()->overflowX() == EOverflow::Auto ||
+         style()->overflowX() == EOverflow::Scroll || this->isDocumentElement();
 }
 
 LayoutRect LayoutSVGRoot::visualOverflowRect() const {
@@ -291,6 +305,8 @@ void LayoutSVGRoot::descendantIsolationRequirementsChanged(
       m_hasNonIsolatedBlendingDescendantsDirty = true;
       break;
   }
+  if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled())
+    setNeedsPaintPropertyUpdate();
 }
 
 void LayoutSVGRoot::insertedIntoTree() {
@@ -330,34 +346,29 @@ PositionWithAffinity LayoutSVGRoot::positionForPoint(const LayoutPoint& point) {
 
 // LayoutBox methods will expect coordinates w/o any transforms in coordinates
 // relative to our borderBox origin.  This method gives us exactly that.
-void LayoutSVGRoot::buildLocalToBorderBoxTransform() {
+SVGTransformChange LayoutSVGRoot::buildLocalToBorderBoxTransform() {
+  SVGTransformChangeDetector changeDetector(m_localToBorderBoxTransform);
   SVGSVGElement* svg = toSVGSVGElement(node());
   ASSERT(svg);
   float scale = style()->effectiveZoom();
-  FloatPoint translate = svg->currentTranslate();
-  LayoutSize borderAndPadding(borderLeft() + paddingLeft(),
-                              borderTop() + paddingTop());
   m_localToBorderBoxTransform = svg->viewBoxToViewTransform(
       contentWidth() / scale, contentHeight() / scale);
 
+  FloatPoint translate = svg->currentTranslate();
+  LayoutSize borderAndPadding(borderLeft() + paddingLeft(),
+                              borderTop() + paddingTop());
   AffineTransform viewToBorderBoxTransform(
       scale, 0, 0, scale, borderAndPadding.width() + translate.x(),
       borderAndPadding.height() + translate.y());
   viewToBorderBoxTransform.scale(svg->currentScale());
   m_localToBorderBoxTransform.preMultiply(viewToBorderBoxTransform);
+  return changeDetector.computeChange(m_localToBorderBoxTransform);
 }
 
-const AffineTransform& LayoutSVGRoot::localToSVGParentTransform() const {
-  // Slightly optimized version of m_localToParentTransform =
-  // AffineTransform::translation(x(), y()) * m_localToBorderBoxTransform;
-  m_localToParentTransform = m_localToBorderBoxTransform;
-  if (location().x())
-    m_localToParentTransform.setE(m_localToParentTransform.e() +
-                                  roundToInt(location().x()));
-  if (location().y())
-    m_localToParentTransform.setF(m_localToParentTransform.f() +
-                                  roundToInt(location().y()));
-  return m_localToParentTransform;
+AffineTransform LayoutSVGRoot::localToSVGParentTransform() const {
+  return AffineTransform::translation(roundToInt(location().x()),
+                                      roundToInt(location().y())) *
+         m_localToBorderBoxTransform;
 }
 
 LayoutRect LayoutSVGRoot::localVisualRect() const {
@@ -368,7 +379,7 @@ LayoutRect LayoutSVGRoot::localVisualRect() const {
   // LayoutSVGRootTest.VisualRectMappingWithViewportClipWithoutBorder).
 
   // Return early for any cases where we don't actually paint.
-  if (style()->visibility() != EVisibility::Visible &&
+  if (style()->visibility() != EVisibility::kVisible &&
       !enclosingLayer()->hasVisibleContent())
     return LayoutRect();
 

@@ -107,8 +107,8 @@ static void appendDescriptorAndReset(const CharType* attributeStart,
                                      const CharType* position,
                                      Vector<DescriptorToken>& descriptors) {
   if (position > descriptorStart)
-    descriptors.append(DescriptorToken(descriptorStart - attributeStart,
-                                       position - descriptorStart));
+    descriptors.push_back(DescriptorToken(descriptorStart - attributeStart,
+                                          position - descriptorStart));
   descriptorStart = 0;
 }
 
@@ -337,9 +337,9 @@ static void parseImageCandidatesFromSrcsetAttribute(
     unsigned imageURLStartingPosition = imageURLStart - attributeStart;
     ASSERT(imageURLEnd > imageURLStart);
     unsigned imageURLLength = imageURLEnd - imageURLStart;
-    imageCandidates.append(ImageCandidate(attribute, imageURLStartingPosition,
-                                          imageURLLength, result,
-                                          ImageCandidate::SrcsetOrigin));
+    imageCandidates.push_back(
+        ImageCandidate(attribute, imageURLStartingPosition, imageURLLength,
+                       result, ImageCandidate::SrcsetOrigin));
     // 11. Return to the step labeled splitting loop.
   }
 }
@@ -395,7 +395,8 @@ static unsigned avoidDownloadIfHigherDensityResourceIsInCache(
     KURL url = document->completeURL(
         stripLeadingAndTrailingHTMLSpaces(imageCandidates[i]->url()));
     if (memoryCache()->resourceForURL(
-            url, document->fetcher()->getCacheIdentifier()))
+            url, document->fetcher()->getCacheIdentifier()) ||
+        url.protocolIsData())
       return i;
   }
   return winner;
@@ -428,7 +429,7 @@ static ImageCandidate pickBestImageCandidate(
   float prevDensity = -1.0;
   for (ImageCandidate& image : imageCandidates) {
     if (image.density() != prevDensity && (!ignoreSrc || !image.srcOrigin()))
-      deDupedImageCandidates.append(&image);
+      deDupedImageCandidates.push_back(&image);
     prevDensity = image.density();
   }
   unsigned winner = selectionLogic(deDupedImageCandidates, deviceScaleFactor);
@@ -478,7 +479,7 @@ ImageCandidate bestFitSourceForImageAttributes(float deviceScaleFactor,
                                           document);
 
   if (!srcAttribute.isEmpty())
-    imageCandidates.append(
+    imageCandidates.push_back(
         ImageCandidate(srcAttribute, 0, srcAttribute.length(),
                        DescriptorParsingResult(), ImageCandidate::SrcOrigin));
 
@@ -494,10 +495,10 @@ String bestFitSourceForImageAttributes(float deviceScaleFactor,
     return srcAttribute;
 
   Vector<ImageCandidate> imageCandidates;
-  imageCandidates.append(srcsetImageCandidate);
+  imageCandidates.push_back(srcsetImageCandidate);
 
   if (!srcAttribute.isEmpty())
-    imageCandidates.append(
+    imageCandidates.push_back(
         ImageCandidate(srcAttribute, 0, srcAttribute.length(),
                        DescriptorParsingResult(), ImageCandidate::SrcOrigin));
 

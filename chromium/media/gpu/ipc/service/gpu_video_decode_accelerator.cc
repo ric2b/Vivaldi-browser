@@ -274,6 +274,8 @@ void GpuVideoDecodeAccelerator::PictureReady(const Picture& picture) {
   params.color_space = picture.color_space();
   params.allow_overlay = picture.allow_overlay();
   params.size_changed = picture.size_changed();
+  params.surface_texture = picture.surface_texture();
+  params.wants_promotion_hint = picture.wants_promotion_hint();
   if (!Send(new AcceleratedVideoDecoderHostMsg_PictureReady(host_route_id_,
                                                             params))) {
     DLOG(ERROR) << "Send(AcceleratedVideoDecoderHostMsg_PictureReady) failed";
@@ -370,8 +372,9 @@ bool GpuVideoDecodeAccelerator::Initialize(
   video_decode_accelerator_ =
       vda_factory->CreateVDA(this, config, gpu_workarounds, gpu_preferences);
   if (!video_decode_accelerator_) {
-    LOG(ERROR) << "HW video decode not available for profile " << config.profile
-               << (config.is_encrypted ? " with encryption" : "");
+    LOG(ERROR) << "HW video decode not available for profile "
+               << GetProfileName(config.profile)
+               << (config.is_encrypted() ? " with encryption" : "");
     return false;
   }
 

@@ -68,7 +68,6 @@ namespace blink {
 
 class EXTDisjointTimerQuery;
 class EXTDisjointTimerQueryWebGL2;
-class EXTsRGB;
 class ExceptionState;
 class HTMLCanvasElementOrOffscreenCanvas;
 class HTMLImageElement;
@@ -77,8 +76,6 @@ class ImageBitmap;
 class ImageBuffer;
 class ImageData;
 class IntSize;
-class OESTextureFloat;
-class OESTextureHalfFloat;
 class OESVertexArrayObject;
 class WebGLActiveInfo;
 class WebGLBuffer;
@@ -92,7 +89,6 @@ class WebGLCompressedTextureS3TCsRGB;
 class WebGLContextGroup;
 class WebGLContextObject;
 class WebGLDebugShaders;
-class WebGLDepthTexture;
 class WebGLDrawBuffers;
 class WebGLExtension;
 class WebGLFramebuffer;
@@ -101,7 +97,6 @@ class WebGLProgram;
 class WebGLRenderbuffer;
 class WebGLShader;
 class WebGLShaderPrecisionFormat;
-class WebGLSharedObject;
 class WebGLUniformLocation;
 class WebGLVertexArrayObjectBase;
 
@@ -110,14 +105,16 @@ class WebGLRenderingContextErrorMessageCallback;
 // This class uses the color mask to prevent drawing to the alpha channel, if
 // the DrawingBuffer requires RGB emulation.
 class ScopedRGBEmulationColorMask {
+  STACK_ALLOCATED();
+
  public:
-  ScopedRGBEmulationColorMask(gpu::gles2::GLES2Interface*,
+  ScopedRGBEmulationColorMask(WebGLRenderingContextBase*,
                               GLboolean* colorMask,
                               DrawingBuffer*);
   ~ScopedRGBEmulationColorMask();
 
  private:
-  gpu::gles2::GLES2Interface* m_contextGL;
+  Member<WebGLRenderingContextBase> m_context;
   GLboolean m_colorMask[4];
   const bool m_requiresEmulation;
 };
@@ -529,6 +526,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void forceLostContext(LostContextMode, AutoRecoveryMethod);
   void forceRestoreContext();
   void loseContextImpl(LostContextMode, AutoRecoveryMethod);
+  uint32_t numberOfContextLosses() const;
 
   // Utilities to restore GL state to match the rendering context's
   // saved state. Use these after contextGL()-based state changes that
@@ -552,16 +550,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void markLayerComposited() override;
   ImageData* paintRenderingResultsToImageData(SourceDrawingBuffer) override;
 
-  void removeSharedObject(WebGLSharedObject*);
-  void removeContextObject(WebGLContextObject*);
-
   unsigned maxVertexAttribs() const { return m_maxVertexAttribs; }
 
-  // Eagerly finalize WebGLRenderingContextBase in order for it
-  // to (first) be able to detach its WebGLContextObjects, before
-  // they're later swept and finalized.
-  EAGERLY_FINALIZE();
-  DECLARE_EAGER_FINALIZATION_OPERATOR_NEW();
   DECLARE_VIRTUAL_TRACE();
 
   DECLARE_VIRTUAL_TRACE_WRAPPERS();
@@ -584,13 +574,13 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   };
 
   PassRefPtr<Image> getImage(AccelerationHint, SnapshotReason) const override;
-  ImageData* toImageData(SnapshotReason) const override;
+  ImageData* toImageData(SnapshotReason) override;
   void setFilterQuality(SkFilterQuality) override;
   bool isWebGL2OrHigher() { return version() >= 2; }
 
   void getHTMLOrOffscreenCanvas(HTMLCanvasElementOrOffscreenCanvas&) const;
 
-  void commit(ScriptState*, ExceptionState&);
+  ScriptPromise commit(ScriptState*, ExceptionState&);
 
  protected:
   friend class EXTDisjointTimerQuery;
@@ -615,6 +605,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   friend class ScopedFramebufferRestorer;
   // To allow V8WebGL[2]RenderingContext to call visitChildDOMWrappers.
   friend class V8WebGLRenderingContext;
+  friend class ScopedUnpackParametersResetRestore;
 
   WebGLRenderingContextBase(HTMLCanvasElement*,
                             std::unique_ptr<WebGraphicsContext3DProvider>,
@@ -646,10 +637,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void DrawingBufferClientRestoreRenderbufferBinding() override;
   void DrawingBufferClientRestoreFramebufferBinding() override;
   void DrawingBufferClientRestorePixelUnpackBufferBinding() override;
-
-  void addSharedObject(WebGLSharedObject*);
-  void addContextObject(WebGLContextObject*);
-  void detachAndRemoveAllObjects();
 
   virtual void destroyContext();
   void markContextChanged(ContentChangeType);
@@ -694,7 +681,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   RefPtr<DrawingBuffer> m_drawingBuffer;
   DrawingBuffer* drawingBuffer() const;
 
-  RefPtr<WebGLContextGroup> m_contextGroup;
+  TraceWrapperMember<WebGLContextGroup> m_contextGroup;
 
   bool m_isHidden;
   LostContextMode m_contextLostMode;
@@ -709,7 +696,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   Timer<WebGLRenderingContextBase> m_restoreTimer;
 
   bool m_markedCanvasDirty;
-  HeapHashSet<WeakMember<WebGLContextObject>> m_contextObjects;
 
   // List of bound VBO's. Used to maintain info about sizes for ARRAY_BUFFER and
   // stored values for ELEMENT_ARRAY_BUFFER
@@ -806,7 +792,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     DraftExtension = 0x01,
   };
 
-  class ExtensionTracker : public GarbageCollected<ExtensionTracker> {
+  class ExtensionTracker : public GarbageCollected<ExtensionTracker>,
+                           public TraceWrapperBase {
    public:
     ExtensionTracker(ExtensionFlags flags, const char* const* prefixes)
         : m_draft(flags & DraftExtension), m_prefixes(prefixes) {}
@@ -872,17 +859,23 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
       ExtensionTracker::trace(visitor);
     }
 
+    DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() {
+      visitor->traceWrappers(m_extension);
+    }
+
    private:
     TypedExtensionTracker(Member<T>& extensionField,
                           ExtensionFlags flags,
                           const char* const* prefixes)
-        : ExtensionTracker(flags, prefixes), m_extensionField(extensionField) {}
+        : ExtensionTracker(flags, prefixes),
+          m_extensionField(extensionField),
+          m_extension(this, nullptr) {}
 
     GC_PLUGIN_IGNORE("http://crbug.com/519953")
     Member<T>& m_extensionField;
     // ExtensionTracker holds it's own reference to the extension to ensure
     // that it is not deleted before this object's destructor is called
-    Member<T> m_extension;
+    TraceWrapperMember<T> m_extension;
   };
 
   bool m_extensionEnabled[WebGLExtensionNameCount];
@@ -892,7 +885,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void registerExtension(Member<T>& extensionPtr,
                          ExtensionFlags flags = ApprovedExtension,
                          const char* const* prefixes = nullptr) {
-    m_extensions.append(TraceWrapperMember<ExtensionTracker>(
+    m_extensions.push_back(TraceWrapperMember<ExtensionTracker>(
         this, TypedExtensionTracker<T>::create(extensionPtr, flags, prefixes)));
   }
 
@@ -986,17 +979,17 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     CopyTexImage,
     CompressedTexImage
   };
+
+  // This must stay in sync with WebMediaPlayer::TexImageFunctionID.
   enum TexImageFunctionID {
     TexImage2D,
     TexSubImage2D,
     TexImage3D,
     TexSubImage3D
   };
-  enum TexImageByGPUType {
-    TexImage2DByGPU,
-    TexSubImage2DByGPU,
-    TexSubImage3DByGPU
-  };
+
+  static SnapshotReason functionIDToSnapshotReason(TexImageFunctionID);
+
   enum TexImageDimension { Tex2D, Tex3D };
   void texImage2DBase(GLenum target,
                       GLint level,
@@ -1107,7 +1100,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
 
   // Copy from the source directly to the texture via the gpu, without a
   // read-back to system memory.  Source could be canvas or imageBitmap.
-  void texImageByGPU(TexImageByGPUType,
+  void texImageByGPU(TexImageFunctionID,
                      WebGLTexture*,
                      GLenum target,
                      GLint level,
@@ -1364,42 +1357,42 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   // Helper function to validate input parameters for uniform functions.
   bool validateUniformParameters(const char* functionName,
                                  const WebGLUniformLocation*,
-                                 DOMFloat32Array*,
-                                 GLsizei mod);
-  bool validateUniformParameters(const char* functionName,
-                                 const WebGLUniformLocation*,
-                                 DOMInt32Array*,
-                                 GLsizei mod);
-  bool validateUniformParameters(const char* functionName,
-                                 const WebGLUniformLocation*,
                                  void*,
                                  GLsizei,
-                                 GLsizei mod);
+                                 GLsizei mod,
+                                 GLuint srcOffset,
+                                 GLuint srcLength);
   bool validateUniformMatrixParameters(const char* functionName,
                                        const WebGLUniformLocation*,
                                        GLboolean transpose,
                                        DOMFloat32Array*,
-                                       GLsizei mod);
+                                       GLsizei mod,
+                                       GLuint srcOffset,
+                                       GLuint srcLength);
   bool validateUniformMatrixParameters(const char* functionName,
                                        const WebGLUniformLocation*,
                                        GLboolean transpose,
                                        void*,
                                        GLsizei,
-                                       GLsizei mod);
+                                       GLsizei mod,
+                                       GLuint srcOffset,
+                                       GLuint srcLength);
 
   template <typename WTFTypedArray>
   bool validateUniformParameters(
       const char* functionName,
       const WebGLUniformLocation* location,
       const TypedFlexibleArrayBufferView<WTFTypedArray>& v,
-      GLsizei requiredMinSize) {
+      GLsizei requiredMinSize,
+      GLuint srcOffset,
+      GLuint srcLength) {
     if (!v.dataMaybeOnStack()) {
       synthesizeGLError(GL_INVALID_VALUE, functionName, "no array");
       return false;
     }
-    return validateUniformMatrixParameters(functionName, location, false,
-                                           v.dataMaybeOnStack(), v.length(),
-                                           requiredMinSize);
+    return validateUniformMatrixParameters(
+        functionName, location, false, v.dataMaybeOnStack(), v.length(),
+        requiredMinSize, srcOffset, srcLength);
   }
 
   // Helper function to validate the target for bufferData and
@@ -1525,13 +1518,16 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   static void deactivateContext(WebGLRenderingContextBase*);
   static void addToEvictedList(WebGLRenderingContextBase*);
   static void removeFromEvictedList(WebGLRenderingContextBase*);
-  static void willDestroyContext(WebGLRenderingContextBase*);
+  static void restoreEvictedContext(WebGLRenderingContextBase*);
   static void forciblyLoseOldestContext(const String& reason);
   // Return the least recently used context's position in the active context
   // vector.  If the vector is empty, return the maximum allowed active context
   // number.
   static WebGLRenderingContextBase* oldestContext();
   static WebGLRenderingContextBase* oldestEvictedContext();
+
+  friend class ScopedRGBEmulationColorMask;
+  unsigned m_activeScopedRGBEmulationColorMasks;
 
   ImageBitmap* transferToImageBitmapBase(ScriptState*);
 
@@ -1648,7 +1644,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                 ScriptState*,
                                 const CanvasContextCreationAttributes&,
                                 unsigned);
-  void texImageCanvasByGPU(HTMLCanvasElement*,
+  void texImageCanvasByGPU(TexImageFunctionID,
+                           HTMLCanvasElement*,
                            GLuint,
                            GLenum,
                            GLenum,
@@ -1658,6 +1655,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                            const IntRect& sourceSubRectangle);
   void texImageBitmapByGPU(ImageBitmap*, GLuint, GLenum, GLenum, GLint, bool);
 
+  sk_sp<SkImage> makeImageSnapshot(SkImageInfo&);
   const unsigned m_version;
 
   bool isPaintable() const final { return drawingBuffer(); }

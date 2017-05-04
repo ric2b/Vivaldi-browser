@@ -68,8 +68,8 @@ class SVGTransformContext : public TransformRecorder {
           auto& paintController = context.getPaintController();
           PaintChunkProperties properties(
               paintController.currentPaintChunkProperties());
-          properties.transform =
-              objectProperties->svgLocalToBorderBoxTransform();
+          properties.propertyTreeState.setTransform(
+              objectProperties->svgLocalToBorderBoxTransform());
           m_transformPropertyScope.emplace(paintController, object, properties);
         }
       } else {
@@ -83,7 +83,8 @@ class SVGTransformContext : public TransformRecorder {
           auto& paintController = context.getPaintController();
           PaintChunkProperties properties(
               paintController.currentPaintChunkProperties());
-          properties.transform = objectProperties->transform();
+          properties.propertyTreeState.setTransform(
+              objectProperties->transform());
           m_transformPropertyScope.emplace(paintController, object, properties);
         }
       }
@@ -103,10 +104,6 @@ class SVGPaintContext {
         m_paintInfo(paintInfo),
         m_filter(nullptr),
         m_masker(nullptr)
-#if ENABLE(ASSERT)
-        ,
-        m_applyClipMaskAndFilterIfNecessaryCalled(false)
-#endif
   {
   }
 
@@ -134,6 +131,7 @@ class SVGPaintContext {
 
  private:
   void applyCompositingIfNecessary();
+  void applyPaintPropertyState();
   void applyClipIfNecessary();
 
   // Return true if no masking is necessary or if the mask is successfully
@@ -154,8 +152,9 @@ class SVGPaintContext {
   std::unique_ptr<CompositingRecorder> m_compositingRecorder;
   Optional<ClipPathClipper> m_clipPathClipper;
   std::unique_ptr<SVGFilterRecordingContext> m_filterRecordingContext;
-#if ENABLE(ASSERT)
-  bool m_applyClipMaskAndFilterIfNecessaryCalled;
+  Optional<ScopedPaintChunkProperties> m_scopedPaintChunkProperties;
+#if DCHECK_IS_ON()
+  bool m_applyClipMaskAndFilterIfNecessaryCalled = false;
 #endif
 };
 

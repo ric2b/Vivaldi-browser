@@ -5,7 +5,10 @@
 #include "base/command_line.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
+#include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/history/history_test_utils.h"
 #include "chrome/browser/prerender/prerender_handle.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
@@ -18,16 +21,17 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "content/public/common/content_switches.h"
+#include "content/public/browser/render_process_host.h"
+#include "content/public/common/result_codes.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/base/escape.h"
+#include "net/base/load_flags.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 
-using prerender::test_utils::CreateCountingInterceptorOnIO;
 using prerender::test_utils::DestructionWaiter;
 using prerender::test_utils::RequestCounter;
 using prerender::test_utils::TestPrerender;
@@ -48,6 +52,7 @@ const char kPrefetchResponseHeaderCSP[] =
     "prerender/prefetch_response_csp.html";
 const char kPrefetchScript[] = "prerender/prefetch.js";
 const char kPrefetchScript2[] = "prerender/prefetch2.js";
+const char kServiceWorkerLoader[] = "prerender/service_worker.html";
 const char kPrefetchSubresourceRedirectPage[] =
     "prerender/prefetch_subresource_redirect.html";
 
@@ -56,10 +61,10 @@ class NoStatePrefetchBrowserTest
  public:
   NoStatePrefetchBrowserTest() {}
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    PrerenderInProcessBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitchASCII(
-        switches::kPrerenderMode, switches::kPrerenderModeSwitchValuePrefetch);
+  void SetUpOnMainThread() override {
+    test_utils::PrerenderInProcessBrowserTest::SetUpOnMainThread();
+    PrerenderManager::SetMode(
+        PrerenderManager::PRERENDER_MODE_NOSTATE_PREFETCH);
   }
 
   // Set up a request counter for |path|, which is also the location of the data
@@ -80,8 +85,8 @@ class NoStatePrefetchBrowserTest
         base::FilePath(), base::FilePath::FromUTF8Unsafe(path_str));
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&CreateCountingInterceptorOnIO, url, url_file,
-                   counter->AsWeakPtr()));
+        base::Bind(&prerender::test_utils::CreateCountingInterceptorOnIO, url,
+                   url_file, counter->AsWeakPtr()));
   }
 
  protected:
@@ -127,6 +132,53 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrefetchSimple) {
 
   // Verify that the page load did not happen.
   test_prerender->WaitForLoads(0);
+}
+
+// Check that the LOAD_PREFETCH flag is set.
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrefetchLoadFlag) {
+  RequestCounter main_counter;
+  RequestCounter script_counter;
+  auto verify_prefetch_only = base::Bind([](net::URLRequest* request) {
+    EXPECT_TRUE(request->load_flags() & net::LOAD_PREFETCH);
+  });
+
+  prerender::test_utils::InterceptRequestAndCount(
+      src_server()->GetURL(MakeAbsolute(kPrefetchPage)), &main_counter,
+      verify_prefetch_only);
+  prerender::test_utils::InterceptRequestAndCount(
+      src_server()->GetURL(MakeAbsolute(kPrefetchScript)), &script_counter,
+      verify_prefetch_only);
+
+  std::unique_ptr<TestPrerender> test_prerender =
+      PrefetchFromFile(kPrefetchPage, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
+  main_counter.WaitForCount(1);
+  script_counter.WaitForCount(1);
+
+  // Verify that the page load did not happen.
+  test_prerender->WaitForLoads(0);
+}
+
+// Check that a prefetch followed by a load produces the approriate
+// histograms. Note that other histogram testing is done in
+// browser/page_load_metrics, in particular, testing the combinations of
+// Warm/Cold and Cacheable/NoCacheable.
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrefetchHistograms) {
+  PrefetchFromFile(kPrefetchPage, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
+  histogram_tester().ExpectTotalCount(
+      "Prerender.websame_PrefetchTTFCP.Warm.Cacheable.Visible", 0);
+
+  test_utils::FirstContentfulPaintManagerWaiter* fcp_waiter =
+      test_utils::FirstContentfulPaintManagerWaiter::Create(
+          GetPrerenderManager());
+  ui_test_utils::NavigateToURL(
+      current_browser(), src_server()->GetURL(MakeAbsolute(kPrefetchPage)));
+  fcp_waiter->Wait();
+
+  histogram_tester().ExpectTotalCount(
+      "Prerender.websame_PrefetchTTFCP.Warm.Cacheable.Visible", 1);
+  histogram_tester().ExpectTotalCount(
+      "Prerender.websame_NoStatePrefetchResponseTypes", 2);
+  histogram_tester().ExpectTotalCount("Prerender.websame_PrefetchAge", 1);
 }
 
 // Checks the prefetch of an img tag.
@@ -200,10 +252,9 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, MetaTagCSP) {
   first_script.WaitForCount(0);
 }
 
-// Checks that the second prefetch request succeeds. TODO(pasko): This test
-// waits for Prerender Stop before starting the second request, add a test that
-// starts the second request from the UI thread immediately without waiting.
-IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrefetchSimultaneous) {
+// Checks that the second prefetch request succeeds. This test waits for
+// Prerender Stop before starting the second request.
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrefetchMultipleRequest) {
   RequestCounter first_main_counter;
   CountRequestFor(kPrefetchPage, &first_main_counter);
   RequestCounter second_main_counter;
@@ -213,14 +264,41 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrefetchSimultaneous) {
   RequestCounter second_script_counter;
   CountRequestFor(kPrefetchScript2, &second_script_counter);
 
-  // The first prerender is marked as canceled. When the second prerender
-  // starts, it sees that the first has been abandoned (because the earlier
-  // prerender is detached immediately and so dies quickly).
   PrefetchFromFile(kPrefetchPage, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
   PrefetchFromFile(kPrefetchPage2, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
   first_main_counter.WaitForCount(1);
   second_main_counter.WaitForCount(1);
   first_script_counter.WaitForCount(1);
+  second_script_counter.WaitForCount(1);
+}
+
+// Checks that a second prefetch request, started before the first stops,
+// succeeds.
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrefetchSimultaneous) {
+  RequestCounter second_main_counter;
+  CountRequestFor(kPrefetchPage2, &second_main_counter);
+  RequestCounter second_script_counter;
+  CountRequestFor(kPrefetchScript2, &second_script_counter);
+
+  GURL first_url = src_server()->GetURL(MakeAbsolute(kPrefetchPage));
+  base::FilePath first_path = ui_test_utils::GetTestFilePath(
+      base::FilePath(), base::FilePath().AppendASCII(kPrefetchPage));
+
+  content::BrowserThread::PostTask(
+      content::BrowserThread::IO, FROM_HERE,
+      base::Bind(&test_utils::CreateHangingFirstRequestInterceptorOnIO,
+                 first_url, first_path, base::Closure()));
+
+  // Start the first prefetch directly instead of via PrefetchFromFile for the
+  // first prefetch to avoid the wait on prerender stop.
+  GURL first_loader_url = ServeLoaderURL(
+      kPrefetchLoaderPath, "REPLACE_WITH_PREFETCH_URL", first_url, "");
+  std::vector<FinalStatus> first_expected_status_queue(1,
+                                                       FINAL_STATUS_CANCELLED);
+  NavigateWithPrerenders(first_loader_url, first_expected_status_queue);
+
+  PrefetchFromFile(kPrefetchPage2, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
+  second_main_counter.WaitForCount(1);
   second_script_counter.WaitForCount(1);
 }
 
@@ -239,6 +317,28 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, Prefetch301Redirect) {
           net::EscapeQueryParamValue(MakeAbsolute(kPrefetchPage), false),
       FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
   script_counter.WaitForCount(1);
+}
+
+// Checks that the load flags are set correctly for all resources in a 301
+// redirect chain.
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, Prefetch301LoadFlags) {
+  std::string redirect_path =
+      "/server-redirect/?" +
+      net::EscapeQueryParamValue(MakeAbsolute(kPrefetchPage), false);
+  GURL redirect_url = src_server()->GetURL(redirect_path);
+  GURL page_url = src_server()->GetURL(MakeAbsolute(kPrefetchPage));
+  RequestCounter redirect_counter;
+  auto verify_prefetch_only = base::Bind([](net::URLRequest* request) {
+    EXPECT_TRUE(request->load_flags() & net::LOAD_PREFETCH);
+  });
+  prerender::test_utils::InterceptRequestAndCount(
+      redirect_url, &redirect_counter, verify_prefetch_only);
+  RequestCounter page_counter;
+  prerender::test_utils::InterceptRequestAndCount(page_url, &page_counter,
+                                                  verify_prefetch_only);
+  PrefetchFromFile(redirect_path, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
+  redirect_counter.WaitForCount(1);
+  page_counter.WaitForCount(1);
 }
 
 // Checks that a subresource 301 redirect is followed.
@@ -372,23 +472,135 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, Jpeg) {
   counter.WaitForCount(1);
 }
 
-// Checks that nothing is prefetched from malware sites.
-// TODO(mattcary): disabled as prefetch process teardown is racey with prerender
-// contents destruction, can fix when prefetch prerenderers are destroyed
-// deterministically.
+// If the main resource is unsafe, the whole prefetch is cancelled.
 IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
-                       DISABLED_PrerenderSafeBrowsingTopLevel) {
+                       PrerenderSafeBrowsingTopLevel) {
   GURL url = src_server()->GetURL(MakeAbsolute(kPrefetchPage));
   GetFakeSafeBrowsingDatabaseManager()->SetThreatTypeForUrl(
       url, safe_browsing::SB_THREAT_TYPE_URL_MALWARE);
-  // Prefetch resources are blocked, but the prerender is not killed in any
-  // special way.
-  // TODO(mattcary): since the prerender will count itself as loaded even if the
-  // fetch of the main resource fails, the test doesn't actually confirm what we
-  // want it to confirm. This may be fixed by planned changes to the prerender
-  // lifecycle.
+
+  RequestCounter main_counter;
+  CountRequestFor(kPrefetchPage, &main_counter);
+  RequestCounter script_counter;
+  CountRequestFor(kPrefetchScript, &script_counter);
+
   std::unique_ptr<TestPrerender> prerender =
       PrefetchFromFile(kPrefetchPage, FINAL_STATUS_SAFE_BROWSING);
+
+  main_counter.WaitForCount(0);
+  script_counter.WaitForCount(0);
+
+  // Verify that the page load did not happen.
+  prerender->WaitForLoads(0);
+}
+
+// If a subresource is unsafe, the corresponding request is cancelled.
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
+                       PrerenderSafeBrowsingSubresource) {
+  GURL url = src_server()->GetURL(MakeAbsolute(kPrefetchScript));
+  GetFakeSafeBrowsingDatabaseManager()->SetThreatTypeForUrl(
+      url, safe_browsing::SB_THREAT_TYPE_URL_MALWARE);
+
+  RequestCounter main_counter;
+  CountRequestFor(kPrefetchPage, &main_counter);
+  RequestCounter script_counter;
+  CountRequestFor(kPrefetchScript, &script_counter);
+
+  std::unique_ptr<TestPrerender> prerender =
+      PrefetchFromFile(kPrefetchPage, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
+
+  main_counter.WaitForCount(1);
+  script_counter.WaitForCount(0);
+}
+
+// Checks that prefetching a page does not add it to browsing history.
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, HistoryUntouchedByPrefetch) {
+  // Initialize.
+  Profile* profile = current_browser()->profile();
+  ASSERT_TRUE(profile);
+  ui_test_utils::WaitForHistoryToLoad(HistoryServiceFactory::GetForProfile(
+      profile, ServiceAccessType::EXPLICIT_ACCESS));
+
+  // Prefetch a page.
+  GURL prefetched_url = src_server()->GetURL(MakeAbsolute(kPrefetchPage));
+  PrefetchFromFile(kPrefetchPage, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
+  WaitForHistoryBackendToRun(profile);
+
+  // Navigate to another page.
+  GURL navigated_url = src_server()->GetURL(MakeAbsolute(kPrefetchPage2));
+  ui_test_utils::NavigateToURL(current_browser(), navigated_url);
+  WaitForHistoryBackendToRun(profile);
+
+  // Check that the URL that was explicitly navigated to is already in history.
+  ui_test_utils::HistoryEnumerator enumerator(profile);
+  std::vector<GURL>& urls = enumerator.urls();
+  EXPECT_TRUE(std::find(urls.begin(), urls.end(), navigated_url) != urls.end());
+
+  // Check that the URL that was prefetched is not in history.
+  EXPECT_TRUE(std::find(urls.begin(), urls.end(), prefetched_url) ==
+              urls.end());
+
+  // The loader URL is the remaining entry.
+  EXPECT_EQ(2U, urls.size());
+}
+
+// Checks that prefetch requests have net::IDLE priority.
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, IssuesIdlePriorityRequests) {
+  GURL script_url = src_server()->GetURL(MakeAbsolute(kPrefetchScript));
+  RequestCounter script_counter;
+  prerender::test_utils::InterceptRequestAndCount(
+      script_url, &script_counter, base::Bind([](net::URLRequest* request) {
+#if defined(OS_ANDROID)
+        // On Android requests from prerenders do not get downgraded priority.
+        // See: https://crbug.com/652746.
+        constexpr net::RequestPriority kExpectedPriority = net::HIGHEST;
+#else
+        constexpr net::RequestPriority kExpectedPriority = net::IDLE;
+#endif
+        EXPECT_EQ(kExpectedPriority, request->priority());
+      }));
+  PrefetchFromFile(kPrefetchPage, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
+  script_counter.WaitForCount(1);
+}
+
+// Checks that a registered ServiceWorker (SW) that is not currently running
+// will intercepts a prefetch request.
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, ServiceWorkerIntercept) {
+  // Register and launch a SW.
+  base::string16 expected_title = base::ASCIIToUTF16("SW READY");
+  content::TitleWatcher title_watcher(GetActiveWebContents(), expected_title);
+  ui_test_utils::NavigateToURL(
+      current_browser(),
+      src_server()->GetURL(MakeAbsolute(kServiceWorkerLoader)));
+  EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
+
+  // Stop any SW, killing the render process in order to test that the
+  // lightweight renderer created for NoState prefetch does not interfere with
+  // SW startup.
+  int host_count = 0;
+  for (content::RenderProcessHost::iterator iter(
+           content::RenderProcessHost::AllHostsIterator());
+       !iter.IsAtEnd(); iter.Advance()) {
+    ++host_count;
+    iter.GetCurrentValue()->Shutdown(content::RESULT_CODE_KILLED,
+                                     true /* wait */);
+  }
+  // There should be at most one render_process_host, that created for the SW.
+  EXPECT_EQ(1, host_count);
+
+  // Open a new tab to replace the one closed with all the RenderProcessHosts.
+  ui_test_utils::NavigateToURLWithDisposition(
+      current_browser(), GURL(url::kAboutBlankURL),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+
+  // The SW intercepts kPrefetchPage and replaces it with a body that contains
+  // an <img> tage for kPrefetchPng. This verifies that the SW ran correctly by
+  // observing the fetch of the image.
+  RequestCounter image_counter;
+  CountRequestFor(kPrefetchPng, &image_counter);
+  PrefetchFromFile(kPrefetchPage, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
+  image_counter.WaitForCount(1);
 }
 
 }  // namespace prerender

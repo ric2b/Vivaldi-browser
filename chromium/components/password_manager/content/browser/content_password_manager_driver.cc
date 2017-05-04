@@ -43,6 +43,19 @@ ContentPasswordManagerDriver::ContentPasswordManagerDriver(
   // for this WebContents.
   VisiblePasswordObserver::CreateForWebContents(
       content::WebContents::FromRenderFrameHost(render_frame_host_));
+
+  // For some frames |this| may be instantiated before log manager creation, so
+  // here we can not send logging state to renderer process for them. For such
+  // cases, after the log manager got ready later,
+  // ContentPasswordManagerDriverFactory::RequestSendLoggingAvailability() will
+  // call ContentPasswordManagerDriver::SendLoggingAvailability() on |this| to
+  // do it actually.
+  if (client_->GetLogManager()) {
+    // Do not call the virtual method SendLoggingAvailability from a constructor
+    // here, inline its steps instead.
+    GetPasswordAutofillAgent()->SetLoggingState(
+        client_->GetLogManager()->IsLoggingActive());
+  }
 }
 
 ContentPasswordManagerDriver::~ContentPasswordManagerDriver() {
@@ -273,8 +286,10 @@ void ContentPasswordManagerDriver::ShowPasswordSuggestions(
       key, text_direction, typed_username, options, bounds);
 }
 
-void ContentPasswordManagerDriver::PasswordAutofillAgentConstructed() {
-  SendLoggingAvailability();
+void ContentPasswordManagerDriver::ShowNotSecureWarning(
+    base::i18n::TextDirection text_direction,
+    const gfx::RectF& bounds) {
+  password_autofill_manager_.OnShowNotSecureWarning(text_direction, bounds);
 }
 
 void ContentPasswordManagerDriver::RecordSavePasswordProgress(
@@ -308,8 +323,8 @@ ContentPasswordManagerDriver::GetAutofillAgent() {
 const autofill::mojom::PasswordAutofillAgentPtr&
 ContentPasswordManagerDriver::GetPasswordAutofillAgent() {
   if (!password_autofill_agent_) {
-    autofill::mojom::PasswordAutofillAgentRequest request =
-        mojo::GetProxy(&password_autofill_agent_);
+    autofill::mojom::PasswordAutofillAgentRequest request(
+        &password_autofill_agent_);
     // Some test codes may have no initialized remote interfaces.
     if (render_frame_host_->GetRemoteInterfaces()) {
       render_frame_host_->GetRemoteInterfaces()->GetInterface(
@@ -324,7 +339,7 @@ const autofill::mojom::PasswordGenerationAgentPtr&
 ContentPasswordManagerDriver::GetPasswordGenerationAgent() {
   if (!password_gen_agent_) {
     render_frame_host_->GetRemoteInterfaces()->GetInterface(
-        mojo::GetProxy(&password_gen_agent_));
+        mojo::MakeRequest(&password_gen_agent_));
   }
 
   return password_gen_agent_;

@@ -53,6 +53,7 @@ class DownloadResourceThrottle
       const GURL& url,
       const std::string& request_method,
       const content::DownloadInformation& info);
+  ~DownloadResourceThrottle() override;
 
   // content::ResourceThrottle implementation:
   void WillStartRequest(bool* defer) override;
@@ -64,8 +65,6 @@ class DownloadResourceThrottle
   void ContinueDownload(const content::DownloadItemAction&);
 
  private:
-  ~DownloadResourceThrottle() override;
-
   void WillDownload(bool* defer);
 
   // Set to true when we are querying the DownloadRequestLimiter.

@@ -117,9 +117,9 @@ void alphaBlendNonPremultiplied(blink::ImageFrame& src,
 namespace blink {
 
 WEBPImageDecoder::WEBPImageDecoder(AlphaOption alphaOption,
-                                   ColorSpaceOption colorOptions,
+                                   const ColorBehavior& colorBehavior,
                                    size_t maxDecodedBytes)
-    : ImageDecoder(alphaOption, colorOptions, maxDecodedBytes),
+    : ImageDecoder(alphaOption, colorBehavior, maxDecodedBytes),
       m_decoder(0),
       m_formatFlags(0),
       m_frameBackgroundHasAlpha(false),
@@ -237,80 +237,32 @@ bool WEBPImageDecoder::updateDemuxer() {
   return true;
 }
 
-bool WEBPImageDecoder::initFrameBuffer(size_t frameIndex) {
+void WEBPImageDecoder::onInitFrameBuffer(size_t frameIndex) {
+  // ImageDecoder::initFrameBuffer does a DCHECK if |frameIndex| exists.
   ImageFrame& buffer = m_frameBufferCache[frameIndex];
-  if (buffer.getStatus() != ImageFrame::FrameEmpty)  // Already initialized.
-    return true;
 
   const size_t requiredPreviousFrameIndex = buffer.requiredPreviousFrameIndex();
   if (requiredPreviousFrameIndex == kNotFound) {
-    // This frame doesn't rely on any previous data.
-    if (!buffer.setSizeAndColorSpace(size().width(), size().height(),
-                                     colorSpace()))
-      return setFailed();
     m_frameBackgroundHasAlpha =
         !buffer.originalFrameRect().contains(IntRect(IntPoint(), size()));
   } else {
-    ImageFrame& prevBuffer = m_frameBufferCache[requiredPreviousFrameIndex];
-    ASSERT(prevBuffer.getStatus() == ImageFrame::FrameComplete);
-
-    // Preserve the last frame as the starting state for this frame. We try
-    // to reuse |prevBuffer| as starting state to avoid copying.
-    // For BlendAtopPreviousFrame, both frames are required, so we can't
-    // take over its image data using takeBitmapDataIfWritable.
-    if ((buffer.getAlphaBlendSource() == ImageFrame::BlendAtopPreviousFrame ||
-         !buffer.takeBitmapDataIfWritable(&prevBuffer)) &&
-        !buffer.copyBitmapData(prevBuffer))
-      return setFailed();
-
-    if (prevBuffer.getDisposalMethod() == ImageFrame::DisposeOverwriteBgcolor) {
-      // We want to clear the previous frame to transparent, without
-      // affecting pixels in the image outside of the frame.
-      const IntRect& prevRect = prevBuffer.originalFrameRect();
-      ASSERT(!prevRect.contains(IntRect(IntPoint(), size())));
-      buffer.zeroFillFrameRect(prevRect);
-    }
-
+    const ImageFrame& prevBuffer =
+        m_frameBufferCache[requiredPreviousFrameIndex];
     m_frameBackgroundHasAlpha =
         prevBuffer.hasAlpha() ||
         (prevBuffer.getDisposalMethod() == ImageFrame::DisposeOverwriteBgcolor);
   }
 
-  buffer.setStatus(ImageFrame::FramePartial);
   // The buffer is transparent outside the decoded area while the image is
   // loading. The correct alpha value for the frame will be set when it is fully
   // decoded.
   buffer.setHasAlpha(true);
-  return true;
 }
 
-size_t WEBPImageDecoder::clearCacheExceptFrame(size_t clearExceptFrame) {
-  // Don't clear if there are no frames, or only one.
-  if (m_frameBufferCache.size() <= 1)
-    return 0;
-
-  // If |clearExceptFrame| has status FrameComplete, we only preserve that
-  // frame.  Otherwise, we *also* preserve the most recent previous frame with
-  // status FrameComplete whose data will be required to decode
-  // |clearExceptFrame|, either in initFrameBuffer() or ApplyPostProcessing().
-  // This frame index is stored in |clearExceptFrame2|.  All other frames can
-  // be cleared.
-  size_t clearExceptFrame2 = kNotFound;
-  if (clearExceptFrame < m_frameBufferCache.size() &&
-      m_frameBufferCache[clearExceptFrame].getStatus() !=
-          ImageFrame::FrameComplete) {
-    clearExceptFrame2 =
-        m_frameBufferCache[clearExceptFrame].requiredPreviousFrameIndex();
-  }
-
-  while ((clearExceptFrame2 < m_frameBufferCache.size()) &&
-         (m_frameBufferCache[clearExceptFrame2].getStatus() !=
-          ImageFrame::FrameComplete)) {
-    clearExceptFrame2 =
-        m_frameBufferCache[clearExceptFrame2].requiredPreviousFrameIndex();
-  }
-
-  return clearCacheExceptTwoFrames(clearExceptFrame, clearExceptFrame2);
+bool WEBPImageDecoder::canReusePreviousFrameBuffer(size_t frameIndex) const {
+  DCHECK(frameIndex < m_frameBufferCache.size());
+  return m_frameBufferCache[frameIndex].getAlphaBlendSource() !=
+         ImageFrame::BlendAtopPreviousFrame;
 }
 
 void WEBPImageDecoder::clearFrameBuffer(size_t frameIndex) {
@@ -334,7 +286,7 @@ void WEBPImageDecoder::readColorProfile() {
       reinterpret_cast<const char*>(chunkIterator.chunk.bytes);
   size_t profileSize = chunkIterator.chunk.size;
 
-  setColorProfileAndComputeTransform(profileData, profileSize);
+  setEmbeddedColorProfile(profileData, profileSize);
 
   WebPDemuxReleaseChunkIterator(&chunkIterator);
 }
@@ -503,7 +455,7 @@ bool WEBPImageDecoder::decodeSingleFrame(const uint8_t* dataBytes,
 
   if (buffer.getStatus() == ImageFrame::FrameEmpty) {
     if (!buffer.setSizeAndColorSpace(size().width(), size().height(),
-                                     colorSpace()))
+                                     colorSpaceForSkImages()))
       return setFailed();
     buffer.setStatus(ImageFrame::FramePartial);
     // The buffer is transparent outside the decoded area while the image is

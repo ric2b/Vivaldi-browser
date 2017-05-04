@@ -15,13 +15,31 @@
 
 namespace net {
 
-class AddressList;
 class IPEndPoint;
 class NetLogWithSource;
 class SSLInfo;
 
 class NET_EXPORT_PRIVATE StreamSocket : public Socket {
  public:
+  // This is used in DumpMemoryStats() to track the estimate of memory usage of
+  // a socket.
+  struct NET_EXPORT_PRIVATE SocketMemoryStats {
+   public:
+    SocketMemoryStats();
+    ~SocketMemoryStats();
+    // Estimated total memory usage of this socket in bytes.
+    size_t total_size;
+    // Size of all buffers used by this socket in bytes.
+    size_t buffer_size;
+    // Number of certs used by this socket.
+    size_t cert_count;
+    // Total size of certs used by this socket in bytes.
+    size_t serialized_cert_size;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(SocketMemoryStats);
+  };
+
   ~StreamSocket() override {}
 
   // Called to establish a connection.  Returns OK if the connection could be
@@ -84,11 +102,11 @@ class NET_EXPORT_PRIVATE StreamSocket : public Socket {
   // Enables use of TCP FastOpen for the underlying transport socket.
   virtual void EnableTCPFastOpenIfSupported() {}
 
-  // Returns true if NPN was negotiated during the connection of this socket.
-  virtual bool WasNpnNegotiated() const = 0;
+  // Returns true if ALPN was negotiated during the connection of this socket.
+  virtual bool WasAlpnNegotiated() const = 0;
 
-  // Returns the protocol negotiated via NPN for this socket, or
-  // kProtoUnknown will be returned if NPN is not applicable.
+  // Returns the protocol negotiated via ALPN for this socket, or
+  // kProtoUnknown will be returned if ALPN is not applicable.
   virtual NextProto GetNegotiatedProtocol() const = 0;
 
   // Gets the SSL connection information of the socket.  Returns false if
@@ -110,6 +128,11 @@ class NET_EXPORT_PRIVATE StreamSocket : public Socket {
   // 0 if the socket does not implement the function. The count is reset when
   // Disconnect() is called.
   virtual int64_t GetTotalReceivedBytes() const = 0;
+
+  // Dumps memory allocation stats into |stats|. |stats| can be assumed as being
+  // default initialized upon entry. Implementations should override fields in
+  // |stats|. Default implementation does nothing.
+  virtual void DumpMemoryStats(SocketMemoryStats* stats) const {}
 
  protected:
   // The following class is only used to gather statistics about the history of

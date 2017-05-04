@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/ui_features.h"
 
 TEST(GlobalKeyboardShortcuts, ShortcutsToWindowCommand) {
   // Test that an invalid shortcut translates into an invalid command id.
@@ -18,15 +19,11 @@ TEST(GlobalKeyboardShortcuts, ShortcutsToWindowCommand) {
       -1, CommandForWindowKeyboardShortcut(false, false, false, false, 0, 0));
 
   // Check that all known keyboard shortcuts return valid results.
-  size_t num_shortcuts = 0;
-  const KeyboardShortcutData *it =
-      GetWindowKeyboardShortcutTable(&num_shortcuts);
-  ASSERT_GT(num_shortcuts, 0U);
-  for (size_t i = 0; i < num_shortcuts; ++i, ++it) {
+  for (const auto& shortcut : GetWindowKeyboardShortcutTable()) {
     int cmd_num = CommandForWindowKeyboardShortcut(
-        it->command_key, it->shift_key, it->cntrl_key, it->opt_key,
-        it->vkey_code, it->key_char);
-    EXPECT_EQ(cmd_num, it->chrome_command);
+        shortcut.command_key, shortcut.shift_key, shortcut.cntrl_key,
+        shortcut.opt_key, shortcut.vkey_code, shortcut.key_char);
+    EXPECT_EQ(cmd_num, shortcut.chrome_command);
   }
 
   // Test that cmd-left and backspace are not window-level commands (else they
@@ -48,10 +45,17 @@ TEST(GlobalKeyboardShortcuts, ShortcutsToWindowCommand) {
   EXPECT_EQ(IDC_SELECT_PREVIOUS_TAB, CommandForWindowKeyboardShortcut(
       true, false, false, true, kVK_ANSI_8, '{'));
 
+  // On MacViews the IDC_SELECT_TAB_0 accelerator is mapped via the
+  // accelerator_table.cc, which supports mapping using only using keycodes.
+  // The only reason CommandForWindowKeyboardShortcut is necessary on MacViews
+  // is to handle the Cmd-'{' and Cmd-'}', and it doesn't need to handle
+  // IDC_SELECT_TAB_0, so this test could be omitted.
+#if !BUILDFLAG(MAC_VIEWS_BROWSER)
   // Test that switching tabs triggers off keycodes and not characters (visible
   // with the Italian keyboard layout).
   EXPECT_EQ(IDC_SELECT_TAB_0, CommandForWindowKeyboardShortcut(
       true, false, false, false, kVK_ANSI_1, '&'));
+#endif  // !BUILDFLAG(MAC_VIEWS_BROWSER)
 }
 
 TEST(GlobalKeyboardShortcuts, KeypadNumberKeysMatch) {
@@ -110,15 +114,11 @@ TEST(GlobalKeyboardShortcuts, ShortcutsToDelayedWindowCommand) {
                                               0, 0));
 
   // Check that all known keyboard shortcuts return valid results.
-  size_t num_shortcuts = 0;
-  const KeyboardShortcutData *it =
-      GetDelayedWindowKeyboardShortcutTable(&num_shortcuts);
-  ASSERT_GT(num_shortcuts, 0U);
-  for (size_t i = 0; i < num_shortcuts; ++i, ++it) {
+  for (const auto& shortcut : GetDelayedWindowKeyboardShortcutTable()) {
     int cmd_num = CommandForDelayedWindowKeyboardShortcut(
-        it->command_key, it->shift_key, it->cntrl_key, it->opt_key,
-        it->vkey_code, it->key_char);
-    EXPECT_EQ(cmd_num, it->chrome_command);
+        shortcut.command_key, shortcut.shift_key, shortcut.cntrl_key,
+        shortcut.opt_key, shortcut.vkey_code, shortcut.key_char);
+    EXPECT_EQ(cmd_num, shortcut.chrome_command);
   }
 }
 
@@ -129,15 +129,11 @@ TEST(GlobalKeyboardShortcuts, ShortcutsToBrowserCommand) {
                                             0, 0));
 
   // Check that all known keyboard shortcuts return valid results.
-  size_t num_shortcuts = 0;
-  const KeyboardShortcutData *it =
-      GetBrowserKeyboardShortcutTable(&num_shortcuts);
-  ASSERT_GT(num_shortcuts, 0U);
-  for (size_t i = 0; i < num_shortcuts; ++i, ++it) {
+  for (const auto& shortcut : GetBrowserKeyboardShortcutTable()) {
     int cmd_num = CommandForBrowserKeyboardShortcut(
-        it->command_key, it->shift_key, it->cntrl_key, it->opt_key,
-        it->vkey_code, it->key_char);
-    EXPECT_EQ(cmd_num, it->chrome_command);
+        shortcut.command_key, shortcut.shift_key, shortcut.cntrl_key,
+        shortcut.opt_key, shortcut.vkey_code, shortcut.key_char);
+    EXPECT_EQ(cmd_num, shortcut.chrome_command);
   }
 }
 

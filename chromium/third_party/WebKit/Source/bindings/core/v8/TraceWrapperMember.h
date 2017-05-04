@@ -28,7 +28,15 @@ class TraceWrapperMember : public Member<T> {
 #if DCHECK_IS_ON()
     DCHECK(!m_parent || HeapObjectHeader::fromPayload(m_parent)->checkHeader());
 #endif
-    ScriptWrappableVisitor::writeBarrier(m_parent, raw);
+    // We don't require a write barrier here as TraceWrapperMember is used for
+    // the following scenarios:
+    // - Initial initialization: The write barrier will not fire as the parent
+    //   is initially white.
+    // - Wrapping when inserting into a container: The write barrier will fire
+    //   upon establishing the move into the container.
+    // - Assignment to a field: The regular assignment operator will fire the
+    //   write barrier.
+    // Note that support for black allocation would require a barrier here.
   }
   TraceWrapperMember(WTF::HashTableDeletedValueType x)
       : Member<T>(x), m_parent(nullptr) {}
@@ -39,8 +47,7 @@ class TraceWrapperMember : public Member<T> {
    */
   TraceWrapperMember(const TraceWrapperMember& other) { *this = other; }
 
-  template <typename U>
-  TraceWrapperMember& operator=(const TraceWrapperMember<U>& other) {
+  TraceWrapperMember& operator=(const TraceWrapperMember& other) {
     DCHECK(other.m_parent);
     m_parent = other.m_parent;
     Member<T>::operator=(other);
@@ -48,16 +55,14 @@ class TraceWrapperMember : public Member<T> {
     return *this;
   }
 
-  template <typename U>
-  TraceWrapperMember& operator=(const Member<U>& other) {
+  TraceWrapperMember& operator=(const Member<T>& other) {
     DCHECK(!traceWrapperMemberIsNotInitialized());
     Member<T>::operator=(other);
     ScriptWrappableVisitor::writeBarrier(m_parent, other);
     return *this;
   }
 
-  template <typename U>
-  TraceWrapperMember& operator=(U* other) {
+  TraceWrapperMember& operator=(T* other) {
     DCHECK(!traceWrapperMemberIsNotInitialized());
     Member<T>::operator=(other);
     ScriptWrappableVisitor::writeBarrier(m_parent, other);
@@ -94,17 +99,17 @@ void swap(HeapVector<TraceWrapperMember<T>>& a,
   HeapVector<TraceWrapperMember<T>> temp;
   temp.reserveCapacity(a.size());
   for (auto item : a) {
-    temp.append(TraceWrapperMember<T>(parentForB, item.get()));
+    temp.push_back(TraceWrapperMember<T>(parentForB, item.get()));
   }
   a.clear();
   a.reserveCapacity(b.size());
   for (auto item : b) {
-    a.append(TraceWrapperMember<T>(parentForA, item.get()));
+    a.push_back(TraceWrapperMember<T>(parentForA, item.get()));
   }
   b.clear();
   b.reserveCapacity(temp.size());
   for (auto item : temp) {
-    b.append(TraceWrapperMember<T>(parentForB, item.get()));
+    b.push_back(TraceWrapperMember<T>(parentForB, item.get()));
   }
 }
 
@@ -121,17 +126,17 @@ void swap(HeapVector<TraceWrapperMember<T>>& a,
   HeapVector<TraceWrapperMember<T>> temp;
   temp.reserveCapacity(a.size());
   for (auto item : a) {
-    temp.append(TraceWrapperMember<T>(nullptr, item.get()));
+    temp.push_back(TraceWrapperMember<T>(item.parent(), item.get()));
   }
   a.clear();
   a.reserveCapacity(b.size());
   for (auto item : b) {
-    a.append(TraceWrapperMember<T>(parentForA, item.get()));
+    a.push_back(TraceWrapperMember<T>(parentForA, item.get()));
   }
   b.clear();
   b.reserveCapacity(temp.size());
   for (auto item : temp) {
-    b.append(item.get());
+    b.push_back(item.get());
   }
 }
 

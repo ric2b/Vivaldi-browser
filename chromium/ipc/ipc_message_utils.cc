@@ -43,7 +43,7 @@ namespace IPC {
 
 namespace {
 
-const int kMaxRecursionDepth = 100;
+const int kMaxRecursionDepth = 200;
 
 template<typename CharType>
 void LogBytes(const std::vector<CharType>& data, std::string* out) {
@@ -78,24 +78,24 @@ void GetValueSize(base::PickleSizer* sizer,
                   const base::Value* value,
                   int recursion) {
   if (recursion > kMaxRecursionDepth) {
-    LOG(WARNING) << "Max recursion depth hit in GetValueSize.";
+    LOG(ERROR) << "Max recursion depth hit in GetValueSize.";
     return;
   }
 
   sizer->AddInt();
   switch (value->GetType()) {
-    case base::Value::TYPE_NULL:
+    case base::Value::Type::NONE:
       break;
-    case base::Value::TYPE_BOOLEAN:
+    case base::Value::Type::BOOLEAN:
       sizer->AddBool();
       break;
-    case base::Value::TYPE_INTEGER:
+    case base::Value::Type::INTEGER:
       sizer->AddInt();
       break;
-    case base::Value::TYPE_DOUBLE:
+    case base::Value::Type::DOUBLE:
       sizer->AddDouble();
       break;
-    case base::Value::TYPE_STRING: {
+    case base::Value::Type::STRING: {
       const base::StringValue* result;
       value->GetAsString(&result);
       if (value->GetAsString(&result)) {
@@ -109,13 +109,13 @@ void GetValueSize(base::PickleSizer* sizer,
       }
       break;
     }
-    case base::Value::TYPE_BINARY: {
+    case base::Value::Type::BINARY: {
       const base::BinaryValue* binary =
           static_cast<const base::BinaryValue*>(value);
       sizer->AddData(static_cast<int>(binary->GetSize()));
       break;
     }
-    case base::Value::TYPE_DICTIONARY: {
+    case base::Value::Type::DICTIONARY: {
       sizer->AddInt();
       const base::DictionaryValue* dict =
           static_cast<const base::DictionaryValue*>(value);
@@ -126,7 +126,7 @@ void GetValueSize(base::PickleSizer* sizer,
       }
       break;
     }
-    case base::Value::TYPE_LIST: {
+    case base::Value::Type::LIST: {
       sizer->AddInt();
       const base::ListValue* list = static_cast<const base::ListValue*>(value);
       for (const auto& entry : *list) {
@@ -142,50 +142,50 @@ void GetValueSize(base::PickleSizer* sizer,
 void WriteValue(base::Pickle* m, const base::Value* value, int recursion) {
   bool result;
   if (recursion > kMaxRecursionDepth) {
-    LOG(WARNING) << "Max recursion depth hit in WriteValue.";
+    LOG(ERROR) << "Max recursion depth hit in WriteValue.";
     return;
   }
 
-  m->WriteInt(value->GetType());
+  m->WriteInt(static_cast<int>(value->GetType()));
 
   switch (value->GetType()) {
-    case base::Value::TYPE_NULL:
+    case base::Value::Type::NONE:
     break;
-    case base::Value::TYPE_BOOLEAN: {
+    case base::Value::Type::BOOLEAN: {
       bool val;
       result = value->GetAsBoolean(&val);
       DCHECK(result);
       WriteParam(m, val);
       break;
     }
-    case base::Value::TYPE_INTEGER: {
+    case base::Value::Type::INTEGER: {
       int val;
       result = value->GetAsInteger(&val);
       DCHECK(result);
       WriteParam(m, val);
       break;
     }
-    case base::Value::TYPE_DOUBLE: {
+    case base::Value::Type::DOUBLE: {
       double val;
       result = value->GetAsDouble(&val);
       DCHECK(result);
       WriteParam(m, val);
       break;
     }
-    case base::Value::TYPE_STRING: {
+    case base::Value::Type::STRING: {
       std::string val;
       result = value->GetAsString(&val);
       DCHECK(result);
       WriteParam(m, val);
       break;
     }
-    case base::Value::TYPE_BINARY: {
+    case base::Value::Type::BINARY: {
       const base::BinaryValue* binary =
           static_cast<const base::BinaryValue*>(value);
       m->WriteData(binary->GetBuffer(), static_cast<int>(binary->GetSize()));
       break;
     }
-    case base::Value::TYPE_DICTIONARY: {
+    case base::Value::Type::DICTIONARY: {
       const base::DictionaryValue* dict =
           static_cast<const base::DictionaryValue*>(value);
 
@@ -198,7 +198,7 @@ void WriteValue(base::Pickle* m, const base::Value* value, int recursion) {
       }
       break;
     }
-    case base::Value::TYPE_LIST: {
+    case base::Value::Type::LIST: {
       const base::ListValue* list = static_cast<const base::ListValue*>(value);
       WriteParam(m, static_cast<int>(list->GetSize()));
       for (const auto& entry : *list) {
@@ -256,7 +256,7 @@ bool ReadValue(const base::Pickle* m,
                base::Value** value,
                int recursion) {
   if (recursion > kMaxRecursionDepth) {
-    LOG(WARNING) << "Max recursion depth hit in ReadValue.";
+    LOG(ERROR) << "Max recursion depth hit in ReadValue.";
     return false;
   }
 
@@ -264,39 +264,39 @@ bool ReadValue(const base::Pickle* m,
   if (!ReadParam(m, iter, &type))
     return false;
 
-  switch (type) {
-    case base::Value::TYPE_NULL:
+  switch (static_cast<base::Value::Type>(type)) {
+    case base::Value::Type::NONE:
       *value = base::Value::CreateNullValue().release();
     break;
-    case base::Value::TYPE_BOOLEAN: {
+    case base::Value::Type::BOOLEAN: {
       bool val;
       if (!ReadParam(m, iter, &val))
         return false;
       *value = new base::FundamentalValue(val);
       break;
     }
-    case base::Value::TYPE_INTEGER: {
+    case base::Value::Type::INTEGER: {
       int val;
       if (!ReadParam(m, iter, &val))
         return false;
       *value = new base::FundamentalValue(val);
       break;
     }
-    case base::Value::TYPE_DOUBLE: {
+    case base::Value::Type::DOUBLE: {
       double val;
       if (!ReadParam(m, iter, &val))
         return false;
       *value = new base::FundamentalValue(val);
       break;
     }
-    case base::Value::TYPE_STRING: {
+    case base::Value::Type::STRING: {
       std::string val;
       if (!ReadParam(m, iter, &val))
         return false;
       *value = new base::StringValue(val);
       break;
     }
-    case base::Value::TYPE_BINARY: {
+    case base::Value::Type::BINARY: {
       const char* data;
       int length;
       if (!iter->ReadData(&data, &length))
@@ -306,14 +306,14 @@ bool ReadValue(const base::Pickle* m,
       *value = val.release();
       break;
     }
-    case base::Value::TYPE_DICTIONARY: {
+    case base::Value::Type::DICTIONARY: {
       std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue());
       if (!ReadDictionaryValue(m, iter, val.get(), recursion))
         return false;
       *value = val.release();
       break;
     }
-    case base::Value::TYPE_LIST: {
+    case base::Value::Type::LIST: {
       std::unique_ptr<base::ListValue> val(new base::ListValue());
       if (!ReadListValue(m, iter, val.get(), recursion))
         return false;
@@ -603,7 +603,8 @@ bool ParamTraits<base::DictionaryValue>::Read(const base::Pickle* m,
                                               base::PickleIterator* iter,
                                               param_type* r) {
   int type;
-  if (!ReadParam(m, iter, &type) || type != base::Value::TYPE_DICTIONARY)
+  if (!ReadParam(m, iter, &type) ||
+      type != static_cast<int>(base::Value::Type::DICTIONARY))
     return false;
 
   return ReadDictionaryValue(m, iter, r, 0);
@@ -659,8 +660,14 @@ bool ParamTraits<base::FileDescriptor>::Read(const base::Pickle* m,
   if (!m->ReadAttachment(iter, &attachment))
     return false;
 
+  if (static_cast<MessageAttachment*>(attachment.get())->GetType() !=
+      MessageAttachment::Type::PLATFORM_FILE) {
+    return false;
+  }
+
   *r = base::FileDescriptor(
-      static_cast<MessageAttachment*>(attachment.get())->TakePlatformFile(),
+      static_cast<internal::PlatformFileAttachment*>(attachment.get())
+          ->TakePlatformFile(),
       true);
   return true;
 }
@@ -813,7 +820,8 @@ bool ParamTraits<base::ListValue>::Read(const base::Pickle* m,
                                         base::PickleIterator* iter,
                                         param_type* r) {
   int type;
-  if (!ReadParam(m, iter, &type) || type != base::Value::TYPE_LIST)
+  if (!ReadParam(m, iter, &type) ||
+      type != static_cast<int>(base::Value::Type::LIST))
     return false;
 
   return ReadListValue(m, iter, r, 0);

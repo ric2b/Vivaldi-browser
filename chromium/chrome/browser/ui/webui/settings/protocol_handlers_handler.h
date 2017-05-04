@@ -44,21 +44,28 @@ class ProtocolHandlersHandler : public SettingsPageUIHandler,
                const content::NotificationDetails& details) override;
 
  private:
-  // Called to fetch the initial list of data to show.
-  void InitializeProtocolHandlerList(const base::ListValue* args);
+  // Called to fetch the state of the protocol handlers. If the full list of
+  // handlers is not needed, consider HandleObserveProtocolHandlersEnabledState
+  // instead.
+  void HandleObserveProtocolHandlers(const base::ListValue* args);
+
+  // Called to begin updates to the handlers enabled status. This is a subset
+  // (lighter alternative) of HandleObserveProtocolHandlers. There's no need to
+  // call this function if HandleObserveProtocolHandlers is called.
+  void HandleObserveProtocolHandlersEnabledState(const base::ListValue* args);
 
   // Notifies the JS side whether the handlers are enabled or not.
   void SendHandlersEnabledValue();
 
   // Called when the user toggles whether custom handlers are enabled.
-  void SetHandlersEnabled(const base::ListValue* args);
+  void HandleSetHandlersEnabled(const base::ListValue* args);
 
   // Called when the user sets a new default handler for a protocol.
-  void SetDefault(const base::ListValue* args);
+  void HandleSetDefault(const base::ListValue* args);
 
   // Called when the user clears the default handler for a protocol.
   // |args| is the string name of the protocol to clear.
-  void ClearDefault(const base::ListValue* args);
+  void HandleClearDefault(const base::ListValue* args);
 
   // Parses a ProtocolHandler out of the arguments passed back from the view.
   // |args| is a list of [protocol, url, title].
@@ -77,11 +84,11 @@ class ProtocolHandlersHandler : public SettingsPageUIHandler,
 
   // Remove a handler.
   // |args| is a list of [protocol, url, title].
-  void RemoveHandler(const base::ListValue* args);
+  void HandleRemoveHandler(const base::ListValue* args);
 
   // Remove an ignored handler.
   // |args| is a list of [protocol, url, title].
-  void RemoveIgnoredHandler(const base::ListValue* args);
+  void HandleRemoveIgnoredHandler(const base::ListValue* args);
 
   ProtocolHandlerRegistry* GetProtocolHandlerRegistry();
 

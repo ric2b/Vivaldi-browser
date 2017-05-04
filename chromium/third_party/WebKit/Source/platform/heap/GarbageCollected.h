@@ -14,9 +14,8 @@ namespace blink {
 
 template <typename T>
 class GarbageCollected;
-class HeapObjectHeader;
 class InlinedGlobalMarkingVisitor;
-class WrapperVisitor;
+class TraceWrapperBase;
 
 // GC_PLUGIN_IGNORE is used to make the plugin ignore a particular class or
 // field when checking for proper usage.  When using GC_PLUGIN_IGNORE
@@ -76,9 +75,7 @@ class PLATFORM_EXPORT GarbageCollectedMixin {
   virtual void trace(Visitor*) {}
   virtual void adjustAndMark(InlinedGlobalMarkingVisitor) const = 0;
   virtual void trace(InlinedGlobalMarkingVisitor);
-  virtual void adjustAndMarkWrapper(const WrapperVisitor*) const = 0;
   virtual bool isHeapObjectAlive() const = 0;
-  virtual HeapObjectHeader* adjustAndGetHeapObjectHeader() const = 0;
 };
 
 #define DEFINE_GARBAGE_COLLECTED_MIXIN_METHODS(VISITOR, TYPE)                 \
@@ -99,29 +96,6 @@ class PLATFORM_EXPORT GarbageCollectedMixin {
                   &blink::TraceTrait<TYPE>::trace);                           \
   }                                                                           \
                                                                               \
- private:
-
-#define DEFINE_GARBAGE_COLLECTED_MIXIN_WRAPPER_METHODS(TYPE)                   \
- public:                                                                       \
-  void adjustAndMarkWrapper(const WrapperVisitor* visitor) const override {    \
-    typedef WTF::IsSubclassOfTemplate<typename std::remove_const<TYPE>::type,  \
-                                      blink::GarbageCollected>                 \
-        IsSubclassOfGarbageCollected;                                          \
-    static_assert(                                                             \
-        IsSubclassOfGarbageCollected::value,                                   \
-        "only garbage collected objects can have garbage collected mixins");   \
-    TraceTrait<TYPE>::markWrapper(visitor, static_cast<const TYPE*>(this));    \
-  }                                                                            \
-  HeapObjectHeader* adjustAndGetHeapObjectHeader() const override {            \
-    typedef WTF::IsSubclassOfTemplate<typename std::remove_const<TYPE>::type,  \
-                                      blink::GarbageCollected>                 \
-        IsSubclassOfGarbageCollected;                                          \
-    static_assert(                                                             \
-        IsSubclassOfGarbageCollected::value,                                   \
-        "only garbage collected objects can have garbage collected mixins");   \
-    return TraceTrait<TYPE>::heapObjectHeader(static_cast<const TYPE*>(this)); \
-  }                                                                            \
-                                                                               \
  private:
 
 // A C++ object's vptr will be initialized to its leftmost base's vtable after
@@ -183,7 +157,6 @@ class PLATFORM_EXPORT GarbageCollectedMixin {
   DEFINE_GARBAGE_COLLECTED_MIXIN_METHODS(blink::Visitor*, TYPE)              \
   DEFINE_GARBAGE_COLLECTED_MIXIN_METHODS(blink::InlinedGlobalMarkingVisitor, \
                                          TYPE)                               \
-  DEFINE_GARBAGE_COLLECTED_MIXIN_WRAPPER_METHODS(TYPE)                       \
   DEFINE_GARBAGE_COLLECTED_MIXIN_CONSTRUCTOR_MARKER(TYPE)                    \
  public:                                                                     \
   bool isHeapObjectAlive() const override {                                  \
@@ -269,8 +242,6 @@ class NeedsAdjustAndMark<T, true> {
  public:
   static const bool value = false;
 };
-template <typename T>
-const bool NeedsAdjustAndMark<T, true>::value;
 
 template <typename T>
 class NeedsAdjustAndMark<T, false> {
@@ -280,8 +251,27 @@ class NeedsAdjustAndMark<T, false> {
   static const bool value =
       IsGarbageCollectedMixin<typename std::remove_const<T>::type>::value;
 };
+
+template <typename T,
+          bool = std::is_base_of<TraceWrapperBase,
+                                 typename std::remove_const<T>::type>::value>
+class CanTraceWrappers;
+
 template <typename T>
-const bool NeedsAdjustAndMark<T, false>::value;
+class CanTraceWrappers<T, true> {
+  static_assert(sizeof(T), "T must be fully defined");
+
+ public:
+  static const bool value = true;
+};
+
+template <typename T>
+class CanTraceWrappers<T, false> {
+  static_assert(sizeof(T), "T must be fully defined");
+
+ public:
+  static const bool value = false;
+};
 
 // TODO(sof): migrate to wtf/TypeTraits.h
 template <typename T>

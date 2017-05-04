@@ -69,6 +69,7 @@ enum class ChromePromptValue {
 void MaybeExecuteSRTFromBlockingPool(
     const base::FilePath& downloaded_path,
     bool metrics_enabled,
+    bool sber_enabled,
     ChromePromptValue prompt_value,
     const scoped_refptr<SingleThreadTaskRunner>& task_runner,
     const base::Closure& success_callback,
@@ -98,6 +99,9 @@ void MaybeExecuteSRTFromBlockingPool(
         srt_command_line.AppendSwitch(kUmaUserSwitch);
         srt_command_line.AppendSwitch(kEnableCrashReporting);
       }
+
+      if (sber_enabled)
+        srt_command_line.AppendSwitch(kExtendedSafeBrowsingEnabledSwitch);
 
       base::Process srt_process(
           base::LaunchProcess(srt_command_line, base::LaunchOptions()));
@@ -221,13 +225,14 @@ void SRTGlobalError::MaybeExecuteSRT() {
     return;
   }
   // At this point, this object owns itself, since ownership has been taken back
-  // from the global_error_service_ in the call to RemoveGlobalError. This means
-  // that it is safe to use base::Unretained here.
+  // from the global_error_service_ in the call to OnUserInteractionStarted.
+  // This means that it is safe to use base::Unretained here.
   BrowserThread::PostBlockingPoolTask(
       FROM_HERE,
       base::Bind(
           &MaybeExecuteSRTFromBlockingPool, downloaded_path_,
           ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled(),
+          SafeBrowsingExtendedReportingEnabled(),
           bubble_shown_from_menu_ ? ChromePromptValue::kShownFromMenu
                                   : ChromePromptValue::kPrompted,
           base::ThreadTaskRunnerHandle::Get(),
@@ -262,7 +267,7 @@ void SRTGlobalError::OnUserinteractionStarted(
   RecordSRTPromptHistogram(histogram_value);
   interacted_ = true;
   if (global_error_service_) {
-    global_error_service_->RemoveGlobalError(this);
+    global_error_service_->RemoveGlobalError(this).release();
     global_error_service_ = nullptr;
   }
 }

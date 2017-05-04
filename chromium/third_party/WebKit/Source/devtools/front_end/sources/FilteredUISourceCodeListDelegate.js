@@ -7,13 +7,12 @@
 /**
  * @unrestricted
  */
-Sources.FilteredUISourceCodeListDelegate = class extends UI.FilteredListWidget.Delegate {
+Sources.FilteredUISourceCodeListDelegate = class extends QuickOpen.FilteredListWidget.Delegate {
   /**
    * @param {!Map.<!Workspace.UISourceCode, number>=} defaultScores
-   * @param {!Array<string>=} history
    */
-  constructor(defaultScores, history) {
-    super(history || []);
+  constructor(defaultScores) {
+    super();
 
     this._defaultScores = defaultScores;
     this._scorer = new Sources.FilePathScoreFunction('');
@@ -52,7 +51,7 @@ Sources.FilteredUISourceCodeListDelegate = class extends UI.FilteredListWidget.D
    */
   _filterUISourceCode(uiSourceCode) {
     var binding = Persistence.persistence.binding(uiSourceCode);
-    return !binding || binding.network === uiSourceCode;
+    return !binding || binding.fileSystem === uiSourceCode;
   }
 
   /**
@@ -123,7 +122,7 @@ Sources.FilteredUISourceCodeListDelegate = class extends UI.FilteredListWidget.D
     var uiSourceCode = this._uiSourceCodes[itemIndex];
     var fullDisplayName = uiSourceCode.fullDisplayName();
     var indexes = [];
-    var score = new Sources.FilePathScoreFunction(query).score(fullDisplayName, indexes);
+    new Sources.FilePathScoreFunction(query).score(fullDisplayName, indexes);
     var fileNameIndex = fullDisplayName.lastIndexOf('/');
 
     titleElement.textContent = uiSourceCode.displayName() + (this._queryLineNumberAndColumnNumber || '');
@@ -184,9 +183,9 @@ Sources.FilteredUISourceCodeListDelegate = class extends UI.FilteredListWidget.D
    * @return {string}
    */
   rewriteQuery(query) {
-    if (!query)
-      return query;
-    query = query.trim();
+    query = query ? query.trim() : '';
+    if (!query || query === ':')
+      return '';
     var lineNumberMatch = query.match(/^([^:]+)((?::[^:]*){0,2})$/);
     this._queryLineNumberAndColumnNumber = lineNumberMatch ? lineNumberMatch[2] : '';
     return lineNumberMatch ? lineNumberMatch[1] : query;
@@ -201,6 +200,14 @@ Sources.FilteredUISourceCodeListDelegate = class extends UI.FilteredListWidget.D
       return;
     this._uiSourceCodes.push(uiSourceCode);
     this.refresh();
+  }
+
+  /**
+   * @override
+   * @return {string}
+   */
+  notFoundText() {
+    return Common.UIString('No files found');
   }
 
   /**

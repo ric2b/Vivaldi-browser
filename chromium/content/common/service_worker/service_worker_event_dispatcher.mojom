@@ -1,0 +1,61 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "components/payments/payment_app.mojom";
+import "content/common/url_loader.mojom";
+import "mojo/common/string16.mojom";
+import "mojo/common/time.mojom";
+import "third_party/WebKit/public/platform/modules/background_sync/background_sync.mojom";
+import "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom";
+import "url/mojo/origin.mojom";
+
+[Native]
+struct PushEventPayload;
+
+[Native]
+struct ServiceWorkerFetchRequest;
+
+[Native]
+struct ExtendableMessageEventSource;
+
+struct FetchEventPreloadHandle {
+  URLLoader url_loader;
+  URLLoaderClient& url_loader_client_request;
+};
+
+struct ExtendableMessageEvent {
+  mojo.common.mojom.String16 message;
+  url.mojom.Origin source_origin;
+  array<int32> message_ports;
+  array<int32> new_routing_ids;
+  ExtendableMessageEventSource source;
+};
+
+// Renderer-side interface bound to ServiceWorkerContextClient for dispatching
+// events.
+interface ServiceWorkerEventDispatcher {
+  // |fetch_event_id| is used internally when sending the response back to the
+  // browser process.
+  DispatchFetchEvent(int32 fetch_event_id, ServiceWorkerFetchRequest request,
+                     FetchEventPreloadHandle? preload_handle)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+  DispatchPushEvent(PushEventPayload payload)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+  // Arguments are passed to the event handler as parameters of SyncEvent.
+  // Ref: https://wicg.github.io/BackgroundSync/spec/#sync-event
+  DispatchSyncEvent(string tag,
+                    blink.mojom.BackgroundSyncEventLastChance last_chance)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+  DispatchPaymentRequestEvent(payments.mojom.PaymentAppRequestData data)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+  DispatchExtendableMessageEvent(ExtendableMessageEvent event)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+};

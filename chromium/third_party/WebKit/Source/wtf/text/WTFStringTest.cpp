@@ -148,12 +148,12 @@ TEST(StringTest, ReplaceWithLiteral) {
 
 TEST(StringTest, ComparisonOfSameStringVectors) {
   Vector<String> stringVector;
-  stringVector.append("one");
-  stringVector.append("two");
+  stringVector.push_back("one");
+  stringVector.push_back("two");
 
   Vector<String> sameStringVector;
-  sameStringVector.append("one");
-  sameStringVector.append("two");
+  sameStringVector.push_back("one");
+  sameStringVector.push_back("two");
 
   EXPECT_EQ(stringVector, sameStringVector);
 }
@@ -339,7 +339,7 @@ TEST(StringTest, ToLowerLocale) {
 TEST(StringTest, StartsWithIgnoringUnicodeCase) {
   // [U+017F U+212A i a] starts with "sk".
   EXPECT_TRUE(String::fromUTF8("\xC5\xBF\xE2\x84\xAAia")
-                  .startsWith("sk", TextCaseInsensitive));
+                  .startsWith("sk", TextCaseUnicodeInsensitive));
 }
 
 TEST(StringTest, StartsWithIgnoringASCIICase) {

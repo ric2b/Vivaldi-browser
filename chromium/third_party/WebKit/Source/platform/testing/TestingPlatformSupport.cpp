@@ -71,7 +71,7 @@ class TestingPlatformSupport::TestingInterfaceProvider
                     mojo::ScopedMessagePipeHandle handle) override {
     if (std::string(name) == mojom::blink::MimeRegistry::Name_) {
       mojo::MakeStrongBinding(
-          makeUnique<MockMimeRegistry>(),
+          WTF::makeUnique<MockMimeRegistry>(),
           mojo::MakeRequest<mojom::blink::MimeRegistry>(std::move(handle)));
       return;
     }
@@ -138,12 +138,11 @@ TestingPlatformSupport::TestingPlatformSupport(const Config& config)
     : m_config(config),
       m_oldPlatform(Platform::current()),
       m_interfaceProvider(new TestingInterfaceProvider) {
-  ASSERT(m_oldPlatform);
-  Platform::setCurrentPlatformForTesting(this);
+  DCHECK(m_oldPlatform);
 }
 
 TestingPlatformSupport::~TestingPlatformSupport() {
-  Platform::setCurrentPlatformForTesting(m_oldPlatform);
+  DCHECK_EQ(this, Platform::current());
 }
 
 WebString TestingPlatformSupport::defaultLocale() {
@@ -315,22 +314,23 @@ ScopedUnittestsEnvironmentSetup::ScopedUnittestsEnvironmentSetup(int argc,
   base::test::InitializeICUForTesting();
 
   m_discardableMemoryAllocator =
-      wrapUnique(new base::TestDiscardableMemoryAllocator);
+      WTF::wrapUnique(new base::TestDiscardableMemoryAllocator);
   base::DiscardableMemoryAllocator::SetInstance(
       m_discardableMemoryAllocator.get());
   base::StatisticsRecorder::Initialize();
 
-  m_platform = wrapUnique(new DummyPlatform);
-  Platform::setCurrentPlatformForTesting(m_platform.get());
+  m_dummyPlatform = WTF::wrapUnique(new DummyPlatform);
+  Platform::setCurrentPlatformForTesting(m_dummyPlatform.get());
 
   WTF::Partitions::initialize(nullptr);
   WTF::setTimeFunctionsForTesting(dummyCurrentTime);
   WTF::initialize(nullptr);
 
-  m_compositorSupport = wrapUnique(new cc_blink::WebCompositorSupportImpl);
+  m_compositorSupport = WTF::wrapUnique(new cc_blink::WebCompositorSupportImpl);
   m_testingPlatformConfig.compositorSupport = m_compositorSupport.get();
   m_testingPlatformSupport =
-      makeUnique<TestingPlatformSupport>(m_testingPlatformConfig);
+      WTF::wrapUnique(new TestingPlatformSupport(m_testingPlatformConfig));
+  Platform::setCurrentPlatformForTesting(m_testingPlatformSupport.get());
 
   ProcessHeap::init();
   ThreadState::attachMainThread();

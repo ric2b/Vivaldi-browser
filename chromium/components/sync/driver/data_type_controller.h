@@ -20,7 +20,7 @@
 
 namespace syncer {
 
-class BackendDataTypeConfigurer;
+class ModelTypeConfigurer;
 class SyncError;
 class SyncMergeResult;
 
@@ -100,9 +100,10 @@ class DataTypeController : public base::SupportsWeakPtr<DataTypeController> {
 
   // Registers with sync backend if needed. This function is called by
   // DataTypeManager before downloading initial data. Non-blocking types need to
-  // pass activation context containing progress marker to sync backend before
-  // initial download starts.
-  virtual void RegisterWithBackend(BackendDataTypeConfigurer* configurer) = 0;
+  // pass activation context containing progress marker to sync backend and use
+  // |set_downloaded| to inform the manager whether their initial sync is done.
+  virtual void RegisterWithBackend(base::Callback<void(bool)> set_downloaded,
+                                   ModelTypeConfigurer* configurer) = 0;
 
   // Will start a potentially asynchronous operation to perform the
   // model association. Once the model association is done the callback will
@@ -113,11 +114,11 @@ class DataTypeController : public base::SupportsWeakPtr<DataTypeController> {
   // one of the implementation specific methods provided by the |configurer|.
   // This is called (on UI thread) after the data type configuration has
   // completed successfully.
-  virtual void ActivateDataType(BackendDataTypeConfigurer* configurer) = 0;
+  virtual void ActivateDataType(ModelTypeConfigurer* configurer) = 0;
 
   // Called by DataTypeManager to deactivate the controlled data type.
   // See comments for ModelAssociationManager::OnSingleDataTypeWillStop.
-  virtual void DeactivateDataType(BackendDataTypeConfigurer* configurer) = 0;
+  virtual void DeactivateDataType(ModelTypeConfigurer* configurer) = 0;
 
   // Synchronously stops the data type. If StartAssociating has already been
   // called but is not done yet it will be aborted. Similarly if LoadModels
@@ -156,16 +157,10 @@ class DataTypeController : public base::SupportsWeakPtr<DataTypeController> {
   virtual void GetStatusCounters(const StatusCountersCallback& callback) = 0;
 
  protected:
-  DataTypeController(ModelType type, const base::Closure& dump_stack);
-
-  // Create an error handler that reports back to this controller.
-  virtual std::unique_ptr<DataTypeErrorHandler> CreateErrorHandler() = 0;
+  explicit DataTypeController(ModelType type);
 
   // Allows subclasses to DCHECK that they're on the correct thread.
   bool CalledOnValidThread() const;
-
-  // Callback to dump and upload a stack trace when an error occurs.
-  base::Closure dump_stack_;
 
  private:
   // The type this object is responsible for controlling.

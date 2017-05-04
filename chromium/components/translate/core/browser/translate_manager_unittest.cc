@@ -5,13 +5,14 @@
 #include "components/translate/core/browser/translate_manager.h"
 
 #include "base/json/json_reader.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "components/infobars/core/infobar.h"
 #include "components/pref_registry/pref_registry_syncable.h"
-#include "components/pref_registry/testing_pref_service_syncable.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/translate/core/browser/mock_translate_driver.h"
 #include "components/translate/core/browser/translate_browser_metrics.h"
 #include "components/translate/core/browser/translate_client.h"
@@ -221,7 +222,7 @@ class TranslateManagerTest : public ::testing::Test {
     return translate_manager_->LanguageInULP(language);
   }
 
-  user_prefs::TestingPrefServiceSyncable prefs_;
+  sync_preferences::TestingPrefServiceSyncable prefs_;
 
   // TODO(groby): request TranslatePrefs from |mock_translate_client_| instead.
   TranslatePrefs translate_prefs_;
@@ -303,64 +304,6 @@ TEST_F(TranslateManagerTest, DontTranslateOffline) {
   histogram_tester.ExpectUniqueSample(
       kMetricName,
       translate::TranslateBrowserMetrics::INITIATION_STATUS_DISABLED_BY_PREFS,
-      1);
-}
-
-// The test measures that Translate is not triggered for a zh-TW page for a
-// zh-CN user.
-TEST_F(TranslateManagerTest,
-       DontTranslateZhTraditionalPageForZhSimplifiedLocale) {
-  TranslateManager::SetIgnoreMissingKeyForTesting(true);
-  translate_manager_.reset(new translate::TranslateManager(
-      &mock_translate_client_, kAcceptLanguages));
-
-  const char kMetricName[] = "Translate.InitiationStatus.v2";
-  base::HistogramTester histogram_tester;
-
-  const std::string locale = "zh-TW";
-  const std::string page_lang = "zh-CN";
-
-  network_notifier_.SimulateOnline();
-  manager_->set_application_locale(locale);
-  ON_CALL(mock_translate_client_, IsTranslatableURL(_))
-      .WillByDefault(Return(true));
-
-  EXPECT_EQ("zh-TW", translate_manager_->GetTargetLanguage(&translate_prefs_));
-  translate_manager_->GetLanguageState().LanguageDetermined(page_lang, true);
-  translate_manager_->InitiateTranslation(page_lang);
-
-  histogram_tester.ExpectUniqueSample(
-      kMetricName,
-      translate::TranslateBrowserMetrics::INITIATION_STATUS_SIMILAR_LANGUAGES,
-      1);
-}
-
-// The test measures that Translate is not triggered for a zh-CN page for a
-// zh-TW user.
-TEST_F(TranslateManagerTest,
-       DontTranslateZhSimplifiedPageForZhTraditionalLocale) {
-  TranslateManager::SetIgnoreMissingKeyForTesting(true);
-  translate_manager_.reset(new translate::TranslateManager(
-      &mock_translate_client_, kAcceptLanguages));
-
-  const char kMetricName[] = "Translate.InitiationStatus.v2";
-  base::HistogramTester histogram_tester;
-
-  const std::string locale = "zh-CN";
-  const std::string page_lang = "zh-TW";
-
-  network_notifier_.SimulateOnline();
-  manager_->set_application_locale(locale);
-  ON_CALL(mock_translate_client_, IsTranslatableURL(_))
-      .WillByDefault(Return(true));
-
-  EXPECT_EQ("zh-CN", translate_manager_->GetTargetLanguage(&translate_prefs_));
-  translate_manager_->GetLanguageState().LanguageDetermined(page_lang, true);
-  translate_manager_->InitiateTranslation(page_lang);
-
-  histogram_tester.ExpectUniqueSample(
-      kMetricName,
-      translate::TranslateBrowserMetrics::INITIATION_STATUS_SIMILAR_LANGUAGES,
       1);
 }
 

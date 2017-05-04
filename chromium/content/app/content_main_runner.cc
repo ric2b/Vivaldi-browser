@@ -67,6 +67,7 @@
 #include "content/utility/in_process_utility_thread.h"
 #include "ipc/ipc_descriptors.h"
 #include "media/base/media.h"
+#include "ppapi/features/features.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 
@@ -112,7 +113,7 @@
 
 namespace content {
 extern int GpuMain(const content::MainFunctionParams&);
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 #if !defined(OS_LINUX)
 extern int PluginMain(const content::MainFunctionParams&);
 #endif
@@ -143,13 +144,20 @@ void InitializeFieldTrialAndFeatureList(
 
   // Ensure any field trials in browser are reflected into the child
   // process.
+#if defined(OS_POSIX)
+  // On POSIX systems that use the zygote, we get the trials from a shared
+  // memory segment backed by an fd instead of the command line.
   base::FieldTrialList::CreateTrialsFromCommandLine(
-      command_line, switches::kFieldTrialHandle);
+      command_line, switches::kFieldTrialHandle, kFieldTrialDescriptor);
+#else
+  base::FieldTrialList::CreateTrialsFromCommandLine(
+      command_line, switches::kFieldTrialHandle, -1);
+#endif
 
   std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-  feature_list->InitializeFromCommandLine(
-      command_line.GetSwitchValueASCII(switches::kEnableFeatures),
-      command_line.GetSwitchValueASCII(switches::kDisableFeatures));
+  base::FieldTrialList::CreateFeaturesFromCommandLine(
+      command_line, switches::kEnableFeatures, switches::kDisableFeatures,
+      feature_list.get());
   base::FeatureList::SetInstance(std::move(feature_list));
 }
 
@@ -299,7 +307,7 @@ int RunZygote(const MainFunctionParams& main_function_params,
               ContentMainDelegate* delegate) {
   static const MainFunction kMainFunctions[] = {
     { switches::kRendererProcess,    RendererMain },
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
     { switches::kPpapiPluginProcess, PpapiPluginMain },
 #endif
     { switches::kUtilityProcess,     UtilityMain },
@@ -377,7 +385,7 @@ int RunNamedProcessTypeMain(
     { "",                            BrowserMain },
 #endif
 #if !defined(CHROME_MULTIPLE_DLL_BROWSER)
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
     { switches::kPpapiPluginProcess, PpapiPluginMain },
     { switches::kPpapiBrokerProcess, PpapiBrokerMain },
 #endif  // ENABLE_PLUGINS
@@ -445,6 +453,10 @@ class ContentMainRunnerImpl : public ContentMainRunner {
   int Initialize(const ContentMainParams& params) override {
     ui_task_ = params.ui_task;
 
+#if defined(USE_AURA)
+    env_mode_ = params.env_mode;
+#endif
+
     base::EnableTerminationOnOutOfMemory();
 #if defined(OS_WIN)
     base::win::RegisterInvalidParamHandler();
@@ -477,6 +489,10 @@ class ContentMainRunnerImpl : public ContentMainRunner {
     SetupSignalHandlers();
     g_fds->Set(kMojoIPCChannel,
                kMojoIPCChannel + base::GlobalDescriptors::kBaseDescriptor);
+
+    g_fds->Set(
+        kFieldTrialDescriptor,
+        kFieldTrialDescriptor + base::GlobalDescriptors::kBaseDescriptor);
 #endif  // !OS_ANDROID
 
 #if defined(OS_LINUX) || defined(OS_OPENBSD)
@@ -770,6 +786,9 @@ class ContentMainRunnerImpl : public ContentMainRunner {
 #elif defined(OS_MACOSX)
     main_params.autorelease_pool = autorelease_pool_.get();
 #endif
+#if defined(USE_AURA)
+    main_params.env_mode = env_mode_;
+#endif
 
     return RunNamedProcessTypeMain(process_type, main_params, delegate_);
   }
@@ -827,6 +846,10 @@ class ContentMainRunnerImpl : public ContentMainRunner {
 #endif
 
   base::Closure* ui_task_;
+
+#if defined(USE_AURA)
+  aura::Env::Mode env_mode_ = aura::Env::Mode::LOCAL;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(ContentMainRunnerImpl);
 };

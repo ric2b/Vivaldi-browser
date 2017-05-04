@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "device/base/device_client.h"
 #include "device/usb/mojo/device_impl.h"
 #include "device/usb/mojo/permission_provider.h"
@@ -18,8 +19,6 @@
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_device_filter.h"
 #include "device/usb/usb_service.h"
-#include "mojo/common/common_type_converters.h"
-#include "mojo/public/cpp/bindings/array.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
@@ -89,7 +88,7 @@ void DeviceManagerImpl::OnGetDevices(
     const std::vector<scoped_refptr<UsbDevice>>& devices) {
   std::vector<UsbDeviceFilter> filters;
   if (options && options->filters)
-    filters = mojo::ConvertTo<std::vector<UsbDeviceFilter>>(*options->filters);
+    filters.swap(*options->filters);
 
   std::vector<DeviceInfoPtr> device_infos;
   for (const auto& device : devices) {

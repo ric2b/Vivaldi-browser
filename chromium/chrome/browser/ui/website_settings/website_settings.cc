@@ -17,7 +17,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -42,7 +41,6 @@
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -51,7 +49,8 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
-#include "components/rappor/rappor_utils.h"
+#include "components/rappor/public/rappor_utils.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "components/ssl_errors/error_info.h"
 #include "components/strings/grit/components_chromium_strings.h"
 #include "components/strings/grit/components_strings.h"
@@ -107,7 +106,6 @@ ContentSettingsType kPermissionType[] = {
 #endif
     CONTENT_SETTINGS_TYPE_POPUPS,
     CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC,
-    CONTENT_SETTINGS_TYPE_KEYGEN,
     CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
     CONTENT_SETTINGS_TYPE_AUTOPLAY,
     CONTENT_SETTINGS_TYPE_MIDI_SYSEX,
@@ -174,17 +172,17 @@ void GetSiteIdentityByMaliciousContentStatus(
     case security_state::MALICIOUS_CONTENT_STATUS_MALWARE:
       *status = WebsiteSettings::SITE_IDENTITY_STATUS_MALWARE;
       *details =
-          l10n_util::GetStringUTF16(IDS_WEBSITE_SETTINGS_MALWARE_DETAILS);
+          l10n_util::GetStringUTF16(IDS_PAGEINFO_MALWARE_DETAILS);
       break;
     case security_state::MALICIOUS_CONTENT_STATUS_SOCIAL_ENGINEERING:
       *status = WebsiteSettings::SITE_IDENTITY_STATUS_SOCIAL_ENGINEERING;
       *details = l10n_util::GetStringUTF16(
-          IDS_WEBSITE_SETTINGS_SOCIAL_ENGINEERING_DETAILS);
+          IDS_PAGEINFO_SOCIAL_ENGINEERING_DETAILS);
       break;
     case security_state::MALICIOUS_CONTENT_STATUS_UNWANTED_SOFTWARE:
       *status = WebsiteSettings::SITE_IDENTITY_STATUS_UNWANTED_SOFTWARE;
       *details = l10n_util::GetStringUTF16(
-          IDS_WEBSITE_SETTINGS_UNWANTED_SOFTWARE_DETAILS);
+          IDS_PAGEINFO_UNWANTED_SOFTWARE_DETAILS);
       break;
   }
 }
@@ -381,7 +379,7 @@ void WebsiteSettings::Init(const GURL& url,
 #endif
 
   bool isChromeUINativeScheme = false;
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
   isChromeUINativeScheme = url.SchemeIs(chrome::kChromeUINativeScheme);
 #endif
 
@@ -493,31 +491,13 @@ void WebsiteSettings::Init(const GURL& url,
         site_identity_details_.assign(l10n_util::GetStringFUTF16(
             IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_VERIFIED, issuer_name));
       }
-      switch (security_info.sha1_deprecation_status) {
-        case security_state::DEPRECATED_SHA1_MINOR:
-          site_identity_status_ =
-              SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MINOR;
-          site_identity_details_ +=
-              UTF8ToUTF16("\n\n") +
-              l10n_util::GetStringUTF16(
-                  IDS_PAGE_INFO_SECURITY_TAB_DEPRECATED_SIGNATURE_ALGORITHM_MINOR);
-          break;
-        case security_state::DEPRECATED_SHA1_MAJOR:
-          site_identity_status_ =
-              SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR;
-          site_identity_details_ +=
-              UTF8ToUTF16("\n\n") +
-              l10n_util::GetStringUTF16(
-                  IDS_PAGE_INFO_SECURITY_TAB_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR);
-          break;
-        case security_state::NO_DEPRECATED_SHA1:
-          // Nothing to do.
-          break;
-        case security_state::UNKNOWN_SHA1:
-          // UNKNOWN_SHA1 should only appear when certificate info has not been
-          // initialized, in which case this if-statement should not be running
-          // because there is no other cert info.
-          NOTREACHED();
+      if (security_info.sha1_in_chain) {
+        site_identity_status_ =
+            SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM;
+        site_identity_details_ +=
+            UTF8ToUTF16("\n\n") +
+            l10n_util::GetStringUTF16(
+                IDS_PAGE_INFO_SECURITY_TAB_DEPRECATED_SIGNATURE_ALGORITHM);
       }
     }
   } else {
@@ -618,9 +598,6 @@ void WebsiteSettings::Init(const GURL& url,
         IDS_PAGE_INFO_SECURITY_TAB_SSL_VERSION,
         ASCIIToUTF16(ssl_version_str));
 
-    bool no_renegotiation =
-        (security_info.connection_status &
-         net::SSL_CONNECTION_NO_RENEGOTIATION_EXTENSION) != 0;
     const char *key_exchange, *cipher, *mac;
     bool is_aead, is_tls13;
     net::SSLCipherSuiteToStrings(&key_exchange, &cipher, &mac, &is_aead,
@@ -651,12 +628,6 @@ void WebsiteSettings::Init(const GURL& url,
             SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE) {
       site_connection_status_ = SITE_CONNECTION_STATUS_ENCRYPTED_ERROR;
     }
-
-    if (no_renegotiation) {
-      site_connection_details_ += ASCIIToUTF16("\n\n");
-      site_connection_details_ += l10n_util::GetStringUTF16(
-          IDS_PAGE_INFO_SECURITY_TAB_RENEGOTIATION_MESSAGE);
-    }
   }
 
   // Check if a user decision has been made to allow or deny certificates with
@@ -667,32 +638,6 @@ void WebsiteSettings::Init(const GURL& url,
   // Only show an SSL decision revoke button if the user has chosen to bypass
   // SSL host errors for this host in the past.
   show_ssl_decision_revoke_button_ = delegate->HasAllowException(url.host());
-
-  // By default select the Permissions Tab that displays all the site
-  // permissions. In case of a connection error or an issue with the certificate
-  // presented by the website, select the Connection Tab to draw the user's
-  // attention to the issue. If the site does not provide a certificate because
-  // it was loaded over an unencrypted connection, don't select the Connection
-  // Tab.
-  WebsiteSettingsUI::TabId tab_id = WebsiteSettingsUI::TAB_ID_PERMISSIONS;
-  if (site_connection_status_ == SITE_CONNECTION_STATUS_ENCRYPTED_ERROR ||
-      site_connection_status_ ==
-          SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE ||
-      site_connection_status_ ==
-          SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE ||
-      site_identity_status_ == SITE_IDENTITY_STATUS_ERROR ||
-      site_identity_status_ == SITE_IDENTITY_STATUS_CERT_REVOCATION_UNKNOWN ||
-      site_identity_status_ == SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT ||
-      site_identity_status_ ==
-          SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MINOR ||
-      site_identity_status_ ==
-          SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR) {
-    tab_id = WebsiteSettingsUI::TAB_ID_CONNECTION;
-    RecordWebsiteSettingsAction(
-      WEBSITE_SETTINGS_CONNECTION_TAB_SHOWN_IMMEDIATELY);
-  }
-
-  ui_->SetSelectedTab(tab_id);
 }
 
 void WebsiteSettings::PresentSitePermissions() {
@@ -710,7 +655,7 @@ void WebsiteSettings::PresentSitePermissions() {
     std::unique_ptr<base::Value> value = content_settings_->GetWebsiteSetting(
         site_url_, site_url_, permission_info.type, std::string(), &info);
     DCHECK(value.get());
-    if (value->GetType() == base::Value::TYPE_INTEGER) {
+    if (value->GetType() == base::Value::Type::INTEGER) {
       permission_info.setting =
           content_settings::ValueToContentSetting(value.get());
     } else {
@@ -730,13 +675,6 @@ void WebsiteSettings::PresentSitePermissions() {
                                                       NULL);
     }
 
-    if (permission_info.type == CONTENT_SETTINGS_TYPE_KEYGEN &&
-        (permission_info.setting == CONTENT_SETTING_DEFAULT ||
-         permission_info.setting == permission_info.default_setting) &&
-        !tab_specific_content_settings()->IsContentBlocked(
-            permission_info.type)) {
-      continue;
-    }
     permission_info_list.push_back(permission_info);
   }
 

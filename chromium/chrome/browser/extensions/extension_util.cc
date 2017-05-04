@@ -4,7 +4,8 @@
 
 #include "chrome/browser/extensions/extension_util.h"
 
-#include "app/vivaldi_apptools.h"
+#include <vector>
+
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
@@ -41,6 +42,8 @@
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 namespace extensions {
 namespace util {
 
@@ -52,7 +55,7 @@ const char kWasInstalledByCustodianPrefName[] = "was_installed_by_custodian";
 // Returns true if |extension| should always be enabled in incognito mode.
 bool IsWhitelistedForIncognito(const Extension* extension) {
   const Feature* feature = FeatureProvider::GetBehaviorFeature(
-      BehaviorFeature::kWhitelistedForIncognito);
+      behavior_feature::kWhitelistedForIncognito);
   return feature && feature->IsAvailableToExtension(extension).is_available();
 }
 
@@ -80,7 +83,9 @@ std::string ReloadExtensionIfEnabled(const std::string& extension_id,
 
 bool IsIncognitoEnabled(const std::string& extension_id,
                         content::BrowserContext* context) {
-  if (vivaldi::IsVivaldiApp(extension_id))
+  //  NOTE(andre@vivaldi.com): This is failing in browser_tests-setup, so we
+  //  need to check if we are running as Vivaldi.
+  if (vivaldi::IsVivaldiApp(extension_id) && vivaldi::IsVivaldiRunning())
     return true;
   const Extension* extension = ExtensionRegistry::Get(context)->
       GetExtensionById(extension_id, ExtensionRegistry::ENABLED);
@@ -311,11 +316,9 @@ std::unique_ptr<base::DictionaryValue> GetExtensionInfo(
   dict->SetString("name", extension->name());
 
   GURL icon = extensions::ExtensionIconSource::GetIconURL(
-      extension,
-      extension_misc::EXTENSION_ICON_SMALLISH,
+      extension, extension_misc::EXTENSION_ICON_SMALLISH,
       ExtensionIconSet::MATCH_BIGGER,
-      false,  // Not grayscale.
-      NULL);  // Don't set bool if exists.
+      false);  // Not grayscale.
   dict->SetString("icon", icon.spec());
 
   return dict;

@@ -4,10 +4,12 @@
 
 #include "chrome/browser/chromeos/arc/extensions/arc_support_message_host.h"
 
+#include <string>
+
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
 
 namespace arc {
@@ -27,13 +29,13 @@ std::unique_ptr<extensions::NativeMessageHost> ArcSupportMessageHost::Create() {
 ArcSupportMessageHost::ArcSupportMessageHost() = default;
 
 ArcSupportMessageHost::~ArcSupportMessageHost() {
-  // On shutdown, ArcAuthService may be already deleted. In that case,
-  // ArcAuthService::Get() returns nullptr. Note that, ArcSupportHost
+  // On shutdown, ArcSessionManager may be already deleted. In that case,
+  // ArcSessionManager::Get() returns nullptr. Note that, ArcSupportHost
   // disconnects to this instance on shutdown already.
-  ArcAuthService* auth_service = ArcAuthService::Get();
-  if (auth_service) {
-    DCHECK(auth_service->support_host());
-    auth_service->support_host()->UnsetMessageHost(this);
+  ArcSessionManager* arc_session_manager = ArcSessionManager::Get();
+  if (arc_session_manager) {
+    DCHECK(arc_session_manager->support_host());
+    arc_session_manager->support_host()->UnsetMessageHost(this);
   }
 }
 
@@ -58,10 +60,11 @@ void ArcSupportMessageHost::Start(Client* client) {
   DCHECK(!client_);
   client_ = client;
 
-  ArcAuthService* auth_service = ArcAuthService::Get();
-  DCHECK(auth_service);
-  DCHECK(auth_service->support_host());
-  auth_service->support_host()->SetMessageHost(this);
+  ArcSessionManager* arc_session_manager = ArcSessionManager::Get();
+  if (arc_session_manager) {
+    DCHECK(arc_session_manager->support_host());
+    arc_session_manager->support_host()->SetMessageHost(this);
+  }
 }
 
 void ArcSupportMessageHost::OnMessage(const std::string& message_string) {

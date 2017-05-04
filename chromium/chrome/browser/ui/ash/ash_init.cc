@@ -26,7 +26,6 @@
 #include "chrome/browser/ui/ash/chrome_shell_content_state.h"
 #include "chrome/browser/ui/ash/chrome_shell_delegate.h"
 #include "chrome/browser/ui/ash/ime_controller_chromeos.h"
-#include "chrome/browser/ui/ash/volume_controller_chromeos.h"
 #include "chrome/common/chrome_switches.h"
 #include "chromeos/accelerometer/accelerometer_reader.h"
 #include "chromeos/chromeos_switches.h"
@@ -63,6 +62,8 @@ void OpenAsh(gfx::AcceleratedWidget remote_window) {
   // Shell takes ownership of ChromeShellDelegate.
   shell_init_params.delegate = new ChromeShellDelegate;
   shell_init_params.context_factory = content::GetContextFactory();
+  shell_init_params.context_factory_private =
+      content::GetContextFactoryPrivate();
   shell_init_params.blocking_pool = content::BrowserThread::GetBlockingPool();
 
   ash::Shell* shell = ash::Shell::CreateInstance(shell_init_params);

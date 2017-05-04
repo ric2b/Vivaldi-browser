@@ -27,6 +27,7 @@
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/fetch/FetchRequest.h"
+#include "core/html/FormAssociated.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLImageLoader.h"
 #include "core/html/canvas/CanvasImageSource.h"
@@ -41,10 +42,12 @@ class ImageCandidate;
 class ShadowRoot;
 class ImageBitmapOptions;
 
-class CORE_EXPORT HTMLImageElement final : public HTMLElement,
-                                           public CanvasImageSource,
-                                           public ImageBitmapSource,
-                                           public ActiveScriptWrappable {
+class CORE_EXPORT HTMLImageElement final
+    : public HTMLElement,
+      public CanvasImageSource,
+      public ImageBitmapSource,
+      public ActiveScriptWrappable<HTMLImageElement>,
+      public FormAssociated {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(HTMLImageElement);
 
@@ -53,7 +56,6 @@ class CORE_EXPORT HTMLImageElement final : public HTMLElement,
 
   static HTMLImageElement* create(Document&);
   static HTMLImageElement* create(Document&,
-                                  HTMLFormElement*,
                                   bool createdByParser);
   static HTMLImageElement* createForJSConstructor(Document&);
   static HTMLImageElement* createForJSConstructor(Document&, unsigned width);
@@ -69,14 +71,21 @@ class CORE_EXPORT HTMLImageElement final : public HTMLElement,
 
   unsigned naturalWidth() const;
   unsigned naturalHeight() const;
+
+  unsigned layoutBoxWidth() const;
+  unsigned layoutBoxHeight() const;
+
   const String& currentSrc() const;
 
   bool isServerMap() const;
 
   String altText() const final;
 
-  ImageResource* cachedImage() const { return imageLoader().image(); }
-  void setImageResource(ImageResource* i) { imageLoader().setImage(i); }
+  ImageResourceContent* cachedImage() const { return imageLoader().image(); }
+  ImageResource* cachedImageResourceForImageDocument() const {
+    return imageLoader().imageResourceForImageDocument();
+  }
+  void setImageResource(ImageResourceContent* i) { imageLoader().setImage(i); }
 
   void setLoadingImageDocument() { imageLoader().setLoadingImageDocument(); }
 
@@ -102,7 +111,7 @@ class CORE_EXPORT HTMLImageElement final : public HTMLElement,
 
   HTMLFormElement* formOwner() const override;
   void formRemovedFromTree(const Node& formRoot);
-  virtual void ensureFallbackContent();
+  virtual void ensureCollapsedOrFallbackContent();
   virtual void ensureFallbackForGeneratedContent();
   virtual void ensurePrimaryContent();
 
@@ -123,8 +132,7 @@ class CORE_EXPORT HTMLImageElement final : public HTMLElement,
 
   // public so that HTMLPictureElement can call this as well.
   void selectSourceURL(ImageLoader::UpdateFromElementBehavior);
-  void reattachFallbackContent();
-  void setUseFallbackContent();
+
   void setIsFallbackImage() { m_isFallbackImage = true; }
 
   FetchRequest::ResourceWidth getResourceWidth();
@@ -140,13 +148,30 @@ class CORE_EXPORT HTMLImageElement final : public HTMLElement,
                                   const ImageBitmapOptions&,
                                   ExceptionState&) override;
 
+  FormAssociated* toFormAssociatedOrNull() override { return this; };
+  void associateWith(HTMLFormElement*) override;
+
  protected:
+  // Controls how an image element appears in the layout. See:
+  // https://html.spec.whatwg.org/multipage/embedded-content.html#image-request
+  enum class LayoutDisposition : uint8_t {
+    // Displayed as a partially or completely loaded image. Corresponds to the
+    // `current request` state being: `unavailable`, `partially available`, or
+    // `completely available`.
+    PrimaryContent,
+    // Showing a broken image icon and 'alt' text, if any. Corresponds to the
+    // `current request` being in the `broken` state.
+    FallbackContent,
+    // No layout object. Corresponds to the `current request` being in the
+    // `broken` state when the resource load failed with an error that has the
+    // |shouldCollapseInitiator| flag set.
+    Collapsed
+  };
+
   explicit HTMLImageElement(Document&,
-                            HTMLFormElement* = 0,
                             bool createdByParser = false);
 
   void didMoveToNewDocument(Document& oldDocument) override;
-  virtual bool useFallbackContent() const { return m_useFallbackContent; }
 
   void didAddUserAgentShadowRoot(ShadowRoot&) override;
   PassRefPtr<ComputedStyle> customStyleForLayoutObject() override;
@@ -154,15 +179,15 @@ class CORE_EXPORT HTMLImageElement final : public HTMLElement,
  private:
   bool areAuthorShadowsAllowed() const override { return false; }
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   bool isPresentationAttribute(const QualifiedName&) const override;
   void collectStyleForPresentationAttribute(const QualifiedName&,
                                             const AtomicString&,
                                             MutableStylePropertySet*) override;
+  void setLayoutDisposition(LayoutDisposition, bool forceReattach = false);
 
   void attachLayoutTree(const AttachContext& = AttachContext()) override;
+  bool layoutObjectIsNeeded(const ComputedStyle&) override;
   LayoutObject* createLayoutObject(const ComputedStyle&) override;
 
   bool canStartSelection() const override { return false; }
@@ -193,9 +218,9 @@ class CORE_EXPORT HTMLImageElement final : public HTMLElement,
   AtomicString m_bestFitImageURL;
   float m_imageDevicePixelRatio;
   Member<HTMLSourceElement> m_source;
+  LayoutDisposition m_layoutDisposition;
   unsigned m_formWasSetByParser : 1;
   unsigned m_elementCreatedByParser : 1;
-  unsigned m_useFallbackContent : 1;
   unsigned m_isFallbackImage : 1;
 
   ReferrerPolicy m_referrerPolicy;

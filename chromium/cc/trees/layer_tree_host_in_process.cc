@@ -23,9 +23,12 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
+#include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
 #include "cc/blimp/client_picture_cache.h"
 #include "cc/blimp/engine_picture_cache.h"
@@ -119,7 +122,8 @@ LayerTreeHostInProcess::LayerTreeHostInProcess(
       did_complete_scale_animation_(false),
       id_(s_layer_tree_host_sequence_number.GetNext() + 1),
       task_graph_runner_(params->task_graph_runner),
-      image_serialization_processor_(params->image_serialization_processor) {
+      image_serialization_processor_(params->image_serialization_processor),
+      image_worker_task_runner_(params->image_worker_task_runner) {
   DCHECK(task_graph_runner_);
   DCHECK(layer_tree_);
   DCHECK_NE(compositor_mode_, CompositorMode::REMOTE);
@@ -134,7 +138,7 @@ void LayerTreeHostInProcess::InitializeThreaded(
   task_runner_provider_ =
       TaskRunnerProvider::Create(main_task_runner, impl_task_runner);
   std::unique_ptr<ProxyMain> proxy_main =
-      ProxyMain::CreateThreaded(this, task_runner_provider_.get());
+      base::MakeUnique<ProxyMain>(this, task_runner_provider_.get());
   InitializeProxy(std::move(proxy_main));
 }
 
@@ -193,6 +197,9 @@ void LayerTreeHostInProcess::InitializeProxy(std::unique_ptr<Proxy> proxy) {
 }
 
 LayerTreeHostInProcess::~LayerTreeHostInProcess() {
+  // Track when we're inside a main frame to see if compositor is being
+  // destroyed midway which causes a crash. crbug.com/654672
+  CHECK(!inside_main_frame_);
   TRACE_EVENT0("cc", "LayerTreeHostInProcess::~LayerTreeHostInProcess");
 
   // Clear any references into the LayerTreeHostInProcess.
@@ -254,12 +261,14 @@ LayerTreeHostInProcess::GetSurfaceSequenceGenerator() {
 }
 
 void LayerTreeHostInProcess::WillBeginMainFrame() {
+  inside_main_frame_ = true;
   devtools_instrumentation::WillBeginMainThreadFrame(GetId(),
                                                      SourceFrameNumber());
   client_->WillBeginMainFrame();
 }
 
 void LayerTreeHostInProcess::DidBeginMainFrame() {
+  inside_main_frame_ = false;
   client_->DidBeginMainFrame();
 }
 
@@ -356,7 +365,8 @@ void LayerTreeHostInProcess::FinishCommitOnImplThread(
 
     // This must happen after synchronizing property trees and after pushing
     // properties, which updates the clobber_active_value flag.
-    sync_tree->UpdatePropertyTreeScrollOffset(layer_tree_->property_trees());
+    sync_tree->property_trees()->scroll_tree.PushScrollUpdatesFromMainThread(
+        layer_tree_->property_trees(), sync_tree);
 
     // This must happen after synchronizing property trees and after push
     // properties, which updates property tree indices, but before animation
@@ -442,7 +452,7 @@ LayerTreeHostInProcess::CreateLayerTreeHostImpl(
   std::unique_ptr<LayerTreeHostImpl> host_impl = LayerTreeHostImpl::Create(
       settings_, client, task_runner_provider_.get(),
       rendering_stats_instrumentation_.get(), task_graph_runner_,
-      std::move(mutator_host_impl), id_);
+      std::move(mutator_host_impl), id_, std::move(image_worker_task_runner_));
   host_impl->SetHasGpuRasterizationTrigger(has_gpu_rasterization_trigger_);
   host_impl->SetContentIsSuitableForGpuRasterization(
       content_is_suitable_for_gpu_rasterization_);
@@ -582,12 +592,40 @@ void LayerTreeHostInProcess::Composite(base::TimeTicks frame_begin_time) {
   proxy->CompositeImmediately(frame_begin_time);
 }
 
+static int GetLayersUpdateTimeHistogramBucket(size_t numLayers) {
+  // We uses the following exponential (ratio 2) bucketization:
+  // [0, 10), [10, 30), [30, 70), [70, 150), [150, infinity)
+  if (numLayers < 10)
+    return 0;
+  if (numLayers < 30)
+    return 1;
+  if (numLayers < 70)
+    return 2;
+  if (numLayers < 150)
+    return 3;
+  return 4;
+}
+
 bool LayerTreeHostInProcess::UpdateLayers() {
-  if (!layer_tree_->root_layer())
+  if (!layer_tree_->root_layer()) {
+    layer_tree_->property_trees()->clear();
     return false;
+  }
   DCHECK(!layer_tree_->root_layer()->parent());
+  base::ElapsedTimer timer;
+
   bool result = DoUpdateLayers(layer_tree_->root_layer());
   micro_benchmark_controller_.DidUpdateLayers();
+
+  if (const char* client_name = GetClientNameForMetrics()) {
+    std::string histogram_name = base::StringPrintf(
+        "Compositing.%s.LayersUpdateTime.%d", client_name,
+        GetLayersUpdateTimeHistogramBucket(layer_tree_->NumLayers()));
+    base::Histogram::FactoryGet(histogram_name, 0, 10000000, 50,
+                                base::HistogramBase::kUmaTargetedHistogramFlag)
+        ->Add(timer.Elapsed().InMicroseconds());
+  }
+
   return result || next_commit_forces_redraw_;
 }
 
@@ -789,7 +827,7 @@ void LayerTreeHostInProcess::AnimateLayers(base::TimeTicks monotonic_time) {
   MutatorHost* mutator_host = layer_tree_->mutator_host();
   std::unique_ptr<MutatorEvents> events = mutator_host->CreateEvents();
 
-  if (mutator_host->AnimateLayers(monotonic_time))
+  if (mutator_host->TickAnimations(monotonic_time))
     mutator_host->UpdateAnimationState(true, events.get());
 
   if (!events->IsEmpty())

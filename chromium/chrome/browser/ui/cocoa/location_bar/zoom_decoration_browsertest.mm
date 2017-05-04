@@ -12,7 +12,7 @@
 #import "chrome/browser/ui/cocoa/browser/zoom_bubble_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
-#include "chrome/browser/ui/cocoa/run_loop_testing.h"
+#include "chrome/browser/ui/cocoa/test/run_loop_testing.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/toolbar/test_toolbar_model.h"
@@ -105,7 +105,7 @@ IN_PROC_BROWSER_TEST_F(ZoomDecorationTest, BubbleAtDefaultZoom) {
   EXPECT_TRUE(zoom_decoration->IsVisible());
   zoom_decoration->ShowBubble(false);
   Zoom(content::PAGE_ZOOM_RESET);
-  EXPECT_TRUE(zoom_decoration->IsVisible());
+  EXPECT_FALSE(zoom_decoration->IsVisible());
 
   // Hide bubble and verify the decoration is hidden.
   zoom_decoration->CloseBubble();

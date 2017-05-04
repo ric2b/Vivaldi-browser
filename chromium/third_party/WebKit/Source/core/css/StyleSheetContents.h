@@ -24,6 +24,7 @@
 
 #include "core/CoreExport.h"
 #include "core/css/RuleSet.h"
+#include "core/css/parser/CSSParserContext.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/HashMap.h"
@@ -47,22 +48,22 @@ class StyleRuleNamespace;
 class CORE_EXPORT StyleSheetContents
     : public GarbageCollectedFinalized<StyleSheetContents> {
  public:
-  static StyleSheetContents* create(const CSSParserContext& context) {
+  static StyleSheetContents* create(const CSSParserContext* context) {
     return new StyleSheetContents(0, String(), context);
   }
   static StyleSheetContents* create(const String& originalURL,
-                                    const CSSParserContext& context) {
+                                    const CSSParserContext* context) {
     return new StyleSheetContents(0, originalURL, context);
   }
   static StyleSheetContents* create(StyleRuleImport* ownerRule,
                                     const String& originalURL,
-                                    const CSSParserContext& context) {
+                                    const CSSParserContext* context) {
     return new StyleSheetContents(ownerRule, originalURL, context);
   }
 
   ~StyleSheetContents();
 
-  const CSSParserContext& parserContext() const { return m_parserContext; }
+  const CSSParserContext* parserContext() const { return m_parserContext; }
 
   const AtomicString& defaultNamespace() { return m_defaultNamespace; }
   const AtomicString& namespaceURIFromPrefix(const AtomicString& prefix);
@@ -86,7 +87,11 @@ class CORE_EXPORT StyleSheetContents
   Document* singleOwnerDocument() const;
   bool hasSingleOwnerDocument() const { return m_hasSingleOwnerDocument; }
 
-  const String& charset() const { return m_parserContext.charset(); }
+  // Gets the first owner document in the list of registered clients, or nullptr
+  // if there are none.
+  Document* anyOwnerDocument() const;
+
+  const String& charset() const { return m_parserContext->charset(); }
 
   bool loadCompleted() const;
   bool hasFailedOrCanceledSubresources() const;
@@ -130,7 +135,7 @@ class CORE_EXPORT StyleSheetContents
   // this style sheet. This property probably isn't useful for much except
   // the JavaScript binding (which needs to use this value for security).
   String originalURL() const { return m_originalURL; }
-  const KURL& baseURL() const { return m_parserContext.baseURL(); }
+  const KURL& baseURL() const { return m_parserContext->baseURL(); }
 
   unsigned ruleCount() const;
   StyleRuleBase* ruleAt(unsigned index) const;
@@ -180,13 +185,14 @@ class CORE_EXPORT StyleSheetContents
  private:
   StyleSheetContents(StyleRuleImport* ownerRule,
                      const String& originalURL,
-                     const CSSParserContext&);
+                     const CSSParserContext*);
   StyleSheetContents(const StyleSheetContents&);
   StyleSheetContents() = delete;
   StyleSheetContents& operator=(const StyleSheetContents&) = delete;
   void notifyRemoveFontFaceRule(const StyleRuleFontFace*);
 
   Document* clientSingleOwnerDocument() const;
+  Document* clientAnyOwnerDocument() const;
 
   Member<StyleRuleImport> m_ownerRule;
 
@@ -209,7 +215,7 @@ class CORE_EXPORT StyleSheetContents
   bool m_hasSingleOwnerDocument : 1;
   bool m_isUsedFromTextCache : 1;
 
-  CSSParserContext m_parserContext;
+  Member<const CSSParserContext> m_parserContext;
 
   HeapHashSet<WeakMember<CSSStyleSheet>> m_loadingClients;
   HeapHashSet<WeakMember<CSSStyleSheet>> m_completedClients;

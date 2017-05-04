@@ -41,16 +41,20 @@ class WebString;
 
 class WebMediaStreamTrack {
  public:
+  enum class FacingMode { None, User, Environment, Left, Right };
+
   struct Settings {
     bool hasFrameRate() { return frameRate >= 0.0; }
     bool hasWidth() { return width >= 0; }
     bool hasHeight() { return height >= 0; }
+    bool hasFacingMode() { return facingMode != FacingMode::None; }
     // The variables are read from
     // MediaStreamTrack::GetSettings only.
     double frameRate = -1.0;
     long width = -1;
     long height = -1;
     WebString deviceId;
+    FacingMode facingMode = FacingMode::None;
   };
 
   class TrackData {
@@ -58,6 +62,14 @@ class WebMediaStreamTrack {
     TrackData() {}
     virtual ~TrackData() {}
     virtual void getSettings(Settings&) = 0;
+  };
+
+  enum class ContentHintType {
+    None,
+    AudioSpeech,
+    AudioMusic,
+    VideoMotion,
+    VideoDetail
   };
 
   WebMediaStreamTrack() {}
@@ -82,6 +94,7 @@ class WebMediaStreamTrack {
   BLINK_PLATFORM_EXPORT WebMediaStreamSource source() const;
   BLINK_PLATFORM_EXPORT bool isEnabled() const;
   BLINK_PLATFORM_EXPORT bool isMuted() const;
+  BLINK_PLATFORM_EXPORT ContentHintType contentHint() const;
 
   // Extra data associated with this WebMediaStream.
   // If non-null, the extra data pointer will be deleted when the object is

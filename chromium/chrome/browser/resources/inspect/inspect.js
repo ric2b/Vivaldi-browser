@@ -44,6 +44,20 @@ function removeChildren(element_id) {
   element.textContent = '';
 }
 
+function removeAdditionalChildren(element_id) {
+  var element = $(element_id);
+  var elements = element.querySelectorAll('.row.additional');
+  for (var i = 0; i != elements.length; i++)
+    element.removeChild(elements[i]);
+}
+
+function removeChildrenExceptAdditional(element_id) {
+  var element = $(element_id);
+  var elements = element.querySelectorAll('.row:not(.additional)');
+  for (var i = 0; i != elements.length; i++)
+      element.removeChild(elements[i]);
+}
+
 function onload() {
   var tabContents = document.querySelectorAll('#content > div');
   for (var i = 0; i != tabContents.length; i++) {
@@ -104,13 +118,19 @@ function populateTargets(source, data) {
     console.error('Unknown source type: ' + source);
 }
 
+function populateAdditionalTargets(data) {
+  removeAdditionalChildren('others-list');
+  for (var i = 0; i < data.length; i++)
+    addAdditionalTargetsToOthersList(data[i]);
+}
+
 function populateLocalTargets(data) {
   removeChildren('pages-list');
   removeChildren('extensions-list');
   removeChildren('apps-list');
-  removeChildren('others-list');
   removeChildren('workers-list');
   removeChildren('service-workers-list');
+  removeChildrenExceptAdditional('others-list');
 
   for (var i = 0; i < data.length; i++) {
     if (data[i].type === 'page')
@@ -428,6 +448,10 @@ function addToOthersList(data) {
   addTargetToList(data, $('others-list'), ['url']);
 }
 
+function addAdditionalTargetsToOthersList(data) {
+  addTargetToList(data, $('others-list'), ['name', 'url']);
+}
+
 function formatValue(data, property) {
   var value = data[property];
 
@@ -567,7 +591,11 @@ function addTargetToList(data, list, properties) {
   actionBox.className = 'actions';
   subrowBox.appendChild(actionBox);
 
-  if (!data.hasCustomInspectAction) {
+  if (data.isAdditional) {
+    addActionLink(row, 'inspect',
+        sendCommand.bind(null, 'inspect-additional', data.url), false);
+    row.classList.add('additional');
+  } else if (!data.hasCustomInspectAction) {
     addActionLink(row, 'inspect', sendTargetCommand.bind(null, 'inspect', data),
         data.hasNoUniqueId || data.adbAttachedForeign);
   }
@@ -611,6 +639,8 @@ function initSettings() {
   $('config-dialog-close').addEventListener('click', function() {
     $('config-dialog').commit(true);
   });
+  $('node-frontend').addEventListener(
+      'click', sendCommand.bind(null, 'open-node-frontend'));
 }
 
 function checkboxHandler(command, event) {
@@ -796,7 +826,7 @@ function appendRow(list, lineFactory, key, value) {
   var line = lineFactory(key, value);
   line.lastElementChild.addEventListener('keydown', function(e) {
     if (e.key == 'Tab' &&
-        !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey &&
+        !hasKeyModifiers(e) &&
         line.classList.contains('fresh') &&
         !line.classList.contains('empty')) {
       // Tabbing forward on the fresh line, try create a new empty one.

@@ -96,10 +96,29 @@ class PersonalDataManagerAndroid
       jboolean include_organization_in_label,
       jboolean include_country_in_label);
 
-  // Returns the label of the given profile for PaymentRequest. This label does
-  // not contain the full name or the email address. All other fields are
-  // included in the label.
-  base::android::ScopedJavaLocalRef<jstring> GetAddressLabelForPaymentRequest(
+  // Returns the shipping label of the given profile for PaymentRequest. This
+  // label does not contain the full name or the email address. All other fields
+  // are included in the label.
+  base::android::ScopedJavaLocalRef<jstring>
+  GetShippingAddressLabelWithCountryForPaymentRequest(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& unused_obj,
+      const base::android::JavaParamRef<jobject>& jprofile);
+
+  // Returns the shipping label of the given profile for PaymentRequest. This
+  // label does not contain the full name, the email address or the country. All
+  // other fields are included in the label.
+  base::android::ScopedJavaLocalRef<jstring>
+  GetShippingAddressLabelWithoutCountryForPaymentRequest(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& unused_obj,
+      const base::android::JavaParamRef<jobject>& jprofile);
+
+  // Returns the billing label of the given profile for PaymentRequest. This
+  // label does not contain the company name, the phone number, the country or
+  // the email address. All other fields are included in the label.
+  base::android::ScopedJavaLocalRef<jstring>
+  GetBillingAddressLabelForPaymentRequest(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jobject>& jprofile);
@@ -142,13 +161,11 @@ class PersonalDataManagerAndroid
       const base::android::JavaParamRef<jobject>& unused_obj,
       const base::android::JavaParamRef<jobject>& jcard);
 
-  // Updates the billing address of a server credit card with server ID
-  // |jcard_server_id|.
+  // Updates the billing address of a server credit card |jcard|.
   void UpdateServerCardBillingAddress(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& unused_obj,
-      const base::android::JavaParamRef<jstring>& jcard_server_id,
-      const base::android::JavaParamRef<jstring>& jbilling_address_id);
+      const base::android::JavaParamRef<jobject>& jcard);
 
   // Returns the card type according to PaymentRequest spec, or an empty string
   // if the given card number is not valid and |jempty_if_invalid| is true.
@@ -343,6 +360,16 @@ class PersonalDataManagerAndroid
       bool include_organization_in_label,
       bool include_country_in_label,
       std::vector<AutofillProfile*> profiles);
+
+  // Returns the shipping label of the given profile for PaymentRequest. This
+  // label does not contain the full name or the email address but will include
+  // the country depending on the value of |include_country_in_label|. All other
+  // fields are included in the label.
+  base::android::ScopedJavaLocalRef<jstring>
+  GetShippingAddressLabelForPaymentRequest(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jprofile,
+      bool inlude_country_in_label);
 
   // Pointer to the java counterpart.
   JavaObjectWeakGlobalRef weak_java_obj_;

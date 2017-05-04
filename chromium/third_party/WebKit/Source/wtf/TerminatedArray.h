@@ -6,6 +6,7 @@
 
 #include "wtf/Allocator.h"
 #include "wtf/PtrUtil.h"
+#include "wtf/VectorTraits.h"
 #include "wtf/allocator/Partitions.h"
 #include <memory>
 
@@ -21,6 +22,11 @@ class TerminatedArray {
   WTF_MAKE_NONCOPYABLE(TerminatedArray);
 
  public:
+  // When TerminatedArray::Allocator implementations grow the backing
+  // store, old is copied into the new and larger block.
+  static_assert(VectorTraits<T>::canCopyWithMemcpy,
+                "Array elements must be memory copyable");
+
   T& at(size_t index) { return reinterpret_cast<T*>(this)[index]; }
   const T& at(size_t index) const {
     return reinterpret_cast<const T*>(this)[index];
@@ -90,13 +96,13 @@ class TerminatedArray {
     static PassPtr release(Ptr& ptr) { return ptr.release(); }
 
     static PassPtr create(size_t capacity) {
-      return wrapUnique(
+      return WTF::wrapUnique(
           static_cast<TerminatedArray*>(WTF::Partitions::fastMalloc(
               capacity * sizeof(T), WTF_HEAP_PROFILER_TYPE_NAME(T))));
     }
 
     static PassPtr resize(Ptr ptr, size_t capacity) {
-      return wrapUnique(static_cast<TerminatedArray*>(
+      return WTF::wrapUnique(static_cast<TerminatedArray*>(
           WTF::Partitions::fastRealloc(ptr.release(), capacity * sizeof(T),
                                        WTF_HEAP_PROFILER_TYPE_NAME(T))));
     }

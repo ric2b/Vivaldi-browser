@@ -5,8 +5,8 @@
 package org.chromium.chrome.browser;
 
 import android.preference.PreferenceScreen;
-import android.test.suitebuilder.annotation.LargeTest;
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.LargeTest;
+import android.support.test.filters.MediumTest;
 import android.util.JsonReader;
 
 import org.chromium.base.ThreadUtils;
@@ -125,10 +125,8 @@ public class HistoryUITest extends ChromeActivityTestCaseBase<ChromeActivity> {
     /**
      * Wait for the UI to show the expected number of results.
      * @param expected The number of results that should be loaded.
-     * @throws InterruptedException
      */
-    private void waitForResultCount(final ContentViewCore cvc, final int expected)
-            throws InterruptedException {
+    private void waitForResultCount(final ContentViewCore cvc, final int expected) {
         CriteriaHelper.pollInstrumentationThread(
                 new Criteria() {
                     @Override

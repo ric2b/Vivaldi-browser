@@ -4,7 +4,7 @@
 
 package org.chromium.net;
 
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.test.util.Feature;
 import org.chromium.net.CronetTestBase.OnlyRunNativeCronet;
@@ -35,7 +35,7 @@ public class CronetUploadTest extends CronetTestBase {
         mDataProvider = new TestDrivenDataProvider(executor, reads);
         mUploadDataStream = new CronetUploadDataStream(mDataProvider, executor);
         mHandler = new TestUploadDataStreamHandler(
-                mUploadDataStream.createUploadDataStreamForTesting());
+                getContext(), mUploadDataStream.createUploadDataStreamForTesting());
     }
 
     @Override

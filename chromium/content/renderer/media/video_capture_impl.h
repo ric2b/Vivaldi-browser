@@ -80,21 +80,20 @@ class CONTENT_EXPORT VideoCaptureImpl : public mojom::VideoCaptureObserver {
   using ClientInfoMap = std::map<int, ClientInfo>;
 
   using BufferFinishedCallback =
-      base::Callback<void(const gpu::SyncToken& sync_token,
-                          double consumer_resource_utilization)>;
+      base::Callback<void(double consumer_resource_utilization)>;
 
   // mojom::VideoCaptureObserver implementation.
   void OnStateChanged(mojom::VideoCaptureState state) override;
   void OnBufferCreated(int32_t buffer_id,
                        mojo::ScopedSharedBufferHandle handle) override;
-  void OnBufferReady(int32_t buffer_id, mojom::VideoFrameInfoPtr info) override;
+  void OnBufferReady(int32_t buffer_id,
+                     media::mojom::VideoFrameInfoPtr info) override;
   void OnBufferDestroyed(int32_t buffer_id) override;
 
   // Sends an IPC message to browser process when all clients are done with the
   // buffer.
   void OnClientBufferFinished(int buffer_id,
                               const scoped_refptr<ClientBuffer>& buffer,
-                              const gpu::SyncToken& release_sync_token,
                               double consumer_resource_utilization);
 
   void StopDevice();
@@ -119,7 +118,6 @@ class CONTENT_EXPORT VideoCaptureImpl : public mojom::VideoCaptureObserver {
   // callback, to trampoline back to the IO thread with the values.
   static void DidFinishConsumingFrame(
       const media::VideoFrameMetadata* metadata,
-      std::unique_ptr<gpu::SyncToken> release_sync_token,
       const BufferFinishedCallback& callback_to_io_thread);
 
   // |device_id_| and |session_id_| are different concepts, but we reuse the

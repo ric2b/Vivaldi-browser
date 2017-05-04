@@ -21,14 +21,14 @@ class TypedInterpolationValue {
       const InterpolationType& type,
       std::unique_ptr<InterpolableValue> interpolableValue,
       PassRefPtr<NonInterpolableValue> nonInterpolableValue = nullptr) {
-    return wrapUnique(new TypedInterpolationValue(
+    return WTF::wrapUnique(new TypedInterpolationValue(
         type, std::move(interpolableValue), std::move(nonInterpolableValue)));
   }
 
   std::unique_ptr<TypedInterpolationValue> clone() const {
     InterpolationValue copy = m_value.clone();
     return create(m_type, std::move(copy.interpolableValue),
-                  copy.nonInterpolableValue.release());
+                  std::move(copy.nonInterpolableValue));
   }
 
   const InterpolationType& type() const { return m_type; }

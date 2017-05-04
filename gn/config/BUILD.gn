@@ -20,13 +20,12 @@ config("features") {
     "CHROMIUM_BUILD",
     "VIVALDI_RELEASE=$release_kind",
     "WIDEVINE_CDM_VERSION_STRING=\"1.0.123.456\"",
-    "OMIT_CHROME_FRAME",
     "VIVALDI_RELEASE_KIND=$VIVALDI_RELEASE_KIND",
   ]
   if (system_proprietary_codecs) {
     defines += [ "USE_SYSTEM_PROPRIETARY_CODECS" ]
   }
-  include_dirs = [ "//vivaldi/" ]
+  include_dirs = [ "//vivaldi/", "//vivaldi/platform_media/" ]
   if (is_official_build) {
     defines += [ "VIVALDI_PRODUCT_VERSION=\"$official_product_kind_string\"" ]
   }

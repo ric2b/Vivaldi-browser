@@ -4,7 +4,6 @@
 
 #include "platform/heap/CallbackStack.h"
 #include "wtf/PtrUtil.h"
-#include "wtf/allocator/PageAllocator.h"
 #include "wtf/allocator/Partitions.h"
 
 namespace blink {
@@ -21,13 +20,13 @@ void CallbackStackMemoryPool::initialize() {
   }
   m_freeListNext[kPooledBlockCount - 1] = -1;
   m_pooledMemory = static_cast<CallbackStack::Item*>(
-      WTF::allocPages(nullptr, kBlockBytes * kPooledBlockCount,
+      WTF::AllocPages(nullptr, kBlockBytes * kPooledBlockCount,
                       WTF::kPageAllocationGranularity, WTF::PageAccessible));
   CHECK(m_pooledMemory);
 }
 
 void CallbackStackMemoryPool::shutdown() {
-  WTF::freePages(m_pooledMemory, kBlockBytes * kPooledBlockCount);
+  WTF::FreePages(m_pooledMemory, kBlockBytes * kPooledBlockCount);
   m_pooledMemory = nullptr;
   m_freeListFirst = 0;
 }
@@ -68,7 +67,7 @@ void CallbackStackMemoryPool::free(CallbackStack::Item* memory) {
 
 CallbackStack::Block::Block(Block* next) {
   m_buffer = CallbackStackMemoryPool::instance().allocate();
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   clear();
 #endif
 
@@ -85,7 +84,7 @@ CallbackStack::Block::~Block() {
   m_next = nullptr;
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 void CallbackStack::Block::clear() {
   for (size_t i = 0; i < CallbackStackMemoryPool::kBlockSize; i++)
     m_buffer[i] = Item(0, 0);
@@ -101,7 +100,7 @@ void CallbackStack::Block::invokeEphemeronCallbacks(Visitor* visitor) {
   }
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 bool CallbackStack::Block::hasCallbackForObject(const void* object) {
   for (unsigned i = 0; m_buffer + i < m_current; i++) {
     Item* item = &m_buffer[i];
@@ -113,7 +112,7 @@ bool CallbackStack::Block::hasCallbackForObject(const void* object) {
 #endif
 
 std::unique_ptr<CallbackStack> CallbackStack::create() {
-  return wrapUnique(new CallbackStack());
+  return WTF::wrapUnique(new CallbackStack());
 }
 
 CallbackStack::CallbackStack() : m_first(nullptr), m_last(nullptr) {}
@@ -160,7 +159,7 @@ CallbackStack::Item* CallbackStack::popSlow() {
   for (;;) {
     Block* next = m_first->next();
     if (!next) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
       m_first->clear();
 #endif
       return nullptr;
@@ -205,7 +204,7 @@ bool CallbackStack::hasJustOneBlock() const {
   return !m_first->next();
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 bool CallbackStack::hasCallbackForObject(const void* object) {
   for (Block* current = m_first; current; current = current->next()) {
     if (current->hasCallbackForObject(object))

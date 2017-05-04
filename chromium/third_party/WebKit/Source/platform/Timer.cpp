@@ -26,7 +26,7 @@
 
 #include "platform/Timer.h"
 
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
 #include "wtf/AddressSanitizer.h"
@@ -40,10 +40,10 @@
 
 namespace blink {
 
-TimerBase::TimerBase(WebTaskRunner* webTaskRunner)
+TimerBase::TimerBase(RefPtr<WebTaskRunner> webTaskRunner)
     : m_nextFireTime(0),
       m_repeatInterval(0),
-      m_webTaskRunner(webTaskRunner->clone()),
+      m_webTaskRunner(std::move(webTaskRunner)),
 #if DCHECK_IS_ON()
       m_thread(currentThread()),
 #endif
@@ -58,7 +58,9 @@ TimerBase::~TimerBase() {
 void TimerBase::start(double nextFireInterval,
                       double repeatInterval,
                       const WebTraceLocation& caller) {
-  ASSERT(m_thread == currentThread());
+#if DCHECK_IS_ON()
+  DCHECK_EQ(m_thread, currentThread());
+#endif
 
   m_location = caller;
   m_repeatInterval = repeatInterval;
@@ -66,7 +68,9 @@ void TimerBase::start(double nextFireInterval,
 }
 
 void TimerBase::stop() {
-  ASSERT(m_thread == currentThread());
+#if DCHECK_IS_ON()
+  DCHECK_EQ(m_thread, currentThread());
+#endif
 
   m_repeatInterval = 0;
   m_nextFireTime = 0;
@@ -81,22 +85,49 @@ double TimerBase::nextFireInterval() const {
   return m_nextFireTime - current;
 }
 
+void TimerBase::moveToNewTaskRunner(RefPtr<WebTaskRunner> taskRunner) {
+#if DCHECK_IS_ON()
+  DCHECK_EQ(m_thread, currentThread());
+  DCHECK(taskRunner->runsTasksOnCurrentThread());
+#endif
+  // If the underlying task runner stays the same, ignore it.
+  if (m_webTaskRunner->toSingleThreadTaskRunner() ==
+      taskRunner->toSingleThreadTaskRunner()) {
+    return;
+  }
+
+  bool active = isActive();
+  m_weakPtrFactory.revokeAll();
+  m_webTaskRunner = std::move(taskRunner);
+
+  if (!active)
+    return;
+
+  double now = timerMonotonicallyIncreasingTime();
+  double nextFireTime = std::max(m_nextFireTime, now);
+  m_nextFireTime = 0;
+
+  setNextFireTime(now, nextFireTime - now);
+}
+
 // static
-WebTaskRunner* TimerBase::getTimerTaskRunner() {
+RefPtr<WebTaskRunner> TimerBase::getTimerTaskRunner() {
   return Platform::current()->currentThread()->scheduler()->timerTaskRunner();
 }
 
 // static
-WebTaskRunner* TimerBase::getUnthrottledTaskRunner() {
+RefPtr<WebTaskRunner> TimerBase::getUnthrottledTaskRunner() {
   return Platform::current()->currentThread()->getWebTaskRunner();
 }
 
-WebTaskRunner* TimerBase::timerTaskRunner() const {
-  return m_webTaskRunner.get();
+RefPtr<WebTaskRunner> TimerBase::timerTaskRunner() const {
+  return m_webTaskRunner;
 }
 
 void TimerBase::setNextFireTime(double now, double delay) {
-  ASSERT(m_thread == currentThread());
+#if DCHECK_IS_ON()
+  DCHECK_EQ(m_thread, currentThread());
+#endif
 
   double newTime = now + delay;
 

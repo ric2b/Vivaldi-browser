@@ -127,7 +127,15 @@ public abstract class UserRecoverableErrorHandler {
          */
         private final Activity mActivity;
 
+        /**
+         * The modal dialog that is shown to the user.
+         */
         private Dialog mDialog;
+
+        /**
+         * Whether the dialog can be canceled by the user.
+         */
+        private final boolean mCancelable;
 
         /**
          * Last error code from Google Play Services.
@@ -141,9 +149,11 @@ public abstract class UserRecoverableErrorHandler {
          * the result via Activity's protected onActivityResult method.
          *
          * @param activity the activity to use
+         * @param cancelable whether the dialog can be canceled by the user
          */
-        public ModalDialog(Activity activity) {
+        public ModalDialog(Activity activity, boolean cancelable) {
             mActivity = activity;
+            mCancelable = cancelable;
         }
 
         /**
@@ -166,11 +176,15 @@ public abstract class UserRecoverableErrorHandler {
             }
             // This can happen if |errorCode| is ConnectionResult.SERVICE_INVALID.
             if (mDialog != null) {
+                mDialog.setCancelable(mCancelable);
                 mDialog.show();
             }
             sErrorHandlerActionHistogramSample.record(ERROR_HANDLER_ACTION_MODAL_DIALOG);
         }
 
+        /**
+         * Cancels the dialog.
+         */
         public void cancelDialog() {
             if (mDialog != null) {
                 mDialog.cancel();

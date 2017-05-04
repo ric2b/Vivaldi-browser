@@ -14,6 +14,7 @@
         "check_for_recommended": "Should the preference be tested when a recommended value is set for the policy? Defaults to |true| if not specified.",
         "note": "When |can_be_recommended| is |false|, the policy is never set to a recommended value so |check_for_recommended| has no effect.",
         "note": "The following entries should be specified if controlled setting indicators exist for |pref| in the settings UI.",
+        "indicator_test_url": "The URL to navigate to in order to test the indicators. Defaults to |chrome://settings-frame/| if not specified.",
         "indicator_test_setup_js": "Any JavaScript that should be executed before testing the indicators. This should be specified only if an explicit user action must be simulated (e.g. clicking a button).",
         "indicator_selector": "A CSS selector that locates all controlled setting indicators for |pref|. This is appended to the selector 'span.controlled-setting-indicator' and if not specified, defaults to '[pref=(the value of |pref|)', e.g. '[pref=homepage]'.",
         "note": "Any number of test cases may be specified in the following array.",
@@ -197,7 +198,7 @@
   },
 
   "AllowDeletingBrowserHistory": {
-    "os": [],
+    "os": ["win", "linux", "mac", "chromeos"],
     "test_policy": { "AllowDeletingBrowserHistory": false },
     "pref_mappings": [
       { "pref": "history.deleting_enabled" }
@@ -361,7 +362,7 @@
     "can_be_recommended": true,
     "test_policy": { "PasswordManagerEnabled": false },
     "pref_mappings": [
-      { "pref": "profile.password_manager_enabled",
+      { "pref": "credentials_enable_service",
         "indicator_tests": [
           { "policy": { "PasswordManagerEnabled": false } }
         ]
@@ -845,7 +846,13 @@
     "os": ["win", "linux", "mac", "chromeos"],
     "test_policy": { "DeveloperToolsDisabled": true },
     "pref_mappings": [
-      { "pref": "devtools.disabled" }
+      { "pref": "devtools.disabled",
+        "indicator_test_url": "chrome://extensions-frame/",
+        "indicator_selector": "#dev-toggle-disabled-by-policy-indicator",
+        "indicator_tests": [
+          { "policy": { "DeveloperToolsDisabled": true } }
+        ]
+      }
     ]
   },
 
@@ -1088,21 +1095,7 @@
   },
 
   "DefaultKeygenSetting": {
-    "os": ["win", "linux", "mac", "chromeos", "android"],
-    "test_policy": { "DefaultKeygenSetting": 2 },
-    "pref_mappings": [
-      { "pref": "profile.managed_default_content_settings.keygen",
-        "indicator_selector": "[content-setting=keygen]",
-        "indicator_tests": [
-          { "policy": { "DefaultKeygenSetting": 1 },
-            "value": "allow"},
-          { "policy": { "DefaultKeygenSetting": 2 },
-            "value": "block"}
-        ]
-      }
-    ],
-
-    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+    "note": "This policy is retired, see https://crbug.com/568184."
   },
 
   "DefaultPluginsSetting": {
@@ -1438,35 +1431,11 @@
   },
 
   "KeygenAllowedForUrls": {
-    "os": ["win", "linux", "mac", "chromeos", "android"],
-    "test_policy": { "KeygenAllowedForUrls": ["[*.]google.com"] },
-    "pref_mappings": [
-      { "pref": "profile.managed_keygen_allowed_for_urls",
-        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=keygen]').click();",
-        "indicator_selector": "[content-exception=keygen]",
-        "indicator_tests": [
-          { "policy": { "KeygenAllowedForUrls": ["[*.]google.com"] } }
-        ]
-      }
-    ],
-
-    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+    "note": "This policy is retired, see https://crbug.com/568184."
   },
 
   "KeygenBlockedForUrls": {
-    "os": ["win", "linux", "mac", "chromeos", "android"],
-    "test_policy": { "KeygenBlockedForUrls": ["[*.]google.com"] },
-    "pref_mappings": [
-      { "pref": "profile.managed_keygen_blocked_for_urls",
-        "indicator_test_setup_js": "document.querySelector('button.exceptions-list-button[contentType=keygen]').click();",
-        "indicator_selector": "[content-exception=keygen]",
-        "indicator_tests": [
-          { "policy": { "KeygenBlockedForUrls": ["[*.]google.com"] } }
-        ]
-      }
-    ],
-
-    "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+    "note": "This policy is retired, see https://crbug.com/568184."
   },
 
   "PluginsAllowedForUrls": {
@@ -2075,6 +2044,23 @@
     ]
   },
 
+  "RoamingProfileSupportEnabled": {
+    "os": ["win"],
+    "test_policy": { "RoamingProfileSupportEnabled": true },
+    "pref_mappings": [
+      { "pref": "sync.enable_local_sync_backend" }
+    ]
+  },
+
+  "RoamingProfileLocation": {
+    "os": ["win"],
+    "test_policy": { "RoamingProfileLocation": "${roaming_app_data}" },
+    "pref_mappings": [
+      { "pref": "sync.local_sync_backend_dir" }
+    ]
+  },
+
+
   "----- Chrome OS policies ------------------------------------------------": {},
 
   "ChromeOsLockOnIdleSuspend": {
@@ -2674,6 +2660,30 @@
     ]
   },
 
+  "PinUnlockMinimumLength": {
+    "os": ["chromeos"],
+    "test_policy": { "PinUnlockMinimumLength": 4 },
+    "pref_mappings": [
+      { "pref": "pin_unlock_minimum_length"}
+    ]
+  },
+
+  "PinUnlockMaximumLength": {
+    "os": ["chromeos"],
+    "test_policy": { "PinUnlockMaximumLength": 0 },
+    "pref_mappings": [
+      { "pref": "pin_unlock_maximum_length"}
+    ]
+  },
+
+  "PinUnlockWeakPinsAllowed": {
+    "os": ["chromeos"],
+    "test_policy": { "PinUnlockWeakPinsAllowed": true },
+    "pref_mappings": [
+      { "pref": "pin_unlock_weak_pins_allowed"}
+    ]
+  },
+
   "ArcCertificatesSyncMode": {
     "os": ["chromeos"],
     "can_be_recommended": false,
@@ -2686,6 +2696,15 @@
     "test_policy": { "ArcBackupRestoreEnabled": false },
     "pref_mappings": [
       { "pref": "arc.backup_restore.enabled" }
+    ]
+  },
+
+  "ArcLocationServiceEnabled": {
+    "os": ["chromeos"],
+    "can_be_recommended": false,
+    "test_policy": { "ArcLocationServiceEnabled": false },
+    "pref_mappings": [
+      { "pref": "arc.location_service.enabled" }
     ]
   },
 
@@ -2989,6 +3008,19 @@
     "test_policy": { "LoginApps": [ "abcdefghijklmnopabcdefghijklmnop" ] },
     "pref_mappings": [
       { "pref": "cros.device.login_apps" }
+    ]
+  },
+
+  "DeviceWallpaperImage": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "DeviceWallpaperImage": {
+        "url": "http://localhost/",
+        "hash": "examplewallpaperhash"
+      }
+    },
+    "pref_mappings": [
+      { "pref": "cros.device_wallpaper_image" }
     ]
   },
 

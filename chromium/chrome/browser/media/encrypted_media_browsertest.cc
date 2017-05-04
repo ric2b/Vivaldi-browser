@@ -8,22 +8,30 @@
 #include "base/command_line.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/win/windows_version.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/media_browsertest.h"
 #include "chrome/browser/media/test_license_server.h"
 #include "chrome/browser/media/wv_test_license_server_config.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/test_launcher_utils.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
+#include "media/base/key_system_names.h"
+#include "media/base/media_switches.h"
 #include "ppapi/features/features.h"
 #include "testing/gtest/include/gtest/gtest-spi.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
+#endif
+
+#if defined(OS_WIN)
+#include "base/win/windows_version.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PEPPER_CDMS)
@@ -66,6 +74,8 @@ const char kWebMVP9VideoOnly[] = "video/webm; codecs=\"vp9\"";
 #if defined(USE_PROPRIETARY_CODECS)
 const char kMP4AudioOnly[] = "audio/mp4; codecs=\"mp4a.40.2\"";
 const char kMP4VideoOnly[] = "video/mp4; codecs=\"avc1.4D000C\"";
+const char kMP4VideoVp9Only[] =
+    "video/mp4; codecs=\"vp09.00.01.08.02.01.01.00\"";
 #endif  // defined(USE_PROPRIETARY_CODECS)
 
 // Sessions to load.
@@ -242,6 +252,7 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(
         switches::kDisableGestureRequirementForMediaPlayback);
+    command_line->AppendSwitch(switches::kEnableVp9InMp4);
   }
 
 #if BUILDFLAG(ENABLE_PEPPER_CDMS)
@@ -403,6 +414,11 @@ class EncryptedMediaTest : public EncryptedMediaTestBase,
                               CurrentKeySystem(), query_params, kEnded);
   }
 
+  void DisableEncryptedMedia() {
+    PrefService* pref_service = browser()->profile()->GetPrefs();
+    pref_service->SetBoolean(prefs::kWebKitEncryptedMediaEnabled, false);
+  }
+
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     EncryptedMediaTestBase::SetUpCommandLine(command_line);
@@ -524,6 +540,19 @@ IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, FrameSizeChangeVideo) {
   TestFrameSizeChange();
 }
 
+IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, EncryptedMediaDisabled) {
+  DisableEncryptedMedia();
+
+  // Clear Key key system is always supported.
+  std::string expected_title =
+      media::IsClearKey(CurrentKeySystem()) ? kEnded : kEmeNotSupportedError;
+
+  RunEncryptedMediaTest(kDefaultEmePlayer, "bear-a_enc-a.webm",
+                        kWebMVorbisAudioOnly, CurrentKeySystem(),
+                        CurrentSourceType(), kNoSessionToLoad, false,
+                        PlayTwice::NO, expected_title);
+}
+
 #if defined(USE_PROPRIETARY_CODECS)
 // Crashes on Mac only.  http://crbug.com/621857
 #if defined(OS_MACOSX)
@@ -547,6 +576,15 @@ IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, Playback_AudioOnly_MP4) {
     return;
   }
   TestSimplePlayback("bear-640x360-a_frag-cenc.mp4", kMP4AudioOnly);
+}
+
+IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, Playback_VideoOnly_MP4_VP9) {
+  // MP4 without MSE is not support yet, http://crbug.com/170793.
+  if (CurrentSourceType() != MSE) {
+    DVLOG(0) << "Skipping test; Can only play MP4 encrypted streams by MSE.";
+    return;
+  }
+  TestSimplePlayback("bear-320x240-v_frag-vp9-cenc.mp4", kMP4VideoVp9Only);
 }
 
 IN_PROC_BROWSER_TEST_P(EncryptedMediaTest,

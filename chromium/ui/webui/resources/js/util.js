@@ -106,7 +106,7 @@ function setQueryParam(location, key, value) {
  * @return {Element} A node with class of |className| or null if none is found.
  */
 function findAncestorByClass(el, className) {
-  return /** @type {Element} */(findAncestor(el, function(el) {
+  return /** @type {Element} */ (findAncestor(el, function(el) {
     return el.classList && el.classList.contains(className);
   }));
 }
@@ -166,7 +166,7 @@ function disableTextSelectAndDrag(opt_allowSelectStart, opt_allowDragStart) {
  */
 function preventDefaultOnPoundLinkClicks() {
   document.addEventListener('click', function(e) {
-    var anchor = findAncestor(/** @type {Node} */(e.target), function(el) {
+    var anchor = findAncestor(/** @type {Node} */ (e.target), function(el) {
       return el.tagName == 'A';
     });
     // Use getAttribute() to prevent URL normalization.
@@ -191,8 +191,8 @@ function isRTL() {
  * @return {!HTMLElement} the Element.
  */
 function getRequiredElement(id) {
-  return assertInstanceof($(id), HTMLElement,
-                          'Missing required element: ' + id);
+  return assertInstanceof(
+      $(id), HTMLElement, 'Missing required element: ' + id);
 }
 
 /**
@@ -206,8 +206,8 @@ function getRequiredElement(id) {
  */
 function queryRequiredElement(selectors, opt_context) {
   var element = (opt_context || document).querySelector(selectors);
-  return assertInstanceof(element, HTMLElement,
-                          'Missing required element: ' + selectors);
+  return assertInstanceof(
+      element, HTMLElement, 'Missing required element: ' + selectors);
 }
 
 // We don't have access to window.parent, so we'll receive the window
@@ -222,7 +222,7 @@ window.addEventListener("message", function(event) {
 ['click', 'auxclick'].forEach(function(eventName) {
   document.addEventListener(eventName, function(e) {
     if (e.button > 1)
-      return; // Ignore buttons other than left and middle.
+      return;  // Ignore buttons other than left and middle.
     if (e.defaultPrevented)
       return;
 
@@ -251,7 +251,7 @@ window.addEventListener("message", function(event) {
     if (!anchor)
       return;
 
-    anchor = /** @type {!HTMLAnchorElement} */(anchor);
+    anchor = /** @type {!HTMLAnchorElement} */ (anchor);
 
     // Send this URL to vivaldi.
     if (vivaldiWindow) {
@@ -262,12 +262,7 @@ window.addEventListener("message", function(event) {
     if ((anchor.protocol == 'file:' || anchor.protocol == 'about:') &&
         (e.button == 0 || e.button == 1)) {
       chrome.send('navigateToUrl', [
-        anchor.href,
-        anchor.target,
-        e.button,
-        e.altKey,
-        e.ctrlKey,
-        e.metaKey,
+        anchor.href, anchor.target, e.button, e.altKey, e.ctrlKey, e.metaKey,
         e.shiftKey
       ]);
       e.preventDefault();
@@ -379,10 +374,10 @@ function setScrollLeftForDocument(doc, value) {
  */
 function HTMLEscape(original) {
   return original.replace(/&/g, '&amp;')
-                 .replace(/</g, '&lt;')
-                 .replace(/>/g, '&gt;')
-                 .replace(/"/g, '&quot;')
-                 .replace(/'/g, '&#39;');
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
 }
 
 /**
@@ -442,7 +437,7 @@ function listenOnce(target, eventNames, callback) {
 if (!('key' in KeyboardEvent.prototype)) {
   Object.defineProperty(KeyboardEvent.prototype, 'key', {
     /** @this {KeyboardEvent} */
-    get: function () {
+    get: function() {
       // 0-9
       if (this.keyCode >= 0x30 && this.keyCode <= 0x39)
         return String.fromCharCode(this.keyCode);
@@ -456,48 +451,83 @@ if (!('key' in KeyboardEvent.prototype)) {
       }
 
       // Special characters
-      switch(this.keyCode) {
-        case 0x08: return 'Backspace';
-        case 0x09: return 'Tab';
-        case 0x0d: return 'Enter';
-        case 0x10: return 'Shift';
-        case 0x11: return 'Control';
-        case 0x12: return 'Alt';
-        case 0x1b: return 'Escape';
-        case 0x20: return ' ';
-        case 0x21: return 'PageUp';
-        case 0x22: return 'PageDown';
-        case 0x23: return 'End';
-        case 0x24: return 'Home';
-        case 0x25: return 'ArrowLeft';
-        case 0x26: return 'ArrowUp';
-        case 0x27: return 'ArrowRight';
-        case 0x28: return 'ArrowDown';
-        case 0x2d: return 'Insert';
-        case 0x2e: return 'Delete';
-        case 0x5b: return 'Meta';
-        case 0x70: return 'F1';
-        case 0x71: return 'F2';
-        case 0x72: return 'F3';
-        case 0x73: return 'F4';
-        case 0x74: return 'F5';
-        case 0x75: return 'F6';
-        case 0x76: return 'F7';
-        case 0x77: return 'F8';
-        case 0x78: return 'F9';
-        case 0x79: return 'F10';
-        case 0x7a: return 'F11';
-        case 0x7b: return 'F12';
-        case 0xbb: return '=';
-        case 0xbd: return '-';
-        case 0xdb: return '[';
-        case 0xdd: return ']';
+      switch (this.keyCode) {
+        case 0x08:
+          return 'Backspace';
+        case 0x09:
+          return 'Tab';
+        case 0x0d:
+          return 'Enter';
+        case 0x10:
+          return 'Shift';
+        case 0x11:
+          return 'Control';
+        case 0x12:
+          return 'Alt';
+        case 0x1b:
+          return 'Escape';
+        case 0x20:
+          return ' ';
+        case 0x21:
+          return 'PageUp';
+        case 0x22:
+          return 'PageDown';
+        case 0x23:
+          return 'End';
+        case 0x24:
+          return 'Home';
+        case 0x25:
+          return 'ArrowLeft';
+        case 0x26:
+          return 'ArrowUp';
+        case 0x27:
+          return 'ArrowRight';
+        case 0x28:
+          return 'ArrowDown';
+        case 0x2d:
+          return 'Insert';
+        case 0x2e:
+          return 'Delete';
+        case 0x5b:
+          return 'Meta';
+        case 0x70:
+          return 'F1';
+        case 0x71:
+          return 'F2';
+        case 0x72:
+          return 'F3';
+        case 0x73:
+          return 'F4';
+        case 0x74:
+          return 'F5';
+        case 0x75:
+          return 'F6';
+        case 0x76:
+          return 'F7';
+        case 0x77:
+          return 'F8';
+        case 0x78:
+          return 'F9';
+        case 0x79:
+          return 'F10';
+        case 0x7a:
+          return 'F11';
+        case 0x7b:
+          return 'F12';
+        case 0xbb:
+          return '=';
+        case 0xbd:
+          return '-';
+        case 0xdb:
+          return '[';
+        case 0xdd:
+          return ']';
       }
       return 'Unidentified';
     }
   });
 } else {
-  window.console.log("KeyboardEvent.Key polyfill not required");
+  window.console.log('KeyboardEvent.Key polyfill not required');
 }
 // </if>  /* is_ios */
 
@@ -513,4 +543,12 @@ function importModules(moduleNames) {
       resolve(Array.from(arguments));
     });
   });
+}
+
+/**
+ * @param {!Event} e
+ * @return {boolean} Whether a modifier key was down when processing |e|.
+ */
+function hasKeyModifiers(e) {
+  return !!(e.altKey || e.ctrlKey || e.metaKey || e.shiftKey);
 }

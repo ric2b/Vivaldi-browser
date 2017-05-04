@@ -38,12 +38,14 @@
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/referrer.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "net/base/net_errors.h"
@@ -186,10 +188,6 @@ void SearchTabHelper::NavigationEntryUpdated() {
   UpdateMode(false);
 }
 
-bool SearchTabHelper::SupportsInstant() const {
-  return model_.instant_support() == INSTANT_SUPPORT_YES;
-}
-
 void SearchTabHelper::SetSuggestionToPrefetch(
     const InstantSuggestion& suggestion) {
   ipc_router_.SetSuggestionToPrefetch(suggestion);
@@ -204,6 +202,9 @@ void SearchTabHelper::OnTabActivated() {
   ipc_router_.OnTabActivated();
 
   if (search::IsInstantNTP(web_contents_)) {
+    if (instant_service_)
+      instant_service_->OnNewTabPageOpened();
+
     // Force creation of NTPUserDataLogger, if we loaded an NTP. The
     // NTPUserDataLogger tries to detect whether the NTP is being created at
     // startup or from the user opening a new tab, and if we wait until later,
@@ -218,7 +219,16 @@ void SearchTabHelper::OnTabDeactivated() {
 
 void SearchTabHelper::DidStartNavigationToPendingEntry(
     const GURL& url,
-    content::ReloadType /* reload_type */) {
+    content::ReloadType reload_type) {
+  // TODO(jam): delete this method once PlzNavigate is turned on by default.
+  // When PlzNavigate is enabled, DidStartNavigation is called early enough such
+  // that there's no flickering. However when PlzNavigate is disabled,
+  // DidStartNavigation is called too late and "Untitled" shows up momentarily.
+  // The fix is to override this deprecated callback for the non-PlzNavigate
+  // case.
+  if (content::IsBrowserSideNavigationEnabled())
+    return;
+
   if (search::IsNTPURL(url, profile())) {
     // Set the title on any pending entry corresponding to the NTP. This
     // prevents any flickering of the tab title.
@@ -231,9 +241,31 @@ void SearchTabHelper::DidStartNavigationToPendingEntry(
   }
 }
 
-void SearchTabHelper::DidNavigateMainFrame(
-    const content::LoadCommittedDetails& details,
-    const content::FrameNavigateParams& params) {
+void SearchTabHelper::DidStartNavigation(
+    content::NavigationHandle* navigation_handle) {
+  if (!content::IsBrowserSideNavigationEnabled())
+    return;
+
+  if (!navigation_handle->IsInMainFrame() || navigation_handle->IsSamePage())
+    return;
+
+  if (search::IsNTPURL(navigation_handle->GetURL(), profile())) {
+    // Set the title on any pending entry corresponding to the NTP. This
+    // prevents any flickering of the tab title.
+    content::NavigationEntry* entry =
+        web_contents_->GetController().GetPendingEntry();
+    if (entry) {
+      web_contents_->UpdateTitleForEntry(
+          entry, l10n_util::GetStringUTF16(IDS_NEW_TAB_TITLE));
+    }
+  }
+}
+
+void SearchTabHelper::DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsInMainFrame() || navigation_handle->IsSamePage())
+    return;
+
   if (IsCacheableNTP(web_contents_)) {
     UMA_HISTOGRAM_ENUMERATION("InstantExtended.CacheableNTPLoad",
                               search::CACHEABLE_NTP_LOAD_SUCCEEDED,
@@ -384,7 +416,8 @@ void SearchTabHelper::OnLogEvent(NTPLoggingEventType event,
 }
 
 void SearchTabHelper::OnLogMostVisitedImpression(
-    int position, NTPLoggingTileSource tile_source) {
+    int position,
+    ntp_tiles::NTPTileSource tile_source) {
 // TODO(kmadhusu): Move platform specific code from here and get rid of #ifdef.
 #if !defined(OS_ANDROID)
   NTPUserDataLogger::GetOrCreateFromWebContents(
@@ -393,7 +426,8 @@ void SearchTabHelper::OnLogMostVisitedImpression(
 }
 
 void SearchTabHelper::OnLogMostVisitedNavigation(
-    int position, NTPLoggingTileSource tile_source) {
+    int position,
+    ntp_tiles::NTPTileSource tile_source) {
 // TODO(kmadhusu): Move platform specific code from here and get rid of #ifdef.
 #if !defined(OS_ANDROID)
   NTPUserDataLogger::GetOrCreateFromWebContents(

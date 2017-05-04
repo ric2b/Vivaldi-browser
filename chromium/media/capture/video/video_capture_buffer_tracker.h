@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_BUFFER_TRACKER_H_
-#define MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_BUFFER_TRACKER_H_
+#ifndef MEDIA_CAPTURE_VIDEO_VIDEO_CAPTURE_BUFFER_TRACKER_H_
+#define MEDIA_CAPTURE_VIDEO_VIDEO_CAPTURE_BUFFER_TRACKER_H_
 
 #include <memory>
 
@@ -23,7 +23,8 @@ class CAPTURE_EXPORT VideoCaptureBufferTracker {
   VideoCaptureBufferTracker()
       : max_pixel_count_(0),
         held_by_producer_(false),
-        consumer_hold_count_(0) {}
+        consumer_hold_count_(0),
+        frame_feedback_id_(0) {}
   virtual bool Init(const gfx::Size& dimensions,
                     media::VideoPixelFormat format,
                     media::VideoPixelStorage storage_type,
@@ -46,11 +47,13 @@ class CAPTURE_EXPORT VideoCaptureBufferTracker {
   void set_held_by_producer(bool value) { held_by_producer_ = value; }
   int consumer_hold_count() const { return consumer_hold_count_; }
   void set_consumer_hold_count(int value) { consumer_hold_count_ = value; }
+  void set_frame_feedback_id(int value) { frame_feedback_id_ = value; }
+  int frame_feedback_id() { return frame_feedback_id_; }
 
-  // Returns a scoped handle to the underlying storage.
-  virtual std::unique_ptr<VideoCaptureBufferHandle> GetBufferHandle() = 0;
-
+  virtual std::unique_ptr<VideoCaptureBufferHandle> GetMemoryMappedAccess() = 0;
   virtual mojo::ScopedSharedBufferHandle GetHandleForTransit() = 0;
+  virtual base::SharedMemoryHandle
+  GetNonOwnedSharedMemoryHandleForLegacyIPC() = 0;
 
  private:
   // |dimensions_| may change as a VideoCaptureBufferTracker is re-used, but
@@ -67,8 +70,10 @@ class CAPTURE_EXPORT VideoCaptureBufferTracker {
 
   // Number of consumer processes which hold this VideoCaptureBufferTracker.
   int consumer_hold_count_;
+
+  int frame_feedback_id_;
 };
 
 }  // namespace content
 
-#endif  // MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_BUFFER_TRACKER_H_
+#endif  // MEDIA_CAPTURE_VIDEO_VIDEO_CAPTURE_BUFFER_TRACKER_H_

@@ -37,7 +37,6 @@ class SingleThreadTaskRunner;
 }
 
 namespace blink {
-class WebContentDecryptionModule;
 class WebFrame;
 class WebMediaPlayerClient;
 class WebMediaPlayerEncryptedMediaClient;
@@ -130,8 +129,6 @@ class WebMediaPlayerAndroid
 
   bool copyVideoTextureToPlatformTexture(gpu::gles2::GLES2Interface* gl,
                                          unsigned int texture,
-                                         unsigned int internal_format,
-                                         unsigned int type,
                                          bool premultiply_alpha,
                                          bool flip_y) override;
 
@@ -215,9 +212,10 @@ class WebMediaPlayerAndroid
   void SuspendAndReleaseResources() override;
 
   // WebMediaPlayerDelegate::Observer implementation.
-  void OnHidden() override;
-  void OnShown() override;
-  bool OnSuspendRequested(bool must_suspend) override;
+  void OnFrameHidden() override;
+  void OnFrameClosed() override;
+  void OnFrameShown() override;
+  void OnIdleTimeout() override;
   void OnPlay() override;
   void OnPause() override;
   void OnVolumeMultiplierUpdate(double multiplier) override;
@@ -424,6 +422,10 @@ class WebMediaPlayerAndroid
   // for a transient sound.  Playout volume is derived by volume * multiplier.
   double volume_;
   double volume_multiplier_;
+
+  // Whether the video requires a user gesture to resume after it was paused in
+  // the background.
+  bool video_locked_when_paused_when_hidden_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<WebMediaPlayerAndroid> weak_factory_;

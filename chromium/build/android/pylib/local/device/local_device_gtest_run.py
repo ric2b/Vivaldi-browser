@@ -7,6 +7,7 @@ import itertools
 import logging
 import os
 import posixpath
+import time
 
 from devil.android import device_errors
 from devil.android import device_temp_file
@@ -18,6 +19,8 @@ from pylib.gtest import gtest_test_instance
 from pylib.local import local_test_server_spawner
 from pylib.local.device import local_device_environment
 from pylib.local.device import local_device_test_run
+from py_trace_event import trace_event
+from py_utils import contextlib_ext
 import tombstones
 
 _MAX_INLINE_FLAGS_LENGTH = 50  # Arbitrarily chosen.
@@ -25,12 +28,15 @@ _EXTRA_COMMAND_LINE_FILE = (
     'org.chromium.native_test.NativeTest.CommandLineFile')
 _EXTRA_COMMAND_LINE_FLAGS = (
     'org.chromium.native_test.NativeTest.CommandLineFlags')
-_EXTRA_TEST_LIST = (
+_EXTRA_STDOUT_FILE = (
     'org.chromium.native_test.NativeTestInstrumentationTestRunner'
-        '.TestList')
+        '.StdoutFile')
 _EXTRA_TEST = (
     'org.chromium.native_test.NativeTestInstrumentationTestRunner'
         '.Test')
+_EXTRA_TEST_LIST = (
+    'org.chromium.native_test.NativeTestInstrumentationTestRunner'
+        '.TestList')
 
 _MAX_SHARD_SIZE = 256
 _SECONDS_TO_NANOS = int(1e9)
@@ -153,13 +159,22 @@ class _ApkDelegate(object):
       else:
         extras[_EXTRA_TEST] = test[0]
 
-    with command_line_file, test_list_file:
+    stdout_file = device_temp_file.DeviceTempFile(
+        device.adb, dir=device.GetExternalStoragePath(), suffix='.gtest_out')
+    extras[_EXTRA_STDOUT_FILE] = stdout_file.name
+
+    with command_line_file, test_list_file, stdout_file:
       try:
-        return device.StartInstrumentation(
+        device.StartInstrumentation(
             self._component, extras=extras, raw=False, **kwargs)
+      except device_errors.CommandFailedError:
+        logging.exception('gtest shard failed.')
+      except device_errors.CommandTimeoutError:
+        logging.exception('gtest shard timed out.')
       except Exception:
         device.ForceStop(self._package)
         raise
+      return device.ReadFile(stdout_file.name).splitlines()
 
   def PullAppFiles(self, device, files, directory):
     PullAppFilesImpl(device, self._package, files, directory)
@@ -251,7 +266,7 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
   def SetUp(self):
     @local_device_environment.handle_shard_failures_with(
         on_failure=self._env.BlacklistDevice)
-    def individual_device_set_up(dev):
+    def individual_device_set_up(dev, host_device_tuples):
       def install_apk():
         # Install test APK.
         self._delegate.Install(dev)
@@ -259,11 +274,12 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
       def push_test_data():
         # Push data dependencies.
         device_root = self._delegate.GetTestDataRoot(dev)
-        data_deps = self._test_instance.GetDataDependencies()
-        host_device_tuples = [
-            (h, d if d is not None else device_root)
-            for h, d in data_deps]
-        dev.PushChangedFiles(host_device_tuples, delete_device_stale=True)
+        host_device_tuples_substituted = [
+            (h, local_device_test_run.SubstituteDeviceRoot(d, device_root))
+            for h, d in host_device_tuples]
+        dev.PushChangedFiles(
+            host_device_tuples_substituted,
+            delete_device_stale=True)
         if not host_device_tuples:
           dev.RunShellCommand(['rm', '-rf', device_root], check_return=True)
           dev.RunShellCommand(['mkdir', '-p', device_root], check_return=True)
@@ -289,7 +305,9 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
         for step in steps:
           step()
 
-    self._env.parallel_devices.pMap(individual_device_set_up)
+    self._env.parallel_devices.pMap(
+        individual_device_set_up,
+        self._test_instance.GetDataDependencies())
 
   #override
   def _ShouldShard(self):
@@ -355,27 +373,35 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
   #override
   def _RunTest(self, device, test):
     # Run the test.
-    timeout = (self._test_instance.shard_timeout
-               * self.GetTool(device).GetTimeoutScale())
-    if self._test_instance.store_tombstones:
-      tombstones.ClearAllTombstones(device)
-    with device_temp_file.DeviceTempFile(
-        adb=device.adb,
-        dir=self._delegate.ResultsDirectory(device),
-        suffix='.xml') as device_tmp_results_file:
+    with contextlib_ext.Optional(
+        self._env.Tracing(),
+        self._env.trace_output):
+      timeout = (self._test_instance.shard_timeout
+                 * self.GetTool(device).GetTimeoutScale())
+      if self._test_instance.store_tombstones:
+        tombstones.ClearAllTombstones(device)
+      with device_temp_file.DeviceTempFile(
+          adb=device.adb,
+          dir=self._delegate.ResultsDirectory(device),
+          suffix='.xml') as device_tmp_results_file:
 
-      flags = self._test_instance.test_arguments or ''
-      if self._test_instance.enable_xml_result_parsing:
-        flags += ' --gtest_output=xml:%s' % device_tmp_results_file.name
+        flags = self._test_instance.test_arguments or ''
+        if self._test_instance.enable_xml_result_parsing:
+          flags += ' --gtest_output=xml:%s' % device_tmp_results_file.name
+        if self._test_instance.gtest_also_run_disabled_tests:
+          flags += ' --gtest_also_run_disabled_tests'
 
-      output = self._delegate.Run(
-          test, device, flags=flags,
-          timeout=timeout, retries=0)
+        with contextlib_ext.Optional(
+            trace_event.trace(str(test)),
+            self._env.trace_output):
+          output = self._delegate.Run(
+              test, device, flags=flags,
+              timeout=timeout, retries=0)
 
-      if self._test_instance.enable_xml_result_parsing:
-        gtest_xml = device.ReadFile(
-            device_tmp_results_file.name,
-            as_root=True)
+        if self._test_instance.enable_xml_result_parsing:
+          gtest_xml = device.ReadFile(
+              device_tmp_results_file.name,
+              as_root=True)
 
     for s in self._servers[str(device)]:
       s.Reset()
@@ -397,17 +423,24 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
                          if r.GetType() == base_test_result.ResultType.CRASH)
 
     if self._test_instance.store_tombstones:
-      resolved_tombstones = None
+      tombstones_url = None
       for result in results:
         if result.GetType() == base_test_result.ResultType.CRASH:
-          if not resolved_tombstones:
-            resolved_tombstones = '\n'.join(tombstones.ResolveTombstones(
+          if not tombstones_url:
+            resolved_tombstones = tombstones.ResolveTombstones(
                 device,
                 resolve_all_tombstones=True,
                 include_stack_symbols=False,
-                wipe_tombstones=True))
-          result.SetTombstones(resolved_tombstones)
-    return results
+                wipe_tombstones=True)
+            stream_name = 'tombstones_%s_%s' % (
+                time.strftime('%Y%m%dT%H%M%S', time.localtime()),
+                device.serial)
+            tombstones_url = tombstones.LogdogTombstones(resolved_tombstones,
+                                                         stream_name)
+          result.SetTombstonesUrl(tombstones_url)
+
+    not_run_tests = set(test).difference(set(r.GetName() for r in results))
+    return results, list(not_run_tests)
 
   #override
   def TearDown(self):

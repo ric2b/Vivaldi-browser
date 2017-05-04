@@ -21,11 +21,6 @@
 
 class IOSChromeStabilityMetricsProvider;
 class PrefRegistrySimple;
-class PrefService;
-
-namespace base {
-class FilePath;
-}  // namespace base
 
 namespace metrics {
 class DriveMetricsProvider;
@@ -58,11 +53,12 @@ class IOSChromeMetricsServiceClient
   bool GetBrand(std::string* brand_code) override;
   metrics::SystemProfileProto::Channel GetChannel() override;
   std::string GetVersionString() override;
-  void OnLogUploadComplete() override;
   void InitializeSystemProfileMetrics(
       const base::Closure& done_callback) override;
   void CollectFinalMetricsForLog(const base::Closure& done_callback) override;
   std::unique_ptr<metrics::MetricsLogUploader> CreateUploader(
+      const std::string& server_url,
+      const std::string& mime_type,
       const base::Callback<void(int)>& on_upload_complete) override;
   base::TimeDelta GetStandardUploadInterval() override;
   base::string16 GetRegistryBackupKey() override;

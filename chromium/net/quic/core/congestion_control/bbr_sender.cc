@@ -7,9 +7,11 @@
 #include <algorithm>
 #include <sstream>
 
+#include "base/stl_util.h"
 #include "net/quic/core/congestion_control/rtt_stats.h"
-#include "net/quic/core/quic_bug_tracker.h"
 #include "net/quic/core/quic_flags.h"
+#include "net/quic/platform/api/quic_bug_tracker.h"
+#include "net/quic/platform/api/quic_logging.h"
 
 namespace net {
 
@@ -63,14 +65,12 @@ BbrSender::DebugState::DebugState(const BbrSender& sender)
 
 BbrSender::DebugState::DebugState(const DebugState& state) = default;
 
-BbrSender::BbrSender(const QuicClock* clock,
-                     const RttStats* rtt_stats,
+BbrSender::BbrSender(const RttStats* rtt_stats,
                      const QuicUnackedPacketMap* unacked_packets,
                      QuicPacketCount initial_tcp_congestion_window,
                      QuicPacketCount max_tcp_congestion_window,
                      QuicRandom* random)
-    : clock_(clock),
-      rtt_stats_(rtt_stats),
+    : rtt_stats_(rtt_stats),
       unacked_packets_(unacked_packets),
       random_(random),
       mode_(STARTUP),
@@ -98,7 +98,10 @@ BbrSender::BbrSender(const QuicClock* clock,
       probe_rtt_round_passed_(false),
       last_sample_is_app_limited_(false),
       recovery_state_(NOT_IN_RECOVERY),
-      end_recovery_at_(0) {
+      end_recovery_at_(0),
+      recovery_window_(max_congestion_window_),
+      enforce_startup_pacing_rate_increase_(
+          FLAGS_quic_reloadable_flag_quic_bbr_faster_startup) {
   EnterStartupMode();
 }
 
@@ -300,9 +303,9 @@ bool BbrSender::UpdateBandwidthAndMinRtt(
       !min_rtt_.IsZero() && (now > (min_rtt_timestamp_ + kMinRttExpiry));
 
   if (min_rtt_expired || sample_min_rtt < min_rtt_ || min_rtt_.IsZero()) {
-    DVLOG(2) << "Min RTT updated, old value: " << min_rtt_
-             << ", new value: " << sample_min_rtt
-             << ", current time: " << now.ToDebuggingValue();
+    QUIC_DVLOG(2) << "Min RTT updated, old value: " << min_rtt_
+                  << ", new value: " << sample_min_rtt
+                  << ", current time: " << now.ToDebuggingValue();
 
     min_rtt_ = sample_min_rtt;
     min_rtt_timestamp_ = now;
@@ -453,7 +456,24 @@ void BbrSender::CalculatePacingRate() {
     return;
   }
 
-  pacing_rate_ = pacing_gain_ * BandwidthEstimate();
+  QuicBandwidth target_rate = pacing_gain_ * BandwidthEstimate();
+
+  // Ensure that the pacing rate does not drop too low during the startup.
+  if (!is_at_full_bandwidth_ && enforce_startup_pacing_rate_increase_) {
+    // Pace at the rate of initial_window / RTT as soon as RTT measurements are
+    // available.
+    if (pacing_rate_.IsZero() && !rtt_stats_->min_rtt().IsZero()) {
+      pacing_rate_ = QuicBandwidth::FromBytesAndTimeDelta(
+          initial_congestion_window_, rtt_stats_->min_rtt());
+      return;
+    }
+
+    // Do not decrease the pacing rate during the startup.
+    pacing_rate_ = std::max(pacing_rate_, target_rate);
+    return;
+  }
+
+  pacing_rate_ = target_rate;
 }
 
 void BbrSender::CalculateCongestionWindow(QuicByteCount bytes_acked) {
@@ -508,8 +528,8 @@ void BbrSender::OnApplicationLimited(QuicByteCount bytes_in_flight) {
   }
 
   sampler_.OnAppLimited();
-  DVLOG(2) << "Becoming application limited. Last sent packet: "
-           << last_sent_packet_ << ", CWND: " << GetCongestionWindow();
+  QUIC_DVLOG(2) << "Becoming application limited. Last sent packet: "
+                << last_sent_packet_ << ", CWND: " << GetCongestionWindow();
 }
 
 BbrSender::DebugState BbrSender::ExportDebugState() const {

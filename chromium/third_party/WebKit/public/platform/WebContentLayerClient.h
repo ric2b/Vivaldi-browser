@@ -34,7 +34,6 @@ class Rect;
 
 namespace blink {
 
-struct WebRect;
 class WebDisplayItemList;
 
 class BLINK_PLATFORM_EXPORT WebContentLayerClient {
@@ -42,8 +41,7 @@ class BLINK_PLATFORM_EXPORT WebContentLayerClient {
   enum PaintingControlSetting {
     // Returns the last PaintArtifact produced.
     PaintDefaultBehavior,
-    // Paints the content to simulate the behavior of
-    // FrameView::synchronizedPaint.
+    // Paints the content to simulate the behavior of FrameView::paintTree().
     PaintDefaultBehaviorForTest,
     // Puts the GraphicsContext in disabled mode and disables display item
     // construction in PaintController.

@@ -25,7 +25,7 @@
 
 #include "core/editing/commands/WrapContentsInDummySpanCommand.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/commands/ApplyStyleCommand.h"
 #include "core/html/HTMLSpanElement.h"
@@ -42,9 +42,9 @@ void WrapContentsInDummySpanCommand::executeApply() {
   getChildNodes(*m_element, children);
 
   for (auto& child : children)
-    m_dummySpan->appendChild(child.release(), IGNORE_EXCEPTION);
+    m_dummySpan->appendChild(child.release(), IGNORE_EXCEPTION_FOR_TESTING);
 
-  m_element->appendChild(m_dummySpan.get(), IGNORE_EXCEPTION);
+  m_element->appendChild(m_dummySpan.get(), IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 void WrapContentsInDummySpanCommand::doApply(EditingState*) {
@@ -63,9 +63,9 @@ void WrapContentsInDummySpanCommand::doUnapply() {
   getChildNodes(*m_dummySpan, children);
 
   for (auto& child : children)
-    m_element->appendChild(child.release(), IGNORE_EXCEPTION);
+    m_element->appendChild(child.release(), IGNORE_EXCEPTION_FOR_TESTING);
 
-  m_dummySpan->remove(IGNORE_EXCEPTION);
+  m_dummySpan->remove(IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 void WrapContentsInDummySpanCommand::doReapply() {

@@ -2,6 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
+import("//build/config/ios/ios_sdk.gni")
+
 source_set("common") {
   sources = [
     "channel_info.h",
@@ -18,7 +21,7 @@ source_set("common") {
     "//base",
     "//components/version_info",
     "//ios/chrome/common/app_group:main_app",
-    "//ios/chrome/common/physical_web:physical_web",
+    "//ios/chrome/common/physical_web",
     "//net",
     "//url",
   ]
@@ -39,4 +42,9 @@ source_set("unit_tests") {
     "//base",
     "//testing/gtest",
   ]
+}
+
+buildflag_header("ios_app_bundle_id_prefix_header") {
+  header = "ios_app_bundle_id_prefix.h"
+  flags = [ "IOS_APP_BUNDLE_ID_PREFIX=\"$ios_app_bundle_id_prefix\"" ]
 }

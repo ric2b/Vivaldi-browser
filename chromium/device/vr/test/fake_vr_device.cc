@@ -16,6 +16,7 @@ FakeVRDevice::FakeVRDevice() {
 FakeVRDevice::~FakeVRDevice() {}
 
 void FakeVRDevice::InitBasicDevice() {
+  device_->index = id();
   device_->displayName = "FakeVRDevice";
 
   device_->capabilities = mojom::VRDisplayCapabilities::New();
@@ -69,22 +70,19 @@ mojom::VRPosePtr FakeVRDevice::GetPose() {
 
 void FakeVRDevice::ResetPose() {}
 
-// TODO(shaobo.yan@intel.com): Will implemenate for VRDeviceServiceImpl tests.
 void FakeVRDevice::RequestPresent(const base::Callback<void(bool)>& callback) {
   callback.Run(true);
 }
 
 void FakeVRDevice::SetSecureOrigin(bool secure_origin) {}
 
-void FakeVRDevice::ExitPresent() {}
+void FakeVRDevice::ExitPresent() {
+  OnExitPresent();
+}
 
 void FakeVRDevice::SubmitFrame(mojom::VRPosePtr pose) {}
 
 void FakeVRDevice::UpdateLayerBounds(mojom::VRLayerBoundsPtr leftBounds,
                                      mojom::VRLayerBoundsPtr rightBounds) {}
-
-void FakeVRDevice::AddService(VRServiceImpl* service) {}
-
-void FakeVRDevice::RemoveService(VRServiceImpl* service) {}
 
 }  // namespace device

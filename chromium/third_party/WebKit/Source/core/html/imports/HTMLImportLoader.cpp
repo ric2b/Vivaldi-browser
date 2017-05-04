@@ -55,7 +55,7 @@ void HTMLImportLoader::dispose() {
   if (m_document) {
     if (m_document->parser())
       m_document->parser()->removeClient(this);
-    m_document->setImportsController(nullptr);
+    m_document->clearImportsController();
     m_document.clear();
   }
   clearResource();
@@ -171,8 +171,8 @@ bool HTMLImportLoader::hasPendingResources() const {
 }
 
 void HTMLImportLoader::didFinishLoading() {
-  for (size_t i = 0; i < m_imports.size(); ++i)
-    m_imports[i]->didFinishLoading();
+  for (const auto& importChild : m_imports)
+    importChild->didFinishLoading();
 
   clearResource();
 
@@ -189,7 +189,7 @@ void HTMLImportLoader::moveToFirst(HTMLImportChild* import) {
 void HTMLImportLoader::addImport(HTMLImportChild* import) {
   DCHECK_EQ(kNotFound, m_imports.find(import));
 
-  m_imports.append(import);
+  m_imports.push_back(import);
   import->normalize();
   if (isDone())
     import->didFinishLoading();

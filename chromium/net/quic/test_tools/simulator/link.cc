@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/strings/stringprintf.h"
 #include "net/quic/test_tools/simulator/link.h"
+
+#include "base/strings/stringprintf.h"
 #include "net/quic/test_tools/simulator/simulator.h"
 
 using base::StringPrintf;
+using std::string;
 
 namespace net {
 namespace simulator {
@@ -15,7 +17,7 @@ namespace simulator {
 const uint64_t kMaxRandomDelayUs = 10;
 
 OneWayLink::OneWayLink(Simulator* simulator,
-                       std::string name,
+                       string name,
                        UnconstrainedPortInterface* sink,
                        QuicBandwidth bandwidth,
                        QuicTime::Delta propagation_delay)
@@ -84,7 +86,7 @@ QuicTime::Delta OneWayLink::GetRandomDelay(QuicTime::Delta transfer_time) {
 }
 
 SymmetricLink::SymmetricLink(Simulator* simulator,
-                             std::string name,
+                             string name,
                              UnconstrainedPortInterface* sink_a,
                              UnconstrainedPortInterface* sink_b,
                              QuicBandwidth bandwidth,

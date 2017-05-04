@@ -13,6 +13,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/strings/grit/components_strings.h"
+#include "ppapi/features/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
@@ -90,7 +91,7 @@ const PermissionsUIInfo kPermissionsUIInfo[] = {
      IDR_BLOCKED_JAVASCRIPT, IDR_ALLOWED_JAVASCRIPT},
     {CONTENT_SETTINGS_TYPE_POPUPS, IDS_WEBSITE_SETTINGS_TYPE_POPUPS,
      IDR_BLOCKED_POPUPS, IDR_ALLOWED_POPUPS},
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
     {CONTENT_SETTINGS_TYPE_PLUGINS, IDS_WEBSITE_SETTINGS_TYPE_FLASH,
      IDR_BLOCKED_PLUGINS, IDR_ALLOWED_PLUGINS},
 #endif
@@ -108,8 +109,6 @@ const PermissionsUIInfo kPermissionsUIInfo[] = {
      IDR_ALLOWED_DOWNLOADS},
     {CONTENT_SETTINGS_TYPE_MIDI_SYSEX, IDS_WEBSITE_SETTINGS_TYPE_MIDI_SYSEX,
      IDR_BLOCKED_MIDI_SYSEX, IDR_ALLOWED_MIDI_SYSEX},
-    {CONTENT_SETTINGS_TYPE_KEYGEN, IDS_WEBSITE_SETTINGS_TYPE_KEYGEN,
-     IDR_BLOCKED_KEYGEN, IDR_ALLOWED_KEYGEN},
     {CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC,
      IDS_WEBSITE_SETTINGS_TYPE_BACKGROUND_SYNC, IDR_BLOCKED_BACKGROUND_SYNC,
      IDR_ALLOWED_BACKGROUND_SYNC},
@@ -171,37 +170,34 @@ WebsiteSettingsUI::IdentityInfo::GetSecurityDescription() const {
         case WebsiteSettings::
             SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE:
           return CreateSecurityDescription(
-              IDS_WEBSITE_SETTINGS_NOT_SECURE_SUMMARY,
-              IDS_WEBSITE_SETTINGS_NOT_SECURE_DETAILS);
+              IDS_PAGEINFO_NOT_SECURE_SUMMARY,
+              IDS_PAGEINFO_NOT_SECURE_DETAILS);
         case WebsiteSettings::
             SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE:
           return CreateSecurityDescription(
-              IDS_WEBSITE_SETTINGS_MIXED_CONTENT_SUMMARY,
-              IDS_WEBSITE_SETTINGS_MIXED_CONTENT_DETAILS);
+              IDS_PAGEINFO_MIXED_CONTENT_SUMMARY,
+              IDS_PAGEINFO_MIXED_CONTENT_DETAILS);
         default:
-          return CreateSecurityDescription(IDS_WEBSITE_SETTINGS_SECURE_SUMMARY,
-                                           IDS_WEBSITE_SETTINGS_SECURE_DETAILS);
+          return CreateSecurityDescription(IDS_PAGEINFO_SECURE_SUMMARY,
+                                           IDS_PAGEINFO_SECURE_DETAILS);
       }
     case WebsiteSettings::SITE_IDENTITY_STATUS_MALWARE:
-      return CreateSecurityDescription(IDS_WEBSITE_SETTINGS_MALWARE_SUMMARY,
-                                       IDS_WEBSITE_SETTINGS_MALWARE_DETAILS);
+      return CreateSecurityDescription(IDS_PAGEINFO_MALWARE_SUMMARY,
+                                       IDS_PAGEINFO_MALWARE_DETAILS);
     case WebsiteSettings::SITE_IDENTITY_STATUS_SOCIAL_ENGINEERING:
       return CreateSecurityDescription(
-          IDS_WEBSITE_SETTINGS_SOCIAL_ENGINEERING_SUMMARY,
-          IDS_WEBSITE_SETTINGS_SOCIAL_ENGINEERING_DETAILS);
+          IDS_PAGEINFO_SOCIAL_ENGINEERING_SUMMARY,
+          IDS_PAGEINFO_SOCIAL_ENGINEERING_DETAILS);
     case WebsiteSettings::SITE_IDENTITY_STATUS_UNWANTED_SOFTWARE:
       return CreateSecurityDescription(
-          IDS_WEBSITE_SETTINGS_UNWANTED_SOFTWARE_SUMMARY,
-          IDS_WEBSITE_SETTINGS_UNWANTED_SOFTWARE_DETAILS);
-    case WebsiteSettings::
-        SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MINOR:
-    case WebsiteSettings::
-        SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR:
+          IDS_PAGEINFO_UNWANTED_SOFTWARE_SUMMARY,
+          IDS_PAGEINFO_UNWANTED_SOFTWARE_DETAILS);
+    case WebsiteSettings::SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM:
     case WebsiteSettings::SITE_IDENTITY_STATUS_UNKNOWN:
     case WebsiteSettings::SITE_IDENTITY_STATUS_NO_CERT:
     default:
-      return CreateSecurityDescription(IDS_WEBSITE_SETTINGS_NOT_SECURE_SUMMARY,
-                                       IDS_WEBSITE_SETTINGS_NOT_SECURE_DETAILS);
+      return CreateSecurityDescription(IDS_PAGEINFO_NOT_SECURE_SUMMARY,
+                                       IDS_PAGEINFO_NOT_SECURE_DETAILS);
   }
 }
 
@@ -246,7 +242,7 @@ base::string16 WebsiteSettingsUI::PermissionActionToUIString(
   if (effective_setting == CONTENT_SETTING_DEFAULT)
     effective_setting = default_setting;
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile);
   effective_setting = PluginsFieldTrial::EffectiveContentSetting(
@@ -349,13 +345,8 @@ int WebsiteSettingsUI::GetIdentityIconID(
     case WebsiteSettings::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT:
       resource_id = IDR_PAGEINFO_ENTERPRISE_MANAGED;
       break;
-    case WebsiteSettings::
-        SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MINOR:
+    case WebsiteSettings::SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM:
       resource_id = IDR_PAGEINFO_WARNING_MINOR;
-      break;
-    case WebsiteSettings::
-        SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM_MAJOR:
-      resource_id = IDR_PAGEINFO_BAD;
       break;
     default:
       NOTREACHED();

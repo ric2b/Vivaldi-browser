@@ -6,6 +6,8 @@
 
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_socket_address.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/mock_quic_dispatcher.h"
 #include "net/tools/quic/quic_epoll_alarm_factory.h"
@@ -15,8 +17,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::testing::_;
-using net::test::CryptoTestUtils;
-using net::test::MockQuicDispatcher;
 
 namespace net {
 namespace test {
@@ -31,13 +31,15 @@ class MockQuicSimpleDispatcher : public QuicSimpleDispatcher {
       QuicVersionManager* version_manager,
       std::unique_ptr<QuicConnectionHelperInterface> helper,
       std::unique_ptr<QuicCryptoServerStream::Helper> session_helper,
-      std::unique_ptr<QuicAlarmFactory> alarm_factory)
+      std::unique_ptr<QuicAlarmFactory> alarm_factory,
+      QuicHttpResponseCache* response_cache)
       : QuicSimpleDispatcher(config,
                              crypto_config,
                              version_manager,
                              std::move(helper),
                              std::move(session_helper),
-                             std::move(alarm_factory)) {}
+                             std::move(alarm_factory),
+                             response_cache) {}
   ~MockQuicSimpleDispatcher() override {}
 
   MOCK_METHOD0(OnCanWrite, void());
@@ -48,7 +50,9 @@ class MockQuicSimpleDispatcher : public QuicSimpleDispatcher {
 
 class TestQuicServer : public QuicServer {
  public:
-  TestQuicServer() : QuicServer(CryptoTestUtils::ProofSourceForTesting()) {}
+  TestQuicServer()
+      : QuicServer(CryptoTestUtils::ProofSourceForTesting(), &response_cache_) {
+  }
 
   ~TestQuicServer() override {}
 
@@ -64,24 +68,27 @@ class TestQuicServer : public QuicServer {
         std::unique_ptr<QuicCryptoServerStream::Helper>(
             new QuicSimpleCryptoServerStreamHelper(QuicRandom::GetInstance())),
         std::unique_ptr<QuicEpollAlarmFactory>(
-            new QuicEpollAlarmFactory(epoll_server())));
+            new QuicEpollAlarmFactory(epoll_server())),
+        &response_cache_);
     return mock_dispatcher_;
   }
 
   MockQuicSimpleDispatcher* mock_dispatcher_;
+  QuicHttpResponseCache response_cache_;
 };
 
 class QuicServerEpollInTest : public ::testing::Test {
  public:
   QuicServerEpollInTest()
-      : port_(net::test::kTestPort), server_address_(Loopback4(), port_) {}
+      : port_(net::test::kTestPort),
+        server_address_(QuicIpAddress::Loopback4(), port_) {}
 
   void StartListening() {
     server_.CreateUDPSocketAndListen(server_address_);
     ASSERT_TRUE(QuicServerPeer::SetSmallSocket(&server_));
 
     if (!server_.overflow_supported()) {
-      LOG(WARNING) << "Overflow not supported.  Not testing.";
+      QUIC_LOG(WARNING) << "Overflow not supported.  Not testing.";
       return;
     }
   }
@@ -89,7 +96,7 @@ class QuicServerEpollInTest : public ::testing::Test {
  protected:
   QuicFlagSaver saver_;
   int port_;
-  IPEndPoint server_address_;
+  QuicSocketAddress server_address_;
   TestQuicServer server_;
 };
 
@@ -97,7 +104,7 @@ class QuicServerEpollInTest : public ::testing::Test {
 // event should try to create connections for them. And set epoll mask with
 // EPOLLIN if there are still CHLOs remaining at the end of epoll event.
 TEST_F(QuicServerEpollInTest, ProcessBufferedCHLOsOnEpollin) {
-  FLAGS_quic_limit_num_new_sessions_per_epoll_loop = true;
+  FLAGS_quic_reloadable_flag_quic_limit_num_new_sessions_per_epoll_loop = true;
   // Given an EPOLLIN event, try to create session for buffered CHLOs. In first
   // event, dispatcher can't create session for all of CHLOs. So listener should
   // register another EPOLLIN event by itself. Even without new packet arrival,
@@ -122,14 +129,12 @@ TEST_F(QuicServerEpollInTest, ProcessBufferedCHLOsOnEpollin) {
 
   char buf[1024];
   memset(buf, 0, arraysize(buf));
-  sockaddr_storage storage;
+  sockaddr_storage storage = server_address_.generic_address();
   socklen_t storage_size = sizeof(storage);
-  ASSERT_TRUE(server_address_.ToSockAddr(reinterpret_cast<sockaddr*>(&storage),
-                                         &storage_size));
   int rc = sendto(fd, buf, arraysize(buf), 0,
                   reinterpret_cast<sockaddr*>(&storage), storage_size);
   if (rc < 0) {
-    DVLOG(1) << errno << " " << strerror(errno);
+    QUIC_DLOG(INFO) << errno << " " << strerror(errno);
   }
 
   while (more_chlos) {
@@ -155,12 +160,13 @@ class QuicServerDispatchPacketTest : public ::testing::Test {
                 new QuicSimpleCryptoServerStreamHelper(
                     QuicRandom::GetInstance())),
             std::unique_ptr<QuicEpollAlarmFactory>(
-                new QuicEpollAlarmFactory(&eps_))) {
+                new QuicEpollAlarmFactory(&eps_)),
+            &response_cache_) {
     dispatcher_.InitializeWithWriter(new QuicDefaultPacketWriter(1234));
   }
 
   void DispatchPacket(const QuicReceivedPacket& packet) {
-    IPEndPoint client_addr, server_addr;
+    QuicSocketAddress client_addr, server_addr;
     dispatcher_.ProcessPacket(server_addr, client_addr, packet);
   }
 
@@ -169,6 +175,7 @@ class QuicServerDispatchPacketTest : public ::testing::Test {
   QuicCryptoServerConfig crypto_config_;
   QuicVersionManager version_manager_;
   EpollServer eps_;
+  QuicHttpResponseCache response_cache_;
   MockQuicDispatcher dispatcher_;
 };
 
@@ -187,9 +194,9 @@ TEST_F(QuicServerDispatchPacketTest, DispatchPacket) {
     0x00
   };
   // clang-format on
-  QuicReceivedPacket encrypted_valid_packet(QuicUtils::AsChars(valid_packet),
-                                            arraysize(valid_packet),
-                                            QuicTime::Zero(), false);
+  QuicReceivedPacket encrypted_valid_packet(
+      reinterpret_cast<char*>(valid_packet), arraysize(valid_packet),
+      QuicTime::Zero(), false);
 
   EXPECT_CALL(dispatcher_, ProcessPacket(_, _, _)).Times(1);
   DispatchPacket(encrypted_valid_packet);

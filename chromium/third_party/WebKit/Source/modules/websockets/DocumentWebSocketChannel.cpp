@@ -30,6 +30,7 @@
 
 #include "modules/websockets/DocumentWebSocketChannel.h"
 
+#include <memory>
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
@@ -46,13 +47,13 @@
 #include "modules/websockets/WebSocketChannelClient.h"
 #include "modules/websockets/WebSocketFrame.h"
 #include "modules/websockets/WebSocketHandleImpl.h"
+#include "platform/WebFrameScheduler.h"
 #include "platform/network/NetworkLog.h"
 #include "platform/network/WebSocketHandshakeRequest.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
 #include "wtf/PtrUtil.h"
-#include <memory>
 
 namespace blink {
 
@@ -132,7 +133,7 @@ DocumentWebSocketChannel::DocumentWebSocketChannel(
     WebSocketChannelClient* client,
     std::unique_ptr<SourceLocation> location,
     WebSocketHandle* handle)
-    : m_handle(wrapUnique(handle ? handle : new WebSocketHandleImpl())),
+    : m_handle(WTF::wrapUnique(handle ? handle : new WebSocketHandleImpl())),
       m_client(client),
       m_identifier(createUniqueIdentifier()),
       m_document(document),
@@ -163,6 +164,11 @@ bool DocumentWebSocketChannel::connect(const KURL& url,
         "deprecated.";
     document()->addConsoleMessage(
         ConsoleMessage::create(JSMessageSource, WarningMessageLevel, message));
+  }
+
+  if (document()->frame()) {
+    connection_handle_for_scheduler_ =
+        document()->frame()->frameScheduler()->onActiveConnectionCreated();
   }
 
   m_url = url;
@@ -288,6 +294,8 @@ void DocumentWebSocketChannel::fail(const String& reason,
   NETWORK_DVLOG(1) << this << " fail(" << reason << ")";
   // m_handle and m_client can be null here.
 
+  connection_handle_for_scheduler_.reset();
+
   InspectorInstrumentation::didReceiveWebSocketFrameError(document(),
                                                           m_identifier, reason);
   const String message = "WebSocket connection to '" + m_url.elidedString() +
@@ -311,6 +319,7 @@ void DocumentWebSocketChannel::disconnect() {
         "data", InspectorWebSocketEvent::data(document(), m_identifier));
     InspectorInstrumentation::didCloseWebSocket(document(), m_identifier);
   }
+  connection_handle_for_scheduler_.reset();
   abortAsyncOperations();
   m_handle.reset();
   m_client = nullptr;
@@ -503,6 +512,8 @@ void DocumentWebSocketChannel::didFail(WebSocketHandle* handle,
   NETWORK_DVLOG(1) << this << " didFail(" << handle << ", " << String(message)
                    << ")";
 
+  connection_handle_for_scheduler_.reset();
+
   DCHECK(m_handle);
   DCHECK_EQ(handle, m_handle.get());
 
@@ -571,7 +582,8 @@ void DocumentWebSocketChannel::didReceiveData(WebSocketHandle* handle,
       m_client->didReceiveTextMessage(message);
     }
   } else {
-    std::unique_ptr<Vector<char>> binaryData = wrapUnique(new Vector<char>);
+    std::unique_ptr<Vector<char>> binaryData =
+        WTF::wrapUnique(new Vector<char>);
     binaryData->swap(m_receivingMessageData);
     m_client->didReceiveBinaryMessage(std::move(binaryData));
   }
@@ -583,6 +595,8 @@ void DocumentWebSocketChannel::didClose(WebSocketHandle* handle,
                                         const String& reason) {
   NETWORK_DVLOG(1) << this << " didClose(" << handle << ", " << wasClean << ", "
                    << code << ", " << String(reason) << ")";
+
+  connection_handle_for_scheduler_.reset();
 
   DCHECK(m_handle);
   DCHECK_EQ(handle, m_handle.get());

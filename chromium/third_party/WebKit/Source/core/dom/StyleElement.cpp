@@ -33,7 +33,7 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLStyleElement.h"
 #include "core/svg/SVGStyleElement.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -77,22 +77,13 @@ void StyleElement::removedFrom(Element& element,
 
   Document& document = element.document();
   if (m_registeredAsCandidate) {
-    ShadowRoot* shadowRoot = element.containingShadowRoot();
-    if (!shadowRoot)
-      shadowRoot = insertionPoint->containingShadowRoot();
-
-    document.styleEngine().removeStyleSheetCandidateNode(
-        element, shadowRoot ? *toTreeScope(shadowRoot) : toTreeScope(document));
+    document.styleEngine().removeStyleSheetCandidateNode(element,
+                                                         *insertionPoint);
     m_registeredAsCandidate = false;
   }
 
-  StyleSheet* removedSheet = m_sheet.get();
-
   if (m_sheet)
     clearSheet(element);
-  if (removedSheet)
-    document.styleEngine().setNeedsActiveStyleUpdate(removedSheet,
-                                                     AnalyzedStyleUpdate);
 }
 
 StyleElement::ProcessingResult StyleElement::childrenChanged(Element& element) {

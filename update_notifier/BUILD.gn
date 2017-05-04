@@ -1,0 +1,43 @@
+import("//build/config/win/console_app.gni")
+import("//build/config/win/manifest.gni")
+import("//chrome/process_version_rc_template.gni")
+
+executable("update_notifier") {
+    deps = [
+      ":update_notifier_version",
+      "//base",
+      "//chrome/app/version_assembly:chrome_exe_manifest",
+      "//chrome/common:constants",
+      "//chrome/installer/util:with_no_strings",
+      "//components/prefs",
+      "//ui/base",
+      "//vivaldi/app:resources",
+      "//vivaldi/browser:init_sparkle",
+    ]
+
+    sources = [
+      "native_menu.cc",
+      "native_menu.h",
+      "update_notifier.rc",
+      "update_notifier_main.cc",
+      "update_notifier_manager.cc",
+      "update_notifier_manager.h",
+      "update_notifier_resources.h",
+      "update_notifier_window.cc",
+      "update_notifier_window.h",
+    ]
+
+    libs = [
+      "comctl32.lib",
+    ]
+
+    configs -= [ "//build/config/win:console" ]
+    configs += [ "//build/config/win:windowed" ]
+}
+
+process_version_rc_template("update_notifier_version") {
+  sources = [
+    "update_notifier.ver",
+  ]
+  output = "$target_gen_dir/update_notifier_version.rc"
+}

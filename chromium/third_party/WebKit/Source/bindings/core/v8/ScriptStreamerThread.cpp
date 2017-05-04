@@ -7,7 +7,7 @@
 #include "bindings/core/v8/ScriptStreamer.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "platform/WebTaskRunner.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebTraceLocation.h"
 #include "wtf/PtrUtil.h"
@@ -68,9 +68,10 @@ void ScriptStreamerThread::taskDone() {
 }
 
 WebThread& ScriptStreamerThread::platformThread() {
-  if (!isRunning())
-    m_thread =
-        wrapUnique(Platform::current()->createThread("ScriptStreamerThread"));
+  if (!isRunning()) {
+    m_thread = WTF::wrapUnique(
+        Platform::current()->createThread("ScriptStreamerThread"));
+  }
   return *m_thread;
 }
 

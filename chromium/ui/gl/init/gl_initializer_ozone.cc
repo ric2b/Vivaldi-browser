@@ -91,15 +91,16 @@ void InitializeDebugGLBindings() {
   InitializeDebugGLBindingsOSMESA();
 }
 
-void ClearGLBindingsPlatform() {
+void ShutdownGLPlatform() {
+  GLSurfaceEGL::ShutdownOneOff();
   if (HasGLOzone()) {
-    GetGLOzone()->ClearGLBindings();
+    GetGLOzone()->ShutdownGL();
     return;
   }
 
-  ClearGLBindingsEGL();
-  ClearGLBindingsGL();
-  ClearGLBindingsOSMESA();
+  ClearBindingsEGL();
+  ClearBindingsGL();
+  ClearBindingsOSMESA();
 }
 
 }  // namespace init

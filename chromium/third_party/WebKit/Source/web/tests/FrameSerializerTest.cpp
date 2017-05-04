@@ -48,6 +48,7 @@
 #include "web/WebViewImpl.h"
 #include "web/tests/FrameTestHelpers.h"
 #include "wtf/Assertions.h"
+#include "wtf/Deque.h"
 #include "wtf/Vector.h"
 
 using blink::URLTestHelpers::toKURL;
@@ -110,7 +111,7 @@ class FrameSerializerTest : public testing::Test,
   }
 
   void registerSkipURL(const char* url) {
-    m_skipURLs.append(KURL(m_baseUrl, url));
+    m_skipURLs.push_back(KURL(m_baseUrl, url));
   }
 
   void serialize(const char* url) {
@@ -125,12 +126,11 @@ class FrameSerializerTest : public testing::Test,
     }
   }
 
-  Vector<SerializedResource>& getResources() { return m_resources; }
+  Deque<SerializedResource>& getResources() { return m_resources; }
 
   const SerializedResource* getResource(const KURL& url, const char* mimeType) {
     String mime(mimeType);
-    for (size_t i = 0; i < m_resources.size(); ++i) {
-      const SerializedResource& resource = m_resources[i];
+    for (const SerializedResource& resource : m_resources) {
       if (resource.url == url && !resource.data->isEmpty() &&
           (mime.isNull() || equalIgnoringASCIICase(resource.mimeType, mime)))
         return &resource;
@@ -190,7 +190,7 @@ class FrameSerializerTest : public testing::Test,
   FrameTestHelpers::WebViewHelper m_helper;
   WebString m_folder;
   KURL m_baseUrl;
-  Vector<SerializedResource> m_resources;
+  Deque<SerializedResource> m_resources;
   HashMap<String, String> m_rewriteURLs;
   Vector<String> m_skipURLs;
   String m_rewriteFolder;

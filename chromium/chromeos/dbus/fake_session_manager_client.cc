@@ -98,6 +98,10 @@ void FakeSessionManagerClient::RetrieveDevicePolicy(
       FROM_HERE, base::Bind(callback, device_policy_));
 }
 
+std::string FakeSessionManagerClient::BlockingRetrieveDevicePolicy() {
+  return device_policy_;
+}
+
 void FakeSessionManagerClient::RetrievePolicyForUser(
     const cryptohome::Identification& cryptohome_id,
     const RetrievePolicyCallback& callback) {
@@ -116,6 +120,11 @@ void FakeSessionManagerClient::RetrieveDeviceLocalAccountPolicy(
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(callback, device_local_account_policy_[account_id]));
+}
+
+std::string FakeSessionManagerClient::BlockingRetrieveDeviceLocalAccountPolicy(
+    const std::string& account_id) {
+  return device_local_account_policy_[account_id];
 }
 
 void FakeSessionManagerClient::StoreDevicePolicy(
@@ -179,6 +188,13 @@ void FakeSessionManagerClient::StopArcInstance(const ArcCallback& callback) {
 }
 
 void FakeSessionManagerClient::PrioritizeArcInstance(
+    const ArcCallback& callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(callback, arc_available_));
+}
+
+void FakeSessionManagerClient::SetArcCpuRestriction(
+    login_manager::ContainerCpuRestrictionState restriction_state,
     const ArcCallback& callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(callback, arc_available_));

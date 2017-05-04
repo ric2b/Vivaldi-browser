@@ -9,27 +9,21 @@
 
 namespace content {
 
-class DevToolsProtocolHandler;
-
-namespace devtools {
-namespace io { class IOHandler; }
-namespace memory { class MemoryHandler; }
-namespace system_info { class SystemInfoHandler; }
-namespace tethering { class TetheringHandler; }
-namespace tracing { class TracingHandler; }
-}  // namespace devtools
-
 class BrowserDevToolsAgentHost : public DevToolsAgentHostImpl {
  private:
   friend class DevToolsAgentHost;
   BrowserDevToolsAgentHost(
       scoped_refptr<base::SingleThreadTaskRunner> tethering_task_runner,
-      const CreateServerSocketCallback& socket_callback);
+      const CreateServerSocketCallback& socket_callback,
+      bool only_discovery);
   ~BrowserDevToolsAgentHost() override;
 
   // DevToolsAgentHostImpl implementation.
-  void Attach() override;
-  void Detach() override;
+  void AttachSession(DevToolsSession* session) override;
+  void DetachSession(int session_id) override;
+  bool DispatchProtocolMessage(
+      DevToolsSession* session,
+      const std::string& message) override;
 
   // DevToolsAgentHost implementation.
   std::string GetType() override;
@@ -38,15 +32,10 @@ class BrowserDevToolsAgentHost : public DevToolsAgentHostImpl {
   bool Activate() override;
   void Reload() override;
   bool Close() override;
-  bool DispatchProtocolMessage(const std::string& message) override;
 
-  std::unique_ptr<devtools::io::IOHandler> io_handler_;
-  std::unique_ptr<devtools::memory::MemoryHandler> memory_handler_;
-  std::unique_ptr<devtools::system_info::SystemInfoHandler>
-      system_info_handler_;
-  std::unique_ptr<devtools::tethering::TetheringHandler> tethering_handler_;
-  std::unique_ptr<devtools::tracing::TracingHandler> tracing_handler_;
-  std::unique_ptr<DevToolsProtocolHandler> protocol_handler_;
+  scoped_refptr<base::SingleThreadTaskRunner> tethering_task_runner_;
+  CreateServerSocketCallback socket_callback_;
+  bool only_discovery_;
 };
 
 }  // namespace content

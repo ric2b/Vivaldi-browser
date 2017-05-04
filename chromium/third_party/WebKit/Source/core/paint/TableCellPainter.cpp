@@ -81,7 +81,7 @@ void TableCellPainter::paintCollapsedBorders(
     const PaintInfo& paintInfo,
     const LayoutPoint& paintOffset,
     const CollapsedBorderValue& currentBorderValue) {
-  if (m_layoutTableCell.style()->visibility() != EVisibility::Visible)
+  if (m_layoutTableCell.style()->visibility() != EVisibility::kVisible)
     return;
 
   LayoutPoint adjustedPaintOffset = paintOffset + m_layoutTableCell.location();
@@ -181,7 +181,7 @@ void TableCellPainter::paintContainerBackgroundBehindCell(
     DisplayItem::Type type) {
   DCHECK(backgroundObject != m_layoutTableCell);
 
-  if (m_layoutTableCell.style()->visibility() != EVisibility::Visible)
+  if (m_layoutTableCell.style()->visibility() != EVisibility::kVisible)
     return;
 
   LayoutPoint adjustedPaintOffset = paintOffset + m_layoutTableCell.location();
@@ -191,7 +191,7 @@ void TableCellPainter::paintContainerBackgroundBehindCell(
 
   LayoutTable* table = m_layoutTableCell.table();
   if (!table->collapseBorders() &&
-      m_layoutTableCell.style()->emptyCells() == EEmptyCells::Hide &&
+      m_layoutTableCell.style()->emptyCells() == EEmptyCells::kHide &&
       !m_layoutTableCell.firstChild())
     return;
 
@@ -239,16 +239,14 @@ void TableCellPainter::paintBoxDecorationBackground(
     const PaintInfo& paintInfo,
     const LayoutPoint& paintOffset) {
   LayoutTable* table = m_layoutTableCell.table();
-  if (!table->collapseBorders() &&
-      m_layoutTableCell.style()->emptyCells() == EEmptyCells::Hide &&
+  const ComputedStyle& style = m_layoutTableCell.styleRef();
+  if (!table->collapseBorders() && style.emptyCells() == EEmptyCells::kHide &&
       !m_layoutTableCell.firstChild())
     return;
 
   bool needsToPaintBorder =
-      m_layoutTableCell.styleRef().hasBorderDecoration() &&
-      !table->collapseBorders();
-  if (!m_layoutTableCell.styleRef().hasBackground() &&
-      !m_layoutTableCell.styleRef().boxShadow() && !needsToPaintBorder)
+      style.hasBorderDecoration() && !table->collapseBorders();
+  if (!style.hasBackground() && !style.boxShadow() && !needsToPaintBorder)
     return;
 
   if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(
@@ -265,28 +263,27 @@ void TableCellPainter::paintBoxDecorationBackground(
 
   LayoutRect paintRect = paintRectNotIncludingVisualOverflow(paintOffset);
 
-  BoxPainter::paintBoxShadow(paintInfo, paintRect, m_layoutTableCell.styleRef(),
-                             Normal);
+  BoxPainter::paintNormalBoxShadow(paintInfo, paintRect, style);
   paintBackground(paintInfo, paintRect, m_layoutTableCell);
-  BoxPainter::paintBoxShadow(paintInfo, paintRect, m_layoutTableCell.styleRef(),
-                             Inset);
+  // TODO(wangxianzhu): Calculate the inset shadow bounds by insetting paintRect
+  // by half widths of collapsed borders.
+  BoxPainter::paintInsetBoxShadow(paintInfo, paintRect, style);
 
   if (!needsToPaintBorder)
     return;
 
-  BoxPainter::paintBorder(m_layoutTableCell, paintInfo, paintRect,
-                          m_layoutTableCell.styleRef());
+  BoxPainter::paintBorder(m_layoutTableCell, paintInfo, paintRect, style);
 }
 
 void TableCellPainter::paintMask(const PaintInfo& paintInfo,
                                  const LayoutPoint& paintOffset) {
-  if (m_layoutTableCell.style()->visibility() != EVisibility::Visible ||
+  if (m_layoutTableCell.style()->visibility() != EVisibility::kVisible ||
       paintInfo.phase != PaintPhaseMask)
     return;
 
   LayoutTable* tableElt = m_layoutTableCell.table();
   if (!tableElt->collapseBorders() &&
-      m_layoutTableCell.style()->emptyCells() == EEmptyCells::Hide &&
+      m_layoutTableCell.style()->emptyCells() == EEmptyCells::kHide &&
       !m_layoutTableCell.firstChild())
     return;
 

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="sr">
+<translation id="1152921474424827756">Приступите <ph name="BEGIN_LINK" />кешираној копији<ph name="END_LINK" /> странице <ph name="URL" /></translation>
+<translation id="1158211211994409885">Хост <ph name="HOST_NAME" /> је неочекивано прекинуо везу.</translation>
+<translation id="1375198122581997741">Основни подаци</translation>
+<translation id="139305205187523129">Хост <ph name="HOST_NAME" /> није послао никакве податке.</translation>
+<translation id="1506687042165942984">Прикажи сачувану копију ове странице (тј. копију за коју се зна да је застарела).</translation>
+<translation id="1559528461873125649">Нема такве датотеке или директоријума</translation>
+<translation id="1710259589646384581">ОС</translation>
+<translation id="1838667051080421715">Прегледате извор веб-странице.</translation>
+<translation id="194030505837763158">Идите на <ph name="LINK" /></translation>
+<translation id="2030481566774242610">Да ли сте мислили <ph name="LINK" />?</translation>
+<translation id="2089090684895656482">Мање</translation>
+<translation id="2166378884831602661">Овај сајт не може да пружи безбедну везу</translation>
+<translation id="2292556288342944218">Приступ интернету је блокиран</translation>
+<translation id="255002559098805027">Хост <ph name="HOST_NAME" /> је послао неважећи одговор.</translation>
+<translation id="2609632851001447353">Варијације</translation>
+<translation id="2650446666397867134">Приступ датотеци је одбијен</translation>
+<translation id="2705137772291741111">Сачувана (кеширана) копија овог сајта није могла да се чита.</translation>
+<translation id="2784949926578158345">Веза је враћена на почетне вредности.</translation>
+<translation id="284702764277384724">Изгледа да је сертификат сервера на хосту <ph name="HOST_NAME" /> фалсификат.</translation>
+<translation id="2909946352844186028">Откривена је промена на мрежи.</translation>
+<translation id="3005723025932146533">Прикажи сачувану копију</translation>
+<translation id="3093245981617870298">Ви сте ван мреже.</translation>
+<translation id="3109728660330352905">Немате овлашћење да прегледате ову страницу.</translation>
+<translation id="3176929007561373547">Проверите подешавања проксија или контактирајте администратора мреже да бисте се уверили да прокси сервер функционише. Ако мислите да не треба да користите прокси сервер: <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673">Хост <ph name="HOST_NAME" /> тренутно није доступан.</translation>
+<translation id="3447661539832366887">Власник овог уређаја је искључио ову застарелу игру.</translation>
+<translation id="3586931643579894722">Сакриј детаље</translation>
+<translation id="3630155396527302611">Ако је већ наведен као програм коме је дозвољен приступ мрежи, покушајте да га уклоните са листе и поново га додате.</translation>
+<translation id="3658742229777143148">Ревизија</translation>
+<translation id="382518646247711829">Ако користите прокси сервер...</translation>
+<translation id="3973234410852337861">Хост <ph name="HOST_NAME" /> је блокиран</translation>
+<translation id="4021036232240155012">DNS је мрежна услуга која преводи назив веб-сајта у његову интернет адресу.</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> није прихватио сертификат за пријављивање или сертификат за пријављивање није приложен.</translation>
+<translation id="4522570452068850558">Детаљи</translation>
+<translation id="4670097147947922288">Прегледате страницу проширења.</translation>
+<translation id="4708268264240856090">Веза је прекинута</translation>
+<translation id="4744603770635761495">Путања извршне датотеке</translation>
+<translation id="4764776831041365478">Могуће је да веб-страница на адреси <ph name="URL" /> привремено не функционише или да је трајно премештена на нову веб адресу.</translation>
+<translation id="5023310440958281426">Проверите смернице администратора</translation>
+<translation id="5115563688576182185">(64-битни)</translation>
+<translation id="5431657950005405462">Датотека није пронађена</translation>
+<translation id="5452270690849572955">Није могуће пронаћи ову страницу хоста <ph name="HOST_NAME" /></translation>
+<translation id="5492298309214877701">Овај сајт на интранету компаније, организације или школе има исти URL као и један спољни веб-сајт.
+    <ph name="LINE_BREAK" />
+    Покушајте да се обратите администратору система.</translation>
+<translation id="5510766032865166053">Можда је премештена или избрисана.</translation>
+<translation id="5556459405103347317">Поново учитај</translation>
+<translation id="5617949217645503996">Хост <ph name="HOST_NAME" /> вас је преусмерио превелики број пута.</translation>
+<translation id="5675650730144413517">Ова страница не функционише</translation>
+<translation id="5869405914158311789">Овај сајт није доступан</translation>
+<translation id="5990559369517809815">Проширење је блокирало захтеве упућене серверу.</translation>
+<translation id="6042308850641462728">Више</translation>
+<translation id="6146055958333702838">Проверите све каблове и поново покрените све рутере, модеме или друге мрежне уређаје које можда користите.</translation>
+<translation id="6165508094623778733">Сазнајте више</translation>
+<translation id="6203231073485539293">Проверите интернет везу</translation>
+<translation id="6305205051461490394"><ph name="URL" /> је недоступан.</translation>
+<translation id="6321917430147971392">Проверите DNS подешавања</translation>
+<translation id="6328639280570009161">Покушајте да онемогућите предвиђање мреже</translation>
+<translation id="6433595998831338502">Хост <ph name="HOST_NAME" /> је одбио повезивање.</translation>
+<translation id="6711464428925977395">Нешто није у реду са прокси сервером или је адреса нетачна.</translation>
+<translation id="6757797048963528358">Ваш уређај је прешао у стање мировања.</translation>
+<translation id="6830600606572693159">Веб-страница на адреси <ph name="URL" /> је тренутно недоступна. Можда је преоптерећена или неактивна због одржавања.</translation>
+<translation id="6897140037006041989">Кориснички агент</translation>
+<translation id="7210863904660874423">Хост <ph name="HOST_NAME" /> не поштује безбедносне стандарде.</translation>
+<translation id="7269802741830436641">Ова веб-страница има петљу за преусмеравање</translation>
+<translation id="7353601530677266744">Командна линија</translation>
+<translation id="7419106976560586862">Путања профила</translation>
+<translation id="7518003948725431193">Ниједна веб-страница није пронађена за веб адресу: <ph name="URL" /></translation>
+<translation id="7549584377607005141">Ова веб-страница захтева податке које сте унели раније да би се правилно приказала. Можете поново да пошаљете те податке, али ако то урадите, поновићете било коју радњу коју је ова страница претходно обавила.</translation>
+<translation id="759889825892636187">Хост <ph name="HOST_NAME" /> тренутно не може да обради овај захтев.</translation>
+<translation id="7716424297397655342">Није могуће учитати овај сајт из кеша</translation>
+<translation id="7758069387465995638">Можда је заштитни зид или антивирусни софтвер блокирао везу.</translation>
+<translation id="778579833039460630">Нема примљених података</translation>
+<translation id="7951415247503192394">(32-битни)</translation>
+<translation id="8134994873729925007">Нисмо успели да пронађемо <ph name="BEGIN_ABBR" />DNS адресу<ph name="END_ABBR" /> сервера хоста <ph name="HOST_NAME" />.</translation>
+<translation id="8142868475871995937">Посетите &lt;strong&gt;vivaldi://policy&lt;/strong&gt; да бисте видели листу URL адреса стављених на црну листу и друге смернице које је наметнуо администратор система.</translation>
+<translation id="8149426793427495338">Рачунар је прешао у стање мировања.</translation>
+<translation id="8150722005171944719">Датотека на адреси <ph name="URL" /> не може да се чита. Можда је уклоњена или премештена или дозволе за датотеке спречавају приступ.</translation>
+<translation id="8225771182978767009">Особа која је подесила овај рачунар је одлучила да блокира овај сајт.</translation>
+<translation id="8289355894181816810">Контактирајте администратора мреже ако нисте сигурни шта то значи.</translation>
+<translation id="8332188693563227489">Приступ хосту <ph name="HOST_NAME" /> је одбијен</translation>
+<translation id="8498891568109133222">Одговор хоста <ph name="HOST_NAME" /> је трајао предуго.</translation>
+<translation id="8740359287975076522">Нисмо успели да пронађемо &lt;abbr id="dnsDefinition"&gt;DNS адресу&lt;/abbr&gt; хоста <ph name="HOST_NAME" />. Покушавамо да утврдимо у чему је проблем.</translation>
+<translation id="9183425211371246419">Хост <ph name="HOST_NAME" /> користи неподржани протокол.</translation>
+<translation id="933612690413056017">Није успостављена веза са интернетом</translation>
+<translation id="969892804517981540">Званична верзија</translation>
+<translation id="988159990683914416">Верзија за програмере</translation>
+</translationbundle>

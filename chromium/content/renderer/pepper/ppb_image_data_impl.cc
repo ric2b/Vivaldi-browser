@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "content/common/pepper_file_util.h"
 #include "content/common/view_messages.h"
 #include "content/renderer/render_thread_impl.h"
@@ -20,7 +21,6 @@
 #include "skia/ext/platform_canvas.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColorPriv.h"
-#include "third_party/skia/include/core/SkDevice.h"
 #include "third_party/skia/include/core/SkPixmap.h"
 #include "ui/surface/transport_dib.h"
 
@@ -113,10 +113,6 @@ int32_t PPB_ImageData_Impl::GetSharedMemory(base::SharedMemory** shm,
   return backend_->GetSharedMemory(shm, byte_count);
 }
 
-SkCanvas* PPB_ImageData_Impl::GetPlatformCanvas() {
-  return backend_->GetPlatformCanvas();
-}
-
 SkCanvas* PPB_ImageData_Impl::GetCanvas() { return backend_->GetCanvas(); }
 
 void PPB_ImageData_Impl::SetIsCandidateForReuse() {
@@ -171,8 +167,7 @@ TransportDIB* ImageDataPlatformBackend::GetTransportDIB() const {
 void* ImageDataPlatformBackend::Map() {
   if (!mapped_canvas_) {
     const bool is_opaque = false;
-    mapped_canvas_ =
-        sk_sp<SkCanvas>(dib_->GetPlatformCanvas(width_, height_, is_opaque));
+    mapped_canvas_ = dib_->GetPlatformCanvas(width_, height_, is_opaque);
     if (!mapped_canvas_)
       return NULL;
   }
@@ -197,10 +192,6 @@ int32_t ImageDataPlatformBackend::GetSharedMemory(base::SharedMemory** shm,
   *byte_count = dib_->size();
   *shm = dib_->shared_memory();
   return PP_OK;
-}
-
-SkCanvas* ImageDataPlatformBackend::GetPlatformCanvas() {
-  return mapped_canvas_.get();
 }
 
 SkCanvas* ImageDataPlatformBackend::GetCanvas() { return mapped_canvas_.get(); }
@@ -250,7 +241,7 @@ void* ImageDataSimpleBackend::Map() {
     skia_bitmap_.setPixels(shared_memory_->memory());
     // Our platform bitmaps are set to opaque by default, which we don't want.
     skia_bitmap_.setAlphaType(kPremul_SkAlphaType);
-    skia_canvas_ = sk_make_sp<SkCanvas>(skia_bitmap_);
+    skia_canvas_ = base::MakeUnique<SkCanvas>(skia_bitmap_);
     return skia_bitmap_.getAddr32(0, 0);
   }
   return shared_memory_->memory();
@@ -266,10 +257,6 @@ int32_t ImageDataSimpleBackend::GetSharedMemory(base::SharedMemory** shm,
   *byte_count = skia_bitmap_.getSize();
   *shm = shared_memory_.get();
   return PP_OK;
-}
-
-SkCanvas* ImageDataSimpleBackend::GetPlatformCanvas() {
-  return NULL;
 }
 
 SkCanvas* ImageDataSimpleBackend::GetCanvas() {

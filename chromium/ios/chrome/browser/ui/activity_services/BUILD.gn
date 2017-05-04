@@ -1,0 +1,114 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+bundle_data("assets") {
+  sources = [
+    "resources/activity_services_print.xcassets/Contents.json",
+    "resources/activity_services_print.xcassets/activity_services_print.imageset/Contents.json",
+    "resources/activity_services_print.xcassets/activity_services_print.imageset/activity_services_print-60@2x.png",
+    "resources/activity_services_print.xcassets/activity_services_print.imageset/activity_services_print-60@3x.png",
+    "resources/activity_services_print.xcassets/activity_services_print.imageset/activity_services_print-76.png",
+    "resources/activity_services_print.xcassets/activity_services_print.imageset/activity_services_print-76@2x.png",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_file_part}}",
+  ]
+}
+
+bundle_data("resources") {
+  sources = [
+    "resources/activity_services_reading_list.png",
+    "resources/activity_services_reading_list@2x.png",
+    "resources/activity_services_reading_list@3x.png",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_file_part}}",
+  ]
+}
+
+source_set("activity_services") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "activity_service_controller.h",
+    "activity_service_controller.mm",
+    "activity_type_util.h",
+    "activity_type_util.mm",
+    "appex_constants.h",
+    "appex_constants.mm",
+    "chrome_activity_item_source.h",
+    "chrome_activity_item_source.mm",
+    "chrome_activity_item_thumbnail_generator.h",
+    "chrome_activity_item_thumbnail_generator.mm",
+    "print_activity.h",
+    "print_activity.mm",
+    "reading_list_activity.h",
+    "reading_list_activity.mm",
+    "share_protocol.h",
+    "share_to_data.h",
+    "share_to_data.mm",
+    "share_to_data_builder.h",
+    "share_to_data_builder.mm",
+  ]
+  deps = [
+    ":assets",
+    ":resources",
+    "//base",
+    "//components/reading_list/core",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/tabs",
+    "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/commands",
+    "//net",
+    "//ui/base",
+    "//url",
+  ]
+  libs = [
+    "MobileCoreServices.framework",
+    "UIKit.framework",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "activity_service_controller_unittest.mm",
+    "activity_type_util_unittest.mm",
+    "chrome_activity_item_thumbnail_generator_unittest.mm",
+  ]
+  deps = [
+    ":activity_services",
+    "//base",
+    "//base/test:test_support",
+    "//components/reading_list/core",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/browser_state:test_support",
+    "//ios/chrome/browser/tabs",
+    "//ios/web:test_support",
+    "//testing/gtest",
+    "//third_party/ocmock",
+    "//ui/base",
+    "//ui/base:test_support",
+  ]
+}
+
+source_set("eg_tests") {
+  testonly = true
+  sources = [
+    "activity_service_controller_egtest.mm",
+  ]
+  deps = [
+    "//base",
+    "//components/strings",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui:ui_internal",
+    "//ios/chrome/test/earl_grey:test_support",
+    "//ios/third_party/material_components_ios",
+    "//ios/web:test_support",
+    "//ui/base",
+  ]
+  libs = [ "XCTest.framework" ]
+}

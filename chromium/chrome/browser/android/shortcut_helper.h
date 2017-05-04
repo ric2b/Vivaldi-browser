@@ -59,19 +59,23 @@ class ShortcutHelper {
       const ShortcutInfo& info,
       const SkBitmap& icon_bitmap);
 
+  // Shows toast notifying user that a WebAPK install is already in progress
+  // when user tries to queue a new install for the same WebAPK.
+  static void ShowWebApkInstallInProgressToast();
+
   // Returns the ideal size for an icon representing a web app.
-  static int GetIdealHomescreenIconSizeInDp();
+  static int GetIdealHomescreenIconSizeInPx();
 
   // Returns the minimum size for an icon representing a web app.
-  static int GetMinimumHomescreenIconSizeInDp();
+  static int GetMinimumHomescreenIconSizeInPx();
 
   // Returns the ideal size for an image displayed on a web app's splash
   // screen.
-  static int GetIdealSplashImageSizeInDp();
+  static int GetIdealSplashImageSizeInPx();
 
   // Returns the minimum size for an image displayed on a web app's splash
   // screen.
-  static int GetMinimumSplashImageSizeInDp();
+  static int GetMinimumSplashImageSizeInPx();
 
   // Fetches the splash screen image and stores it inside the WebappDataStorage
   // of the webapp. The WebappDataStorage object *must* have been previously
@@ -101,8 +105,10 @@ class ShortcutHelper {
   static std::string QueryWebApkPackage(const GURL& url);
 
   // Returns true if WebAPKs are enabled and there is an installed WebAPK which
-  // can handle |url|.
-  static bool IsWebApkInstalled(const GURL& url);
+  // can handle |start_url|, or there is one is being installed.
+  static bool IsWebApkInstalled(content::BrowserContext* browser_context,
+                                const GURL& start_url,
+                                const GURL& manifest_url);
 
   // Generates a scope URL based on the passed in |url|. It should be used
   // when the Web Manifest does not specify a scope URL.

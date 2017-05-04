@@ -1,14 +1,8 @@
 include_rules = [
-  "-ash",
-  "+ash/common",
-  "+ash/mus",
-  "+ash/public",
-  "+ash/shared",
   "+services/ui/common",
   "+services/ui/public",
   "+grit/ash_mus_resources.h",
   "+mash/public/interfaces",
-  "+mash/session/public",
   "+mash/shelf/public",
   "+mojo/common",
   "+mojo/public",
@@ -25,5 +19,9 @@ specific_include_rules = {
   "shelf_delegate_mus.cc": [
     "+ash/shelf/shelf.h",
     "+ash/shelf/shelf_widget.h",
+  ],
+
+  "app_launch_unittest.cc": [
+    "+mash/quick_launch/public",
   ],
 }

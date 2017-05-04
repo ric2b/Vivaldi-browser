@@ -6,14 +6,15 @@ module content.mojom;
 
 import "content/common/native_types.mojom";
 import "content/public/common/window_container_type.mojom";
+import "gpu/ipc/common/mailbox.mojom";
 import "third_party/WebKit/public/platform/referrer.mojom";
 import "third_party/WebKit/public/web/window_features.mojom";
 import "ui/base/mojo/window_open_disposition.mojom";
 import "url/mojo/url.mojom";
 
 struct CreateNewWindowParams {
-  // Routing ID of the view initiating the open.
-  int32 opener_id;
+  // The routing id of the frame initiating the open.
+  int32 opener_render_frame_id;
 
   // True if this open request came in the context of a user gesture.
   bool user_gesture;
@@ -27,9 +28,6 @@ struct CreateNewWindowParams {
   // The name of the resulting frame that should be created (empty if none
   // has been specified). UTF8 encoded string.
   string frame_name;
-
-  // The routing id of the frame initiating the open.
-  int32 opener_render_frame_id;
 
   // The URL of the frame initiating the open.
   url.mojom.Url opener_url;
@@ -48,7 +46,7 @@ struct CreateNewWindowParams {
   ui.mojom.WindowOpenDisposition disposition;
 
   // The URL that will be loaded in the new window (empty if none has been
-  // sepcified).
+  // specified).
   url.mojom.Url target_url;
 
   // The referrer that will be used to load |target_url| (empty if none has
@@ -61,7 +59,10 @@ struct CreateNewWindowParams {
 
 struct CreateNewWindowReply {
   // The ID of the view to be created. If the ID is MSG_ROUTING_NONE, then the
-  // view couldn't be created.
+  // opener RenderFrame should not create a RenderView in its process.
+  // MSG_ROUTING_NONE does not necessarily indicate failure; it may also occur
+  // in cases where a window was created, but the opener relationship is
+  // severed.
   int32 route_id;
 
   // The ID of the main frame hosted in the view.
@@ -92,4 +93,15 @@ interface RenderMessageFilter {
   // Similar to CreateWidget except the widget is a full screen window.
   [Sync] CreateFullscreenWidget(int32 opener_id)
       => (int32 route_id);
+
+  // The 2 following methods belong to a future CC related mojom.
+  // For now they need to be part of this channel associated interface to
+  // prevent running into message ordering issues (CC trying to access a shared
+  // bitmap before the registration message below made it to the browser).
+  //
+  // Informs the browser that the child allocated a shared bitmap.
+  AllocatedSharedBitmap(handle<shared_buffer> buffer, gpu.mojom.Mailbox id);
+
+  // Informs the browser that the child deleted a shared bitmap.
+  DeletedSharedBitmap(gpu.mojom.Mailbox id);
 };

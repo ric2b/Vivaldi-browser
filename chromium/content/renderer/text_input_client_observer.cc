@@ -15,6 +15,7 @@
 #include "content/renderer/render_view_impl.h"
 #include "content/renderer/render_widget.h"
 #include "ipc/ipc_message.h"
+#include "ppapi/features/features.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -24,6 +25,13 @@
 #include "ui/gfx/geometry/rect.h"
 
 namespace content {
+
+namespace {
+uint32_t GetCurrentCursorPositionInFrame(blink::WebLocalFrame* localFrame) {
+  blink::WebRange range = localFrame->selectionRange();
+  return range.isNull() ? 0U : static_cast<uint32_t>(range.startOffset());
+}
+}
 
 TextInputClientObserver::TextInputClientObserver(RenderWidget* render_widget)
     : render_widget_(render_widget) {}
@@ -78,7 +86,7 @@ blink::WebLocalFrame* TextInputClientObserver::GetFocusedFrame() const {
   return nullptr;
 }
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 PepperPluginInstanceImpl* TextInputClientObserver::GetFocusedPepperPlugin()
     const {
   blink::WebLocalFrame* focusedFrame = GetFocusedFrame();
@@ -120,7 +128,7 @@ void TextInputClientObserver::OnCharacterIndexForPoint(gfx::Point point) {
 
 void TextInputClientObserver::OnFirstRectForCharacterRange(gfx::Range range) {
   gfx::Rect rect;
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   PepperPluginInstanceImpl* focused_plugin = GetFocusedPepperPlugin();
   if (focused_plugin) {
     rect = focused_plugin->GetCaretBounds();
@@ -132,8 +140,11 @@ void TextInputClientObserver::OnFirstRectForCharacterRange(gfx::Range range) {
     // See crbug.com/304341
     if (frame) {
       blink::WebRect web_rect;
-      frame->firstRectForCharacterRange(range.start(), range.length(),
-                                        web_rect);
+      // When request range is invalid we will try to obtain it from current
+      // frame selection. The fallback value will be 0.
+      uint32_t start = range.IsValid() ? range.start()
+                                       : GetCurrentCursorPositionInFrame(frame);
+      frame->firstRectForCharacterRange(start, range.length(), web_rect);
       rect = web_rect;
     }
   }

@@ -6,6 +6,7 @@
 #define ScreenWakeLock_h
 
 #include "core/dom/ContextLifecycleObserver.h"
+#include "core/frame/LocalFrame.h"
 #include "core/page/PageVisibilityObserver.h"
 #include "device/wake_lock/public/interfaces/wake_lock_service.mojom-blink.h"
 #include "modules/ModulesExport.h"
@@ -40,7 +41,9 @@ class MODULES_EXPORT ScreenWakeLock final
 
   // Inherited from PageVisibilityObserver.
   void pageVisibilityChanged() override;
-  void contextDestroyed() override;
+
+  // Inherited from ContextLifecycleObserver.
+  void contextDestroyed(ExecutionContext*) override;
 
   bool keepAwake() const;
   void setKeepAwake(bool);

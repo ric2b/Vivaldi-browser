@@ -10,16 +10,19 @@
 #include "components/metrics/enabled_state_provider.h"
 #include "components/metrics/metrics_state_manager.h"
 #include "components/prefs/pref_service.h"
-#include "components/rappor/rappor_service.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "components/variations/service/variations_service.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/metrics/ios_chrome_metrics_service_accessor.h"
 #include "ios/chrome/browser/metrics/ios_chrome_metrics_service_client.h"
-#include "ios/chrome/browser/ui/browser_otr_state.h"
+#include "ios/chrome/browser/tabs/tab_model_list.h"
 #include "ios/chrome/browser/variations/ios_chrome_variations_service_client.h"
 #include "ios/chrome/browser/variations/ios_ui_string_overrider_factory.h"
-#include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -46,7 +49,8 @@ class IOSChromeMetricsServicesManagerClient::IOSChromeEnabledStateProvider
 
 IOSChromeMetricsServicesManagerClient::IOSChromeMetricsServicesManagerClient(
     PrefService* local_state)
-    : enabled_state_provider_(new IOSChromeEnabledStateProvider()),
+    : enabled_state_provider_(
+          base::MakeUnique<IOSChromeEnabledStateProvider>()),
       local_state_(local_state) {
   DCHECK(local_state);
 }
@@ -54,10 +58,10 @@ IOSChromeMetricsServicesManagerClient::IOSChromeMetricsServicesManagerClient(
 IOSChromeMetricsServicesManagerClient::
     ~IOSChromeMetricsServicesManagerClient() = default;
 
-std::unique_ptr<rappor::RapporService>
-IOSChromeMetricsServicesManagerClient::CreateRapporService() {
+std::unique_ptr<rappor::RapporServiceImpl>
+IOSChromeMetricsServicesManagerClient::CreateRapporServiceImpl() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return base::MakeUnique<rappor::RapporService>(
+  return base::MakeUnique<rappor::RapporServiceImpl>(
       local_state_, base::Bind(&::IsOffTheRecordSessionActive));
 }
 
@@ -69,7 +73,7 @@ IOSChromeMetricsServicesManagerClient::CreateVariationsService() {
   // a dummy value for the name of the switch that disables background
   // networking.
   return variations::VariationsService::Create(
-      base::WrapUnique(new IOSChromeVariationsServiceClient), local_state_,
+      base::MakeUnique<IOSChromeVariationsServiceClient>(), local_state_,
       GetMetricsStateManager(), "dummy-disable-background-switch",
       ::CreateUIStringOverrider());
 }
@@ -92,8 +96,7 @@ IOSChromeMetricsServicesManagerClient::GetURLRequestContext() {
 
 bool IOSChromeMetricsServicesManagerClient::IsSafeBrowsingEnabled(
     const base::Closure& on_update_callback) {
-  return ios::GetChromeBrowserProvider()->IsSafeBrowsingEnabled(
-      on_update_callback);
+  return false;
 }
 
 bool IOSChromeMetricsServicesManagerClient::IsMetricsReportingEnabled() {

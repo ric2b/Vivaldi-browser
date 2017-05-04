@@ -13,10 +13,10 @@
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebSpellCheckClient.h"
+#include "v8/include/v8.h"
 
 namespace blink {
 class WebTextCheckingCompletion;
-struct WebTextCheckingResult;
 }  // namespace blink
 
 namespace test_runner {
@@ -32,8 +32,16 @@ class SpellCheckClient : public blink::WebSpellCheckClient {
   void SetDelegate(WebTestDelegate* delegate);
   void SetEnabled(bool enabled);
 
+  // Sets a callback that will be invoked after each request is revoled.
+  void SetSpellCheckResolvedCallback(v8::Local<v8::Function> callback);
+
+  // Remove the above callback. Beware: don't call it inside the callback.
+  void RemoveSpellCheckResolvedCallback();
+
+  void Reset();
+
   // blink::WebSpellCheckClient implementation.
-  void spellCheck(
+  void checkSpelling(
       const blink::WebString& text,
       int& offset,
       int& length,
@@ -48,15 +56,19 @@ class SpellCheckClient : public blink::WebSpellCheckClient {
  private:
   void FinishLastTextCheck();
 
+  void RequestResolved();
+
   // Do not perform any checking when |enabled_ == false|.
   // Tests related to spell checking should enable it manually.
   bool enabled_ = false;
 
-  // The mock spellchecker used in spellCheck().
+  // The mock spellchecker used in checkSpelling().
   MockSpellCheck spell_check_;
 
   blink::WebString last_requested_text_check_string_;
   blink::WebTextCheckingCompletion* last_requested_text_checking_completion_;
+
+  v8::Persistent<v8::Function> resolved_callback_;
 
   TestRunner* test_runner_;
   WebTestDelegate* delegate_;

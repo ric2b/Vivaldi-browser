@@ -8,11 +8,12 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/options/network_config_view.h"
 #include "chrome/browser/extensions/tab_helper.h"
-#include "chrome/browser/ui/webui/settings/md_settings_localized_strings_provider.h"
+#include "chrome/browser/ui/webui/chromeos/network_element_localized_strings_provider.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
@@ -189,6 +190,9 @@ void NetworkUI::GetLocalizedStrings(base::DictionaryValue* localized_strings) {
       l10n_util::GetStringUTF16(IDS_NETWORK_UI_FORMAT_SHILL));
 
   localized_strings->SetString(
+      "globalPolicyLabel",
+      l10n_util::GetStringUTF16(IDS_NETWORK_UI_GLOBAL_POLICY));
+  localized_strings->SetString(
       "visibleNetworksLabel",
       l10n_util::GetStringUTF16(IDS_NETWORK_UI_VISIBLE_NETWORKS));
   localized_strings->SetString(
@@ -198,7 +202,7 @@ void NetworkUI::GetLocalizedStrings(base::DictionaryValue* localized_strings) {
 
 NetworkUI::NetworkUI(content::WebUI* web_ui)
     : content::WebUIController(web_ui) {
-  web_ui->AddMessageHandler(new NetworkConfigMessageHandler());
+  web_ui->AddMessageHandler(base::MakeUnique<NetworkConfigMessageHandler>());
 
   // Enable extension API calls in the WebUI.
   extensions::TabHelper::CreateForWebContents(web_ui->GetWebContents());
@@ -210,7 +214,7 @@ NetworkUI::NetworkUI(content::WebUI* web_ui)
       content::WebUIDataSource::Create(chrome::kChromeUINetworkHost);
   html->AddLocalizedStrings(localized_strings);
 
-  settings::AddCrNetworkStrings(html);
+  network_element::AddLocalizedStrings(html);
 
   html->SetJsonPath("strings.js");
   html->AddResourcePath("network_ui.css", IDR_NETWORK_UI_CSS);

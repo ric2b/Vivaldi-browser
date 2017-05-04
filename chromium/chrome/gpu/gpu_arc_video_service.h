@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "chrome/gpu/arc_video_accelerator.h"
 #include "components/arc/common/video_accelerator.mojom.h"
+#include "components/arc/video_accelerator/video_accelerator.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 
 namespace chromeos {
@@ -28,12 +29,6 @@ class GpuArcVideoService : public ::arc::mojom::VideoAcceleratorService,
   explicit GpuArcVideoService(const gpu::GpuPreferences& gpu_preferences);
   ~GpuArcVideoService() override;
 
-  // Connects to VideoAcceleratorServiceClient.
-  // |request| specified the message pipe of client to use.
-  static void DeprecatedConnect(
-      std::unique_ptr<GpuArcVideoService> service,
-      ::arc::mojom::VideoAcceleratorServiceClientRequest client_request);
-
  private:
   // ArcVideoAccelerator::Client implementation.
   void OnError(ArcVideoAccelerator::Result error) override;
@@ -48,22 +43,15 @@ class GpuArcVideoService : public ::arc::mojom::VideoAcceleratorService,
   void Initialize(::arc::mojom::ArcVideoAcceleratorConfigPtr config,
                   ::arc::mojom::VideoAcceleratorServiceClientPtr client,
                   const InitializeCallback& callback) override;
-  void DeprecatedInitialize(
-      ::arc::mojom::ArcVideoAcceleratorConfigPtr config,
-      const DeprecatedInitializeCallback& callback) override;
   void BindSharedMemory(::arc::mojom::PortType port,
                         uint32_t index,
                         mojo::ScopedHandle ashmem_handle,
                         uint32_t offset,
                         uint32_t length) override;
-  void DeprecatedBindDmabuf(::arc::mojom::PortType port,
-                            uint32_t index,
-                            mojo::ScopedHandle dmabuf_handle,
-                            int32_t stride) override;
   void BindDmabuf(::arc::mojom::PortType port,
                   uint32_t index,
                   mojo::ScopedHandle dmabuf_handle,
-                  std::vector<::arc::mojom::ArcVideoAcceleratorDmabufPlanePtr>
+                  std::vector<::arc::ArcVideoAcceleratorDmabufPlane>
                       dmabuf_planes) override;
   void UseBuffer(::arc::mojom::PortType port,
                  uint32_t index,

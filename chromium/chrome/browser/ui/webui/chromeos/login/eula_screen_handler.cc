@@ -10,12 +10,12 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
 #include "chrome/browser/chromeos/login/helper.h"
+#include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/screens/core_oobe_actor.h"
-#include "chrome/browser/chromeos/login/screens/eula_model.h"
+#include "chrome/browser/chromeos/login/screens/eula_screen.h"
 #include "chrome/browser/chromeos/login/ui/login_web_dialog.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_screen.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -23,6 +23,7 @@
 #include "components/login/localized_values_builder.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
+#include "rlz/features/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
@@ -83,17 +84,12 @@ namespace chromeos {
 
 EulaScreenHandler::EulaScreenHandler(CoreOobeActor* core_oobe_actor)
     : BaseScreenHandler(kJsScreenPath),
-      model_(NULL),
-      core_oobe_actor_(core_oobe_actor),
-      show_on_init_(false) {
+      core_oobe_actor_(core_oobe_actor) {
 }
 
 EulaScreenHandler::~EulaScreenHandler() {
-  if (model_)
-    model_->OnViewDestroyed(this);
-}
-
-void EulaScreenHandler::PrepareToShow() {
+  if (screen_)
+    screen_->OnViewDestroyed(this);
 }
 
 void EulaScreenHandler::Show() {
@@ -107,15 +103,15 @@ void EulaScreenHandler::Show() {
 void EulaScreenHandler::Hide() {
 }
 
-void EulaScreenHandler::Bind(EulaModel& model) {
-  model_ = &model;
-  BaseScreenHandler::SetBaseScreen(model_);
+void EulaScreenHandler::Bind(EulaScreen* screen) {
+  screen_ = screen;
+  BaseScreenHandler::SetBaseScreen(screen_);
   if (page_is_ready())
     Initialize();
 }
 
 void EulaScreenHandler::Unbind() {
-  model_ = nullptr;
+  screen_ = nullptr;
   BaseScreenHandler::SetBaseScreen(nullptr);
 }
 
@@ -134,7 +130,7 @@ void EulaScreenHandler::DeclareLocalizedValues(
   builder->Add("eulaTpmBusy", IDS_EULA_TPM_BUSY);
   builder->Add("eulaSystemInstallationSettingsOkButton", IDS_OK);
   builder->Add("termsOfServiceLoading", IDS_TERMS_OF_SERVICE_SCREEN_LOADING);
-#if defined(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ)
   builder->AddF("eulaRlzDesc",
                 IDS_EULA_RLZ_DESCRIPTION,
                 IDS_SHORT_PRODUCT_NAME,
@@ -164,7 +160,7 @@ void EulaScreenHandler::DeclareJSCallbacks() {
 }
 
 void EulaScreenHandler::GetAdditionalParameters(base::DictionaryValue* dict) {
-#if defined(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ)
   dict->SetString("rlzEnabled", "enabled");
 #else
   dict->SetString("rlzEnabled", "disabled");
@@ -172,14 +168,14 @@ void EulaScreenHandler::GetAdditionalParameters(base::DictionaryValue* dict) {
 }
 
 void EulaScreenHandler::Initialize() {
-  if (!page_is_ready() || !model_)
+  if (!page_is_ready() || !screen_)
     return;
 
-  core_oobe_actor_->SetUsageStats(model_->IsUsageStatsEnabled());
+  core_oobe_actor_->SetUsageStats(screen_->IsUsageStatsEnabled());
 
   // This OEM EULA is a file:// URL which we're unable to load in iframe.
   // Instead if it's defined we use chrome://terms/oem that will load same file.
-  if (!model_->GetOemEulaUrl().is_empty())
+  if (!screen_->GetOemEulaUrl().is_empty())
     core_oobe_actor_->SetOemEulaUrl(chrome::kChromeUITermsOemURL);
 
   if (show_on_init_) {
@@ -217,8 +213,8 @@ void EulaScreenHandler::HandleOnChromeCredits() {
 }
 
 void EulaScreenHandler::HandleOnInstallationSettingsPopupOpened() {
-  if (model_)
-    model_->InitiatePasswordFetch();
+  if (screen_)
+    screen_->InitiatePasswordFetch();
 }
 
 }  // namespace chromeos

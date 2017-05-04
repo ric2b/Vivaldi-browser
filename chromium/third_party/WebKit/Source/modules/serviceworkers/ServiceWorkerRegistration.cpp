@@ -17,8 +17,15 @@
 #include "public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
+#include <utility>
 
 namespace blink {
+
+ServiceWorkerRegistration* ServiceWorkerRegistration::take(
+    ScriptPromiseResolver* resolver,
+    std::unique_ptr<WebServiceWorkerRegistration::Handle> handle) {
+  return getOrCreate(resolver->getExecutionContext(), std::move(handle));
+}
 
 bool ServiceWorkerRegistration::hasPendingActivity() const {
   return !m_stopped;
@@ -36,24 +43,24 @@ void ServiceWorkerRegistration::setInstalling(
     std::unique_ptr<WebServiceWorker::Handle> handle) {
   if (!getExecutionContext())
     return;
-  m_installing =
-      ServiceWorker::from(getExecutionContext(), wrapUnique(handle.release()));
+  m_installing = ServiceWorker::from(getExecutionContext(),
+                                     WTF::wrapUnique(handle.release()));
 }
 
 void ServiceWorkerRegistration::setWaiting(
     std::unique_ptr<WebServiceWorker::Handle> handle) {
   if (!getExecutionContext())
     return;
-  m_waiting =
-      ServiceWorker::from(getExecutionContext(), wrapUnique(handle.release()));
+  m_waiting = ServiceWorker::from(getExecutionContext(),
+                                  WTF::wrapUnique(handle.release()));
 }
 
 void ServiceWorkerRegistration::setActive(
     std::unique_ptr<WebServiceWorker::Handle> handle) {
   if (!getExecutionContext())
     return;
-  m_active =
-      ServiceWorker::from(getExecutionContext(), wrapUnique(handle.release()));
+  m_active = ServiceWorker::from(getExecutionContext(),
+                                 WTF::wrapUnique(handle.release()));
 }
 
 ServiceWorkerRegistration* ServiceWorkerRegistration::getOrCreate(
@@ -68,10 +75,7 @@ ServiceWorkerRegistration* ServiceWorkerRegistration::getOrCreate(
     return existingRegistration;
   }
 
-  ServiceWorkerRegistration* newRegistration =
-      new ServiceWorkerRegistration(executionContext, std::move(handle));
-  newRegistration->suspendIfNeeded();
-  return newRegistration;
+  return new ServiceWorkerRegistration(executionContext, std::move(handle));
 }
 
 NavigationPreloadManager* ServiceWorkerRegistration::navigationPreload() {
@@ -98,7 +102,8 @@ ScriptPromise ServiceWorkerRegistration::update(ScriptState* scriptState) {
   ScriptPromise promise = resolver->promise();
   m_handle->registration()->update(
       client->provider(),
-      new CallbackPromiseAdapter<void, ServiceWorkerErrorForUpdate>(resolver));
+      WTF::makeUnique<
+          CallbackPromiseAdapter<void, ServiceWorkerErrorForUpdate>>(resolver));
   return promise;
 }
 
@@ -116,20 +121,19 @@ ScriptPromise ServiceWorkerRegistration::unregister(ScriptState* scriptState) {
   ScriptPromise promise = resolver->promise();
   m_handle->registration()->unregister(
       client->provider(),
-      new CallbackPromiseAdapter<bool, ServiceWorkerError>(resolver));
+      WTF::makeUnique<CallbackPromiseAdapter<bool, ServiceWorkerError>>(
+          resolver));
   return promise;
 }
 
 ServiceWorkerRegistration::ServiceWorkerRegistration(
     ExecutionContext* executionContext,
     std::unique_ptr<WebServiceWorkerRegistration::Handle> handle)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(executionContext),
+    : ContextLifecycleObserver(executionContext),
       m_handle(std::move(handle)),
       m_stopped(false) {
   ASSERT(m_handle);
   ASSERT(!m_handle->registration()->proxy());
-  ThreadState::current()->registerPreFinalizer(this);
 
   if (!executionContext)
     return;
@@ -150,11 +154,11 @@ DEFINE_TRACE(ServiceWorkerRegistration) {
   visitor->trace(m_active);
   visitor->trace(m_navigationPreload);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
   Supplementable<ServiceWorkerRegistration>::trace(visitor);
 }
 
-void ServiceWorkerRegistration::contextDestroyed() {
+void ServiceWorkerRegistration::contextDestroyed(ExecutionContext*) {
   if (m_stopped)
     return;
   m_stopped = true;

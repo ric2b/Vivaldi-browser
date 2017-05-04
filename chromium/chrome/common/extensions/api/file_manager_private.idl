@@ -9,7 +9,7 @@
 namespace fileManagerPrivate {
 // Type of the mounted volume.
 enum VolumeType { drive, downloads, removable, archive, provided, mtp,
-                  testing };
+                  media_view, testing };
 
 // Device type. Available if this is removable volume.
 enum DeviceType { usb, sd, optical, mobile, unknown };
@@ -1005,5 +1005,7 @@ interface Events {
   static void onDeviceChanged(DeviceEvent event);
 
   static void onDriveSyncError(DriveSyncErrorEvent event);
+
+  static void onAppsUpdated();
 };
 };

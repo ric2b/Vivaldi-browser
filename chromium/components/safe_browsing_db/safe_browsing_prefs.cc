@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing_db/safe_browsing_prefs.h"
@@ -45,6 +46,76 @@ enum ScoutTransitionReason {
   // New reasons must be added BEFORE MAX_REASONS
   MAX_REASONS
 };
+
+// The Extended Reporting pref that is currently active, used for UMA metrics.
+// These values are written to logs.  New enum values can be added, but
+// existing enums must never be renumbered or deleted and reused.
+enum ActiveExtendedReportingPref {
+  SBER1_PREF = 0,
+  SBER2_PREF = 1,
+  // New prefs must be added before MAX_SBER_PREF
+  MAX_SBER_PREF
+};
+
+// Update the correct UMA metric based on which pref was changed and which UI
+// the change was made on.
+void RecordExtendedReportingPrefChanged(
+    const PrefService& prefs,
+    safe_browsing::ExtendedReportingOptInLocation location) {
+  bool pref_value = safe_browsing::IsExtendedReportingEnabled(prefs);
+
+  if (safe_browsing::IsScout(prefs)) {
+    switch (location) {
+      case safe_browsing::SBER_OPTIN_SITE_CHROME_SETTINGS:
+        UMA_HISTOGRAM_BOOLEAN(
+            "SafeBrowsing.Pref.Scout.SetPref.SBER2Pref.ChromeSettings",
+            pref_value);
+        break;
+      case safe_browsing::SBER_OPTIN_SITE_ANDROID_SETTINGS:
+        UMA_HISTOGRAM_BOOLEAN(
+            "SafeBrowsing.Pref.Scout.SetPref.SBER2Pref.AndroidSettings",
+            pref_value);
+        break;
+      case safe_browsing::SBER_OPTIN_SITE_DOWNLOAD_FEEDBACK_POPUP:
+        UMA_HISTOGRAM_BOOLEAN(
+            "SafeBrowsing.Pref.Scout.SetPref.SBER2Pref.DownloadPopup",
+            pref_value);
+        break;
+      case safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL:
+        UMA_HISTOGRAM_BOOLEAN(
+            "SafeBrowsing.Pref.Scout.SetPref.SBER2Pref.SecurityInterstitial",
+            pref_value);
+        break;
+      default:
+        NOTREACHED();
+    }
+  } else {
+    switch (location) {
+      case safe_browsing::SBER_OPTIN_SITE_CHROME_SETTINGS:
+        UMA_HISTOGRAM_BOOLEAN(
+            "SafeBrowsing.Pref.Scout.SetPref.SBER1Pref.ChromeSettings",
+            pref_value);
+        break;
+      case safe_browsing::SBER_OPTIN_SITE_ANDROID_SETTINGS:
+        UMA_HISTOGRAM_BOOLEAN(
+            "SafeBrowsing.Pref.Scout.SetPref.SBER1Pref.AndroidSettings",
+            pref_value);
+        break;
+      case safe_browsing::SBER_OPTIN_SITE_DOWNLOAD_FEEDBACK_POPUP:
+        UMA_HISTOGRAM_BOOLEAN(
+            "SafeBrowsing.Pref.Scout.SetPref.SBER1Pref.DownloadPopup",
+            pref_value);
+        break;
+      case safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL:
+        UMA_HISTOGRAM_BOOLEAN(
+            "SafeBrowsing.Pref.Scout.SetPref.SBER1Pref.SecurityInterstitial",
+            pref_value);
+        break;
+      default:
+        NOTREACHED();
+    }
+  }
+}
 }  // namespace
 
 namespace prefs {
@@ -228,8 +299,79 @@ void RecordExtendedReportingMetrics(const PrefService& prefs) {
   }
 }
 
+void SetExtendedReportingPrefAndMetric(
+    PrefService* prefs,
+    bool value,
+    ExtendedReportingOptInLocation location) {
+  prefs->SetBoolean(GetExtendedReportingPrefName(*prefs), value);
+  RecordExtendedReportingPrefChanged(*prefs, location);
+}
+
 void SetExtendedReportingPref(PrefService* prefs, bool value) {
   prefs->SetBoolean(GetExtendedReportingPrefName(*prefs), value);
+}
+
+void UpdateMetricsAfterSecurityInterstitial(const PrefService& prefs,
+                                            bool on_show_pref_existed,
+                                            bool on_show_pref_value) {
+  const ActiveExtendedReportingPref active_pref =
+      IsScout(prefs) ? SBER2_PREF : SBER1_PREF;
+  const bool cur_pref_value = IsExtendedReportingEnabled(prefs);
+
+  if (!on_show_pref_existed) {
+    if (!ExtendedReportingPrefExists(prefs)) {
+      // User seeing pref for the first time, didn't touch the checkbox (left it
+      // unchecked).
+      UMA_HISTOGRAM_ENUMERATION(
+          "SafeBrowsing.Pref.Scout.Decision.First_LeftUnchecked", active_pref,
+          MAX_SBER_PREF);
+      return;
+    }
+
+    // Pref currently exists so user did something to the checkbox
+    if (cur_pref_value) {
+      // User turned the pref on.
+      UMA_HISTOGRAM_ENUMERATION(
+          "SafeBrowsing.Pref.Scout.Decision.First_Enabled", active_pref,
+          MAX_SBER_PREF);
+      return;
+    }
+
+    // Otherwise, user turned the pref off, but because it didn't exist when
+    // the interstitial was first shown, they must have turned it on and then
+    // off before the interstitial was closed.
+    UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.Pref.Scout.Decision.First_Disabled",
+                              active_pref, MAX_SBER_PREF);
+    return;
+  }
+
+  // At this point, the pref existed when the interstitial was shown so this is
+  // a repeat appearance of the opt-in. Existence can't be removed during an
+  // interstitial so no need to check whether the pref currently exists.
+  if (on_show_pref_value && cur_pref_value) {
+    // User left the pref on.
+    UMA_HISTOGRAM_ENUMERATION(
+        "SafeBrowsing.Pref.Scout.Decision.Repeat_LeftEnabled", active_pref,
+        MAX_SBER_PREF);
+    return;
+  } else if (on_show_pref_value && !cur_pref_value) {
+    // User turned the pref off.
+    UMA_HISTOGRAM_ENUMERATION(
+        "SafeBrowsing.Pref.Scout.Decision.Repeat_Disabled", active_pref,
+        MAX_SBER_PREF);
+    return;
+  } else if (!on_show_pref_value && cur_pref_value) {
+    // User turned the pref on.
+    UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.Pref.Scout.Decision.Repeat_Enabled",
+                              active_pref, MAX_SBER_PREF);
+    return;
+  } else {
+    // Both on_show and cur values are false - user left the pref off.
+    UMA_HISTOGRAM_ENUMERATION(
+        "SafeBrowsing.Pref.Scout.Decision.Repeat_LeftDisabled", active_pref,
+        MAX_SBER_PREF);
+    return;
+  }
 }
 
 void UpdatePrefsBeforeSecurityInterstitial(PrefService* prefs) {

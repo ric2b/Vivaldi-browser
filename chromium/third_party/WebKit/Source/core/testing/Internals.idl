@@ -26,7 +26,6 @@
 
 [
     DoNotCheckConstants,
-    ConstructorCallWith=ScriptState,
 ] interface Internals {
     DOMString address(Node node);
 
@@ -35,6 +34,7 @@
     [RaisesException] DOMString elementLayoutTreeAsText(Element element);
     boolean isPreloaded(DOMString url);
     boolean isPreloadedBy(DOMString url, Document document);
+    boolean isLoading(DOMString url);
     boolean isLoadingFromMemoryCache(DOMString url);
     unsigned long getResourcePriority (DOMString url, Document document);
     DOMString getResourceHeader (DOMString url, DOMString header, Document document);
@@ -145,7 +145,9 @@
     sequence<DOMString> userPreferredLanguages();
     void setUserPreferredLanguages(sequence<DOMString> languages);
 
-    unsigned long activeDOMObjectCount(Document document);
+    unsigned long mediaKeysCount();
+    unsigned long mediaKeySessionCount();
+    unsigned long suspendableObjectCount(Document document);
     unsigned long wheelEventHandlerCount(Document document);
     unsigned long scrollEventHandlerCount(Document document);
     unsigned long touchStartOrMoveEventHandlerCount(Document document);
@@ -231,12 +233,10 @@
 
     TypeConversions typeConversions();
 
-    // This is enabled only in Debug builds.
-    // This is because we want to avoid putting the byte stream of testing private scripts
-    // into the binary of Release builds.
-    PrivateScriptTest privateScriptTest();
-
     sequence<DOMString> getReferencedFilePaths();
+
+    [RaisesException] void startStoringCompositedLayerDebugInfo(Document document);
+    [RaisesException] void stopStoringCompositedLayerDebugInfo(Document document);
 
     // These functions both reset the tracked repaint rects. They are intended to be used in the following order:
     //  startTrackingRepaints(), repaintRectsAsText(), stopTrackingRepaints().
@@ -349,9 +349,6 @@
     [RaisesException] double monotonicTimeToZeroBasedDocumentTime(double platformTime);
 
     void setMediaElementNetworkState(HTMLMediaElement element, long state);
-
-    // TODO(liberato): remove once autoplay gesture override experiment concludes.
-    void triggerAutoplayViewportCheck(HTMLMediaElement mediaElement);
 
     DOMString getScrollAnimationState(Node node);
 

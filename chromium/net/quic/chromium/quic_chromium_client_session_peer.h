@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_TEST_TOOLS_QUIC_CHROMIUM_CLIENT_SESSION_PEER_H_
-#define NET_QUIC_TEST_TOOLS_QUIC_CHROMIUM_CLIENT_SESSION_PEER_H_
+#ifndef NET_QUIC_CHROMIUM_QUIC_CHROMIUM_CLIENT_SESSION_PEER_H_
+#define NET_QUIC_CHROMIUM_QUIC_CHROMIUM_CLIENT_SESSION_PEER_H_
 
 #include <stddef.h>
 
 #include <string>
 
 #include "base/macros.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 
 namespace net {
 
@@ -42,4 +42,4 @@ class QuicChromiumClientSessionPeer {
 }  // namespace test
 }  // namespace net
 
-#endif  // NET_QUIC_TEST_TOOLS_QUIC_CHROMIUM_CLIENT_SESSION_PEER_H_
+#endif  // NET_QUIC_CHROMIUM_QUIC_CHROMIUM_CLIENT_SESSION_PEER_H_

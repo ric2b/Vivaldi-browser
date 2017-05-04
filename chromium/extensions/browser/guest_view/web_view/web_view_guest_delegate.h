@@ -10,13 +10,6 @@
 
 namespace extensions {
 
-namespace api {
-namespace web_view_internal {
-
-struct ContextMenuItem;
-}  // namespace web_view_internal
-}  // namespace api
-
 // A delegate class of WebViewGuest that are not a part of chrome.
 class WebViewGuestDelegate {
  public :
@@ -24,9 +17,6 @@ class WebViewGuestDelegate {
 
   // Called when context menu operation was handled.
   virtual bool HandleContextMenu(const content::ContextMenuParams& params) = 0;
-
-  // Called just after additional initialization is performed.
-  virtual void OnDidInitialize() = 0;
 
   // Shows the context menu for the guest.
   virtual void OnShowContextMenu(int request_id) = 0;

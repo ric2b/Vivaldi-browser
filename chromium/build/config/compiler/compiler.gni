@@ -5,6 +5,7 @@
 import("//build/config/android/config.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
+import("//build/config/compiler/pgo/pgo.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/toolchain/goma.gni")
 import("//build/toolchain/toolchain.gni")
@@ -40,18 +41,23 @@ declare_args() {
   # can be used to convert a fastlink pdb to a normal one.
   is_win_fastlink = false
 
-  # Specify the current PGO phase, only used for the Windows MSVS build. Here's
-  # the different values that can be used:
-  #     0 : Means that PGO is turned off.
-  #     1 : Used during the PGI (instrumentation) phase.
-  #     2 : Used during the PGO (optimization) phase.
-  #
-  # TODO(sebmarchand): Add support for the PGU (update) phase.
-  chrome_pgo_phase = 0
-
   # Whether or not we should turn on incremental WPO. Only affects the VS
   # Windows build.
   use_incremental_wpo = false
+
+  # Root directory that will store the MSVC link repro. This should only be
+  # used for debugging purposes on the builders where a MSVC linker flakyness
+  # has been observed. The targets for which a link repro should be generated
+  # should add somethink like this to their configuration:
+  #   if (linkrepro_root_dir != "") {
+  #     ldflags = ["/LINKREPRO:" + linkrepro_root_dir + "/" + target_name]
+  #   }
+  #
+  # Note that doing a link repro uses a lot of disk space and slows down the
+  # build, so this shouldn't be enabled on too many targets.
+  #
+  # See crbug.com/669854.
+  linkrepro_root_dir = ""
 }
 
 declare_args() {

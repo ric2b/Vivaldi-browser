@@ -2044,6 +2044,12 @@ bool Connection::IntegrityCheckHelper(
   return ret;
 }
 
+bool Connection::ReportMemoryUsage(base::trace_event::ProcessMemoryDump* pmd,
+                                   const std::string& dump_name) {
+  return memory_dump_provider_ &&
+         memory_dump_provider_->ReportMemoryUsage(pmd, dump_name);
+}
+
 base::TimeTicks TimeSource::Now() {
   return base::TimeTicks::Now();
 }

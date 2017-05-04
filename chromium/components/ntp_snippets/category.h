@@ -9,8 +9,6 @@
 
 namespace ntp_snippets {
 
-class CategoryFactory;
-
 // These are the categories that the client knows about.
 // The values before LOCAL_CATEGORIES_COUNT are the categories that are provided
 // locally on the device. Categories provided by the server (IDs strictly larger
@@ -59,6 +57,25 @@ class Category {
   // a std::map, but should not be used to order categories for other purposes.
   struct CompareByID;
 
+  // Creates a category from a KnownCategory value. The passed |known_category|
+  // must not be one of the special values (LOCAL_CATEGORIES_COUNT or
+  // REMOTE_CATEGORIES_OFFSET).
+  static Category FromKnownCategory(KnownCategories known_category);
+
+  // Creates a category from a category identifier delivered by the server.
+  // |remote_category| must be positive.
+  static Category FromRemoteCategory(int remote_category);
+
+  // Creates a category from an ID as returned by |id()|. |id| must be a
+  // non-negative value. Callers should make sure this is a valid id (if in
+  // doubt, call IsValidIDValue()).
+  static Category FromIDValue(int id);
+
+  // Verifies if |id| is a valid ID value. Only checks that the value is within
+  // a valid range -- not that the system actually knows about the corresponding
+  // category.
+  static bool IsValidIDValue(int id);
+
   // Returns a non-negative identifier that is unique for the category and can
   // be converted back to a Category instance using
   // |CategoryFactory::FromIDValue(id)|.
@@ -68,8 +85,6 @@ class Category {
   bool IsKnownCategory(KnownCategories known_category) const;
 
  private:
-  friend class CategoryFactory;
-
   explicit Category(int id);
 
   int id_;

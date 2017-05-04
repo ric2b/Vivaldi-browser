@@ -50,11 +50,11 @@ StyleRuleKeyframes::~StyleRuleKeyframes() {}
 void StyleRuleKeyframes::parserAppendKeyframe(StyleRuleKeyframe* keyframe) {
   if (!keyframe)
     return;
-  m_keyframes.append(keyframe);
+  m_keyframes.push_back(keyframe);
 }
 
 void StyleRuleKeyframes::wrapperAppendKeyframe(StyleRuleKeyframe* keyframe) {
-  m_keyframes.append(keyframe);
+  m_keyframes.push_back(keyframe);
   styleChanged();
 }
 
@@ -99,7 +99,8 @@ void CSSKeyframesRule::appendRule(const String& ruleText) {
          m_keyframesRule->keyframes().size());
 
   CSSStyleSheet* styleSheet = parentStyleSheet();
-  CSSParserContext context(parserContext(), UseCounter::getFrom(styleSheet));
+  CSSParserContext* context =
+      CSSParserContext::createWithStyleSheet(parserContext(), styleSheet);
   StyleRuleKeyframe* keyframe = CSSParser::parseKeyframeRule(context, ruleText);
   if (!keyframe)
     return;

@@ -42,8 +42,15 @@ static void SetRuntimeFeatureDefaultsForPlatform() {
   // Android does not yet support switching of audio output devices
   WebRuntimeFeatures::enableAudioOutputDevices(false);
   WebRuntimeFeatures::enableAutoplayMutedVideos(true);
-#else
+  // Android does not yet support SystemMonitor.
+  WebRuntimeFeatures::enableOnDeviceChange(false);
+  WebRuntimeFeatures::enableMediaSession(true);
+#else  // defined(OS_ANDROID)
   WebRuntimeFeatures::enableNavigatorContentUtils(true);
+  if (base::FeatureList::IsEnabled(
+          features::kCrossOriginMediaPlaybackRequiresUserGesture)) {
+    WebRuntimeFeatures::enableAutoplayMutedVideos(true);
+  }
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_ANDROID) || defined(USE_AURA)
@@ -93,9 +100,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (!base::FeatureList::IsEnabled(features::kNotificationContentImage))
     WebRuntimeFeatures::enableNotificationContentImage(false);
 
-  // For the time being, enable wasm serialization when wasm is enabled,
-  // since the whole wasm space is experimental. We have the flexibility
-  // to decouple the two.
+  // For the time being, wasm serialization is separately controlled
+  // by this flag. WebAssembly APIs and compilation is now enabled
+  // unconditionally in V8.
   if (base::FeatureList::IsEnabled(features::kWebAssembly))
     WebRuntimeFeatures::enableWebAssemblySerialization(true);
 
@@ -247,10 +254,14 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kEnableSlimmingPaintV2))
     WebRuntimeFeatures::enableSlimmingPaintV2(true);
 
-  if (base::FeatureList::IsEnabled(
-          features::kNonValidatingReloadOnNormalReload)) {
-    WebRuntimeFeatures::enableReloadwithoutSubResourceCacheRevalidation(true);
-  }
+  if (base::FeatureList::IsEnabled(features::kSlimmingPaintInvalidation))
+    WebRuntimeFeatures::enableSlimmingPaintInvalidation(true);
+
+  if (command_line.HasSwitch(switches::kEnableSlimmingPaintInvalidation))
+    WebRuntimeFeatures::enableSlimmingPaintInvalidation(true);
+
+  if (command_line.HasSwitch(switches::kDisableSlimmingPaintInvalidation))
+    WebRuntimeFeatures::enableSlimmingPaintInvalidation(false);
 
   if (base::FeatureList::IsEnabled(features::kDocumentWriteEvaluator))
     WebRuntimeFeatures::enableDocumentWriteEvaluator(true);
@@ -264,14 +275,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::enablePointerEvent(
       base::FeatureList::IsEnabled(features::kPointerEvents));
 
-  if (base::FeatureList::IsEnabled(features::kPointerEventV1SpecCapturing))
-    WebRuntimeFeatures::enablePointerEventV1SpecCapturing(true);
-
   WebRuntimeFeatures::enablePassiveDocumentEventListeners(
       base::FeatureList::IsEnabled(features::kPassiveDocumentEventListeners));
-
-  if (base::FeatureList::IsEnabled(features::kPassiveEventListenersDueToFling))
-    WebRuntimeFeatures::enablePassiveEventListenersDueToFling(true);
 
   WebRuntimeFeatures::enableFeatureFromString(
       "FontCacheScaling",
@@ -292,6 +297,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
       base::FeatureList::IsEnabled(
           features::kExpensiveBackgroundTimerThrottling));
 
+  if (base::FeatureList::IsEnabled(features::kHeapCompaction))
+    WebRuntimeFeatures::enableHeapCompaction(true);
+
   WebRuntimeFeatures::enableRenderingPipelineThrottling(
     base::FeatureList::IsEnabled(features::kRenderingPipelineThrottling));
 
@@ -303,12 +311,27 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
     WebRuntimeFeatures::enableSendBeaconThrowForBlobWithNonSimpleType(true);
 
 #if defined(OS_ANDROID)
+  if (command_line.HasSwitch(switches::kDisableMediaSessionAPI))
+    WebRuntimeFeatures::enableMediaSession(false);
+
   WebRuntimeFeatures::enablePaymentRequest(
       base::FeatureList::IsEnabled(features::kWebPayments));
 #endif
 
-  if (base::FeatureList::IsEnabled(features::kServiceWorkerNavigationPreload))
+  // Sets the RuntimeEnabledFeatures for Navigation Preload feature only when
+  // '--enable-features' command line flag is given. While experimenting this
+  // feature using Origin-Trial, this base::Feature is enabled by default in
+  // content_features.cc. So FeatureList::IsEnabled() always returns true. But,
+  // unless the command line explicitly enabled the feature, this feature should
+  // be available only when a valid origin trial token is set. This check is
+  // done by the generated code of
+  // blink::OriginTrials::serviceWorkerNavigationPreloadEnabled(). See the
+  // comments in service_worker_version.h for the details.
+  if (base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
+          features::kServiceWorkerNavigationPreload.name,
+          base::FeatureList::OVERRIDE_ENABLE_FEATURE)) {
     WebRuntimeFeatures::enableServiceWorkerNavigationPreload(true);
+  }
 
   if (base::FeatureList::IsEnabled(features::kSpeculativeLaunchServiceWorker))
     WebRuntimeFeatures::enableSpeculativeLaunchServiceWorker(true);
@@ -326,6 +349,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   if (base::FeatureList::IsEnabled(features::kGenericSensor))
     WebRuntimeFeatures::enableGenericSensor(true);
+
+  if (base::FeatureList::IsEnabled(features::kFasterLocationReload))
+    WebRuntimeFeatures::enableFasterLocationReload(true);
 
   // Enable features which VrShell depends on.
   if (base::FeatureList::IsEnabled(features::kVrShell)) {

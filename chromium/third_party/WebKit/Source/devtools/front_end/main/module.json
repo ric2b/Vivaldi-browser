@@ -7,14 +7,33 @@
         },
         {
             "type": "@UI.ContextMenu.Provider",
-            "contextTypes": ["Workspace.UISourceCode", "SDK.Resource", "SDK.NetworkRequest", "Node"],
-            "className": "Components.HandlerRegistry.ContextMenuProvider"
+            "contextTypes": [
+                "Workspace.UISourceCode",
+                "SDK.Resource",
+                "SDK.NetworkRequest"
+            ],
+            "className": "Components.Linkifier.ContentProviderContextMenuProvider"
+        },
+        {
+            "type": "@UI.ContextMenu.Provider",
+            "contextTypes": [
+                "Node"
+            ],
+            "className": "UI.ExternaLinkContextMenuProvider"
+        },
+        {
+            "type": "@UI.ContextMenu.Provider",
+            "contextTypes": [
+                "Node"
+            ],
+            "className": "Components.Linkifier.LinkContextMenuProvider"
         },
         {
             "type": "@UI.ActionDelegate",
             "category": "Navigation",
             "actionId": "main.reload",
             "className": "Main.Main.ReloadActionDelegate",
+            "iconClass": "largeicon-refresh",
             "title": "Reload page",
             "bindings": [
                 {
@@ -216,8 +235,14 @@
             "order": 0,
             "defaultValue": false,
             "options": [
-                { "value": true, "title": "Disable cache (while DevTools is open)" },
-                { "value": false, "title": "Enable cache" }
+                {
+                    "value": true,
+                    "title": "Disable cache (while DevTools is open)"
+                },
+                {
+                    "value": false,
+                    "title": "Enable cache"
+                }
             ]
         },
         {
@@ -229,8 +254,14 @@
             "order": 1,
             "defaultValue": false,
             "options": [
-                { "value": true, "title": "Disable JavaScript" },
-                { "value": false, "title": "Enable JavaScript" }
+                {
+                    "value": true,
+                    "title": "Disable JavaScript"
+                },
+                {
+                    "value": false,
+                    "title": "Enable JavaScript"
+                }
             ]
         },
         {
@@ -242,8 +273,14 @@
             "order": 2,
             "defaultValue": false,
             "options": [
-                { "value": true, "title": "Auto-open DevTools for popups" },
-                { "value": false, "title": "Do not auto-open DevTools for popups" }
+                {
+                    "value": true,
+                    "title": "Auto-open DevTools for popups"
+                },
+                {
+                    "value": false,
+                    "title": "Do not auto-open DevTools for popups"
+                }
             ]
         },
         {
@@ -254,9 +291,18 @@
             "settingType": "enum",
             "defaultValue": "default",
             "options": [
-                { "title": "Switch to default theme", "text": "Default", "value": "default" },
-                { "title": "Switch to dark theme", "text": "Dark", "value": "dark" }
-            ]
+                {
+                    "title": "Switch to light theme",
+                    "text": "Light",
+                    "value": "default"
+                },
+                {
+                    "title": "Switch to dark theme",
+                    "text": "Dark",
+                    "value": "dark"
+                }
+            ],
+            "tags": "dark, light"
         },
         {
             "type": "setting",
@@ -266,9 +312,21 @@
             "settingType": "enum",
             "defaultValue": "auto",
             "options": [
-                { "title": "Use horizontal panel layout", "text": "horizontal", "value": "bottom" },
-                { "title": "Use vertical panel layout", "text": "vertical", "value": "right" },
-                { "title": "Use automatic panel layout", "text": "auto", "value": "auto" }
+                {
+                    "title": "Use horizontal panel layout",
+                    "text": "horizontal",
+                    "value": "bottom"
+                },
+                {
+                    "title": "Use vertical panel layout",
+                    "text": "vertical",
+                    "value": "right"
+                },
+                {
+                    "title": "Use automatic panel layout",
+                    "text": "auto",
+                    "value": "auto"
+                }
             ]
         },
         {
@@ -299,7 +357,7 @@
         {
             "type": "@UI.SettingUI",
             "category": "Extensions",
-            "className": "Components.HandlerRegistry.OpenAnchorLocationSettingUI"
+            "className": "Components.Linkifier.LinkHandlerSettingUI"
         },
         {
             "type": "@UI.SettingUI",
@@ -330,15 +388,38 @@
             "settingType": "enum",
             "defaultValue": "right",
             "options": [
-                { "value": "right", "title": "Dock to right" },
-                { "value": "bottom", "title": "Dock to bottom" },
-                { "value": "undocked", "title": "Undock into separate window" }
+                {
+                    "value": "right",
+                    "title": "Dock to right"
+                },
+                {
+                    "value": "bottom",
+                    "title": "Dock to bottom"
+                },
+                {
+                    "value": "undocked",
+                    "title": "Undock into separate window"
+                }
             ]
         },
         {
             "type": "@UI.ViewLocationResolver",
             "name": "drawer-view",
             "className": "UI.InspectorView"
+        },
+        {
+            "type": "@UI.ActionDelegate",
+            "actionId": "components.collect-garbage",
+            "title": "Collect garbage",
+            "iconClass": "largeicon-trash-bin",
+            "className": "Main.GCActionDelegate"
+        },
+        {
+            "type": "@UI.ActionDelegate",
+            "category": "Mobile",
+            "actionId": "components.request-app-banner",
+            "className": "Main.RequestAppBannerActionDelegate",
+            "title": "Add to homescreen"
         }
     ],
     "dependencies": [
@@ -352,6 +433,9 @@
         "RenderingOptions.js",
         "SimpleApp.js",
         "OverlayController.js",
+        "GCActionDelegate.js",
+        "RequestAppBannerActionDelegate.js",
+        "ExecutionContextSelector.js",
         "Main.js"
     ],
     "resources": [

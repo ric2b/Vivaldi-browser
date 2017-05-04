@@ -14,11 +14,11 @@ using WindowTreeHostTest = test::AuraTestBase;
 TEST_F(WindowTreeHostTest, DPIWindowSize) {
   gfx::Rect starting_bounds(0, 0, 800, 600);
   EXPECT_EQ(starting_bounds.size(), host()->compositor()->size());
-  EXPECT_EQ(starting_bounds, host()->GetBounds());
+  EXPECT_EQ(starting_bounds, host()->GetBoundsInPixels());
   EXPECT_EQ(starting_bounds, root_window()->bounds());
 
   test_screen()->SetDeviceScaleFactor(1.5f);
-  EXPECT_EQ(starting_bounds, host()->GetBounds());
+  EXPECT_EQ(starting_bounds, host()->GetBoundsInPixels());
   // Size should be rounded up after scaling.
   EXPECT_EQ(gfx::Rect(0, 0, 534, 400), root_window()->bounds());
 
@@ -29,11 +29,11 @@ TEST_F(WindowTreeHostTest, DPIWindowSize) {
 
   gfx::Insets padding(1, 2, 3, 4);
   // Padding is in physical pixels.
-  host()->SetOutputSurfacePadding(padding);
+  host()->SetOutputSurfacePaddingInPixels(padding);
   gfx::Rect padded_rect = starting_bounds;
   padded_rect.Inset(-padding);
   EXPECT_EQ(padded_rect.size(), host()->compositor()->size());
-  EXPECT_EQ(starting_bounds, host()->GetBounds());
+  EXPECT_EQ(starting_bounds, host()->GetBoundsInPixels());
   EXPECT_EQ(gfx::Rect(1, 1, 534, 401), root_window()->bounds());
   EXPECT_EQ(gfx::Vector2dF(0, 0),
             host()->compositor()->root_layer()->subpixel_position_offset());

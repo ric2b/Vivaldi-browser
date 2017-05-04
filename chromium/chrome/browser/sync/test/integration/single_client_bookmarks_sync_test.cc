@@ -37,10 +37,12 @@ using bookmarks_helper::RemoveAll;
 using bookmarks_helper::SetFavicon;
 using bookmarks_helper::SetTitle;
 
+namespace {
 // All tests in this file utilize a single profile.
 // TODO(pvalenzuela): Standardize this pattern by moving this constant to
 // SyncTest and using it in all single client tests.
 const int kSingleProfileIndex = 0;
+}
 
 class SingleClientBookmarksSyncTest : public SyncTest {
  public:
@@ -85,6 +87,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest, Sanity) {
   //        -> http://www.facebook.com "tier1_a_url2"
   //      -> tier1_b
   //        -> http://www.nhl.com "tier1_b_url0"
+  //        -> http://www.vg.no "tier1_b_url1"
+  //    -> trash
+  //      -> http://www.microsoft.com "trash_1_url0"
   const BookmarkNode* top = AddFolder(
       kSingleProfileIndex, GetOtherNode(kSingleProfileIndex), 0, "top");
   const BookmarkNode* tier1_a = AddFolder(
@@ -103,6 +108,19 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest, Sanity) {
   const BookmarkNode* tier1_b_url0 = AddURL(
       kSingleProfileIndex, tier1_b, 0, "tier1_b_url0",
       GURL("http://www.nhl.com"));
+
+  const BookmarkNode *trash_node = GetBookmarkModel(0)->trash_node();
+  const BookmarkNode* tier1_b_url1 = nullptr;
+  const BookmarkNode* trash_1_url0 = nullptr;
+  if (trash_node) {
+    tier1_b_url1 = AddURL(
+        kSingleProfileIndex, tier1_b, 0, "tier1_b_url1",
+        GURL("http://www.vg.no"));
+
+    trash_1_url0 = AddURL(
+        kSingleProfileIndex, trash_node, 0, "trash_1_url0",
+        GURL("http://www.microsoft.com"));
+  }
 
   // Setup sync, wait for its completion, and make sure changes were synced.
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
@@ -131,6 +149,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest, Sanity) {
   //            -> Toronto Maple Leafs (mapleleafs.nhl.com)
   //            -> Wynn (www.wynnlasvegas.com)
   //      -> tier1_a_url0
+  //  -> trash
+  //    -> http://www.microsoft.com "trash_1_url0"
+  //    -> http://www.vg.no "tier1_b_url1"
   const BookmarkNode* bar = GetBookmarkBarNode(kSingleProfileIndex);
   const BookmarkNode* cnn = AddURL(
       kSingleProfileIndex, bar, 0, "CNN", GURL("http://www.cnn.com"));
@@ -199,6 +220,26 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest, Sanity) {
   ASSERT_TRUE(
       UpdatedProgressMarkerChecker(GetSyncService(kSingleProfileIndex)).Wait());
   ASSERT_TRUE(ModelMatchesVerifier(kSingleProfileIndex));
+
+  if (trash_node) {
+    Move(0, tier1_b_url1, trash_node, 1);
+
+    // Wait for newly deleted bookmarks to sync.
+    ASSERT_TRUE(
+        UpdatedProgressMarkerChecker(GetSyncService(kSingleProfileIndex))
+            .Wait());
+    ASSERT_TRUE(ModelMatchesVerifier(kSingleProfileIndex));
+
+    ASSERT_EQ(trash_node->GetChild(0)->id(), trash_1_url0->id());
+    Remove(kSingleProfileIndex, trash_node, 0);
+    ASSERT_EQ(trash_node->GetChild(0)->id(), tier1_b_url1->id());
+
+    // Wait for newly deleted notes to sync.
+    ASSERT_TRUE(
+        UpdatedProgressMarkerChecker(GetSyncService(kSingleProfileIndex))
+            .Wait());
+    ASSERT_TRUE(ModelMatchesVerifier(kSingleProfileIndex));
+  }
 
   // Only verify FakeServer data if FakeServer is being used.
   // TODO(pvalenzuela): Use this style of verification in more tests once it is

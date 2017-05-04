@@ -31,7 +31,7 @@ ConflictResolution ModelTypeSyncBridge::ResolveConflict(
 }
 
 void ModelTypeSyncBridge::OnSyncStarting(
-    std::unique_ptr<DataTypeErrorHandler> error_handler,
+    const ModelErrorHandler& error_handler,
     const ModelTypeChangeProcessor::StartCallback& start_callback) {
   change_processor_->OnSyncStarting(std::move(error_handler), start_callback);
 }
@@ -44,8 +44,7 @@ void ModelTypeSyncBridge::DisableSync() {
   // processor that there is no metadata. DisableSync() should never be called
   // while the models are loading, aka before the service has finished loading
   // the initial metadata.
-  change_processor_->OnMetadataLoaded(SyncError(),
-                                      base::MakeUnique<MetadataBatch>());
+  change_processor_->ModelReadyToSync(base::MakeUnique<MetadataBatch>());
 }
 
 ModelTypeChangeProcessor* ModelTypeSyncBridge::change_processor() const {

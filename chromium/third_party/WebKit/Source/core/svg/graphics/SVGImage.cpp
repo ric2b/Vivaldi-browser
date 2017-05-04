@@ -33,11 +33,11 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
-#include "core/style/ComputedStyle.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/paint/FloatClipRecorder.h"
 #include "core/paint/TransformRecorder.h"
+#include "core/style/ComputedStyle.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGFEImageElement.h"
 #include "core/svg/SVGImageElement.h"
@@ -55,7 +55,7 @@
 #include "platform/graphics/paint/CullRect.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/SkPictureBuilder.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "wtf/PassRefPtr.h"
 
@@ -262,7 +262,10 @@ void SVGImage::drawForContainer(SkCanvas* canvas,
                ClampImageToSourceRect, url);
 }
 
-sk_sp<SkImage> SVGImage::imageForCurrentFrame() {
+sk_sp<SkImage> SVGImage::imageForCurrentFrame(
+    const ColorBehavior& colorBehavior) {
+  // TODO(ccameron): This function should not ignore |colorBehavior|.
+  // https://crbug.com/667431
   return imageForCurrentFrameForContainer(KURL(), size());
 }
 
@@ -285,6 +288,16 @@ void SVGImage::drawPatternForContainer(GraphicsContext& context,
   spacedTile.expand(FloatSize(repeatSpacing));
 
   SkPictureBuilder patternPicture(spacedTile, nullptr, &context);
+  // SVG images paint into their own property tree set that is distinct
+  // from the embedding frame tree.
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+    PaintChunk::Id id(patternPicture, DisplayItem::kSVGImage);
+    PropertyTreeState state(
+        TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+        EffectPaintPropertyNode::root(), ScrollPaintPropertyNode::root());
+    m_paintController->updateCurrentPaintChunkProperties(&id, state);
+  }
+
   {
     DrawingRecorder patternPictureRecorder(
         patternPicture.context(), patternPicture, DisplayItem::Type::kSVGImage,
@@ -307,7 +320,7 @@ void SVGImage::drawPatternForContainer(GraphicsContext& context,
   paint.setShader(SkShader::MakePictureShader(
       std::move(tilePicture), SkShader::kRepeat_TileMode,
       SkShader::kRepeat_TileMode, &patternTransform, nullptr));
-  paint.setBlendMode(static_cast<SkBlendMode>(compositeOp));
+  paint.setBlendMode(compositeOp);
   paint.setColorFilter(sk_ref_sp(context.getColorFilter()));
   context.drawRect(dstRect, paint);
 }
@@ -342,7 +355,10 @@ void SVGImage::draw(SkCanvas* canvas,
                     const FloatRect& dstRect,
                     const FloatRect& srcRect,
                     RespectImageOrientationEnum shouldRespectImageOrientation,
-                    ImageClampingMode clampMode) {
+                    ImageClampingMode clampMode,
+                    const ColorBehavior& colorBehavior) {
+  // TODO(ccameron): This function should not ignore |colorBehavior|.
+  // https://crbug.com/667431
   if (!m_page)
     return;
 
@@ -373,6 +389,16 @@ void SVGImage::drawInternal(SkCanvas* canvas,
   flushPendingTimelineRewind();
   SkPictureBuilder imagePicture(dstRect, nullptr, nullptr,
                                 m_paintController.get());
+  // SVG images paint into their own property tree set that is distinct
+  // from the embedding frame tree.
+  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+    PaintChunk::Id id(imagePicture, DisplayItem::kSVGImage);
+    PropertyTreeState state(
+        TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+        EffectPaintPropertyNode::root(), ScrollPaintPropertyNode::root());
+    m_paintController->updateCurrentPaintChunkProperties(&id, state);
+  }
+
   {
     ClipRecorder clipRecorder(imagePicture.context(), imagePicture,
                               DisplayItem::kClipNodeImage,
@@ -406,9 +432,6 @@ void SVGImage::drawInternal(SkCanvas* canvas,
     sk_sp<const SkPicture> recording = imagePicture.endRecording();
     canvas->drawPicture(recording.get());
   }
-
-  if (getImageObserver())
-    getImageObserver()->didDraw(this);
 
   // Start any (SMIL) animations if needed. This will restart or continue
   // animations if preceded by calls to resetAnimation or stopAnimation
@@ -487,8 +510,9 @@ void SVGImage::serviceAnimations(double monotonicAnimationStartTime) {
   ScriptForbiddenScope forbidScript;
 
   // The calls below may trigger GCs, so set up the required persistent
-  // reference on the ImageResource which owns this SVGImage. By transitivity,
-  // that will keep the associated SVGImageChromeClient object alive.
+  // reference on the ImageResourceContent which owns this SVGImage. By
+  // transitivity, that will keep the associated SVGImageChromeClient object
+  // alive.
   Persistent<ImageObserver> protect(getImageObserver());
   m_page->animator().serviceScriptedAnimations(monotonicAnimationStartTime);
   // Do *not* update the paint phase. It's critical to paint only when
@@ -580,12 +604,14 @@ Image::SizeAvailability SVGImage::dataChanged(bool allDataReceived) {
             (*Page::ordinaryPages().begin())->settings();
         page->settings().genericFontFamilySettings() =
             defaultSettings.genericFontFamilySettings();
-        page->settings().setMinimumFontSize(defaultSettings.minimumFontSize());
+        page->settings().setMinimumFontSize(
+            defaultSettings.getMinimumFontSize());
         page->settings().setMinimumLogicalFontSize(
-            defaultSettings.minimumLogicalFontSize());
-        page->settings().setDefaultFontSize(defaultSettings.defaultFontSize());
+            defaultSettings.getMinimumLogicalFontSize());
+        page->settings().setDefaultFontSize(
+            defaultSettings.getDefaultFontSize());
         page->settings().setDefaultFixedFontSize(
-            defaultSettings.defaultFixedFontSize());
+            defaultSettings.getDefaultFixedFontSize());
       }
     }
 

@@ -81,7 +81,6 @@ class CoreTabHelper : public content::WebContentsObserver,
 
   // content::WebContentsObserver overrides:
   void DidStartLoading() override;
-  void DocumentOnLoadCompletedInMainFrame() override;
   void WasShown() override;
   void WebContentsDestroyed() override;
   void BeforeUnloadFired(const base::TimeTicks& proceed_time) override;
@@ -116,7 +115,7 @@ class CoreTabHelper : public content::WebContentsObserver,
   // (full-page plugins for now only) permissions.
   int content_restrictions_;
 
-  IDMap<ContextNodeThumbnailCallback, IDMapOwnPointer> thumbnail_callbacks_;
+  IDMap<std::unique_ptr<ContextNodeThumbnailCallback>> thumbnail_callbacks_;
 
   DISALLOW_COPY_AND_ASSIGN(CoreTabHelper);
 };

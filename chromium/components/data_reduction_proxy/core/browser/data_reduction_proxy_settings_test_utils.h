@@ -21,12 +21,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 class PrefService;
-class TestingPrefServiceSimple;
 
 namespace data_reduction_proxy {
 
 class DataReductionProxyTestContext;
-class MockDataReductionProxyConfig;
 
 template <class C>
 class MockDataReductionProxySettings : public C {
@@ -35,8 +33,7 @@ class MockDataReductionProxySettings : public C {
   }
   MOCK_METHOD0(GetOriginalProfilePrefs, PrefService*());
   MOCK_METHOD0(GetLocalStatePrefs, PrefService*());
-  MOCK_METHOD1(RecordStartupState,
-               void(ProxyStartupState state));
+  MOCK_CONST_METHOD1(RecordStartupState, void(ProxyStartupState state));
 };
 
 class DataReductionProxySettingsTestBase : public testing::Test {
@@ -44,9 +41,7 @@ class DataReductionProxySettingsTestBase : public testing::Test {
   static void AddTestProxyToCommandLine();
 
   DataReductionProxySettingsTestBase();
-  DataReductionProxySettingsTestBase(bool allowed,
-                                     bool fallback_allowed,
-                                     bool promo_allowed);
+  DataReductionProxySettingsTestBase(bool promo_allowed);
   ~DataReductionProxySettingsTestBase() override;
 
   void AddProxyToCommandLine();
@@ -55,13 +50,9 @@ class DataReductionProxySettingsTestBase : public testing::Test {
 
   template <class C>
   void ResetSettings(std::unique_ptr<base::Clock> clock,
-                     bool allowed,
-                     bool fallback_allowed,
                      bool promo_allowed,
                      bool holdback);
   virtual void ResetSettings(std::unique_ptr<base::Clock> clock,
-                             bool allowed,
-                             bool fallback_allowed,
                              bool promo_allowed,
                              bool holdback) = 0;
 
@@ -99,12 +90,10 @@ class ConcreteDataReductionProxySettingsTest
  public:
   typedef MockDataReductionProxySettings<C> MockSettings;
   void ResetSettings(std::unique_ptr<base::Clock> clock,
-                     bool allowed,
-                     bool fallback_allowed,
                      bool promo_allowed,
                      bool holdback) override {
     return DataReductionProxySettingsTestBase::ResetSettings<C>(
-        std::move(clock), allowed, fallback_allowed, promo_allowed, holdback);
+        std::move(clock), promo_allowed, holdback);
   }
 };
 

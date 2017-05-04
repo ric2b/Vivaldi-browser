@@ -53,6 +53,7 @@ static const ColumnSpec g_metas_columns[] = {
     {"unique_server_tag", "varchar"},
     {"unique_client_tag", "varchar"},
     {"unique_bookmark_tag", "varchar"},
+    {"unique_notes_tag", "varchar default NULL"},
     //////////////////////////////////////
     // Blobs (serialized protos).
     {"specifics", "blob"},

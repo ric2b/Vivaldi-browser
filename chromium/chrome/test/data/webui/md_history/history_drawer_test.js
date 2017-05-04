@@ -2,38 +2,34 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-cr.define('md_history.history_drawer_test', function () {
-  function registerTests() {
-    suite('drawer-test', function() {
-      var app;
+suite('drawer-test', function() {
+  var app;
 
-      suiteSetup(function() {
-        app = $('history-app');
-      });
+  suiteSetup(function() {
+    app = $('history-app');
+  });
 
-      test('drawer has correct selection', function() {
-        app.selectedPage_ = 'syncedTabs';
-        app.hasDrawer_ = true;
-        return PolymerTest.flushTasks().then(function() {
-          var drawer = app.$$('#drawer');
-          var drawerSideBar = app.$$('#drawer-side-bar');
+  test('drawer has correct selection', function() {
+    app.selectedPage_ = 'syncedTabs';
+    app.hasDrawer_ = true;
+    return PolymerTest.flushTasks().then(function() {
+      var drawer = /** @type {CrLazyRenderElement} */ (app.$.drawer);
+      var drawerSideBar = app.$$('#drawer-side-bar');
 
-          assertTrue(!!drawer);
-          assertTrue(!!drawerSideBar);
+      assertTrue(!!drawer);
+      // Drawer side bar doesn't exist until the first time the drawer is
+      // opened.
+      assertFalse(!!drawerSideBar);
 
-          var menuButton = app.$.toolbar.$['main-toolbar'].$$('#menuButton');
-          assertTrue(!!menuButton);
+      var menuButton = app.$.toolbar.$['main-toolbar'].$$('#menuButton');
+      assertTrue(!!menuButton);
 
-          MockInteractions.tap(menuButton);
-          assertTrue(drawer.opened);
+      MockInteractions.tap(menuButton);
+      assertTrue(drawer.getIfExists().open);
+      drawerSideBar = app.$$('#drawer-side-bar');
+      assertTrue(!!drawerSideBar);
 
-          assertEquals('syncedTabs', drawerSideBar.$.menu.selected);
-        });
-      });
+      assertEquals('syncedTabs', drawerSideBar.$.menu.selected);
     });
-  }
-
-  return {
-    registerTests: registerTests
-  };
+  });
 });

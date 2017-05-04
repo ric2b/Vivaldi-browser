@@ -64,7 +64,6 @@ RemoteFontFaceSource::RemoteFontFaceSource(FontResource* font,
                                           : FontLoadHistograms::FromUnknown,
                    m_display),
       m_isInterventionTriggered(false) {
-  ThreadState::current()->registerPreFinalizer(this);
   m_font->addClient(this);
 
   if (shouldTriggerWebFontsIntervention()) {
@@ -219,7 +218,8 @@ PassRefPtr<SimpleFontData> RemoteFontFaceSource::createFontData(
       m_font->platformDataFromCustomData(fontDescription.effectiveFontSize(),
                                          fontDescription.isSyntheticBold(),
                                          fontDescription.isSyntheticItalic(),
-                                         fontDescription.orientation()),
+                                         fontDescription.orientation(),
+                                         fontDescription.variationSettings()),
       CustomFontData::create());
 }
 
@@ -249,10 +249,12 @@ void RemoteFontFaceSource::beginLoadIfNeeded() {
       // for painting the text.
       m_font->didChangePriority(ResourceLoadPriorityVeryLow, 0);
     }
-    m_fontSelector->document()->fetcher()->startLoad(m_font);
-    if (!m_font->isLoaded())
-      m_font->startLoadLimitTimers();
-    m_histograms.loadStarted();
+    if (m_fontSelector->document()->fetcher()->startLoad(m_font)) {
+      // Start timers only when load is actually started asynchronously.
+      if (!m_font->isLoaded())
+        m_font->startLoadLimitTimers();
+      m_histograms.loadStarted();
+    }
   }
 
   if (m_face)

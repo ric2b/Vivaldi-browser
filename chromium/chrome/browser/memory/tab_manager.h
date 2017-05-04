@@ -158,6 +158,11 @@ class TabManager : public TabStripModelObserver {
   // the WebContents could be deleted if the user closed the tab.
   static int64_t IdFromWebContents(content::WebContents* web_contents);
 
+  // Vivaldi: This is used to set the discarded state for unloaded tabs on
+  // startup, and when cloning a tab that is discarded. It only sets the discard
+  // flag in WebContentsData.
+  void SetIsDiscarded(content::WebContents* web_contents);
+
  private:
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest,
                            ActivateTabResetPurgeAndSuspendState);
@@ -365,6 +370,9 @@ class TabManager : public TabStripModelObserver {
   // This allows protecting tabs for a certain amount of time after being
   // backgrounded.
   base::TimeDelta minimum_protection_time_;
+
+  // A backgrounded renderer will be suspended when this time passes.
+  base::TimeDelta time_to_first_suspension_;
 
 #if defined(OS_CHROMEOS)
   std::unique_ptr<TabManagerDelegate> delegate_;

@@ -6,6 +6,7 @@
 
 #include "ash/common/keyboard/keyboard_ui_observer.h"
 #include "base/memory/ptr_util.h"
+#include "content/public/common/service_names.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace ash {
@@ -14,7 +15,7 @@ KeyboardUIMus::KeyboardUIMus(service_manager::Connector* connector)
     : is_enabled_(false), observer_binding_(this) {
   if (connector) {
     // TODO(sky): should be something like mojo:keyboard, but need mapping.
-    connector->ConnectToInterface("content_browser", &keyboard_);
+    connector->BindInterface(content::mojom::kBrowserServiceName, &keyboard_);
     keyboard_->AddObserver(observer_binding_.CreateInterfacePtrAndBind());
   }
 }
@@ -28,11 +29,20 @@ std::unique_ptr<KeyboardUI> KeyboardUIMus::Create(
 }
 
 void KeyboardUIMus::Hide() {
-  keyboard_->Hide();
+  if (keyboard_)
+    keyboard_->Hide();
 }
 
 void KeyboardUIMus::Show() {
-  keyboard_->Show();
+  if (keyboard_)
+    keyboard_->Show();
+}
+
+void KeyboardUIMus::ShowInDisplay(const int64_t display_id) {
+  // TODO(yhanada): Send display id after adding a display_id argument to
+  // |Keyboard::Show()| in keyboard.mojom. See crbug.com/585253.
+  if (keyboard_)
+    keyboard_->Show();
 }
 
 bool KeyboardUIMus::IsEnabled() {

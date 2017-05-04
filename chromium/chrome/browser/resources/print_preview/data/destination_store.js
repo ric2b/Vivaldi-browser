@@ -280,6 +280,16 @@ cr.define('print_preview', function() {
      */
     this.waitForRegisterDestination_ = null;
 
+    /**
+     * Local destinations are CROS destinations on ChromeOS because they require
+     * extra setup.
+     * @type {!print_preview.Destination.Origin}
+     * @private
+     */
+    this.platformOrigin_ = cr.isChromeOS ?
+        print_preview.Destination.Origin.CROS :
+        print_preview.Destination.Origin.LOCAL;
+
     this.addEventListeners_();
     this.reset_();
   };
@@ -301,7 +311,9 @@ cr.define('print_preview', function() {
     CACHED_SELECTED_DESTINATION_INFO_READY:
         'print_preview.DestinationStore.CACHED_SELECTED_DESTINATION_INFO_READY',
     SELECTED_DESTINATION_CAPABILITIES_READY:
-        'print_preview.DestinationStore.SELECTED_DESTINATION_CAPABILITIES_READY'
+        'print_preview.DestinationStore.SELECTED_DESTINATION_CAPABILITIES_READY',
+    PRINTER_CONFIGURED:
+        'print_preview.DestinationStore.PRINTER_CONFIGURED',
   };
 
   /**
@@ -655,15 +667,6 @@ cr.define('print_preview', function() {
              this.cloudPrintInterface_.isCloudDestinationSearchInProgress;
     },
 
-    /**
-     * @return {boolean} Whether the selected destination is valid.
-     */
-    selectedDestinationValid_: function() {
-      return this.appState_.selectedDestination &&
-             this.appState_.selectedDestination.id &&
-             this.appState_.selectedDestination.origin;
-    },
-
     /*
      * Initializes the destination store. Sets the initially selected
      * destination. If any inserted destinations match this ID, that destination
@@ -684,7 +687,7 @@ cr.define('print_preview', function() {
       this.systemDefaultDestinationId_ = systemDefaultDestinationId;
       this.createLocalPdfPrintDestination_();
 
-      if (!this.selectedDestinationValid_()) {
+      if (!this.appState_.isSelectedDestinationValid()) {
         var destinationMatch = this.convertToDestinationMatch_(
             serializedDefaultDestinationSelectionRulesStr);
         if (destinationMatch) {
@@ -694,13 +697,13 @@ cr.define('print_preview', function() {
       }
 
       if (!this.systemDefaultDestinationId_ &&
-          !this.selectedDestinationValid_()) {
+          !this.appState_.isSelectedDestinationValid()) {
         this.selectPdfDestination_();
         return;
       }
 
-      var origin = print_preview.Destination.Origin.LOCAL;
-      var id = this.systemDefaultDestinationId_;
+      var origin = null;
+      var id = '';
       var account = '';
       var name = '';
       var capabilities = null;
@@ -744,7 +747,13 @@ cr.define('print_preview', function() {
         }
       }
       if (foundDestination) return;
+
       // Try the system default
+      id = this.systemDefaultDestinationId_;
+      origin = id == print_preview.Destination.GooglePromotedId.SAVE_AS_PDF ?
+          print_preview.Destination.Origin.LOCAL :
+          this.platformOrigin_;
+      account = '';
       var candidate =
           this.destinationMap_[this.getDestinationKey_(origin, id, account)];
       if (candidate != null) {
@@ -785,7 +794,8 @@ cr.define('print_preview', function() {
       this.autoSelectMatchingDestination_ =
           this.createExactDestinationMatch_(origin, id);
 
-      if (origin == print_preview.Destination.Origin.LOCAL) {
+      if (origin == print_preview.Destination.Origin.LOCAL ||
+          origin == print_preview.Destination.Origin.CROS) {
         this.nativeLayer_.startGetLocalDestinationCapabilities(id);
         return true;
       }
@@ -856,7 +866,9 @@ cr.define('print_preview', function() {
       this.autoSelectMatchingDestination_ = destinationMatch;
 
       if (destinationMatch.matchOrigin(
-            print_preview.Destination.Origin.LOCAL)) {
+            print_preview.Destination.Origin.LOCAL) ||
+          destinationMatch.matchOrigin(
+            print_preview.Destination.Origin.CROS)) {
         this.startLoadLocalDestinations();
       }
       if (destinationMatch.matchOrigin(
@@ -911,6 +923,7 @@ cr.define('print_preview', function() {
         origins.push(print_preview.Destination.Origin.LOCAL);
         origins.push(print_preview.Destination.Origin.PRIVET);
         origins.push(print_preview.Destination.Origin.EXTENSION);
+        origins.push(print_preview.Destination.Origin.CROS);
       }
       if (isCloud) {
         origins.push(print_preview.Destination.Origin.COOKIES);
@@ -949,14 +962,14 @@ cr.define('print_preview', function() {
      * @private
      */
     convertPreselectedToDestinationMatch_: function() {
-      if (this.selectedDestinationValid_()) {
+      if (this.appState_.isSelectedDestinationValid()) {
         return this.createExactDestinationMatch_(
             this.appState_.selectedDestination.origin,
             this.appState_.selectedDestination.id);
       }
       if (this.systemDefaultDestinationId_) {
         return this.createExactDestinationMatch_(
-            print_preview.Destination.Origin.LOCAL,
+            this.platformOrigin_,
             this.systemDefaultDestinationId_);
       }
       return null;
@@ -1093,6 +1106,34 @@ cr.define('print_preview', function() {
     },
 
     /**
+     * Attempt to resolve the capabilities for a Chrome OS printer.
+     * @param {!print_preview.Destination} destination The destination which
+     *     requires resolution.
+     */
+    resolveCrosDestination: function(destination) {
+      assert(destination.origin == print_preview.Destination.Origin.CROS);
+      this.nativeLayer_.setupPrinter(destination.id).then(
+          /**
+            * Handle the result of a successful PRINTER_SETUP request.
+            * @param {!print_preview.PrinterSetupResponse} response.
+            */
+          function(response) {
+            this.dispatchEvent(new CustomEvent(
+                DestinationStore.EventType.PRINTER_CONFIGURED, {
+                  detail: response
+                }));
+          }.bind(this),
+          /**
+           * Calling printer setup failed.
+           */
+          function() {
+            this.dispatchEvent(new CustomEvent(
+                DestinationStore.EventType.PRINTER_CONFIGURED,
+                {detail: {printerId: destination.id, success: false}}));
+          }.bind(this));
+    },
+
+    /**
      * Attempts to resolve a provisional destination.
      * @param {!print_preview.Destination} destinaion Provisional destination
      *     that should be resolved.
@@ -1128,9 +1169,9 @@ cr.define('print_preview', function() {
         if (this.autoSelectMatchingDestination_ &&
             !this.autoSelectMatchingDestination_.matchIdAndOrigin(
                 this.systemDefaultDestinationId_,
-                print_preview.Destination.Origin.LOCAL)) {
+                this.plaformOrigin_)) {
           if (this.fetchPreselectedDestination_(
-                print_preview.Destination.Origin.LOCAL,
+                this.platformOrigin_,
                 this.systemDefaultDestinationId_,
                 '' /*account*/,
                 '' /*name*/,
@@ -1533,8 +1574,13 @@ cr.define('print_preview', function() {
       var destinationId = event.settingsInfo['printerId'];
       var printerName = event.settingsInfo['printerName'];
       var printerDescription = event.settingsInfo['printerDescription'];
+      // PDF is special since we don't need to query the device for
+      // capabilities.
+      var origin = destinationId ==
+          print_preview.Destination.GooglePromotedId.SAVE_AS_PDF ?
+          print_preview.Destination.Origin.LOCAL : this.platformOrigin_;
       var key = this.getDestinationKey_(
-          print_preview.Destination.Origin.LOCAL,
+          origin,
           destinationId,
           '');
       var destination = this.destinationMap_[key];
@@ -1556,9 +1602,11 @@ cr.define('print_preview', function() {
           }
           destination.capabilities = capabilities;
         } else {
+          var isEnterprisePrinter = event.settingsInfo['cupsEnterprisePrinter'];
           destination = print_preview.LocalDestinationParser.parse(
               {deviceName: destinationId,
                printerName: printerName,
+               cupsEnterprisePrinter: isEnterprisePrinter,
                printerDescription: printerDescription});
           destination.capabilities = capabilities;
           this.insertDestination_(destination);

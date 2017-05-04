@@ -74,6 +74,7 @@
 <translation id="1680732992526857724"><ph name="NAME" />: включено</translation>
 <translation id="1692077714702418899">Структурная линия.</translation>
 <translation id="1700517974991662022">Посещено</translation>
+<translation id="1714116687360794776">Счетчик</translation>
 <translation id="1722567105086139392">Ссылка</translation>
 <translation id="1727806147743597030">ftr</translation>
 <translation id="174268867904053074">Перейти к следующей диаграмме</translation>
@@ -123,6 +124,7 @@
 <translation id="2344193891939537199">Выбор даты и времени</translation>
 <translation id="2347456970887948350">Ссылка</translation>
 <translation id="2359897517538099099">Режим таблицы выключен.</translation>
+<translation id="2390264819538553347">Чтобы продолжить, нажмите ВВОД. Чтобы вернуться на предыдущую страницу, нажмите BACKSPACE.</translation>
 <translation id="241124561063364910">а затем</translation>
 <translation id="2416512023405990736">Снятый флажок</translation>
 <translation id="2417569100218200841">Сведения о контенте</translation>
@@ -177,6 +179,7 @@
 <translation id="2899328121302785497">{COUNT,plural, =1{открывающая фигурная скобка}one{# открывающая фигурная скобка}few{# открывающие фигурные скобки}many{# открывающих фигурных скобок}other{# left braces}}</translation>
 <translation id="2911433807131383493">Открыть руководство ChromeVox</translation>
 <translation id="2932083475399492303">Переключиться между структурной и контурной линией</translation>
+<translation id="2944762337049891859">Автоматически читать страницу после загрузки</translation>
 <translation id="2964026537669811554">Группировка заголовков.</translation>
 <translation id="296951647852255825">{COUNT,plural, =1{вкладка}one{# вкладка}few{# вкладки}many{# вкладок}other{# tabs}}</translation>
 <translation id="2972078295414139404">Предыдущей открытой ссылки нет.</translation>
@@ -188,6 +191,7 @@
 <translation id="3012414509011670858">Предыдущего раздела нет.</translation>
 <translation id="3030432017085518523">Пункт меню переключатель</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{апостроф}one{# апостроф}few{# апострофа}many{# апострофов}other{# apostrophes}}</translation>
+<translation id="3040901448410802366">Индикатор выполнения</translation>
 <translation id="3046838483509668188">Параметры ChromeVox</translation>
 <translation id="3047143736589213134">Экспериментальная раскладка</translation>
 <translation id="3060756054951570867">Открыто меню <ph name="TITLE" />.</translation>
@@ -230,7 +234,7 @@
 <translation id="3321460131042519426">Переносить по словам</translation>
 <translation id="3322936298410871309">Перейти к предыдущему заголовку первого уровня</translation>
 <translation id="3323447499041942178">Текстовое поле</translation>
-<translation id="3329854757664111426">Чтобы продолжить, нажмите ВВОД.</translation>
+<translation id="3338224621010291843">Ползунок <ph name="VALUE" /> <ph name="NAME" /></translation>
 <translation id="3353420241558113817">{"ar": "арабский",
         "bg": "болгарский",
         "ca": "каталанский",
@@ -307,6 +311,7 @@
 <translation id="3712520970944678024">Управление речью</translation>
 <translation id="3716845769494773620">Несколько строк</translation>
 <translation id="3731746171184829332">Предыдущего заголовка нет.</translation>
+<translation id="3735039640698208086">При воспроизведении аудио…</translation>
 <translation id="3762198587642264450">Перейти к концу текущей строки</translation>
 <translation id="3777255250339039212">h1</translation>
 <translation id="3793710123303304873">Диалоговое окно закрыто.</translation>
@@ -547,6 +552,7 @@
 <translation id="5876817486144482042">Уменьшить громкость речи</translation>
 <translation id="5887397643266327462">Титры шрифтом Брайля включены.</translation>
 <translation id="5891934789323004067">Таблица.</translation>
+<translation id="5899860758576822363">Уменьшать его громкость во время чтения ChromeVox</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{знак равенства}one{# знак равенства}few{# знака равенства}many{# знаков равенства}other{# equal signs}}</translation>
 <translation id="5939518447894949180">Сбросить</translation>
 <translation id="5948123859135882163">Переключение между структурным и семантическим методами интерпретации математических выражений</translation>
@@ -569,6 +575,7 @@
 <translation id="6132506484792346370">Обычный или комбинированный список</translation>
 <translation id="6138576064440631958">комбинация: $1</translation>
 <translation id="6142308968191113180">Заголовок четвертого уровня</translation>
+<translation id="6164829606128959761">счетчик</translation>
 <translation id="6169420925157477918">Изображение с подробным описанием</translation>
 <translation id="6186305613600865047">Перейти в конец страницы</translation>
 <translation id="6193330012414963395">AM/PM</translation>
@@ -579,6 +586,7 @@
 <translation id="6281876499889881039">Перейти к следующему похожему элементу</translation>
 <translation id="6282062888058716985">nav</translation>
 <translation id="6290434000785343030">Следующего поля со списком нет.</translation>
+<translation id="6305702903308659374">Не менять его громкость даже во время чтения ChromeVox</translation>
 <translation id="6307969636681130414">Нажато</translation>
 <translation id="6322856989298155004">Звук</translation>
 <translation id="6324551002951139333">Найдена грамматическая ошибка</translation>
@@ -691,7 +699,6 @@
 <translation id="7492049978501397201">Открыто диалоговое окно.</translation>
 <translation id="7518543783849163354">Чтобы временно отключить озвучивание в ChromeVox, нажмите клавишу CTRL.</translation>
 <translation id="7532613204005497612">июнь</translation>
-<translation id="7540083713905917247">Ползунок "<ph name="NAME" />" со значением "<ph name="VALUE" />"</translation>
 <translation id="7552432549459840808">Быстрые клавиши для работы с Chrome</translation>
 <translation id="7579911500627256166">точка <ph name="DOT" /></translation>
 <translation id="7596919493010894443">Отмена выбора.</translation>
@@ -769,6 +776,7 @@
 <translation id="8455868257606149352">Максимум <ph name="X" />.</translation>
 <translation id="84575901236241018">имеет ключ доступа <ph name="KEY" />.</translation>
 <translation id="847154984256717791">занято</translation>
+<translation id="8476408756881832830">Останавливать его во время чтения ChromeVox</translation>
 <translation id="8476508772960940536">режим обзора</translation>
 <translation id="8503360654911991865">Уменьшить точность навигации</translation>
 <translation id="8520472399088452386">Счетчик</translation>

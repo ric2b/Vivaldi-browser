@@ -3,7 +3,9 @@
 # found in the LICENSE file.
 
 source_set("voice") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
+    "text_to_speech_player+subclassing.h",
     "text_to_speech_player.h",
     "text_to_speech_player.mm",
     "voice_search_notification_names.h",
@@ -18,6 +20,7 @@ source_set("voice") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
 
   sources = [
@@ -25,6 +28,7 @@ source_set("unit_tests") {
   ]
 
   deps = [
+    ":voice",
     ":voice_unit_tests_bundle_data",
     "//base",
     "//base/test:test_support",
@@ -32,10 +36,6 @@ source_set("unit_tests") {
     "//ios/web:test_support",
     "//testing/gtest",
     "//url",
-  ]
-
-  public_deps = [
-    ":voice",
   ]
 }
 

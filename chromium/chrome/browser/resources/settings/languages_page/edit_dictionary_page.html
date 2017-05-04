@@ -16,7 +16,10 @@
       }
 
       #newWord {
-        flex: .5;
+        width: var(--paper-input-max-width);
+        --paper-input-container-label: {
+          font-size: inherit;
+        };
       }
 
       iron-list {
@@ -32,11 +35,13 @@
         -webkit-margin-start: 16px;
       }
     </style>
-    <div class="settings-box">
+    <div class="settings-box first">
       <iron-a11y-keys id="keys" keys="enter esc"
           on-keys-pressed="onKeysPress_"></iron-a11y-keys>
-      <paper-input id="newWord" no-label-float
-          label="$i18n{addDictionaryWordLabel}"></paper-input>
+      <div class="start">
+        <paper-input id="newWord" no-label-float
+            label="$i18n{addDictionaryWordLabel}"></paper-input>
+      </div>
       <paper-button on-tap="onAddWordTap_">
         $i18n{addDictionaryWordButton}
       </paper-button>
@@ -47,8 +52,9 @@
         <iron-list id="list" items="{{words_}}">
           <template>
             <div class="list-item">
-              <div class="word">[[item]]</div>
-              <paper-icon-button icon="cr:clear" on-tap="onRemoveWordTap_">
+              <div class="word text-elide">[[item]]</div>
+              <paper-icon-button icon="cr:clear" on-tap="onRemoveWordTap_"
+                  tabindex$="[[tabIndex]]">
               </paper-icon-button>
             </div>
           </template>

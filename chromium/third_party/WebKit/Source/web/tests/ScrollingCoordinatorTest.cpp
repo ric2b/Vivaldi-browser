@@ -29,6 +29,7 @@
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/VisualViewport.h"
+#include "core/html/HTMLIFrameElement.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
@@ -111,6 +112,9 @@ class ScrollingCoordinatorTest : public testing::Test {
   WebLayerTreeView* webLayerTreeView() const {
     return webViewImpl()->layerTreeView();
   }
+
+  void styleRelatedMainThreadScrollingReasonTest(const std::string&,
+                                                 const uint32_t);
 
  protected:
   std::string m_baseURL;
@@ -847,6 +851,310 @@ TEST_F(ScrollingCoordinatorTest, CustomScrollbarShouldTriggerMainThreadScroll) {
   ASSERT_FALSE(
       scrollbarGraphicsLayer->platformLayer()->mainThreadScrollingReasons() &
       MainThreadScrollingReason::kCustomScrollbarScrolling);
+}
+
+TEST_F(ScrollingCoordinatorTest,
+       BackgroundAttachmentFixedShouldTriggerMainThreadScroll) {
+  registerMockedHttpURLLoad("iframe-background-attachment-fixed.html");
+  registerMockedHttpURLLoad("iframe-background-attachment-fixed-inner.html");
+  registerMockedHttpURLLoad("white-1x1.png");
+  navigateTo(m_baseURL + "iframe-background-attachment-fixed.html");
+  forceFullCompositingUpdate();
+
+  Element* iframe = frame()->document()->getElementById("iframe");
+  ASSERT_TRUE(iframe);
+
+  LayoutObject* layoutObject = iframe->layoutObject();
+  ASSERT_TRUE(layoutObject);
+  ASSERT_TRUE(layoutObject->isLayoutPart());
+
+  LayoutPart* layoutPart = toLayoutPart(layoutObject);
+  ASSERT_TRUE(layoutPart);
+  ASSERT_TRUE(layoutPart->widget());
+  ASSERT_TRUE(layoutPart->widget()->isFrameView());
+
+  FrameView* innerFrameView = toFrameView(layoutPart->widget());
+  LayoutViewItem innerLayoutViewItem = innerFrameView->layoutViewItem();
+  ASSERT_FALSE(innerLayoutViewItem.isNull());
+
+  PaintLayerCompositor* innerCompositor = innerLayoutViewItem.compositor();
+  ASSERT_TRUE(innerCompositor->inCompositingMode());
+  ASSERT_TRUE(innerCompositor->scrollLayer());
+
+  GraphicsLayer* scrollLayer = innerCompositor->scrollLayer();
+  ASSERT_EQ(innerFrameView, scrollLayer->getScrollableArea());
+
+  WebLayer* webScrollLayer = scrollLayer->platformLayer();
+  ASSERT_TRUE(webScrollLayer->scrollable());
+  ASSERT_TRUE(webScrollLayer->mainThreadScrollingReasons() &
+              MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects);
+
+  // Remove fixed background-attachment should make the iframe
+  // scroll on cc.
+  auto* iframeDoc = toHTMLIFrameElement(iframe)->contentDocument();
+  iframe = iframeDoc->getElementById("scrollable");
+  ASSERT_TRUE(iframe);
+
+  iframe->removeAttribute("class");
+  forceFullCompositingUpdate();
+
+  layoutObject = iframe->layoutObject();
+  ASSERT_TRUE(layoutObject);
+
+  scrollLayer = layoutObject->frameView()->layerForScrolling();
+  ASSERT_TRUE(scrollLayer);
+
+  webScrollLayer = scrollLayer->platformLayer();
+  ASSERT_TRUE(webScrollLayer->scrollable());
+  ASSERT_FALSE(webScrollLayer->mainThreadScrollingReasons() &
+               MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects);
+
+  // Force main frame to scroll on main thread. All its descendants
+  // should scroll on main thread as well.
+  Element* element = frame()->document()->getElementById("scrollable");
+  element->setAttribute(
+      "style",
+      "background-image: url('white-1x1.png'); background-attachment: fixed;",
+      ASSERT_NO_EXCEPTION);
+
+  forceFullCompositingUpdate();
+
+  layoutObject = iframe->layoutObject();
+  ASSERT_TRUE(layoutObject);
+
+  scrollLayer = layoutObject->frameView()->layerForScrolling();
+  ASSERT_TRUE(scrollLayer);
+
+  webScrollLayer = scrollLayer->platformLayer();
+  ASSERT_TRUE(webScrollLayer->scrollable());
+  ASSERT_TRUE(webScrollLayer->mainThreadScrollingReasons() &
+              MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects);
+}
+
+// Upon resizing the content size, the main thread scrolling reason
+// kHasNonLayerViewportConstrainedObject should be updated on all frames
+TEST_F(ScrollingCoordinatorTest,
+       RecalculateMainThreadScrollingReasonsUponResize) {
+  webViewImpl()->settings()->setPreferCompositingToLCDTextEnabled(false);
+  registerMockedHttpURLLoad("has-non-layer-viewport-constrained-objects.html");
+  navigateTo(m_baseURL + "has-non-layer-viewport-constrained-objects.html");
+  forceFullCompositingUpdate();
+
+  LOG(ERROR) << frame()->view()->mainThreadScrollingReasons();
+  Element* element = frame()->document()->getElementById("scrollable");
+  ASSERT_TRUE(element);
+
+  LayoutObject* layoutObject = element->layoutObject();
+  ASSERT_TRUE(layoutObject);
+
+  GraphicsLayer* scrollLayer = layoutObject->frameView()->layerForScrolling();
+  ASSERT_TRUE(scrollLayer);
+
+  WebLayer* webScrollLayer = scrollLayer->platformLayer();
+  ASSERT_TRUE(webScrollLayer->scrollable());
+  ASSERT_FALSE(
+      webScrollLayer->mainThreadScrollingReasons() &
+      MainThreadScrollingReason::kHasNonLayerViewportConstrainedObjects);
+
+  Element* iframe = frame()->document()->getElementById("iframe");
+  ASSERT_TRUE(iframe);
+
+  layoutObject = iframe->layoutObject();
+  ASSERT_TRUE(layoutObject);
+
+  scrollLayer = layoutObject->frameView()->layerForScrolling();
+  ASSERT_TRUE(scrollLayer);
+
+  webScrollLayer = scrollLayer->platformLayer();
+  ASSERT_TRUE(webScrollLayer->scrollable());
+  ASSERT_FALSE(
+      webScrollLayer->mainThreadScrollingReasons() &
+      MainThreadScrollingReason::kHasNonLayerViewportConstrainedObjects);
+
+  // When the div becomes to scrollable it should scroll on main thread
+  element->setAttribute("style",
+                        "overflow:scroll;height:2000px;will-change:transform;",
+                        ASSERT_NO_EXCEPTION);
+  forceFullCompositingUpdate();
+
+  layoutObject = element->layoutObject();
+  ASSERT_TRUE(layoutObject);
+
+  scrollLayer = layoutObject->frameView()->layerForScrolling();
+  ASSERT_TRUE(scrollLayer);
+
+  webScrollLayer = scrollLayer->platformLayer();
+  ASSERT_TRUE(webScrollLayer->scrollable());
+  ASSERT_TRUE(
+      webScrollLayer->mainThreadScrollingReasons() &
+      MainThreadScrollingReason::kHasNonLayerViewportConstrainedObjects);
+
+  layoutObject = iframe->layoutObject();
+  ASSERT_TRUE(layoutObject);
+
+  scrollLayer = layoutObject->frameView()->layerForScrolling();
+  ASSERT_TRUE(scrollLayer);
+
+  webScrollLayer = scrollLayer->platformLayer();
+  ASSERT_TRUE(webScrollLayer->scrollable());
+  ASSERT_TRUE(
+      webScrollLayer->mainThreadScrollingReasons() &
+      MainThreadScrollingReason::kHasNonLayerViewportConstrainedObjects);
+
+  // The main thread scrolling reason should be reset upon the following change
+  element->setAttribute("style",
+                        "overflow:scroll;height:200px;will-change:transform;",
+                        ASSERT_NO_EXCEPTION);
+  forceFullCompositingUpdate();
+
+  layoutObject = element->layoutObject();
+  ASSERT_TRUE(layoutObject);
+
+  scrollLayer = layoutObject->frameView()->layerForScrolling();
+  ASSERT_TRUE(scrollLayer);
+
+  webScrollLayer = scrollLayer->platformLayer();
+  ASSERT_TRUE(webScrollLayer->scrollable());
+  ASSERT_FALSE(
+      webScrollLayer->mainThreadScrollingReasons() &
+      MainThreadScrollingReason::kHasNonLayerViewportConstrainedObjects);
+
+  layoutObject = iframe->layoutObject();
+  ASSERT_TRUE(layoutObject);
+
+  scrollLayer = layoutObject->frameView()->layerForScrolling();
+  ASSERT_TRUE(scrollLayer);
+
+  webScrollLayer = scrollLayer->platformLayer();
+  ASSERT_TRUE(webScrollLayer->scrollable());
+  ASSERT_FALSE(
+      webScrollLayer->mainThreadScrollingReasons() &
+      MainThreadScrollingReason::kHasNonLayerViewportConstrainedObjects);
+}
+
+class StyleRelatedMainThreadScrollingReasonTest
+    : public ScrollingCoordinatorTest {
+  static const uint32_t m_LCDTextRelatedReasons =
+      MainThreadScrollingReason::kHasOpacityAndLCDText |
+      MainThreadScrollingReason::kHasTransformAndLCDText |
+      MainThreadScrollingReason::kBackgroundNotOpaqueInRectAndLCDText;
+
+ protected:
+  StyleRelatedMainThreadScrollingReasonTest() {
+    registerMockedHttpURLLoad("two_scrollable_area.html");
+    navigateTo(m_baseURL + "two_scrollable_area.html");
+  }
+  void testStyle(const std::string& target, const uint32_t reason) {
+    webViewImpl()->settings()->setPreferCompositingToLCDTextEnabled(false);
+    Document* document = frame()->document();
+    Element* container = document->getElementById("scroller1");
+    container->setAttribute("class", target.c_str(), ASSERT_NO_EXCEPTION);
+    container = document->getElementById("scroller2");
+    container->setAttribute("class", target.c_str(), ASSERT_NO_EXCEPTION);
+    forceFullCompositingUpdate();
+
+    FrameView* frameView = frame()->view();
+    ASSERT_TRUE(frameView);
+    ASSERT_TRUE(frameView->mainThreadScrollingReasons() & reason);
+
+    // Remove the target attribute from one of the scrollers.
+    // Still need to scroll on main thread.
+    container = document->getElementById("scroller1");
+    DCHECK(container);
+
+    container->removeAttribute("class");
+    forceFullCompositingUpdate();
+
+    ASSERT_TRUE(frameView->mainThreadScrollingReasons() & reason);
+
+    // Remove attribute from the other scroller would lead to
+    // scroll on impl.
+    container = document->getElementById("scroller2");
+    DCHECK(container);
+
+    container->removeAttribute("class");
+    forceFullCompositingUpdate();
+
+    ASSERT_FALSE(frameView->mainThreadScrollingReasons() & reason);
+
+    // Add target attribute would again lead to scroll on main thread
+    container->setAttribute("class", target.c_str(), ASSERT_NO_EXCEPTION);
+    forceFullCompositingUpdate();
+
+    ASSERT_TRUE(frameView->mainThreadScrollingReasons() & reason);
+
+    if ((reason & m_LCDTextRelatedReasons) &&
+        !(reason & ~m_LCDTextRelatedReasons)) {
+      webViewImpl()->settings()->setPreferCompositingToLCDTextEnabled(true);
+      forceFullCompositingUpdate();
+      ASSERT_FALSE(frameView->mainThreadScrollingReasons());
+    }
+  }
+};
+
+// TODO(yigu): This test and all other style realted main thread scrolling
+// reason tests below have been disabled due to https://crbug.com/701355.
+TEST_F(StyleRelatedMainThreadScrollingReasonTest, DISABLED_TransparentTest) {
+  testStyle("transparent", MainThreadScrollingReason::kHasOpacityAndLCDText);
+}
+
+TEST_F(StyleRelatedMainThreadScrollingReasonTest, DISABLED_TransformTest) {
+  testStyle("transform", MainThreadScrollingReason::kHasTransformAndLCDText);
+}
+
+TEST_F(StyleRelatedMainThreadScrollingReasonTest,
+       DISABLED_BackgroundNotOpaqueTest) {
+  testStyle("background-not-opaque",
+            MainThreadScrollingReason::kBackgroundNotOpaqueInRectAndLCDText);
+}
+
+TEST_F(StyleRelatedMainThreadScrollingReasonTest, DISABLED_BorderRadiusTest) {
+  testStyle("border-radius", MainThreadScrollingReason::kHasBorderRadius);
+}
+
+TEST_F(StyleRelatedMainThreadScrollingReasonTest, DISABLED_ClipTest) {
+  testStyle("clip", MainThreadScrollingReason::kHasClipRelatedProperty);
+}
+
+TEST_F(StyleRelatedMainThreadScrollingReasonTest, DISABLED_ClipPathTest) {
+  uint32_t reason = MainThreadScrollingReason::kHasClipRelatedProperty;
+  webViewImpl()->settings()->setPreferCompositingToLCDTextEnabled(false);
+  Document* document = frame()->document();
+  // Test ancestor with ClipPath
+  Element* element = document->body();
+  DCHECK(element);
+  element->setAttribute(HTMLNames::styleAttr,
+                        "clip-path:circle(115px at 20px 20px);");
+  forceFullCompositingUpdate();
+
+  FrameView* frameView = frame()->view();
+  ASSERT_TRUE(frameView);
+  ASSERT_TRUE(frameView->mainThreadScrollingReasons() & reason);
+
+  // Remove clip path from ancestor.
+  element->removeAttribute(HTMLNames::styleAttr);
+  forceFullCompositingUpdate();
+
+  ASSERT_FALSE(frameView->mainThreadScrollingReasons() & reason);
+
+  // Test descendant with ClipPath
+  element = document->getElementById("content1");
+  DCHECK(element);
+  element->setAttribute(HTMLNames::styleAttr,
+                        "clip-path:circle(115px at 20px 20px);");
+  forceFullCompositingUpdate();
+  ASSERT_TRUE(frameView->mainThreadScrollingReasons() & reason);
+
+  // Remove clip path from descendant.
+  element->removeAttribute(HTMLNames::styleAttr);
+  forceFullCompositingUpdate();
+  ASSERT_FALSE(frameView->mainThreadScrollingReasons() & reason);
+}
+
+TEST_F(StyleRelatedMainThreadScrollingReasonTest, DISABLED_LCDTextEnabledTest) {
+  testStyle("transparent border-radius",
+            MainThreadScrollingReason::kHasOpacityAndLCDText |
+                MainThreadScrollingReason::kHasBorderRadius);
 }
 
 }  // namespace blink

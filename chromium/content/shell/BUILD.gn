@@ -9,6 +9,7 @@ import("//build/config/win/console_app.gni")
 import("//build/config/win/manifest.gni")
 import("//media/media_options.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//ppapi/features/features.gni")
 import("//tools/grit/repack.gni")
 import("//tools/grit/grit_rule.gni")
 if (is_android) {
@@ -57,8 +58,6 @@ static_library("content_shell_lib") {
     "app/shell_main_delegate_mac.mm",
     "browser/layout_test/blink_test_controller.cc",
     "browser/layout_test/blink_test_controller.h",
-    "browser/layout_test/layout_test_android.cc",
-    "browser/layout_test/layout_test_android.h",
     "browser/layout_test/layout_test_bluetooth_adapter_provider.cc",
     "browser/layout_test/layout_test_bluetooth_adapter_provider.h",
     "browser/layout_test/layout_test_bluetooth_chooser_factory.cc",
@@ -248,6 +247,7 @@ static_library("content_shell_lib") {
     "//mojo/edk/js",
     "//net",
     "//net:net_resources",
+    "//ppapi/features",
     "//sandbox",
     "//services/service_manager/public/cpp",
     "//skia",
@@ -306,15 +306,18 @@ static_library("content_shell_lib") {
   if (use_x11) {
     # Some tests rely on this tool at runtime. Note: it might be better if
     # the tests that needed it had this as a dep instead of adding it here.
-    data_deps = [
-      "//tools/xdisplaycheck",
-    ]
-
     deps += [ "//ui/events/devices/x11" ]
   }
 
   if (is_android) {
-    deps += [ "//content/shell/android:content_shell_jni_headers" ]
+    sources += [
+      "browser/layout_test/scoped_android_configuration.cc",
+      "browser/layout_test/scoped_android_configuration.h",
+    ]
+    deps += [
+      "//base/test:test_support",
+      "//content/shell/android:content_shell_jni_headers",
+    ]
   }
 
   if (is_posix && !is_mac) {
@@ -404,6 +407,9 @@ copy("copy_shell_resources") {
 group("resources") {
   public_deps = [
     ":copy_shell_resources",
+  ]
+  deps = [
+    "//components/test_runner:resources",
   ]
   data_deps = [
     "//components/test_runner:resources",
@@ -508,6 +514,7 @@ if (is_android) {
 
     deps = [
       ":content_shell_lib",
+      ":pak",
       "//build/config/sanitizers:deps",
       "//build/win:default_exe_manifest",
     ]

@@ -63,6 +63,10 @@ void WriteNode::SetTitle(const std::string& title) {
   if (BOOKMARKS == type && entry_->GetSpecifics().has_encrypted()) {
     // Encrypted bookmarks only have their title in the unencrypted specifics.
     current_legal_title = GetBookmarkSpecifics().title();
+  } else if (NOTES == type &&
+      entry_->GetSpecifics().has_encrypted()) {
+    // Encrypted notes only have their title in the unencrypted specifics.
+    current_legal_title = GetNotesSpecifics().subject();
   } else {
     // Non-bookmarks and legacy bookmarks (those with no title in their
     // specifics) store their title in NON_UNIQUE_NAME. Non-legacy bookmarks
@@ -109,6 +113,12 @@ void WriteNode::SetBookmarkSpecifics(
     const sync_pb::BookmarkSpecifics& new_value) {
   sync_pb::EntitySpecifics entity_specifics;
   entity_specifics.mutable_bookmark()->CopyFrom(new_value);
+  SetEntitySpecifics(entity_specifics);
+}
+
+void WriteNode::SetNotesSpecifics(const sync_pb::NotesSpecifics& new_value) {
+  sync_pb::EntitySpecifics entity_specifics;
+  entity_specifics.mutable_notes()->CopyFrom(new_value);
   SetEntitySpecifics(entity_specifics);
 }
 
@@ -264,8 +274,9 @@ BaseNode::InitByLookupResult WriteNode::InitTypeRoot(ModelType type) {
 
 // Create a new node with default properties, and bind this WriteNode to it.
 // Return true on success.
-bool WriteNode::InitBookmarkByCreation(const BaseNode& parent,
-                                       const BaseNode* predecessor) {
+bool WriteNode::InitNodeByCreation(const BaseNode& parent,
+                                   const BaseNode* predecessor,
+                                   ModelType model_type) {
   DCHECK(!entry_) << "Init called twice";
   // |predecessor| must be a child of |parent| or null.
   if (predecessor && predecessor->GetParentId() != parent.GetId()) {
@@ -282,7 +293,7 @@ bool WriteNode::InitBookmarkByCreation(const BaseNode& parent,
 
   entry_ =
       new syncable::MutableEntry(transaction_->GetWrappedWriteTrans(),
-                                 syncable::CREATE, BOOKMARKS, parent_id, dummy);
+                               syncable::CREATE, model_type, parent_id, dummy);
 
   if (!entry_->good())
     return false;

@@ -46,8 +46,9 @@ class BLINK_PLATFORM_EXPORT TaskHandle {
   TaskHandle(TaskHandle&&);
   TaskHandle& operator=(TaskHandle&&);
 
- private:
   class Runner;
+
+ private:
   friend class WebTaskRunner;
 
   explicit TaskHandle(RefPtr<Runner>);
@@ -55,34 +56,14 @@ class BLINK_PLATFORM_EXPORT TaskHandle {
 };
 
 // The blink representation of a chromium SingleThreadTaskRunner.
-class BLINK_PLATFORM_EXPORT WebTaskRunner {
+class BLINK_PLATFORM_EXPORT WebTaskRunner
+    : public ThreadSafeRefCounted<WebTaskRunner> {
  public:
-  virtual ~WebTaskRunner() {}
-
-  class BLINK_PLATFORM_EXPORT Task {
-   public:
-    virtual ~Task() {}
-    virtual void run() = 0;
-  };
-
-  // Schedule a task to be run on the the associated WebThread.
-  // Takes ownership of |Task|. Can be called from any thread.
-  virtual void postTask(const WebTraceLocation&, Task*) = 0;
-
-  // Schedule a task to be run after |delayMs| on the the associated WebThread.
-  // Takes ownership of |Task|. Can be called from any thread.
-  virtual void postDelayedTask(const WebTraceLocation&,
-                               Task*,
-                               double delayMs) = 0;
-
   // Schedule a task to be run after |delayMs| on the the associated WebThread.
   // Can be called from any thread.
   virtual void postDelayedTask(const WebTraceLocation&,
                                const base::Closure&,
                                double delayMs) = 0;
-
-  // Returns a clone of the WebTaskRunner.
-  virtual std::unique_ptr<WebTaskRunner> clone() = 0;
 
   // Returns true if the current thread is a thread on which a task may be run.
   // Can be called from any thread.
@@ -126,12 +107,20 @@ class BLINK_PLATFORM_EXPORT WebTaskRunner {
 
   // For same-thread cancellable task posting. Returns a TaskHandle object for
   // cancellation.
-  TaskHandle postCancellableTask(const WebTraceLocation&,
-                                 std::unique_ptr<WTF::Closure>)
-      WARN_UNUSED_RETURN;
-  TaskHandle postDelayedCancellableTask(const WebTraceLocation&,
-                                        std::unique_ptr<WTF::Closure>,
-                                        long long delayMs) WARN_UNUSED_RETURN;
+  WARN_UNUSED_RESULT TaskHandle
+  postCancellableTask(const WebTraceLocation&, std::unique_ptr<WTF::Closure>);
+  WARN_UNUSED_RESULT TaskHandle
+  postDelayedCancellableTask(const WebTraceLocation&,
+                             std::unique_ptr<WTF::Closure>,
+                             long long delayMs);
+
+ protected:
+  friend ThreadSafeRefCounted<WebTaskRunner>;
+  WebTaskRunner() = default;
+  virtual ~WebTaskRunner();
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(WebTaskRunner);
 };
 
 }  // namespace blink

@@ -171,6 +171,7 @@ class SiteDetailsBrowserTest : public ExtensionBrowserTest {
   ~SiteDetailsBrowserTest() override {}
 
   void SetUpOnMainThread() override {
+    ExtensionBrowserTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
 
     // Add content/test/data so we can use cross_site_iframe_factory.html
@@ -655,7 +656,13 @@ IN_PROC_BROWSER_TEST_F(SiteDetailsBrowserTest, ManyIframes) {
   EXPECT_FALSE(IsInTrial("SiteIsolationExtensionsActive"));
 }
 
-IN_PROC_BROWSER_TEST_F(SiteDetailsBrowserTest, IsolateExtensions) {
+// Flaky on Windows. crbug.com/671891
+#if defined(OS_WIN)
+#define MAYBE_IsolateExtensions DISABLED_IsolateExtensions
+#else
+#define MAYBE_IsolateExtensions IsolateExtensions
+#endif
+IN_PROC_BROWSER_TEST_F(SiteDetailsBrowserTest, MAYBE_IsolateExtensions) {
   // We start on "about:blank", which should be credited with a process in this
   // case.
   scoped_refptr<TestMemoryDetails> details = new TestMemoryDetails();

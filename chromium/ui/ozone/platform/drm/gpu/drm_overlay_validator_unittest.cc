@@ -290,15 +290,10 @@ TEST_F(DrmOverlayValidatorTest, OptimalFormatForOverlayInFullScreen_YUV) {
   overlay_validator_->TestPageFlip(overlay_params_, ui::OverlayPlaneList());
   ui::OverlayPlaneList plane_list =
       overlay_validator_->PrepareBuffersForPageFlip(plane_list_);
-#if defined(USE_DRM_ATOMIC)
-  EXPECT_EQ(DRM_FORMAT_UYVY,
-            plane_list.back().buffer->GetFramebufferPixelFormat());
-#else
-  // If Atomic support is disabled, ensure we choose DRM_FORMAT_XRGB8888 as the
-  // optimal format even if other packed formats are supported by Primary.
+  // TODO(dcastagna): If Atomic support is enabled, a packed format (UYVY) might
+  // be the optimal one and should be preferred.
   EXPECT_EQ(DRM_FORMAT_XRGB8888,
             plane_list.back().buffer->GetFramebufferPixelFormat());
-#endif
 }
 
 TEST_F(DrmOverlayValidatorTest, OverlayPreferredFormat) {
@@ -632,4 +627,14 @@ TEST_F(DrmOverlayValidatorTest, DontResetOriginalBufferIfProcessedIsInvalid) {
             plane_list.back().buffer->GetFramebufferPixelFormat());
   plane_list_.back().processing_callback = base::Bind(
       &DrmOverlayValidatorTest::ProcessBuffer, base::Unretained(this));
+}
+
+TEST_F(DrmOverlayValidatorTest, RejectBufferAllocationFail) {
+  // Buffer allocation for scanout might fail.
+  // In that case we should reject the overlay candidate.
+  buffer_generator_->set_allocation_failure(true);
+
+  std::vector<ui::OverlayCheck_Params> validated_params =
+      overlay_validator_->TestPageFlip(overlay_params_, ui::OverlayPlaneList());
+  EXPECT_FALSE(validated_params.front().is_overlay_candidate);
 }

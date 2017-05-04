@@ -27,7 +27,6 @@
 namespace device {
 
 class BluetoothAdapterMac;
-class BluetoothLowEnergyDiscoverManagerMac;
 class BluetoothRemoteGattServiceMac;
 
 class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
@@ -90,6 +89,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
   void DidWriteValue(CBCharacteristic* characteristic, NSError* error);
   void DidUpdateNotificationState(CBCharacteristic* characteristic,
                                   NSError* error);
+  void DidDiscoverDescriptors(CBCharacteristic* characteristic, NSError* error);
 
   static std::string GetPeripheralIdentifier(CBPeripheral* peripheral);
 
@@ -106,6 +106,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
   friend class BluetoothRemoteGattServiceMac;
   friend class BluetoothTestMac;
   friend class BluetoothRemoteGattServiceMac;
+
+  // Sends notification if this device is ready with all services discovered.
+  void SendNotificationIfDiscoveryComplete();
 
   // Returns the Bluetooth adapter.
   BluetoothAdapterMac* GetMacAdapter();

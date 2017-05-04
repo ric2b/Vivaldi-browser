@@ -173,7 +173,6 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   ScrollingCoordinator* scrollingCoordinator();
 
-  String mainThreadScrollingReasonsAsText();
   ClientRectList* nonFastScrollableRects(const LocalFrame*);
 
   Settings& settings() const { return *m_settings; }
@@ -214,7 +213,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   bool isCursorVisible() const;
   void setIsCursorVisible(bool isVisible) { m_isCursorVisible = isVisible; }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   void setIsPainting(bool painting) { m_isPainting = painting; }
   bool isPainting() const { return m_isPainting; }
 #endif
@@ -227,8 +226,8 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   DECLARE_TRACE();
 
-  void layerTreeViewInitialized(WebLayerTreeView&);
-  void willCloseLayerTreeView(WebLayerTreeView&);
+  void layerTreeViewInitialized(WebLayerTreeView&, FrameView*);
+  void willCloseLayerTreeView(WebLayerTreeView&, FrameView*);
 
   void willBeDestroyed();
 
@@ -296,8 +295,8 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   bool m_isCursorVisible;
 
-#if ENABLE(ASSERT)
-  bool m_isPainting;
+#if DCHECK_IS_ON()
+  bool m_isPainting = false;
 #endif
 
   // A pointer to all the interfaces provided to in-process Frames for this

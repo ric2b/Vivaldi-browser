@@ -15,6 +15,9 @@ post_process_template("//chrome/browser:browser") {
 
 post_process_template("//chrome/browser/ui:ui") {
   sources += [
+    "//vivaldi/browser/launch_update_notifier.h",
+    "//vivaldi/browser/launch_update_notifier_win.cc",
+    "//vivaldi/browser/launch_update_notifier_posix.cc",
     "//vivaldi/browser/startup_vivaldi_browser.cpp",
     "//vivaldi/browser/startup_vivaldi_browser.h",
   ]

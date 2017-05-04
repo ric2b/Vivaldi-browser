@@ -74,11 +74,6 @@ class CORE_EXPORT InspectorCSSAgent final
     MediaListSourceImportRule
   };
 
-  enum StyleSheetsUpdateType {
-    InitialFrontendLoad = 0,
-    ExistingFrontendRefresh,
-  };
-
   class InlineStyleOverrideScope {
     STACK_ALLOCATED();
 
@@ -216,12 +211,6 @@ class CORE_EXPORT InspectorCSSAgent final
   CSSStyleDeclaration* findEffectiveDeclaration(
       CSSPropertyID,
       const HeapVector<Member<CSSStyleDeclaration>>& styles);
-  Response setLayoutEditorValue(Element*,
-                                CSSStyleDeclaration*,
-                                CSSPropertyID,
-                                const String& value,
-                                bool forceImportant = false);
-  void layoutEditorItemSelected(Element*, CSSStyleDeclaration*);
   Response getLayoutTreeAndStyles(
       std::unique_ptr<protocol::Array<String>> styleWhitelist,
       std::unique_ptr<protocol::Array<protocol::CSS::LayoutTreeNode>>*
@@ -262,10 +251,9 @@ class CORE_EXPORT InspectorCSSAgent final
   void resetNonPersistentData();
   InspectorStyleSheetForInlineStyle* asInspectorStyleSheet(Element* element);
 
-  void updateActiveStyleSheets(Document*, StyleSheetsUpdateType);
+  void updateActiveStyleSheets(Document*);
   void setActiveStyleSheets(Document*,
-                            const HeapVector<Member<CSSStyleSheet>>&,
-                            StyleSheetsUpdateType);
+                            const HeapVector<Member<CSSStyleSheet>>&);
   Response setStyleText(InspectorStyleSheetBase*,
                         const SourceRange&,
                         const String&,

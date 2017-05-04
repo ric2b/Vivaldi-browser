@@ -77,10 +77,19 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
-    public void didFinishNavigation(
-            boolean isMainFrame, boolean isErrorPage, boolean hasCommitted) {
+    public void didStartNavigation(String url, boolean isInMainFrame, boolean isErrorPage) {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().didFinishNavigation(isMainFrame, isErrorPage, hasCommitted);
+            mObserversIterator.next().didStartNavigation(url, isInMainFrame, isErrorPage);
+        }
+    }
+
+    @CalledByNative
+    public void didFinishNavigation(String url, boolean isInMainFrame, boolean isErrorPage,
+            boolean hasCommitted, boolean isSamePage, int transition, int errorCode) {
+        Integer pageTransition = transition == -1 ? null : transition;
+        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+            mObserversIterator.next().didFinishNavigation(url, isInMainFrame, isErrorPage,
+                    hasCommitted, isSamePage, pageTransition, errorCode);
         }
     }
 
@@ -146,6 +155,14 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
+    public void titleWasSet(String title) {
+        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+            mObserversIterator.next().titleWasSet(title);
+        }
+    }
+
+    @Override
+    @CalledByNative
     public void didNavigateAnyFrame(String url, String baseUrl, boolean isReload) {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
             mObserversIterator.next().didNavigateAnyFrame(url, baseUrl, isReload);
@@ -163,10 +180,10 @@ class WebContentsObserverProxy extends WebContentsObserver {
     @Override
     @CalledByNative
     public void didStartProvisionalLoadForFrame(long frameId, long parentFrameId,
-            boolean isMainFrame, String validatedUrl, boolean isErrorPage, boolean isIframeSrcdoc) {
+            boolean isMainFrame, String validatedUrl, boolean isErrorPage) {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
             mObserversIterator.next().didStartProvisionalLoadForFrame(
-                    frameId, parentFrameId, isMainFrame, validatedUrl, isErrorPage, isIframeSrcdoc);
+                    frameId, parentFrameId, isMainFrame, validatedUrl, isErrorPage);
         }
     }
 

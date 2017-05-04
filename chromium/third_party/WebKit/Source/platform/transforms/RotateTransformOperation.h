@@ -31,8 +31,7 @@
 
 namespace blink {
 
-class PLATFORM_EXPORT RotateTransformOperation final
-    : public TransformOperation {
+class PLATFORM_EXPORT RotateTransformOperation : public TransformOperation {
  public:
   static PassRefPtr<RotateTransformOperation> create(double angle,
                                                      OperationType type) {
@@ -49,6 +48,7 @@ class PLATFORM_EXPORT RotateTransformOperation final
 
   static PassRefPtr<RotateTransformOperation> create(const Rotation& rotation,
                                                      OperationType type) {
+    DCHECK(isMatchingOperationType(type));
     return adoptRef(new RotateTransformOperation(rotation, type));
   }
 
@@ -66,6 +66,7 @@ class PLATFORM_EXPORT RotateTransformOperation final
 
   virtual bool canBlendWith(const TransformOperation& other) const;
   OperationType type() const override { return m_type; }
+  OperationType primitiveType() const final { return Rotate3D; }
 
   void apply(TransformationMatrix& transform,
              const FloatSize& /*borderBoxSize*/) const override {
@@ -77,17 +78,16 @@ class PLATFORM_EXPORT RotateTransformOperation final
            type == RotateZ || type == Rotate3D;
   }
 
- private:
+ protected:
   bool operator==(const TransformOperation&) const override;
 
   PassRefPtr<TransformOperation> blend(const TransformOperation* from,
                                        double progress,
                                        bool blendToIdentity = false) override;
-  PassRefPtr<TransformOperation> zoom(double factor) final { return this; }
+  PassRefPtr<TransformOperation> zoom(double factor) override { return this; }
 
   RotateTransformOperation(const Rotation& rotation, OperationType type)
       : m_rotation(rotation), m_type(type) {
-    ASSERT(isMatchingOperationType(type));
   }
 
   const Rotation m_rotation;
@@ -95,6 +95,39 @@ class PLATFORM_EXPORT RotateTransformOperation final
 };
 
 DEFINE_TRANSFORM_TYPE_CASTS(RotateTransformOperation);
+
+class PLATFORM_EXPORT RotateAroundOriginTransformOperation final
+    : public RotateTransformOperation {
+ public:
+  static PassRefPtr<RotateAroundOriginTransformOperation>
+  create(double angle, double originX, double originY) {
+    return adoptRef(
+        new RotateAroundOriginTransformOperation(angle, originX, originY));
+  }
+
+  void apply(TransformationMatrix&, const FloatSize&) const override;
+
+  static bool isMatchingOperationType(OperationType type) {
+    return type == RotateAroundOrigin;
+  }
+
+ private:
+  RotateAroundOriginTransformOperation(double angle,
+                                       double originX,
+                                       double originY);
+
+  bool operator==(const TransformOperation&) const override;
+
+  PassRefPtr<TransformOperation> blend(const TransformOperation* from,
+                                       double progress,
+                                       bool blendToIdentity = false) override;
+  PassRefPtr<TransformOperation> zoom(double factor) override;
+
+  double m_originX;
+  double m_originY;
+};
+
+DEFINE_TRANSFORM_TYPE_CASTS(RotateAroundOriginTransformOperation);
 
 }  // namespace blink
 

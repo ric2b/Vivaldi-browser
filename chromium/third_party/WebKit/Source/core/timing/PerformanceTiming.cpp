@@ -45,6 +45,7 @@
 #include "platform/network/ResourceLoadTiming.h"
 #include "platform/network/ResourceResponse.h"
 
+// Legacy support for NT1(https://www.w3.org/TR/navigation-timing/).
 namespace blink {
 
 static unsigned long long toIntegerMilliseconds(double seconds) {
@@ -58,7 +59,7 @@ static double toDoubleSeconds(unsigned long long integerMilliseconds) {
 }
 
 PerformanceTiming::PerformanceTiming(LocalFrame* frame)
-    : DOMWindowProperty(frame) {}
+    : ContextClient(frame) {}
 
 unsigned long long PerformanceTiming::navigationStart() const {
   DocumentLoadTiming* timing = documentLoadTiming();
@@ -413,6 +414,14 @@ unsigned long long PerformanceTiming::authorStyleSheetParseDurationBeforeFCP()
       timing->authorStyleSheetParseDurationBeforeFCP());
 }
 
+unsigned long long PerformanceTiming::updateStyleDurationBeforeFCP() const {
+  const CSSTiming* timing = cssTiming();
+  if (!timing)
+    return 0;
+
+  return toIntegerMilliseconds(timing->updateDurationBeforeFCP());
+}
+
 DocumentLoader* PerformanceTiming::documentLoader() const {
   if (!frame())
     return nullptr;
@@ -529,7 +538,7 @@ double PerformanceTiming::integerMillisecondsToMonotonicTime(
 }
 
 DEFINE_TRACE(PerformanceTiming) {
-  DOMWindowProperty::trace(visitor);
+  ContextClient::trace(visitor);
 }
 
 }  // namespace blink

@@ -7,8 +7,8 @@
 <link rel="import" href="chrome://history/history_list.html">
 <link rel="import" href="chrome://history/shared_style.html">
 
-<!-- Lazy loaded: cr-dialog, cr-shared-menu, history-grouped-list, paper-button,
-  paper-item. -->
+<!-- Lazy loaded: cr-dialog, cr-action-menu, history-grouped-list, paper-button.
+  -->
 
 <dom-module id="history-list-container">
   <template>
@@ -28,10 +28,14 @@
         white-space: pre-wrap;
       }
     </style>
-    <iron-pages id="content" attr-for-selected="id"
-        selected="[[selectedPage_]]">
-      <history-list id="infinite-list" querying="[[queryState.querying]]"
-          searched-term="[[queryResult.info.term]]"></history-list>
+    <iron-pages id="content"
+        attr-for-selected="id"
+        selected="[[selectedPage_]]"
+        fallback-selection="infinite-list">
+      <history-list id="infinite-list"
+          querying="[[queryState.querying]]"
+          searched-term="[[queryResult.info.term]]">
+      </history-list>
       <template is="dom-if" if="[[grouped]]">
         <history-grouped-list id="grouped-list"
             range="[[groupedRange]]"
@@ -58,17 +62,17 @@
     </template>
 
     <template is="cr-lazy-render" id="sharedMenu">
-      <cr-shared-menu>
-        <paper-item id="menuMoreButton" class="menu-item"
+      <dialog is="cr-action-menu">
+        <button id="menuMoreButton" class="dropdown-item"
             on-tap="onMoreFromSiteTap_">
           $i18n{moreFromSite}
-        </paper-item>
-        <paper-item id="menuRemoveButton" class="menu-item"
+        </button>
+        <button id="menuRemoveButton" class="dropdown-item"
             disabled="[[!canDeleteHistory_()]]"
             on-tap="onRemoveFromHistoryTap_">
           $i18n{removeFromHistory}
-        </paper-item>
-      </cr-shared-menu>
+        </button>
+      </dialog>
     </template>
   </template>
   <script src="chrome://history/list_container.js"></script>

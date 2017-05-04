@@ -30,6 +30,7 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/webdatabase/Database.h"
 #include "modules/webdatabase/DatabaseCallback.h"
@@ -63,10 +64,6 @@ void DatabaseManager::terminateDatabaseThread() {
 }
 
 DatabaseManager::DatabaseManager()
-#if ENABLE(ASSERT)
-    : m_databaseContextRegisteredCount(0),
-      m_databaseContextInstanceCount(0)
-#endif
 {
 }
 
@@ -97,7 +94,7 @@ void DatabaseManager::registerDatabaseContext(
     DatabaseContext* databaseContext) {
   ExecutionContext* context = databaseContext->getExecutionContext();
   m_contextMap.set(context, databaseContext);
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_databaseContextRegisteredCount++;
 #endif
 }
@@ -106,13 +103,13 @@ void DatabaseManager::unregisterDatabaseContext(
     DatabaseContext* databaseContext) {
   ExecutionContext* context = databaseContext->getExecutionContext();
   ASSERT(m_contextMap.get(context));
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_databaseContextRegisteredCount--;
 #endif
   m_contextMap.remove(context);
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 void DatabaseManager::didConstructDatabaseContext() {
   m_databaseContextInstanceCount++;
 }
@@ -209,9 +206,10 @@ Database* DatabaseManager::openDatabase(ExecutionContext* context,
     STORAGE_DVLOG(1) << "Scheduling DatabaseCreationCallbackTask for database "
                      << database;
     database->getExecutionContext()->postTask(
-        BLINK_FROM_HERE, createSameThreadTask(&databaseCallbackHandleEvent,
-                                              wrapPersistent(creationCallback),
-                                              wrapPersistent(database)),
+        TaskType::DatabaseAccess, BLINK_FROM_HERE,
+        createSameThreadTask(&databaseCallbackHandleEvent,
+                             wrapPersistent(creationCallback),
+                             wrapPersistent(database)),
         "openDatabase");
   }
 

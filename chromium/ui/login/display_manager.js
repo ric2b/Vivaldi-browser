@@ -25,6 +25,7 @@
 /** @const */ var SCREEN_CREATE_SUPERVISED_USER_FLOW =
     'supervised-user-creation';
 /** @const */ var SCREEN_APP_LAUNCH_SPLASH = 'app-launch-splash';
+/** @const */ var SCREEN_ARC_KIOSK_SPLASH = 'arc-kiosk-splash';
 /** @const */ var SCREEN_CONFIRM_PASSWORD = 'confirm-password';
 /** @const */ var SCREEN_FATAL_ERROR = 'fatal-error';
 /** @const */ var SCREEN_KIOSK_ENABLE = 'kiosk-enable';
@@ -34,6 +35,8 @@
 /** @const */ var SCREEN_DEVICE_DISABLED = 'device-disabled';
 /** @const */ var SCREEN_UNRECOVERABLE_CRYPTOHOME_ERROR =
     'unrecoverable-cryptohome-error';
+/** @const */ var SCREEN_ACTIVE_DIRECTORY_PASSWORD_CHANGE =
+    'ad-password-change';
 
 /* Accelerator identifiers. Must be kept in sync with webui_login_view.cc. */
 /** @const */ var ACCELERATOR_CANCEL = 'cancel';
@@ -87,6 +90,7 @@
   LOCK: 'lock',
   USER_ADDING: 'user-adding',
   APP_LAUNCH_SPLASH: 'app-launch-splash',
+  ARC_KIOSK_SPLASH: 'arc-kiosk-splash',
   DESKTOP_USER_MANAGER: 'login-add-user'
 };
 
@@ -266,7 +270,7 @@ cr.define('cr.ui.login', function() {
 
     set pinHidden(hidden) {
       this.virtualKeyboardShown = hidden;
-      $('pod-row').setPinHidden(hidden);
+      $('pod-row').setFocusedPodPinVisibility(!hidden);
     },
 
     /**
@@ -344,7 +348,10 @@ cr.define('cr.ui.login', function() {
                 currentStepId) != -1) {
           chrome.send('toggleEnableDebuggingScreen');
         }
-      } else if (name == ACCELERATOR_ENROLLMENT) {
+      } else if (name == ACCELERATOR_ENROLLMENT ||
+                 name == ACCELERATOR_ENROLLMENT_AD) {
+        if (name == ACCELERATOR_ENROLLMENT_AD)
+          chrome.send('toggleEnrollmentAd');
         if (currentStepId == SCREEN_GAIA_SIGNIN ||
             currentStepId == SCREEN_ACCOUNT_PICKER) {
           chrome.send('toggleEnrollmentScreen');
@@ -353,11 +360,6 @@ cr.define('cr.ui.login', function() {
           // In this case update check will be skipped and OOBE will
           // proceed straight to enrollment screen when EULA is accepted.
           chrome.send('skipUpdateEnrollAfterEula');
-        }
-      } else if (name == ACCELERATOR_ENROLLMENT_AD) {
-        if (currentStepId == SCREEN_GAIA_SIGNIN ||
-            currentStepId == SCREEN_ACCOUNT_PICKER) {
-          chrome.send('toggleEnrollmentAd');
         }
       } else if (name == ACCELERATOR_KIOSK_ENABLE) {
         if (currentStepId == SCREEN_GAIA_SIGNIN ||
@@ -387,6 +389,8 @@ cr.define('cr.ui.login', function() {
       } else if (name == ACCELERATOR_APP_LAUNCH_BAILOUT) {
         if (currentStepId == SCREEN_APP_LAUNCH_SPLASH)
           chrome.send('cancelAppLaunch');
+        if (currentStepId == SCREEN_ARC_KIOSK_SPLASH)
+          chrome.send('cancelArcKioskLaunch');
       } else if (name == ACCELERATOR_APP_LAUNCH_NETWORK_CONFIG) {
         if (currentStepId == SCREEN_APP_LAUNCH_SPLASH)
           chrome.send('networkConfigRequest');
@@ -1002,6 +1006,15 @@ cr.define('cr.ui.login', function() {
    */
   DisplayManager.showTpmError = function() {
     login.TPMErrorMessageScreen.show();
+  };
+
+  /**
+   * Shows password change screen for Active Directory users.
+   * @param {string} username Display name of the user whose password is being
+   * changed.
+   */
+  DisplayManager.showActiveDirectoryPasswordChangeScreen = function(username) {
+    login.ActiveDirectoryPasswordChangeScreen.show(username);
   };
 
   /**

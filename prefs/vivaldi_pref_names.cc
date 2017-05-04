@@ -8,18 +8,19 @@ namespace vivaldiprefs {
 
 const char kAlwaysLoadPinnedTabAfterRestore[] =
     "vivaldi.always_load_restored_pinned_tabs";
+const char kAutoUpdateEnabled[]="vivaldi.autoupdate_enabled";
 const char kDeferredTabLoadingAfterRestore[] =
     "vivaldi.deferred_tab_loading_after_restore";
 const char kMousegesturesEnabled[] = "mousegestures_enabled";
+const char kPluginsWidevideEnabled[] = "plugins.widevine_enabled";
 const char kRockerGesturesEnabled[] = "vivaldi.rocker_gestures_enabled";
 const char kSmoothScrollingEnabled[] = "smooth_scrolling_enabled";
-const char kVivaldiTabsToLinks[] = "vivaldi.tabs_to_links";
+const char kVivaldiHomepage[] = "vivaldi.home_page";
 const char kVivaldiLastTopSitesVacuumDate[] =
     "vivaldi.last_topsites_vacuum_date";
+const char kVivaldiNumberOfDaysToKeepVisits[] = "vivaldi.days_to_keep_visits";
 const char kVivaldiTabZoom[] = "vivaldi.tab_zoom_enabled";
-const char kVivaldiHomepage[] = "vivaldi.home_page";
-const char kVivaldiNumberOfDaysToKeepVisits[] =
-    "vivaldi.days_to_keep_visits";
+const char kVivaldiTabsToLinks[] = "vivaldi.tabs_to_links";
 
 // Used to store active vivaldi experiments
 const char kVivaldiExperiments[] = "vivaldi.experiments";

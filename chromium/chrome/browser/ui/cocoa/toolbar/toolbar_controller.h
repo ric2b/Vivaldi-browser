@@ -21,7 +21,6 @@
 @class BackForwardMenuController;
 class Browser;
 @class BrowserActionsContainerView;
-class BrowserActionsContainerViewSizeDelegate;
 @class BrowserActionsController;
 class CommandUpdater;
 class LocationBarViewMac;
@@ -71,8 +70,6 @@ class NotificationBridge;
   base::scoped_nsobject<BackForwardMenuController> backMenuController_;
   base::scoped_nsobject<BackForwardMenuController> forwardMenuController_;
   base::scoped_nsobject<BrowserActionsController> browserActionsController_;
-  std::unique_ptr<BrowserActionsContainerViewSizeDelegate>
-      browserActionsContainerDelegate_;
 
   // Lazily-instantiated menu controller.
   base::scoped_nsobject<AppMenuController> appMenuController_;
@@ -165,6 +162,9 @@ class NotificationBridge;
 // Point on the save credit card icon for the save credit card bubble.
 - (NSPoint)saveCreditCardBubblePoint;
 
+// Point in the window's coordinate system for bubbles attached to the app menu.
+- (NSPoint)appMenuBubblePoint;
+
 // Returns the desired toolbar height for the given compression factor.
 - (CGFloat)desiredHeightForCompression:(CGFloat)compressByHeight;
 
@@ -200,6 +200,10 @@ class NotificationBridge;
 - (void)installAppMenu;
 // Return a hover button for the current event.
 - (NSButton*)hoverButtonForEvent:(NSEvent*)theEvent;
+// Adjusts browser actions container view in response to toolbar frame changes.
+// Outside of tests, called in response to frame changed/new window
+// notifications.
+- (void)toolbarFrameChanged;
 @end
 
 #endif  // CHROME_BROWSER_UI_COCOA_TOOLBAR_TOOLBAR_CONTROLLER_H_

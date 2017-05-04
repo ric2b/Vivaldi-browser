@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("net") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "chrome_cookie_store_ios_client.h",
     "chrome_cookie_store_ios_client.mm",
@@ -14,18 +15,12 @@ source_set("net") {
     "crl_set_fetcher.h",
     "http_server_properties_manager_factory.cc",
     "http_server_properties_manager_factory.h",
-    "image_fetcher.h",
-    "image_fetcher.mm",
     "ios_chrome_http_user_agent_settings.h",
     "ios_chrome_http_user_agent_settings.mm",
     "ios_chrome_network_delegate.cc",
     "ios_chrome_network_delegate.h",
     "ios_chrome_url_request_context_getter.cc",
     "ios_chrome_url_request_context_getter.h",
-    "metrics_network_client.h",
-    "metrics_network_client.mm",
-    "metrics_network_client_manager.h",
-    "metrics_network_client_manager.mm",
     "net_types.h",
     "proxy_service_factory.cc",
     "proxy_service_factory.h",
@@ -43,7 +38,6 @@ source_set("net") {
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/browsing_data",
-    "//ios/chrome/browser/webp_transcode",
     "//ios/net",
     "//ios/web",
     "//net",
@@ -56,24 +50,11 @@ source_set("net") {
   ]
 }
 
-source_set("test_support") {
-  testonly = true
-  sources = [
-    "mock_image_fetcher.h",
-    "mock_image_fetcher.mm",
-  ]
-  deps = [
-    ":net",
-    "//testing/gmock",
-  ]
-}
-
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "cookie_util_unittest.mm",
-    "image_fetcher_unittest.mm",
-    "metrics_network_client_unittest.mm",
     "retryable_url_fetcher_unittest.mm",
   ]
   deps = [
@@ -85,4 +66,20 @@ source_set("unit_tests") {
     "//net:test_support",
     "//testing/gtest",
   ]
+}
+
+source_set("eg_tests") {
+  testonly = true
+  sources = [
+    "cookies_egtest.mm",
+  ]
+  deps = [
+    "//base",
+    "//ios/chrome/test/app:test_support",
+    "//ios/chrome/test/earl_grey:test_support",
+    "//ios/third_party/earl_grey",
+    "//ios/web:test_support",
+    "//url",
+  ]
+  libs = [ "XCTest.framework" ]
 }

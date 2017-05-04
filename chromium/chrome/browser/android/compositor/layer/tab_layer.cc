@@ -136,6 +136,7 @@ void TabLayer::SetProperties(int id,
                              int toolbar_background_color,
                              int close_button_color,
                              bool anonymize_toolbar,
+                             bool show_tab_title,
                              int toolbar_textbox_resource_id,
                              int toolbar_textbox_background_color,
                              float toolbar_textbox_alpha,
@@ -235,13 +236,16 @@ void TabLayer::SetProperties(int id,
                                toolbar_textbox_resource_id,
                                toolbar_textbox_alpha,
                                view_height,
+                               // TODO(mdjones): Feels odd to pass 0 here when
+                               // we have access to toolbar_y_offset.
+                               0,
                                false,
                                false,
                                browser_controls_at_bottom);
   toolbar_layer_->UpdateProgressBar(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
   float toolbar_impact_height = 0;
-  if (show_toolbar && !back_visible)
+  if (show_toolbar && !back_visible && !browser_controls_at_bottom)
     toolbar_impact_height = toolbar_layer_->layer()->bounds().height();
 
   //----------------------------------------------------------------------------
@@ -387,7 +391,7 @@ void TabLayer::SetProperties(int id,
   bool content_visible = desired_content_size.GetArea() > 0.f;
 
   // TODO(dtrainor): Improve these calculations to prune these layers out.
-  bool title_visible = border_alpha > 0.f && !back_visible;
+  bool title_visible = border_alpha > 0.f && !back_visible && show_tab_title;
   bool close_btn_visible = title_visible;
   bool toolbar_visible = show_toolbar && toolbar_alpha > 0.f && !back_visible;
 
@@ -450,8 +454,7 @@ void TabLayer::SetProperties(int id,
 
     content_->SetProperties(id, can_use_live_layer, static_to_view_blend,
                             true, alpha, saturation,
-                            rounded_descaled_content_area,
-                            gfx::Size(content_width, content_height));
+                            true, rounded_descaled_content_area);
   } else if (back_logo_resource) {
     back_logo_->SetUIResourceId(back_logo_resource->ui_resource->id());
   }

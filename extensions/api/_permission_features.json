@@ -16,6 +16,7 @@
 
 {
   "autoUpdate": {
+    "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],
     "whitelist": [
@@ -114,6 +115,14 @@
     "extension_types": [ "platform_app" ],
     "whitelist": [
       "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  },
+  "sync": {
+   "vivaldi": true,
+   "channel": "stable",
+    "extension_types": ["platform_app"],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
     ]
   },
   "thumbnails": {

@@ -30,9 +30,8 @@ MIDIAccessInitializer::MIDIAccessInitializer(ScriptState* scriptState,
                                              const MIDIOptions& options)
     : ScriptPromiseResolver(scriptState), m_options(options) {}
 
-void MIDIAccessInitializer::contextDestroyed() {
+void MIDIAccessInitializer::contextDestroyed(ExecutionContext*) {
   m_permissionService.reset();
-  LifecycleObserver::contextDestroyed();
 }
 
 ScriptPromise MIDIAccessInitializer::start() {
@@ -40,7 +39,7 @@ ScriptPromise MIDIAccessInitializer::start() {
   m_accessor = MIDIAccessor::create(this);
 
   connectToPermissionService(getExecutionContext(),
-                             mojo::GetProxy(&m_permissionService));
+                             mojo::MakeRequest(&m_permissionService));
   m_permissionService->RequestPermission(
       createMidiPermissionDescriptor(m_options.hasSysex() && m_options.sysex()),
       getExecutionContext()->getSecurityOrigin(),
@@ -57,8 +56,8 @@ void MIDIAccessInitializer::didAddInputPort(const String& id,
                                             const String& version,
                                             PortState state) {
   DCHECK(m_accessor);
-  m_portDescriptors.append(PortDescriptor(id, manufacturer, name,
-                                          MIDIPort::TypeInput, version, state));
+  m_portDescriptors.push_back(PortDescriptor(
+      id, manufacturer, name, MIDIPort::TypeInput, version, state));
 }
 
 void MIDIAccessInitializer::didAddOutputPort(const String& id,
@@ -67,7 +66,7 @@ void MIDIAccessInitializer::didAddOutputPort(const String& id,
                                              const String& version,
                                              PortState state) {
   DCHECK(m_accessor);
-  m_portDescriptors.append(PortDescriptor(
+  m_portDescriptors.push_back(PortDescriptor(
       id, manufacturer, name, MIDIPort::TypeOutput, version, state));
 }
 

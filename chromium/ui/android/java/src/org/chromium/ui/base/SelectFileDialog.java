@@ -19,12 +19,15 @@ import android.provider.MediaStore;
 import android.text.TextUtils;
 import android.util.Log;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContentUriUtils;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.MainDex;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.ui.R;
 import org.chromium.ui.UiUtils;
 
@@ -52,9 +55,24 @@ public class SelectFileDialog
     private static final String ANY_TYPES = "*/*";
 
     /**
+     * The SELECT_FILE_DIALOG_SCOPE_* enumerations are used to measure the sort of content that
+     * developers are requesting to be shown in the select file dialog. Values must be kept in sync
+     * with their definition in //tools/metrics/histograms/histograms.xml, and both the numbering
+     * and meaning of the values must remain constant as they're recorded by UMA.
+     *
+     * Values are package visible because they're tested in the SelectFileDialogTest junit test.
+     */
+    static final int SELECT_FILE_DIALOG_SCOPE_GENERIC = 0;
+    static final int SELECT_FILE_DIALOG_SCOPE_IMAGES = 1;
+    static final int SELECT_FILE_DIALOG_SCOPE_VIDEOS = 2;
+    static final int SELECT_FILE_DIALOG_SCOPE_IMAGES_AND_VIDEOS = 3;
+    static final int SELECT_FILE_DIALOG_SCOPE_COUNT =
+            SELECT_FILE_DIALOG_SCOPE_IMAGES_AND_VIDEOS + 1;
+
+    /**
      * If set, overrides the WindowAndroid passed in {@link selectFile()}.
      */
-    private static WindowAndroid sOverrideWindowAndroid = null;
+    private static WindowAndroid sOverrideWindowAndroid;
 
     private final long mNativeSelectFileDialog;
     private List<String> mFileTypes;
@@ -77,6 +95,14 @@ public class SelectFileDialog
     @VisibleForTesting
     public static void setWindowAndroidForTests(WindowAndroid window) {
         sOverrideWindowAndroid = window;
+    }
+
+    /**
+     * Overrides the list of accepted file types for testing purposes.
+     */
+    @VisibleForTesting
+    public void setFileTypesForTests(List<String> fileTypes) {
+        mFileTypes = fileTypes;
     }
 
     /**
@@ -167,11 +193,13 @@ public class SelectFileDialog
         }
 
         Intent getContentIntent = new Intent(Intent.ACTION_GET_CONTENT);
-        getContentIntent.addCategory(Intent.CATEGORY_OPENABLE);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2 && mAllowMultiple) {
             getContentIntent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
         }
+
+        RecordHistogram.recordEnumeratedHistogram("Android.SelectFileDialogScope",
+                determineSelectFileDialogScope(), SELECT_FILE_DIALOG_SCOPE_COUNT);
 
         ArrayList<Intent> extraIntents = new ArrayList<Intent>();
         if (!noSpecificType()) {
@@ -188,6 +216,10 @@ public class SelectFileDialog
                 if (soundRecorder != null) extraIntents.add(soundRecorder);
                 getContentIntent.setType(ALL_AUDIO_TYPES);
             }
+
+            // If any types are specified, then only accept openable files, as coercing
+            // virtual files may yield to a MIME type different than expected.
+            getContentIntent.addCategory(Intent.CATEGORY_OPENABLE);
         }
 
         if (extraIntents.isEmpty()) {
@@ -215,7 +247,8 @@ public class SelectFileDialog
         public Uri doInBackground(Void...voids) {
             try {
                 Context context = mWindowAndroid.getApplicationContext();
-                return UiUtils.getUriForImageCaptureFile(context, getFileForImageCapture(context));
+                return ApiCompatibilityUtils.getUriForImageCaptureFile(context,
+                        getFileForImageCapture(context));
             } catch (IOException e) {
                 Log.e(TAG, "Cannot retrieve content uri from file", e);
                 return null;
@@ -263,13 +296,11 @@ public class SelectFileDialog
      * SelectFileDialog.
      * @param window The window that has access to the application activity.
      * @param resultCode The result code whether the intent returned successfully.
-     * @param contentResolver The content resolver used to extract the path of the selected file.
      * @param results The results of the requested intent.
      */
     @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR2)
     @Override
-    public void onIntentCompleted(WindowAndroid window, int resultCode,
-            ContentResolver contentResolver, Intent results) {
+    public void onIntentCompleted(WindowAndroid window, int resultCode, Intent results) {
         if (resultCode != Activity.RESULT_OK) {
             onFileNotSelected();
             return;
@@ -313,7 +344,8 @@ public class SelectFileDialog
             for (int i = 0; i < itemCount; ++i) {
                 filePathArray[i] = clipData.getItemAt(i).getUri();
             }
-            GetDisplayNameTask task = new GetDisplayNameTask(contentResolver, true);
+            GetDisplayNameTask task =
+                    new GetDisplayNameTask(ContextUtils.getApplicationContext(), true);
             task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, filePathArray);
             return;
         }
@@ -325,7 +357,8 @@ public class SelectFileDialog
         }
 
         if (ContentResolver.SCHEME_CONTENT.equals(results.getScheme())) {
-            GetDisplayNameTask task = new GetDisplayNameTask(contentResolver, false);
+            GetDisplayNameTask task =
+                    new GetDisplayNameTask(ContextUtils.getApplicationContext(), false);
             task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, results.getData());
             return;
         }
@@ -347,6 +380,28 @@ public class SelectFileDialog
 
     private void onFileNotSelected() {
         nativeOnFileNotSelected(mNativeSelectFileDialog);
+    }
+
+    // Determines the scope of the requested select file dialog for use in a UMA histogram. Right
+    // now we want to distinguish between generic, photo and visual media pickers.
+    @VisibleForTesting
+    int determineSelectFileDialogScope() {
+        boolean isGeneric = noSpecificType();
+
+        if (!isGeneric && shouldShowImageTypes()) {
+            return SELECT_FILE_DIALOG_SCOPE_IMAGES;
+        } else if (!isGeneric && shouldShowVideoTypes()) {
+            return SELECT_FILE_DIALOG_SCOPE_VIDEOS;
+        } else if (mFileTypes.size() == 2) {
+            // The shouldShow{Image,Video}Types() methods cannot be used here since they test for
+            // a generic dialog, which any request with more than one file type is considered as.
+            if ((mFileTypes.contains(ALL_IMAGE_TYPES) || acceptSpecificType(IMAGE_TYPE))
+                    && (mFileTypes.contains(ALL_VIDEO_TYPES) || acceptSpecificType(VIDEO_TYPE))) {
+                return SELECT_FILE_DIALOG_SCOPE_IMAGES_AND_VIDEOS;
+            }
+        }
+
+        return SELECT_FILE_DIALOG_SCOPE_GENERIC;
     }
 
     private boolean noSpecificType() {
@@ -401,11 +456,11 @@ public class SelectFileDialog
 
     private class GetDisplayNameTask extends AsyncTask<Uri, Void, String[]> {
         String[] mFilePaths;
-        final ContentResolver mContentResolver;
+        final Context mContext;
         final boolean mIsMultiple;
 
-        public GetDisplayNameTask(ContentResolver contentResolver, boolean isMultiple) {
-            mContentResolver = contentResolver;
+        public GetDisplayNameTask(Context context, boolean isMultiple) {
+            mContext = context;
             mIsMultiple = isMultiple;
         }
 
@@ -417,7 +472,7 @@ public class SelectFileDialog
                 for (int i = 0; i < uris.length; i++) {
                     mFilePaths[i] = uris[i].toString();
                     displayNames[i] = ContentUriUtils.getDisplayName(
-                            uris[i], mContentResolver, MediaStore.MediaColumns.DISPLAY_NAME);
+                            uris[i], mContext, MediaStore.MediaColumns.DISPLAY_NAME);
                 }
             }  catch (SecurityException e) {
                 // Some third party apps will present themselves as being able
@@ -447,8 +502,9 @@ public class SelectFileDialog
         }
     }
 
+    @VisibleForTesting
     @CalledByNative
-    private static SelectFileDialog create(long nativeSelectFileDialog) {
+    static SelectFileDialog create(long nativeSelectFileDialog) {
         return new SelectFileDialog(nativeSelectFileDialog);
     }
 

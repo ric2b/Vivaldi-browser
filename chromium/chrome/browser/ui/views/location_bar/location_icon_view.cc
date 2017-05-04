@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
 
-#include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/website_settings/website_settings_popup_view.h"
@@ -12,14 +11,10 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
-#include "components/security_state/core/security_state.h"
-#include "content/public/browser/navigation_controller.h"
-#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/controls/label.h"
 
-using content::NavigationEntry;
 using content::WebContents;
 
 LocationIconView::LocationIconView(const gfx::FontList& font_list,
@@ -106,22 +101,13 @@ bool LocationIconView::OnActivate(const ui::Event& event) {
   WebContents* contents = location_bar_->GetWebContents();
   if (!contents)
     return false;
-
-  // Important to use GetVisibleEntry to match what's showing in the omnibox.
-  NavigationEntry* entry = contents->GetController().GetVisibleEntry();
-  // The visible entry can be nullptr in the case of window.open("").
-  if (!entry)
-    return false;
-
-  SecurityStateTabHelper* helper =
-      SecurityStateTabHelper::FromWebContents(contents);
-  DCHECK(helper);
-  security_state::SecurityInfo security_info;
-  helper->GetSecurityInfo(&security_info);
-
-  location_bar_->delegate()->ShowWebsiteSettings(
-      contents, entry->GetVirtualURL(), security_info);
+  location_bar_->delegate()->ShowWebsiteSettings(contents);
   return true;
+}
+
+void LocationIconView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  IconLabelBubbleView::GetAccessibleNodeData(node_data);
+  node_data->role = ui::AX_ROLE_POP_UP_BUTTON;
 }
 
 gfx::Size LocationIconView::GetMinimumSizeForLabelText(
@@ -131,7 +117,8 @@ gfx::Size LocationIconView::GetMinimumSizeForLabelText(
       GetSizeForLabelWidth(label.GetPreferredSize().width()));
 }
 
-void LocationIconView::SetSecurityState(bool should_show, bool should_animate) {
+void LocationIconView::SetTextVisibility(bool should_show,
+                                         bool should_animate) {
   if (!should_animate) {
     animation_.Reset(should_show);
   } else if (should_show) {

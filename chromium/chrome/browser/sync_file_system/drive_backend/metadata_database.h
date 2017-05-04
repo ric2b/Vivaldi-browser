@@ -15,10 +15,8 @@
 #include <vector>
 
 #include "base/containers/hash_tables.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/values.h"
@@ -184,7 +182,8 @@ class MetadataDatabase {
   SyncStatusCode PopulateInitialData(
       int64_t largest_change_id,
       const google_apis::FileResource& sync_root_folder,
-      const ScopedVector<google_apis::FileResource>& app_root_folders);
+      const std::vector<std::unique_ptr<google_apis::FileResource>>&
+          app_root_folders);
 
   // Returns true if the folder associated to |app_id| is enabled.
   bool IsAppEnabled(const std::string& app_id) const;
@@ -262,7 +261,7 @@ class MetadataDatabase {
   // needed.
   SyncStatusCode UpdateByChangeList(
       int64_t largest_change_id,
-      ScopedVector<google_apis::ChangeResource> changes);
+      std::vector<std::unique_ptr<google_apis::ChangeResource>> changes);
 
   // Updates database by |resource|.
   // Marks each tracker for modified file as dirty and adds new trackers if
@@ -270,7 +269,7 @@ class MetadataDatabase {
   SyncStatusCode UpdateByFileResource(
       const google_apis::FileResource& resource);
   SyncStatusCode UpdateByFileResourceList(
-      ScopedVector<google_apis::FileResource> resources);
+      std::vector<std::unique_ptr<google_apis::FileResource>> resources);
 
   SyncStatusCode UpdateByDeletedRemoteFile(const std::string& file_id);
   SyncStatusCode UpdateByDeletedRemoteFileList(const FileIDList& file_ids);

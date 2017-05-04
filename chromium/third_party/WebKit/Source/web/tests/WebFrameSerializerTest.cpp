@@ -61,6 +61,44 @@ class SimpleWebFrameSerializerClient final : public WebFrameSerializerClient {
   StringBuilder m_builder;
 };
 
+class SimpleMHTMLPartsGenerationDelegate
+    : public WebFrameSerializer::MHTMLPartsGenerationDelegate {
+ public:
+  SimpleMHTMLPartsGenerationDelegate() : m_removePopupOverlay(false) {}
+
+  void setRemovePopupOverlay(bool removePopupOverlay) {
+    m_removePopupOverlay = removePopupOverlay;
+  }
+
+ private:
+  bool shouldSkipResource(const WebURL&) final { return false; }
+
+  WebString getContentID(WebFrame*) final { return WebString("<cid>"); }
+
+  WebFrameSerializerCacheControlPolicy cacheControlPolicy() final {
+    return WebFrameSerializerCacheControlPolicy::None;
+  }
+
+  bool useBinaryEncoding() final { return false; }
+  bool removePopupOverlay() final { return m_removePopupOverlay; }
+
+  bool m_removePopupOverlay;
+};
+
+// Returns the count of match for substring |pattern| in string |str|.
+int matchSubstring(const String& str, const char* pattern, size_t size) {
+  int matches = 0;
+  size_t start = 0;
+  while (true) {
+    size_t pos = str.find(pattern, start);
+    if (pos == WTF::kNotFound)
+      break;
+    matches++;
+    start = pos + size;
+  }
+  return matches;
+}
+
 }  // namespace
 
 class WebFrameSerializerTest : public testing::Test {
@@ -115,6 +153,8 @@ class WebFrameSerializerTest : public testing::Test {
     return serializerClient.toString();
   }
 
+  WebViewImpl* webView() { return m_helper.webView(); }
+
   WebLocalFrameImpl* mainFrameImpl() {
     return m_helper.webView()->mainFrameImpl();
   }
@@ -162,6 +202,163 @@ TEST_F(WebFrameSerializerTest, FromUrlWithMinusMinus) {
       serializeFile("http://www.test.com?--x--", "text_only_page.html");
   EXPECT_EQ("<!-- saved from url=(0030)http://www.test.com/?-%2Dx-%2D -->",
             actualHTML.substring(1, 60));
+}
+
+class WebFrameSerializerSanitizationTest : public WebFrameSerializerTest {
+ protected:
+  WebFrameSerializerSanitizationTest() {}
+
+  ~WebFrameSerializerSanitizationTest() override {}
+
+  String generateMHTMLParts(const String& url,
+                            const String& fileName,
+                            const String& mimeType = "text/html") {
+    KURL parsedURL(ParsedURLString, url);
+    URLTestHelpers::registerMockedURLLoad(parsedURL, fileName,
+                                          "frameserialization/", mimeType);
+    FrameTestHelpers::loadFrame(mainFrameImpl(), url.utf8().data());
+    WebThreadSafeData result = WebFrameSerializer::generateMHTMLParts(
+        WebString("boundary"), mainFrameImpl(), &m_mhtmlDelegate);
+    return String(result.data(), result.size());
+  }
+
+  void setRemovePopupOverlay(bool removePopupOverlay) {
+    m_mhtmlDelegate.setRemovePopupOverlay(removePopupOverlay);
+  }
+
+ private:
+  SimpleMHTMLPartsGenerationDelegate m_mhtmlDelegate;
+};
+
+TEST_F(WebFrameSerializerSanitizationTest, RemoveInlineScriptInAttributes) {
+  String mhtml =
+      generateMHTMLParts("http://www.test.com", "script_in_attributes.html");
+
+  // These scripting attributes should be removed.
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("onload="));
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("ONLOAD="));
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("onclick="));
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("href="));
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("from="));
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("to="));
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("javascript:"));
+
+  // These non-scripting attributes should remain intact.
+  EXPECT_NE(WTF::kNotFound, mhtml.find("class="));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("id="));
+
+  // srcdoc attribute of frame element should be replaced with src attribute.
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("srcdoc="));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("src="));
+}
+
+TEST_F(WebFrameSerializerSanitizationTest, DisableFormElements) {
+  String mhtml = generateMHTMLParts("http://www.test.com", "form.html");
+
+  const char kDisabledAttr[] = "disabled=3D\"\"";
+  int matches =
+      matchSubstring(mhtml, kDisabledAttr, arraysize(kDisabledAttr) - 1);
+  EXPECT_EQ(21, matches);
+}
+
+TEST_F(WebFrameSerializerSanitizationTest, RemoveHiddenElements) {
+  String mhtml =
+      generateMHTMLParts("http://www.test.com", "hidden_elements.html");
+
+  // These hidden elements that do not affect layout should be removed.
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("<h1"));
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("<p id=3D\"hidden_id\""));
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("<input type=3D\"hidden\""));
+
+  // These default-hidden elements should not be removed.
+  EXPECT_NE(WTF::kNotFound, mhtml.find("<html"));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("<head"));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("<style"));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("<title"));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("<link"));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("<datalist"));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("<option"));
+  // One for meta in head and another for meta in body.
+  EXPECT_EQ(2, matchSubstring(mhtml, "<meta", 5));
+  // One for style in head and another for style in body.
+  EXPECT_EQ(2, matchSubstring(mhtml, "<style", 6));
+
+  // These hidden elements that affect layout should remain intact.
+  EXPECT_NE(WTF::kNotFound, mhtml.find("<h2"));
+
+  // These visible elements should remain intact.
+  EXPECT_NE(WTF::kNotFound, mhtml.find("<h2"));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("<p id=3D\"visible_id\""));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("<form"));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("<input type=3D\"text\""));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("<div"));
+}
+
+// Regression test for crbug.com/678893, where in some cases serializing an
+// image document could cause code to pick an element from an empty container.
+TEST_F(WebFrameSerializerSanitizationTest, FromBrokenImageDocument) {
+  String mhtml = generateMHTMLParts("http://www.test.com", "broken-image.png",
+                                    "image/png");
+  EXPECT_TRUE(mhtml.isEmpty());
+}
+
+TEST_F(WebFrameSerializerSanitizationTest, ImageLoadedFromSrcsetForHiDPI) {
+  URLTestHelpers::registerMockedURLLoad(
+      KURL(ParsedURLString, "http://www.test.com/1x.png"),
+      "frameserialization/1x.png");
+  URLTestHelpers::registerMockedURLLoad(
+      KURL(ParsedURLString, "http://www.test.com/2x.png"),
+      "frameserialization/2x.png");
+
+  // Set high DPR in order to load image from srcset, instead of src.
+  webView()->setDeviceScaleFactor(2.0f);
+
+  String mhtml = generateMHTMLParts("http://www.test.com", "img_srcset.html");
+
+  // srcset attribute should be skipped.
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("srcset="));
+
+  // Width and height attributes should be set when none is present in <img>.
+  EXPECT_NE(WTF::kNotFound,
+            mhtml.find("id=3D\"i1\" width=3D\"6\" height=3D\"6\">"));
+
+  // Height attribute should not be set if width attribute is already present in
+  // <img>
+  EXPECT_NE(WTF::kNotFound, mhtml.find("id=3D\"i2\" width=3D\"8\">"));
+}
+
+TEST_F(WebFrameSerializerSanitizationTest, ImageLoadedFromSrcForNormalDPI) {
+  URLTestHelpers::registerMockedURLLoad(
+      KURL(ParsedURLString, "http://www.test.com/1x.png"),
+      "frameserialization/1x.png");
+  URLTestHelpers::registerMockedURLLoad(
+      KURL(ParsedURLString, "http://www.test.com/2x.png"),
+      "frameserialization/2x.png");
+
+  String mhtml = generateMHTMLParts("http://www.test.com", "img_srcset.html");
+
+  // srcset attribute should be skipped.
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("srcset="));
+
+  // New width and height attributes should not be set.
+  EXPECT_NE(WTF::kNotFound, mhtml.find("id=3D\"i1\">"));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("id=3D\"i2\" width=3D\"8\">"));
+}
+
+TEST_F(WebFrameSerializerSanitizationTest, RemovePopupOverlayIfRequested) {
+  webView()->resize(WebSize(500, 500));
+  setRemovePopupOverlay(true);
+  String mhtml = generateMHTMLParts("http://www.test.com", "popup.html");
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("class=3D\"overlay"));
+  EXPECT_EQ(WTF::kNotFound, mhtml.find("class=3D\"modal"));
+}
+
+TEST_F(WebFrameSerializerSanitizationTest, KeepPopupOverlayIfNotRequested) {
+  webView()->resize(WebSize(500, 500));
+  setRemovePopupOverlay(false);
+  String mhtml = generateMHTMLParts("http://www.test.com", "popup.html");
+  EXPECT_NE(WTF::kNotFound, mhtml.find("class=3D\"overlay"));
+  EXPECT_NE(WTF::kNotFound, mhtml.find("class=3D\"modal"));
 }
 
 }  // namespace blink

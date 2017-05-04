@@ -37,11 +37,13 @@
 #include "extensions/common/constants.h"
 #include "skia/ext/skia_utils_mac.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMUILocalizerAndLayoutTweaker.h"
+#import "ui/base/cocoa/a11y_util.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/controls/hyperlink_button_cell.h"
 #import "ui/base/cocoa/flipped_view.h"
 #import "ui/base/cocoa/hover_image_button.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/gfx/scoped_ns_graphics_context_save_gstate_mac.h"
@@ -235,6 +237,15 @@ bool IsInternalURL(const GURL& url) {
     bridge_->set_bubble_controller(self);
   }
   return self;
+}
+
+- (LocationBarDecoration*)decorationForBubble {
+  if (vivaldi::IsVivaldiRunning()) {
+    return nullptr;
+  }
+  BrowserWindowController* controller = [[self parentWindow] windowController];
+  LocationBarViewMac* location_bar = [controller locationBarBridge];
+  return location_bar ? location_bar->GetPageInfoDecoration() : nullptr;
 }
 
 - (Profile*)profile {
@@ -624,19 +635,10 @@ bool IsInternalURL(const GURL& url) {
   NSRect frame = NSMakeRect(point.x, point.y, size.width, size.height);
   base::scoped_nsobject<NSImageView> imageView(
       [[NSImageView alloc] initWithFrame:frame]);
-  [self hideImageFromAccessibilityOrder:imageView];
+  ui::a11y_util::HideImageFromAccessibilityOrder(imageView);
   [imageView setImageFrameStyle:NSImageFrameNone];
   [view addSubview:imageView.get()];
   return imageView.get();
-}
-
-// Hide the given image view from the accessibility order for VoiceOver.
-- (void)hideImageFromAccessibilityOrder:(NSImageView*)imageView {
-  // This is the minimum change necessary to get VoiceOver to skip the image
-  // (instead of reading the word "image"). Accessibility mechanisms in OSX
-  // change once in a while, so this may be fragile.
-  [[imageView cell] accessibilitySetOverrideValue:@""
-                                     forAttribute:NSAccessibilityRoleAttribute];
 }
 
 // Add a separator as a subview of the given view. Return the new view.
@@ -1168,7 +1170,7 @@ void WebsiteSettingsUIBridge::Show(
     content::WebContents* web_contents,
     const GURL& virtual_url,
     const security_state::SecurityInfo& security_info) {
-  if (chrome::ToolkitViewsWebUIDialogsEnabled()) {
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
     chrome::ShowWebsiteSettingsBubbleViewsAtPoint(
         gfx::ScreenPointFromNSPoint(AnchorPointForWindow(parent)), profile,
         web_contents, virtual_url, security_info);
@@ -1268,8 +1270,4 @@ void WebsiteSettingsUIBridge::SetPermissionInfo(
     ChosenObjectInfoList chosen_object_info_list) {
   [bubble_controller_ setPermissionInfo:permission_info_list
                        andChosenObjects:std::move(chosen_object_info_list)];
-}
-
-void WebsiteSettingsUIBridge::SetSelectedTab(TabId tab_id) {
-  // TODO(lgarron): Remove this from the interface. (crbug.com/571533)
 }

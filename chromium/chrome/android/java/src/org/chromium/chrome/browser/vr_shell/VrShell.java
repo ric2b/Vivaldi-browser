@@ -16,7 +16,7 @@ public interface VrShell {
     /**
      * Performs native VrShell initialization.
      */
-    void initializeNative(Tab currentTab, VrShellDelegate delegate);
+    void initializeNative(Tab currentTab, VrShellDelegate delegate, boolean forWebVR);
 
     /**
      * Pauses VrShell.
@@ -47,4 +47,9 @@ public interface VrShell {
      * Sets a callback to be run when the close button is tapped.
      */
     void setCloseButtonListener(Runnable runner);
+
+    /**
+     * Handles a change in page load progress.
+     */
+    void onLoadProgressChanged(double progress);
 }

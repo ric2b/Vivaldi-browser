@@ -22,7 +22,7 @@
 // access a Bluetooth device. It is owned by ChooserBubbleDelegate.
 class BluetoothChooserController : public ChooserController {
  public:
-  explicit BluetoothChooserController(
+  BluetoothChooserController(
       content::RenderFrameHost* owner,
       const content::BluetoothChooser::EventHandler& event_handler);
   ~BluetoothChooserController() override;
@@ -39,7 +39,7 @@ class BluetoothChooserController : public ChooserController {
   void RefreshOptions() override;
   void OpenAdapterOffHelpUrl() const override;
   base::string16 GetStatus() const override;
-  void Select(size_t index) override;
+  void Select(const std::vector<size_t>& indices) override;
   void Cancel() override;
   void Close() override;
   void OpenHelpCenterUrl() const override;

@@ -6,11 +6,12 @@
 
 #include <memory>
 
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
-#include "services/ui/public/cpp/tests/window_tree_client_private.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/aura/test/mus/window_tree_client_private.h"
 #include "ui/events/event.h"
-#include "ui/views/mus/window_manager_connection.h"
+#include "ui/views/mus/mus_client.h"
 #include "ui/views/pointer_watcher.h"
 #include "ui/views/test/scoped_views_test_helper.h"
 
@@ -47,15 +48,12 @@ class PointerWatcherEventRouterTest : public testing::Test {
   ~PointerWatcherEventRouterTest() override {}
 
   void OnPointerEventObserved(const ui::PointerEvent& event) {
-    WindowManagerConnection::Get()
-        ->pointer_watcher_event_router()
-        ->OnPointerEventObserved(event, nullptr);
+    MusClient::Get()->pointer_watcher_event_router()->OnPointerEventObserved(
+        event, nullptr);
   }
 
   PointerWatcherEventRouter::EventTypes event_types() const {
-    return WindowManagerConnection::Get()
-        ->pointer_watcher_event_router()
-        ->event_types_;
+    return MusClient::Get()->pointer_watcher_event_router()->event_types_;
   }
 
  private:
@@ -67,9 +65,9 @@ TEST_F(PointerWatcherEventRouterTest, EventTypes) {
   ScopedViewsTestHelper helper;
   TestPointerWatcher pointer_watcher1, pointer_watcher2;
   PointerWatcherEventRouter* pointer_watcher_event_router =
-      WindowManagerConnection::Get()->pointer_watcher_event_router();
-  ui::WindowTreeClientPrivate test_api(
-      WindowManagerConnection::Get()->client());
+      MusClient::Get()->pointer_watcher_event_router();
+  aura::WindowTreeClientPrivate test_api(
+      MusClient::Get()->window_tree_client());
   EXPECT_FALSE(test_api.HasPointerWatcher());
 
   // Start with no moves.
@@ -118,9 +116,9 @@ TEST_F(PointerWatcherEventRouterTest, EventTypes) {
 TEST_F(PointerWatcherEventRouterTest, PointerWatcherNoMove) {
   base::MessageLoop message_loop(base::MessageLoop::TYPE_UI);
   ScopedViewsTestHelper helper;
-  ASSERT_TRUE(WindowManagerConnection::Get());
+  ASSERT_TRUE(MusClient::Get());
   PointerWatcherEventRouter* pointer_watcher_event_router =
-      WindowManagerConnection::Get()->pointer_watcher_event_router();
+      MusClient::Get()->pointer_watcher_event_router();
   ASSERT_TRUE(pointer_watcher_event_router);
 
   ui::PointerEvent pointer_event_down(
@@ -191,9 +189,9 @@ TEST_F(PointerWatcherEventRouterTest, PointerWatcherNoMove) {
 TEST_F(PointerWatcherEventRouterTest, PointerWatcherMove) {
   base::MessageLoop message_loop(base::MessageLoop::TYPE_UI);
   ScopedViewsTestHelper helper;
-  ASSERT_TRUE(WindowManagerConnection::Get());
+  ASSERT_TRUE(MusClient::Get());
   PointerWatcherEventRouter* pointer_watcher_event_router =
-      WindowManagerConnection::Get()->pointer_watcher_event_router();
+      MusClient::Get()->pointer_watcher_event_router();
   ASSERT_TRUE(pointer_watcher_event_router);
 
   ui::PointerEvent pointer_event_down(

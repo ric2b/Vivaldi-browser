@@ -38,6 +38,7 @@ enum DistanceModelType {
 [
     Constructor(BaseAudioContext context, optional PannerOptions options),
     RaisesException=Constructor,
+    Measure
 ] interface PannerNode : AudioNode {
     // Default model for stereo is equalpower.
     attribute PanningModelType panningModel;
@@ -58,8 +59,8 @@ enum DistanceModelType {
     // Distance model
     attribute DistanceModelType distanceModel;
 
-    attribute double refDistance;
-    attribute double maxDistance;
+    [RaisesException=Setter] attribute double refDistance;
+    [RaisesException=Setter] attribute double maxDistance;
     attribute double rolloffFactor;
 
     // Directional sound cone

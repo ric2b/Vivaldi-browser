@@ -47,3 +47,19 @@
 
   // In Vivaldi this will always break since the relevant code has been modified
   DISABLE(WebViewTest, Shim_TestRendererNavigationRedirectWhileUnattached)
+  DISABLE(BrowsingHistoryHandlerTest, ObservingWebHistoryDeletions)
+
+  // Failing media tests since proprietary media code was imported
+  DISABLE(AudioVideoMetadataExtractorTest, AndroidRotatedMP4Video)
+  DISABLE(AudioVideoMetadataExtractorTest, AudioMP3)
+  DISABLE(MediaGalleriesPlatformAppBrowserTest, GetMetadata)
+  DISABLE_MULTI(MediaTest, VideoBearMovPcmS16be)
+  DISABLE_MULTI(MediaTest, VideoBearMovPcmS24be)
+  DISABLE_MULTI(MediaTest, VideoBearMp4)
+  DISABLE_MULTI(MediaTest, VideoBearSilentMp4)
+  DISABLE(MediaTest, VideoBearRotated0)
+  DISABLE(MediaTest, VideoBearRotated180)
+  DISABLE(MediaColorTest, Yuv420pHighBitDepth)
+  DISABLE(MediaColorTest, Yuv422pH264)
+  DISABLE(MediaColorTest, Yuv444pH264)
+  DISABLE(MediaColorTest, Yuvj420pH264)

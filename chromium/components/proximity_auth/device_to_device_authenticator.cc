@@ -9,13 +9,14 @@
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "components/proximity_auth/connection.h"
-#include "components/proximity_auth/cryptauth/secure_message_delegate.h"
+#include "components/cryptauth/connection.h"
+#include "components/cryptauth/secure_message_delegate.h"
+#include "components/cryptauth/wire_message.h"
+#include "components/proximity_auth/authenticator.h"
 #include "components/proximity_auth/device_to_device_initiator_operations.h"
 #include "components/proximity_auth/device_to_device_secure_context.h"
 #include "components/proximity_auth/logging/logging.h"
 #include "components/proximity_auth/secure_context.h"
-#include "components/proximity_auth/wire_message.h"
 
 namespace proximity_auth {
 
@@ -26,16 +27,12 @@ namespace {
 // authentication will fail.
 const int kResponderAuthTimeoutSeconds = 5;
 
-// The prefix of the permit id sent to the remote device. The permit id
-// is used by the remote device to find the credentials of the local device.
-const char kPermitIdPrefix[] = "permit://google.com/easyunlock/v1/";
-
 }  // namespace
 
 DeviceToDeviceAuthenticator::DeviceToDeviceAuthenticator(
-    Connection* connection,
+    cryptauth::Connection* connection,
     const std::string& account_id,
-    std::unique_ptr<SecureMessageDelegate> secure_message_delegate)
+    std::unique_ptr<cryptauth::SecureMessageDelegate> secure_message_delegate)
     : connection_(connection),
       account_id_(account_id),
       secure_message_delegate_(std::move(secure_message_delegate)),
@@ -113,9 +110,8 @@ void DeviceToDeviceAuthenticator::OnHelloMessageCreated(
   // Send the [Hello] message to the remote device.
   state_ = State::SENT_HELLO;
   hello_message_ = message;
-  std::string permit_id = kPermitIdPrefix + account_id_;
-  connection_->SendMessage(
-      base::MakeUnique<WireMessage>(hello_message_, permit_id));
+  connection_->SendMessage(base::MakeUnique<cryptauth::WireMessage>(
+      hello_message_, std::string(Authenticator::kAuthenticationFeature)));
 }
 
 void DeviceToDeviceAuthenticator::OnResponderAuthTimedOut() {
@@ -154,7 +150,8 @@ void DeviceToDeviceAuthenticator::OnInitiatorAuthCreated(
   }
 
   state_ = State::SENT_INITIATOR_AUTH;
-  connection_->SendMessage(base::MakeUnique<WireMessage>(message));
+  connection_->SendMessage(base::MakeUnique<cryptauth::WireMessage>(
+      message, std::string(Authenticator::kAuthenticationFeature)));
 }
 
 void DeviceToDeviceAuthenticator::Fail(const std::string& error_message) {
@@ -187,20 +184,21 @@ void DeviceToDeviceAuthenticator::Succeed() {
 }
 
 void DeviceToDeviceAuthenticator::OnConnectionStatusChanged(
-    Connection* connection,
-    Connection::Status old_status,
-    Connection::Status new_status) {
+    cryptauth::Connection* connection,
+    cryptauth::Connection::Status old_status,
+    cryptauth::Connection::Status new_status) {
   // We do not expect the connection to drop during authentication.
-  if (new_status == Connection::DISCONNECTED) {
+  if (new_status == cryptauth::Connection::DISCONNECTED) {
     Fail("Disconnected while authentication is in progress",
          Result::DISCONNECTED);
   }
 }
 
 void DeviceToDeviceAuthenticator::OnMessageReceived(
-    const Connection& connection,
-    const WireMessage& message) {
-  if (state_ == State::SENT_HELLO) {
+    const cryptauth::Connection& connection,
+    const cryptauth::WireMessage& message) {
+  if (state_ == State::SENT_HELLO &&
+      message.feature() == std::string(Authenticator::kAuthenticationFeature)) {
     PA_LOG(INFO) << "Received [Responder Auth] message, payload_size="
                  << message.payload().size();
     state_ = State::RECEIVED_RESPONDER_AUTH;
@@ -222,9 +220,10 @@ void DeviceToDeviceAuthenticator::OnMessageReceived(
   }
 }
 
-void DeviceToDeviceAuthenticator::OnSendCompleted(const Connection& connection,
-                                                  const WireMessage& message,
-                                                  bool success) {
+void DeviceToDeviceAuthenticator::OnSendCompleted(
+    const cryptauth::Connection& connection,
+    const cryptauth::WireMessage& message,
+    bool success) {
   if (state_ == State::SENT_INITIATOR_AUTH) {
     if (success)
       Succeed();

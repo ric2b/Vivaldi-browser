@@ -18,6 +18,7 @@
 #include "third_party/WebKit/public/platform/WebCachePolicy.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebHTTPHeaderVisitor.h"
+#include "third_party/WebKit/public/platform/WebMixedContent.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
@@ -245,7 +246,7 @@ WebHTTPBody GetWebHTTPBodyForRequestBody(
         break;
       case ResourceRequestBodyImpl::Element::TYPE_FILE:
         http_body.appendFileRange(
-            element.path().AsUTF16Unsafe(), element.offset(),
+            blink::FilePathToWebString(element.path()), element.offset(),
             (element.length() != std::numeric_limits<uint64_t>::max())
                 ? element.length()
                 : -1,
@@ -260,7 +261,7 @@ WebHTTPBody GetWebHTTPBodyForRequestBody(
             element.expected_modification_time().ToDoubleT());
         break;
       case ResourceRequestBodyImpl::Element::TYPE_BLOB:
-        http_body.appendBlob(WebString::fromUTF8(element.blob_uuid()));
+        http_body.appendBlob(WebString::fromASCII(element.blob_uuid()));
         break;
       case ResourceRequestBodyImpl::Element::TYPE_BYTES_DESCRIPTION:
       case ResourceRequestBodyImpl::Element::TYPE_DISK_CACHE_ENTRY:
@@ -471,6 +472,19 @@ RequestContextType GetRequestContextTypeForWebURLRequest(
   return static_cast<RequestContextType>(request.getRequestContext());
 }
 
+blink::WebMixedContentContextType GetMixedContentContextTypeForWebURLRequest(
+    const blink::WebURLRequest& request) {
+  bool block_mixed_plugin_content = false;
+  if (request.getExtraData()) {
+    RequestExtraData* extra_data =
+        static_cast<RequestExtraData*>(request.getExtraData());
+    block_mixed_plugin_content = extra_data->block_mixed_plugin_content();
+  }
+
+  return blink::WebMixedContent::contextTypeFromRequestContext(
+      request.getRequestContext(), block_mixed_plugin_content);
+}
+
 STATIC_ASSERT_ENUM(SkipServiceWorker::NONE,
                    WebURLRequest::SkipServiceWorker::None);
 STATIC_ASSERT_ENUM(SkipServiceWorker::CONTROLLING,
@@ -487,7 +501,7 @@ blink::WebURLError CreateWebURLError(const blink::WebURL& unreachable_url,
                                      bool stale_copy_in_cache,
                                      int reason) {
   blink::WebURLError error;
-  error.domain = WebString::fromUTF8(net::kErrorDomain);
+  error.domain = WebString::fromASCII(net::kErrorDomain);
   error.reason = reason;
   error.unreachableURL = unreachable_url;
   error.staleCopyInCache = stale_copy_in_cache;
@@ -497,10 +511,10 @@ blink::WebURLError CreateWebURLError(const blink::WebURL& unreachable_url,
     error.isCacheMiss = true;
   } else if (reason == net::ERR_TEMPORARILY_THROTTLED) {
     error.localizedDescription =
-        WebString::fromUTF8(kThrottledErrorDescription);
+        WebString::fromASCII(kThrottledErrorDescription);
   } else {
     error.localizedDescription =
-        WebString::fromUTF8(net::ErrorToString(reason));
+        WebString::fromASCII(net::ErrorToString(reason));
   }
   return error;
 }

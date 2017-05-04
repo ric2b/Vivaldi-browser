@@ -2,12 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# Several dependencies of Chrome require a different min sdk and/or deployment
-# target when built as stand-alone projects. If this is ever not the case, these
-# variables can be removed.
+# Several dependencies of Chrome require a different min sdk when built
+# as stand-alone projects. If this is ever not the case, these variables
+# can be removed.
 # See https://bugs.chromium.org/p/webrtc/issues/detail?id=5453.
 mac_sdk_min_build_override = "10.10"
-mac_deployment_target_build_override = "10.9"
 
 # Variable that can be used to support multiple build scenarios, like having
 # Chromium specific targets in a client project's GN file etc.
@@ -24,10 +23,19 @@ enable_java_templates = true
 # Some non-Chromium builds don't use Chromium's third_party/binutils.
 linux_use_bundled_binutils_override = true
 
-# Allows different projects to specify their own suppressions files.
-asan_suppressions_file = "//build/sanitizers/asan_suppressions.cc"
-lsan_suppressions_file = "//build/sanitizers/lsan_suppressions.cc"
-tsan_suppressions_file = "//build/sanitizers/tsan_suppressions.cc"
+# Allows different projects to specify their own suppressions and blacklist
+# files for sanitizer tools.
+# asan_suppressions_file = "path/to/asan_suppressions.cc"
+# asan_blacklist_path = "path/to/asan/blacklist.txt"
+# asan_win_blacklist_path = "path/to/asan/blacklist_win.txt"
+# lsan_suppressions_file = "path/to/lsan_suppressions.cc"
+# tsan_suppressions_file = "path/to/tsan_suppressions.cc"
+# tsan_blacklist_path = "path/to/tsan/ignores.txt"
+# msan_blacklist_path = "path/to/msan/blacklist.txt"
+# ubsan_blacklist_path = "path/to/ubsan/blacklist.txt"
+# ubsan_vptr_blacklist_path = "path/to/ubsan/vptr_blacklist.txt"
+# ubsan_security_blacklist_path = "path/to/ubsan/security_blacklist.txt"
+# cfi_blacklist_path = "path/to/cfi/blacklist.txt"
 
 # Uncomment these to specify a different lint suppressions file for android
 # lint_suppressions_file = path/to/your/suppressions/file/suppressions.xml
@@ -47,12 +55,8 @@ declare_args() {
 }
 
 if (use_system_xcode == "") {
-  if (target_os == "mac") {
-    _result =
-        exec_script("//build/mac/should_use_hermetic_xcode.py", [], "value")
-    use_system_xcode = _result == 0
-  }
-  if (target_os == "ios") {
-    use_system_xcode = true
-  }
+  _result = exec_script("//build/mac/should_use_hermetic_xcode.py",
+                        [ target_os ],
+                        "value")
+  use_system_xcode = _result == 0
 }

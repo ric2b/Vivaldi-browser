@@ -16,6 +16,7 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/test_shell_delegate.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
@@ -91,12 +92,12 @@ void TrayUserTest::InitializeParameters(int users_logged_in,
   // the access easier.
   for (int i = 0; i < delegate_->GetMaximumNumberOfLoggedInUsers(); i++) {
     tray_user_.push_back(new TrayUser(tray_, i));
-    tray_->AddTrayItem(tray_user_[i]);
+    tray_->AddTrayItem(base::WrapUnique(tray_user_[i]));
   }
   if (!UseMd()) {
     // We then add also the separator.
     tray_user_separator_ = new TrayUserSeparator(tray_);
-    tray_->AddTrayItem(tray_user_separator_);
+    tray_->AddTrayItem(base::WrapUnique(tray_user_separator_));
   }
 }
 
@@ -193,7 +194,6 @@ TEST_F(TrayUserTest, AccessibleLabelContainsMultiUserInfo) {
   EXPECT_EQ(ui::AX_ROLE_BUTTON, node_data.role);
 }
 
-#if defined(OS_CHROMEOS)
 // Make sure that in multi user mode the user panel can be activated and there
 // will be one panel for each user plus one additional separator at the end.
 // Note: the mouse watcher (for automatic closing upon leave) cannot be tested
@@ -278,7 +278,5 @@ TEST_F(TrayUserTest, MultiUserModeButtonClicks) {
             second_user->GetDisplayEmail());
   tray()->CloseSystemBubble();
 }
-
-#endif
 
 }  // namespace ash

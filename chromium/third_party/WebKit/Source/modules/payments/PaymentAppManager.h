@@ -8,7 +8,6 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "components/payments/payment_app.mojom-blink.h"
-#include "core/dom/ContextLifecycleObserver.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
 
@@ -21,16 +20,12 @@ class ServiceWorkerRegistration;
 
 class MODULES_EXPORT PaymentAppManager final
     : public GarbageCollectedFinalized<PaymentAppManager>,
-      public ScriptWrappable,
-      public ContextLifecycleObserver {
+      public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(PaymentAppManager);
   WTF_MAKE_NONCOPYABLE(PaymentAppManager);
 
  public:
-  static PaymentAppManager* create(ScriptState*, ServiceWorkerRegistration*);
-
-  void contextDestroyed() override;
+  static PaymentAppManager* create(ServiceWorkerRegistration*);
 
   ScriptPromise setManifest(ScriptState*, const PaymentAppManifest&);
   ScriptPromise getManifest(ScriptState*);
@@ -38,9 +33,12 @@ class MODULES_EXPORT PaymentAppManager final
   DECLARE_TRACE();
 
  private:
-  PaymentAppManager(ScriptState*, ServiceWorkerRegistration*);
+  explicit PaymentAppManager(ServiceWorkerRegistration*);
 
   void onSetManifest(ScriptPromiseResolver*,
+                     payments::mojom::blink::PaymentAppManifestError);
+  void onGetManifest(ScriptPromiseResolver*,
+                     payments::mojom::blink::PaymentAppManifestPtr,
                      payments::mojom::blink::PaymentAppManifestError);
   void onServiceConnectionError();
 

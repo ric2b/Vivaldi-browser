@@ -12,10 +12,6 @@
 
 class GURL;
 
-namespace base {
-class ListValue;
-}  // namespace base
-
 class NetInternalsTest : public WebUIBrowserTest {
  protected:
   NetInternalsTest();
@@ -25,7 +21,6 @@ class NetInternalsTest : public WebUIBrowserTest {
   class MessageHandler;
 
   // InProcessBrowserTest overrides.
-  void SetUpCommandLine(base::CommandLine* command_line) override;
   void SetUpOnMainThread() override;
 
   // WebUIBrowserTest implementation.

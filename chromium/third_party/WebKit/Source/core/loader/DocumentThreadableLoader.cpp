@@ -32,6 +32,7 @@
 #include "core/loader/DocumentThreadableLoader.h"
 
 #include "core/dom/Document.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/fetch/CrossOriginAccessControl.h"
 #include "core/fetch/FetchRequest.h"
 #include "core/fetch/FetchUtils.h"
@@ -58,6 +59,7 @@
 #include "wtf/Assertions.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/WeakPtr.h"
+#include "wtf/debug/Alias.h"
 #include <memory>
 
 namespace blink {
@@ -94,7 +96,7 @@ class EmptyDataHandle final : public WebDataConsumerHandle {
   };
 
   std::unique_ptr<Reader> obtainReader(Client* client) override {
-    return makeUnique<EmptyDataReader>(client);
+    return WTF::makeUnique<EmptyDataReader>(client);
   }
   const char* debugName() const override { return "EmptyDataHandle"; }
 };
@@ -119,6 +121,67 @@ bool IsNoCORSAllowedContext(
   }
 }
 
+// TODO(yhirano): Remove these when https://crbug.com/667254 is fixed.
+void NEVER_INLINE crashWithBlobBytesConsumer() {
+  const char* name = __func__;
+  WTF::debug::alias(&name);
+  CRASH();
+}
+
+void NEVER_INLINE crashWithEventSource() {
+  const char* name = __func__;
+  WTF::debug::alias(&name);
+  CRASH();
+}
+
+void NEVER_INLINE crashWithFetchManager() {
+  const char* name = __func__;
+  WTF::debug::alias(&name);
+  CRASH();
+}
+
+void NEVER_INLINE crashWithFileReaderLoader() {
+  const char* name = __func__;
+  WTF::debug::alias(&name);
+  CRASH();
+}
+
+void NEVER_INLINE crashWithMainThreadLoaderHolder() {
+  const char* name = __func__;
+  WTF::debug::alias(&name);
+  CRASH();
+}
+
+void NEVER_INLINE crashWithNotificationImageLoader() {
+  const char* name = __func__;
+  WTF::debug::alias(&name);
+  CRASH();
+}
+
+void NEVER_INLINE crashWithWebAssociatedURLLoader() {
+  const char* name = __func__;
+  WTF::debug::alias(&name);
+  CRASH();
+}
+
+void NEVER_INLINE crashWithWorkerScriptLoader() {
+  const char* name = __func__;
+  WTF::debug::alias(&name);
+  CRASH();
+}
+
+void NEVER_INLINE crashWithXHR() {
+  const char* name = __func__;
+  WTF::debug::alias(&name);
+  CRASH();
+}
+
+void NEVER_INLINE crashWithTesting() {
+  const char* name = __func__;
+  WTF::debug::alias(&name);
+  CRASH();
+}
+
 }  // namespace
 
 // Max number of CORS redirects handled in DocumentThreadableLoader. Same number
@@ -133,9 +196,10 @@ void DocumentThreadableLoader::loadResourceSynchronously(
     const ResourceRequest& request,
     ThreadableLoaderClient& client,
     const ThreadableLoaderOptions& options,
-    const ResourceLoaderOptions& resourceLoaderOptions) {
+    const ResourceLoaderOptions& resourceLoaderOptions,
+    ClientSpec clientSpec) {
   (new DocumentThreadableLoader(document, &client, LoadSynchronously, options,
-                                resourceLoaderOptions))
+                                resourceLoaderOptions, clientSpec))
       ->start(request);
 }
 
@@ -143,9 +207,11 @@ DocumentThreadableLoader* DocumentThreadableLoader::create(
     Document& document,
     ThreadableLoaderClient* client,
     const ThreadableLoaderOptions& options,
-    const ResourceLoaderOptions& resourceLoaderOptions) {
+    const ResourceLoaderOptions& resourceLoaderOptions,
+    ClientSpec clientSpec) {
   return new DocumentThreadableLoader(document, client, LoadAsynchronously,
-                                      options, resourceLoaderOptions);
+                                      options, resourceLoaderOptions,
+                                      clientSpec);
 }
 
 DocumentThreadableLoader::DocumentThreadableLoader(
@@ -153,19 +219,22 @@ DocumentThreadableLoader::DocumentThreadableLoader(
     ThreadableLoaderClient* client,
     BlockingBehavior blockingBehavior,
     const ThreadableLoaderOptions& options,
-    const ResourceLoaderOptions& resourceLoaderOptions)
+    const ResourceLoaderOptions& resourceLoaderOptions,
+    ClientSpec clientSpec)
     : m_client(client),
+      m_clientSpec(clientSpec),
       m_document(&document),
       m_options(options),
       m_resourceLoaderOptions(resourceLoaderOptions),
       m_forceDoNotAllowStoredCredentials(false),
       m_securityOrigin(m_resourceLoaderOptions.securityOrigin),
       m_sameOriginRequest(false),
-      m_crossOriginNonSimpleRequest(false),
       m_isUsingDataConsumerHandle(false),
       m_async(blockingBehavior == LoadAsynchronously),
       m_requestContext(WebURLRequest::RequestContextUnspecified),
-      m_timeoutTimer(this, &DocumentThreadableLoader::didTimeout),
+      m_timeoutTimer(TaskRunnerHelper::get(TaskType::Networking, &document),
+                     this,
+                     &DocumentThreadableLoader::didTimeout),
       m_requestStartedSeconds(0.0),
       m_corsRedirectLimit(m_options.crossOriginRequestPolicy == UseAccessControl
                               ? kMaxCORSRedirects
@@ -199,22 +268,10 @@ void DocumentThreadableLoader::start(const ResourceRequest& request) {
 
   m_requestStartedSeconds = monotonicallyIncreasingTime();
 
-  // Save any CORS simple headers on the request here. If this request redirects
+  // Save any headers on the request here. If this request redirects
   // cross-origin, we cancel the old request create a new one, and copy these
   // headers.
-  const HTTPHeaderMap& headerMap = request.httpHeaderFields();
-  for (const auto& header : headerMap) {
-    if (FetchUtils::isSimpleHeader(header.key, header.value)) {
-      m_simpleRequestHeaders.add(header.key, header.value);
-    } else if (equalIgnoringCase(header.key, HTTPNames::Range) &&
-               m_options.crossOriginRequestPolicy == UseAccessControl &&
-               m_options.preflightPolicy == PreventPreflight) {
-      // Allow an exception for the "range" header for when CORS callers request
-      // no preflight, this ensures cross-origin redirects work correctly for
-      // crossOrigin enabled WebURLRequest::RequestContextVideo type requests.
-      m_simpleRequestHeaders.add(header.key, header.value);
-    }
-  }
+  m_requestHeaders = request.httpHeaderFields();
 
   // DocumentThreadableLoader is used by all javascript initiated fetch, so we
   // use this chance to record non-GET fetch script requests. However, this is
@@ -335,9 +392,7 @@ void DocumentThreadableLoader::makeCrossOriginAccessRequest(
     InspectorInstrumentation::
         documentThreadableLoaderFailedToStartLoadingForClient(m_document,
                                                               m_client);
-    ThreadableLoaderClient* client = m_client;
-    clear();
-    client->didFailAccessControlCheck(ResourceError(
+    dispatchDidFailAccessControlCheck(ResourceError(
         errorDomainBlinkInternal, 0, request.url().getString(),
         "Cross origin requests are only supported for protocol schemes: " +
             SchemeRegistry::listOfCORSEnabledURLSchemes() + "."));
@@ -347,9 +402,7 @@ void DocumentThreadableLoader::makeCrossOriginAccessRequest(
   // Non-secure origins may not make "external requests":
   // https://mikewest.github.io/cors-rfc1918/#integration-fetch
   if (!document().isSecureContext() && request.isExternalRequest()) {
-    ThreadableLoaderClient* client = m_client;
-    clear();
-    client->didFailAccessControlCheck(
+    dispatchDidFailAccessControlCheck(
         ResourceError(errorDomainBlinkInternal, 0, request.url().getString(),
                       "Requests to internal network resources are not allowed "
                       "from non-secure contexts (see https://goo.gl/Y0ZkNV). "
@@ -386,7 +439,15 @@ void DocumentThreadableLoader::makeCrossOriginAccessRequest(
     prepareCrossOriginRequest(crossOriginRequest);
     loadRequest(crossOriginRequest, crossOriginOptions);
   } else {
-    m_crossOriginNonSimpleRequest = true;
+    // Explicitly set the SkipServiceWorker flag here. Although the page is not
+    // controlled by a SW at this point, a new SW may be controlling the page
+    // when this request gets sent later. We should not send the actual request
+    // to the SW. https://crbug.com/604583
+    // Similarly we don't want any requests that could involve a CORS preflight
+    // to get intercepted by a foreign fetch service worker, even if we have the
+    // result of the preflight cached already. https://crbug.com/674370
+    crossOriginRequest.setSkipServiceWorker(
+        WebURLRequest::SkipServiceWorker::All);
 
     bool shouldForcePreflight =
         request.isExternalRequest() ||
@@ -420,7 +481,42 @@ void DocumentThreadableLoader::makeCrossOriginAccessRequest(
 }
 
 DocumentThreadableLoader::~DocumentThreadableLoader() {
-  CHECK(!m_client);
+  if (m_client) {
+    auto clientSpec = m_clientSpec;
+    WTF::debug::alias(&clientSpec);
+    switch (m_clientSpec) {
+      case ClientSpec::kBlobBytesConsumer:
+        crashWithBlobBytesConsumer();
+        break;
+      case ClientSpec::kEventSource:
+        crashWithEventSource();
+        break;
+      case ClientSpec::kFetchManager:
+        crashWithFetchManager();
+        break;
+      case ClientSpec::kFileReaderLoader:
+        crashWithFileReaderLoader();
+        break;
+      case ClientSpec::kMainThreadLoaderHolder:
+        crashWithMainThreadLoaderHolder();
+        break;
+      case ClientSpec::kNotificationImageLoader:
+        crashWithNotificationImageLoader();
+        break;
+      case ClientSpec::kWebAssociatedURLLoader:
+        crashWithWebAssociatedURLLoader();
+        break;
+      case ClientSpec::kWorkerScriptLoader:
+        crashWithWorkerScriptLoader();
+        break;
+      case ClientSpec::kXHR:
+        crashWithXHR();
+        break;
+      case ClientSpec::kTesting:
+        crashWithTesting();
+        break;
+    }
+  }
   DCHECK(!m_resource);
 }
 
@@ -452,29 +548,20 @@ void DocumentThreadableLoader::overrideTimeout(
 }
 
 void DocumentThreadableLoader::cancel() {
-  cancelWithError(ResourceError());
-}
-
-void DocumentThreadableLoader::cancelWithError(const ResourceError& error) {
-  // Cancel can re-enter and m_resource might be null here as a result.
+  // Cancel can re-enter, and therefore |resource()| might be null here as a
+  // result.
   if (!m_client || !resource()) {
     clear();
     return;
   }
 
-  ResourceError errorForCallback = error;
-  if (errorForCallback.isNull()) {
-    // FIXME: This error is sent to the client in didFail(), so it should not be
-    // an internal one. Use FrameLoaderClient::cancelledError() instead.
-    errorForCallback =
-        ResourceError(errorDomainBlinkInternal, 0,
-                      resource()->url().getString(), "Load cancelled");
-    errorForCallback.setIsCancellation(true);
-  }
+  // FIXME: This error is sent to the client in didFail(), so it should not be
+  // an internal one. Use FrameLoaderClient::cancelledError() instead.
+  ResourceError error(errorDomainBlinkInternal, 0, resource()->url(),
+                      "Load cancelled");
+  error.setIsCancellation(true);
 
-  ThreadableLoaderClient* client = m_client;
-  clear();
-  client->didFail(errorForCallback);
+  dispatchDidFail(error);
 }
 
 void DocumentThreadableLoader::setDefersLoading(bool value) {
@@ -525,7 +612,8 @@ bool DocumentThreadableLoader::redirectReceived(
     // TODO(horo): If we support any API which expose the internal body, we will
     // have to read the body. And also HTTPCache changes will be needed because
     // it doesn't store the body of redirect responses.
-    responseReceived(resource, redirectResponse, makeUnique<EmptyDataHandle>());
+    responseReceived(resource, redirectResponse,
+                     WTF::makeUnique<EmptyDataHandle>());
 
     if (m_client) {
       DCHECK(m_actualRequest.isNull());
@@ -546,6 +634,7 @@ bool DocumentThreadableLoader::redirectReceived(
   // Allow same origin requests to continue after allowing clients to audit the
   // redirect.
   if (isAllowedRedirect(request.url())) {
+    m_client->didReceiveRedirectTo(request.url());
     if (m_client->isDocumentThreadableLoaderClient()) {
       return static_cast<DocumentThreadableLoaderClient*>(m_client)
           ->willFollowRedirect(request, redirectResponse);
@@ -567,45 +656,49 @@ bool DocumentThreadableLoader::redirectReceived(
       document().frame()->loader().documentLoader(), redirectResponse,
       resource);
 
-  bool allowRedirect = false;
   String accessControlErrorDescription;
 
-  if (m_crossOriginNonSimpleRequest) {
-    // Non-simple cross origin requests (both preflight and actual one) are not
-    // allowed to follow redirect.
-    accessControlErrorDescription =
-        "Redirect from '" + redirectResponse.url().getString() + "' to '" +
-        request.url().getString() +
-        "' has been blocked by CORS policy: Request requires preflight, which "
-        "is disallowed to follow cross-origin redirect.";
-  } else if (!CrossOriginAccessControl::isLegalRedirectLocation(
-                 request.url(), accessControlErrorDescription)) {
-    accessControlErrorDescription =
-        "Redirect from '" + redirectResponse.url().getString() +
-        "' has been blocked by CORS policy: " + accessControlErrorDescription;
-  } else if (!m_sameOriginRequest &&
-             !passesAccessControlCheck(
-                 redirectResponse, effectiveAllowCredentials(),
-                 getSecurityOrigin(), accessControlErrorDescription,
-                 m_requestContext)) {
+  CrossOriginAccessControl::RedirectStatus redirectStatus =
+      CrossOriginAccessControl::checkRedirectLocation(request.url());
+  bool allowRedirect =
+      redirectStatus == CrossOriginAccessControl::kRedirectSuccess;
+  if (!allowRedirect) {
+    StringBuilder builder;
+    builder.append("Redirect from '");
+    builder.append(redirectResponse.url().getString());
+    builder.append("' has been blocked by CORS policy: ");
+    CrossOriginAccessControl::redirectErrorString(builder, redirectStatus,
+                                                  request.url());
+    accessControlErrorDescription = builder.toString();
+  } else if (!m_sameOriginRequest) {
     // The redirect response must pass the access control check if the original
     // request was not same-origin.
-    accessControlErrorDescription =
-        "Redirect from '" + redirectResponse.url().getString() + "' to '" +
-        request.url().getString() + "' has been blocked by CORS policy: " +
-        accessControlErrorDescription;
-  } else {
-    allowRedirect = true;
+    CrossOriginAccessControl::AccessStatus corsStatus =
+        CrossOriginAccessControl::checkAccess(
+            redirectResponse, effectiveAllowCredentials(), getSecurityOrigin());
+    allowRedirect = corsStatus == CrossOriginAccessControl::kAccessAllowed;
+    if (!allowRedirect) {
+      StringBuilder builder;
+      builder.append("Redirect from '");
+      builder.append(redirectResponse.url().getString());
+      builder.append("' to '");
+      builder.append(request.url().getString());
+      builder.append("' has been blocked by CORS policy: ");
+      CrossOriginAccessControl::accessControlErrorString(
+          builder, corsStatus, redirectResponse, getSecurityOrigin(),
+          m_requestContext);
+      accessControlErrorDescription = builder.toString();
+    }
   }
 
   if (!allowRedirect) {
-    ThreadableLoaderClient* client = m_client;
-    clear();
-    client->didFailAccessControlCheck(ResourceError(
+    dispatchDidFailAccessControlCheck(ResourceError(
         errorDomainBlinkInternal, 0, redirectResponse.url().getString(),
         accessControlErrorDescription));
     return false;
   }
+
+  m_client->didReceiveRedirectTo(request.url());
 
   // FIXME: consider combining this with CORS redirect handling performed by
   // CrossOriginAccessControl::handleRedirect().
@@ -645,9 +738,9 @@ bool DocumentThreadableLoader::redirectReceived(
   crossOriginRequest.clearHTTPReferrer();
   crossOriginRequest.clearHTTPOrigin();
   crossOriginRequest.clearHTTPUserAgent();
-  // Add any CORS simple request headers which we previously saved from the
+  // Add any request headers which we previously saved from the
   // original request.
-  for (const auto& header : m_simpleRequestHeaders)
+  for (const auto& header : m_requestHeaders)
     crossOriginRequest.setHTTPHeaderField(header.key, header.value);
   makeCrossOriginAccessRequest(crossOriginRequest);
 
@@ -715,31 +808,45 @@ void DocumentThreadableLoader::handlePreflightResponse(
     const ResourceResponse& response) {
   String accessControlErrorDescription;
 
-  if (!passesAccessControlCheck(
-          response, effectiveAllowCredentials(), getSecurityOrigin(),
-          accessControlErrorDescription, m_requestContext)) {
-    handlePreflightFailure(
-        response.url().getString(),
-        "Response to preflight request doesn't pass access control check: " +
-            accessControlErrorDescription);
+  CrossOriginAccessControl::AccessStatus corsStatus =
+      CrossOriginAccessControl::checkAccess(
+          response, effectiveAllowCredentials(), getSecurityOrigin());
+  if (corsStatus != CrossOriginAccessControl::kAccessAllowed) {
+    StringBuilder builder;
+    builder.append(
+        "Response to preflight request doesn't pass access "
+        "control check: ");
+    CrossOriginAccessControl::accessControlErrorString(
+        builder, corsStatus, response, getSecurityOrigin(), m_requestContext);
+    handlePreflightFailure(response.url().getString(), builder.toString());
     return;
   }
 
-  if (!passesPreflightStatusCheck(response, accessControlErrorDescription)) {
-    handlePreflightFailure(response.url().getString(),
-                           accessControlErrorDescription);
+  CrossOriginAccessControl::PreflightStatus preflightStatus =
+      CrossOriginAccessControl::checkPreflight(response);
+  if (preflightStatus != CrossOriginAccessControl::kPreflightSuccess) {
+    StringBuilder builder;
+    CrossOriginAccessControl::preflightErrorString(builder, preflightStatus,
+                                                   response);
+    handlePreflightFailure(response.url().getString(), builder.toString());
     return;
   }
 
-  if (m_actualRequest.isExternalRequest() &&
-      !passesExternalPreflightCheck(response, accessControlErrorDescription)) {
-    handlePreflightFailure(response.url().getString(),
-                           accessControlErrorDescription);
-    return;
+  if (m_actualRequest.isExternalRequest()) {
+    CrossOriginAccessControl::PreflightStatus externalPreflightStatus =
+        CrossOriginAccessControl::checkExternalPreflight(response);
+    if (externalPreflightStatus !=
+        CrossOriginAccessControl::kPreflightSuccess) {
+      StringBuilder builder;
+      CrossOriginAccessControl::preflightErrorString(
+          builder, externalPreflightStatus, response);
+      handlePreflightFailure(response.url().getString(), builder.toString());
+      return;
+    }
   }
 
   std::unique_ptr<CrossOriginPreflightResultCacheItem> preflightResult =
-      wrapUnique(
+      WTF::wrapUnique(
           new CrossOriginPreflightResultCacheItem(effectiveAllowCredentials()));
   if (!preflightResult->parse(response, accessControlErrorDescription) ||
       !preflightResult->allowsCrossOriginMethod(
@@ -765,10 +872,10 @@ void DocumentThreadableLoader::reportResponseReceived(
   DCHECK(frame);
   if (!frame)
     return;
+  TRACE_EVENT1(
+      "devtools.timeline", "ResourceReceiveResponse", "data",
+      InspectorReceiveResponseEvent::data(identifier, frame, response));
   DocumentLoader* loader = frame->loader().documentLoader();
-  TRACE_EVENT_INSTANT1(
-      "devtools.timeline", "ResourceReceiveResponse", TRACE_EVENT_SCOPE_THREAD,
-      "data", InspectorReceiveResponseEvent::data(identifier, frame, response));
   InspectorInstrumentation::didReceiveResourceResponse(
       frame, identifier, loader, response, resource());
   frame->console().reportResourceResponseReceived(loader, identifier, response);
@@ -820,17 +927,17 @@ void DocumentThreadableLoader::handleResponse(
 
   if (!m_sameOriginRequest &&
       m_options.crossOriginRequestPolicy == UseAccessControl) {
-    String accessControlErrorDescription;
-    if (!passesAccessControlCheck(
-            response, effectiveAllowCredentials(), getSecurityOrigin(),
-            accessControlErrorDescription, m_requestContext)) {
+    CrossOriginAccessControl::AccessStatus corsStatus =
+        CrossOriginAccessControl::checkAccess(
+            response, effectiveAllowCredentials(), getSecurityOrigin());
+    if (corsStatus != CrossOriginAccessControl::kAccessAllowed) {
       reportResponseReceived(identifier, response);
-
-      ThreadableLoaderClient* client = m_client;
-      clear();
-      client->didFailAccessControlCheck(
+      StringBuilder builder;
+      CrossOriginAccessControl::accessControlErrorString(
+          builder, corsStatus, response, getSecurityOrigin(), m_requestContext);
+      dispatchDidFailAccessControlCheck(
           ResourceError(errorDomainBlinkInternal, 0, response.url().getString(),
-                        accessControlErrorDescription));
+                        builder.toString()));
       return;
     }
   }
@@ -885,7 +992,7 @@ void DocumentThreadableLoader::notifyFinished(Resource* resource) {
   m_checker.notifyFinished(resource);
 
   if (resource->errorOccurred()) {
-    handleError(resource->resourceError());
+    dispatchDidFail(resource->resourceError());
   } else {
     handleSuccessfulFinish(resource->identifier(), resource->loadFinishTime());
   }
@@ -914,7 +1021,16 @@ void DocumentThreadableLoader::handleSuccessfulFinish(unsigned long identifier,
 }
 
 void DocumentThreadableLoader::didTimeout(TimerBase* timer) {
+  DCHECK(m_async);
   DCHECK_EQ(timer, &m_timeoutTimer);
+  // clearResource() may be called in clear() and some other places. clear()
+  // calls stop() on |m_timeoutTimer|. In the other places, the resource is set
+  // again. If the creation fails, clear() is called. So, here, resource() is
+  // always non-nullptr.
+  DCHECK(resource());
+  // When |m_client| is set to nullptr only in clear() where |m_timeoutTimer|
+  // is stopped. So, |m_client| is always non-nullptr here.
+  DCHECK(m_client);
 
   // Using values from net/base/net_error_list.h ERR_TIMED_OUT, Same as existing
   // FIXME above - this error should be coming from FrameLoaderClient to be
@@ -922,7 +1038,8 @@ void DocumentThreadableLoader::didTimeout(TimerBase* timer) {
   static const int timeoutError = -7;
   ResourceError error("net", timeoutError, resource()->url(), String());
   error.setIsTimeout(true);
-  cancelWithError(error);
+
+  dispatchDidFail(error);
 }
 
 void DocumentThreadableLoader::loadFallbackRequestForServiceWorker() {
@@ -940,12 +1057,6 @@ void DocumentThreadableLoader::loadActualRequest() {
 
   clearResource();
 
-  // Explicitly set the SkipServiceWorker flag here. Even if the page was not
-  // controlled by a SW when the preflight request was sent, a new SW may be
-  // controlling the page now by calling clients.claim(). We should not send
-  // the actual request to the SW. https://crbug.com/604583
-  actualRequest.setSkipServiceWorker(WebURLRequest::SkipServiceWorker::All);
-
   prepareCrossOriginRequest(actualRequest);
   loadRequest(actualRequest, actualOptions);
 }
@@ -958,12 +1069,17 @@ void DocumentThreadableLoader::handlePreflightFailure(
   // Prevent handleSuccessfulFinish() from bypassing access check.
   m_actualRequest = ResourceRequest();
 
+  dispatchDidFailAccessControlCheck(error);
+}
+
+void DocumentThreadableLoader::dispatchDidFailAccessControlCheck(
+    const ResourceError& error) {
   ThreadableLoaderClient* client = m_client;
   clear();
   client->didFailAccessControlCheck(error);
 }
 
-void DocumentThreadableLoader::handleError(const ResourceError& error) {
+void DocumentThreadableLoader::dispatchDidFail(const ResourceError& error) {
   ThreadableLoaderClient* client = m_client;
   clear();
   client->didFail(error);

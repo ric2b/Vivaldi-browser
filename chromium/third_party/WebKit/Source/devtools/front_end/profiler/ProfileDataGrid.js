@@ -26,7 +26,7 @@
 /**
  * @unrestricted
  */
-Profiler.ProfileDataGridNode = class extends UI.DataGridNode {
+Profiler.ProfileDataGridNode = class extends DataGrid.DataGridNode {
   /**
    * @param {!SDK.ProfileNode} profileNode
    * @param {!Profiler.ProfileDataGridTree} owningTree
@@ -208,7 +208,7 @@ Profiler.ProfileDataGridNode = class extends UI.DataGridNode {
 
   /**
    * @override
-   * @param {!UI.DataGridNode} profileDataGridNode
+   * @param {!DataGrid.DataGridNode} profileDataGridNode
    * @param {number} index
    */
   insertChild(profileDataGridNode, index) {
@@ -220,7 +220,7 @@ Profiler.ProfileDataGridNode = class extends UI.DataGridNode {
 
   /**
    * @override
-   * @param {!UI.DataGridNode} profileDataGridNode
+   * @param {!DataGrid.DataGridNode} profileDataGridNode
    */
   removeChild(profileDataGridNode) {
     super.removeChild(profileDataGridNode);
@@ -332,6 +332,7 @@ Profiler.ProfileDataGridTree = class {
     this.total = total;
     this.lastComparator = null;
     this.childrenByCallUID = new Map();
+    this.deepSearch = true;
   }
 
   /**
@@ -547,7 +548,8 @@ Profiler.ProfileDataGridTree = class {
       return;
 
     this._searchResults = [];
-    for (var current = this.children[0]; current; current = current.traverseNextNode(false, null, false)) {
+    const deepSearch = this.deepSearch;
+    for (var current = this.children[0]; current; current = current.traverseNextNode(!deepSearch, null, !deepSearch)) {
       if (matchesQuery(current))
         this._searchResults.push({profileNode: current});
     }
@@ -637,18 +639,18 @@ Profiler.ProfileDataGridNode.Formatter.prototype = {
    * @param {!Profiler.ProfileDataGridNode} node
    * @return {string}
    */
-  formatValue: function(value, node) {},
+  formatValue(value, node) {},
 
   /**
    * @param {number} value
    * @param {!Profiler.ProfileDataGridNode} node
    * @return {string}
    */
-  formatPercent: function(value, node) {},
+  formatPercent(value, node) {},
 
   /**
    * @param  {!Profiler.ProfileDataGridNode} node
    * @return {?Element}
    */
-  linkifyNode: function(node) {}
+  linkifyNode(node) {}
 };

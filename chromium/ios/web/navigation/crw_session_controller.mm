@@ -15,12 +15,12 @@
 #import "base/mac/foundation_util.h"
 #import "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
-#import "ios/web/history_state_util.h"
+#include "ios/web/history_state_util.h"
 #import "ios/web/navigation/crw_session_certificate_policy_manager.h"
 #import "ios/web/navigation/crw_session_controller+private_constructors.h"
 #import "ios/web/navigation/crw_session_entry.h"
-#include "ios/web/navigation/navigation_item_impl.h"
-#import "ios/web/navigation/navigation_manager_facade_delegate.h"
+#import "ios/web/navigation/navigation_item_impl.h"
+#include "ios/web/navigation/navigation_manager_facade_delegate.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
 #include "ios/web/navigation/time_smoother.h"
 #include "ios/web/public/browser_state.h"
@@ -164,7 +164,8 @@ NSString* const kWindowNameKey = @"windowName";
   return self;
 }
 
-- (id)initWithNavigationItems:(ScopedVector<web::NavigationItem>)scoped_items
+- (id)initWithNavigationItems:
+          (std::vector<std::unique_ptr<web::NavigationItem>>)items
                  currentIndex:(NSUInteger)currentIndex
                  browserState:(web::BrowserState*)browserState {
   self = [super init];
@@ -174,12 +175,9 @@ NSString* const kWindowNameKey = @"windowName";
     _browserState = browserState;
 
     // Create entries array from list of navigations.
-    _entries = [[NSMutableArray alloc] initWithCapacity:scoped_items.size()];
-    std::vector<web::NavigationItem*> items;
-    scoped_items.release(&items);
+    _entries = [[NSMutableArray alloc] initWithCapacity:items.size()];
 
-    for (size_t i = 0; i < items.size(); ++i) {
-      std::unique_ptr<web::NavigationItem> item(items[i]);
+    for (auto& item : items) {
       base::scoped_nsobject<CRWSessionEntry> entry(
           [[CRWSessionEntry alloc] initWithNavigationItem:std::move(item)]);
       [_entries addObject:entry];
@@ -373,7 +371,7 @@ NSString* const kWindowNameKey = @"windowName";
   // between new navigations and history stack navigation, hence the inclusion
   // of specific transiton type logic here, in order to make it reliable with
   // real-world observed behavior.
-  // TODO(stuartmorgan): Fix the way changes are detected/reported elsewhere
+  // TODO(crbug.com/676129): Fix the way changes are detected/reported elsewhere
   // in the web layer so that this hack can be removed.
   // Remove the workaround code from -presentSafeBrowsingWarningForResource:.
   CRWSessionEntry* currentEntry = self.currentEntry;
@@ -571,64 +569,32 @@ NSString* const kWindowNameKey = @"windowName";
   return _pendingEntry != nil;
 }
 
-- (void)insertStateFromSessionController:(CRWSessionController*)other {
-  [self copyStateFromAndPrune:other replaceState:NO];
-}
+- (void)insertStateFromSessionController:(CRWSessionController*)sourceSession {
+  DCHECK(sourceSession);
+  self.windowName = sourceSession.windowName;
 
-- (void)copyStateFromAndPrune:(CRWSessionController*)otherSession
-                 replaceState:(BOOL)replaceState {
-  DCHECK(otherSession);
-  if (replaceState) {
-    [_entries removeAllObjects];
-    self.currentNavigationIndex = -1;
-    _previousNavigationIndex = -1;
-    _pendingEntryIndex = -1;
-  }
-  self.windowName = otherSession.windowName;
-  NSInteger numInitialEntries = [_entries count];
+  // The other session may not have any entries, in which case there is nothing
+  // to insert.  The other session's currentNavigationEntry will be bogus
+  // in such cases, so ignore it and return early.
+  NSArray* sourceEntries = sourceSession.entries;
+  if (!sourceEntries.count)
+    return;
 
   // Cycle through the entries from the other session and insert them before any
   // entries from this session.  Do not copy anything that comes after the other
-  // session's current entry unless replaceState is true.
-  NSArray* otherEntries = [otherSession entries];
-
-  // The other session may not have any entries, in which case there is nothing
-  // to copy or prune.  The other session's currentNavigationEntry will be bogus
-  // in such cases, so ignore it and return early.
-  // TODO(rohitrao): Do we need to copy over any pending entries?  We might not
-  // add the prerendered page into the back/forward history if we don't copy
-  // pending entries.
-  if (![otherEntries count])
-    return;
-
-  NSInteger maxCopyIndex = replaceState ? [otherEntries count] - 1 :
-                                          [otherSession currentNavigationIndex];
-  for (NSInteger i = 0; i <= maxCopyIndex; ++i) {
-    [_entries insertObject:[otherEntries objectAtIndex:i] atIndex:i];
-    ++_currentNavigationIndex;
-    _previousNavigationIndex = -1;
+  // session's current entry.
+  NSInteger lastIndexToCopy = sourceSession.currentNavigationIndex;
+  for (NSInteger i = 0; i <= lastIndexToCopy; ++i) {
+    [_entries insertObject:sourceEntries[i] atIndex:i];
   }
 
+  _previousNavigationIndex = -1;
+  _currentNavigationIndex += lastIndexToCopy + 1;
   if (_pendingEntryIndex != -1)
-    _pendingEntryIndex += maxCopyIndex + 1;
+    _pendingEntryIndex += lastIndexToCopy + 1;
 
-  // If this CRWSessionController has no entries initially, reset
-  // |currentNavigationIndex_| to be in bounds.
-  if (!numInitialEntries) {
-    if (replaceState) {
-      self.currentNavigationIndex = [otherSession currentNavigationIndex];
-      _previousNavigationIndex = [otherSession previousNavigationIndex];
-    } else {
-      self.currentNavigationIndex = maxCopyIndex;
-    }
-  }
-  DCHECK_LT((NSUInteger)_currentNavigationIndex, [_entries count]);
+  DCHECK_LT(static_cast<NSUInteger>(_currentNavigationIndex), _entries.count);
   DCHECK(_pendingEntryIndex == -1 || _pendingEntry);
-}
-
-- (BOOL)canGoDelta:(int)delta {
-  NSInteger index = [self indexOfEntryForDelta:delta];
-  return 0 <= index && static_cast<NSUInteger>(index) < _entries.count;
 }
 
 - (void)goToEntryAtIndex:(NSInteger)index {
@@ -687,36 +653,6 @@ NSString* const kWindowNameKey = @"windowName";
   return entries;
 }
 
-- (std::vector<GURL>)currentRedirectedUrls {
-  std::vector<GURL> results;
-  if (_pendingEntry) {
-    web::NavigationItem* item = [_pendingEntry navigationItem];
-    results.push_back(item->GetURL());
-
-    if (!ui::PageTransitionIsRedirect(item->GetTransitionType()))
-      return results;
-  }
-
-  if (![_entries count])
-    return results;
-
-  NSInteger index = _currentNavigationIndex;
-  // Add urls in the redirected entries.
-  while (index >= 0) {
-    web::NavigationItem* item = [[_entries objectAtIndex:index] navigationItem];
-    if (!ui::PageTransitionIsRedirect(item->GetTransitionType()))
-      break;
-    results.push_back(item->GetURL());
-    --index;
-  }
-  // Add the last non-redirected entry.
-  if (index >= 0) {
-    web::NavigationItem* item = [[_entries objectAtIndex:index] navigationItem];
-    results.push_back(item->GetURL());
-  }
-  return results;
-}
-
 - (BOOL)isSameDocumentNavigationBetweenEntry:(CRWSessionEntry*)firstEntry
                                     andEntry:(CRWSessionEntry*)secondEntry {
   if (!firstEntry || !secondEntry || firstEntry == secondEntry)
@@ -761,59 +697,6 @@ NSString* const kWindowNameKey = @"windowName";
     [_pendingEntry navigationItem]->SetIsOverridingUserAgent(true);
   else
     _useDesktopUserAgentForNextPendingEntry = YES;
-}
-
-- (NSInteger)indexOfEntryForDelta:(int)delta {
-  NSInteger result = _currentNavigationIndex;
-  if (delta < 0) {
-    if (_transientEntry) {
-      // Going back from transient entry is a matter of discarding it and there
-      // is no need to move navigation index back.
-      delta++;
-    }
-
-    while (delta < 0 && result > 0) {
-      // To stop the user getting 'stuck' on redirecting pages they weren't
-      // even aware existed, it is necessary to pass over pages that would
-      // immediately result in a redirect (the entry *before* the redirected
-      // page).
-      while (result > 0 && [self isRedirectTransitionForEntryAtIndex:result]) {
-        --result;
-      }
-      --result;
-      ++delta;
-    }
-    // Result may be out of bounds, so stop trying to skip redirect items and
-    // simply add the remainder.
-    result += delta;
-  } else if (delta > 0) {
-    NSInteger count = static_cast<NSInteger>([_entries count]);
-    if (_pendingEntry && _pendingEntryIndex == -1) {
-      // Chrome for iOS does not allow forward navigation if there is another
-      // pending navigation in progress. Returning invalid index indicates that
-      // forward navigation will not be allowed (and |NSNotFound| works for
-      // that). This is different from other platforms which allow forward
-      // navigation if pending entry exist.
-      // TODO(crbug.com/661858): Remove this once back-forward navigation uses
-      // pending index.
-      return NSNotFound;
-    }
-
-    while (delta > 0 && result < count) {
-      ++result;
-      --delta;
-      // As with going back, skip over redirects.
-      while (result + 1 < count &&
-             [self isRedirectTransitionForEntryAtIndex:result + 1]) {
-        ++result;
-      }
-    }
-    // Result may be out of bounds, so stop trying to skip redirect items and
-    // simply add the remainder.
-    result += delta;
-  }
-
-  return result;
 }
 
 #pragma mark -

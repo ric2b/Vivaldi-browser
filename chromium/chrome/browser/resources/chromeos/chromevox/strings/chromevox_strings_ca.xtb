@@ -74,6 +74,7 @@
 <translation id="1680732992526857724"><ph name="NAME" />, activa</translation>
 <translation id="1692077714702418899">línia estructural</translation>
 <translation id="1700517974991662022">Visitat</translation>
+<translation id="1714116687360794776">Mesurador</translation>
 <translation id="1722567105086139392">Enllaç</translation>
 <translation id="1727806147743597030">peu</translation>
 <translation id="174268867904053074">Gràfic següent</translation>
@@ -123,12 +124,13 @@
 <translation id="2344193891939537199">Control de data i hora</translation>
 <translation id="2347456970887948350">Un enllaç</translation>
 <translation id="2359897517538099099">No teniu activat el mode de taula.</translation>
+<translation id="2390264819538553347">Prem Retorn per avançar i Retrocés per tornar enrere.</translation>
 <translation id="241124561063364910">i, tot seguit,</translation>
 <translation id="2416512023405990736">Una casella de selecció desmarcada</translation>
 <translation id="2417569100218200841">Informació sobre el contingut</translation>
 <translation id="2422937916923936891">Casella de selecció de l'element de menú</translation>
 <translation id="2428534162001909979">Menús d'ordres</translation>
-<translation id="2429669115401274487">p.m.</translation>
+<translation id="2429669115401274487">p. m.</translation>
 <translation id="2435413342408885429"><ph name="KEY" /> és ara la nova tecla modificadora de ChromeVox.</translation>
 <translation id="2450814015951372393">Casella de selecció</translation>
 <translation id="2462626033734746142">Grup de botons d'opció</translation>
@@ -155,7 +157,7 @@
 <translation id="2706462751667573066">Amunt</translation>
 <translation id="2717271541250958000">tabpnl</translation>
 <translation id="2723001399770238859">àudio</translation>
-<translation id="2732718972699418926">a.m.</translation>
+<translation id="2732718972699418926">a. m.</translation>
 <translation id="2749275490991666823">Comprovat</translation>
 <translation id="27527859628328957">Vés a l'element enfocable següent</translation>
 <translation id="2770781857296573485">Entra a l'exploració de grups</translation>
@@ -177,6 +179,7 @@
 <translation id="2899328121302785497">{COUNT,plural, =1{clau d'obertura}other{# claus d'obertura}}</translation>
 <translation id="2911433807131383493">Obre el tutorial de ChromeVox</translation>
 <translation id="2932083475399492303">Commuta el tipus de línia entre estructural o disseny.</translation>
+<translation id="2944762337049891859">Llegeix la pàgina automàticament quan s'acabi de carregar.</translation>
 <translation id="2964026537669811554">Grup de capçalera</translation>
 <translation id="296951647852255825">{COUNT,plural, =1{tabulació}other{# tabulacions}}</translation>
 <translation id="2972078295414139404">No hi ha cap enllaç visitat anterior.</translation>
@@ -188,6 +191,7 @@
 <translation id="3012414509011670858">No hi ha cap secció anterior.</translation>
 <translation id="3030432017085518523">Botó d'opció de l'element del menú</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apòstrof}other{# apòstrofs}}</translation>
+<translation id="3040901448410802366">Indicador de progrés</translation>
 <translation id="3046838483509668188">Opcions de ChromeVox</translation>
 <translation id="3047143736589213134">Teclat experimental</translation>
 <translation id="3060756054951570867">S'ha obert el menú <ph name="TITLE" />.</translation>
@@ -230,7 +234,7 @@ Si has acabat el tutorial, fes servir ChromeVox per desplaçar-te fins al botó 
 <translation id="3321460131042519426">Activa l'ajust de la paraula a la línia</translation>
 <translation id="3322936298410871309">Capçalera del nivell 1 anterior</translation>
 <translation id="3323447499041942178">Quadre de text</translation>
-<translation id="3329854757664111426">Prem Retorn per avançar.</translation>
+<translation id="3338224621010291843">Control lliscant <ph name="VALUE" /> <ph name="NAME" /></translation>
 <translation id="3353420241558113817">{"ar": "Àrab",
         "bg": "Búlgar",
         "ca": "Català",
@@ -307,6 +311,7 @@ Si has acabat el tutorial, fes servir ChromeVox per desplaçar-te fins al botó 
 <translation id="3712520970944678024">Control de veu</translation>
 <translation id="3716845769494773620">Diverses línies</translation>
 <translation id="3731746171184829332">No hi ha cap capçalera anterior.</translation>
+<translation id="3735039640698208086">En reproduir àudio…</translation>
 <translation id="3762198587642264450">Va al final de la fila actual.</translation>
 <translation id="3777255250339039212">h1</translation>
 <translation id="3793710123303304873">S'ha sortit del diàleg.</translation>
@@ -547,6 +552,7 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="5876817486144482042">Redueix el volum de la veu.</translation>
 <translation id="5887397643266327462">Subtítols en braille activats.</translation>
 <translation id="5891934789323004067">Taula</translation>
+<translation id="5899860758576822363">Reprodueix a un volum més baix quan ChromeVox parli</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{signe igual}other{# signes igual}}</translation>
 <translation id="5939518447894949180">Restableix</translation>
 <translation id="5948123859135882163">Canvia la interpretació de les expressions matemàtiques, entre estructural i semàntica.</translation>
@@ -569,6 +575,7 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="6132506484792346370">Un quadre de llista o combinat</translation>
 <translation id="6138576064440631958">Acord: $1</translation>
 <translation id="6142308968191113180">Capçalera 4</translation>
+<translation id="6164829606128959761">comptador</translation>
 <translation id="6169420925157477918">Imatge amb descripció llarga</translation>
 <translation id="6186305613600865047">Vés a la part inferior de la pàgina.</translation>
 <translation id="6193330012414963395">a. m./p. m.</translation>
@@ -579,6 +586,7 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="6281876499889881039">Element similar següent</translation>
 <translation id="6282062888058716985">navegació</translation>
 <translation id="6290434000785343030">No hi ha cap quadre combinat més.</translation>
+<translation id="6305702903308659374">Reprodueix a un volum normal encara que ChromeVox parli</translation>
 <translation id="6307969636681130414">Premut</translation>
 <translation id="6322856989298155004">Sons</translation>
 <translation id="6324551002951139333">S'ha detectat un error gramatical.</translation>
@@ -691,7 +699,6 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="7492049978501397201">Diàleg introduït</translation>
 <translation id="7518543783849163354">Per aturar els comentaris de ChromeVox temporalment, prem la tecla Control.</translation>
 <translation id="7532613204005497612">Juny</translation>
-<translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, control lliscant</translation>
 <translation id="7552432549459840808">Dreceres útils de Chrome</translation>
 <translation id="7579911500627256166">punt <ph name="DOT" /></translation>
 <translation id="7596919493010894443">S'ha esborrat la selecció.</translation>
@@ -769,6 +776,7 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="8455868257606149352">Màx.: <ph name="X" /></translation>
 <translation id="84575901236241018">té una tecla d'accés, <ph name="KEY" /></translation>
 <translation id="847154984256717791">ocupat</translation>
+<translation id="8476408756881832830">Pausa la reproducció quan ChromeVox parli</translation>
 <translation id="8476508772960940536">visió general de la finestra</translation>
 <translation id="8503360654911991865">Disminueix la granularitat de la navegació.</translation>
 <translation id="8520472399088452386">Botó de selecció de valors</translation>

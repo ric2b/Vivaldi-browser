@@ -4,12 +4,10 @@
 
 package org.chromium.chrome.browser.permissions;
 
-import android.test.suitebuilder.annotation.LargeTest;
-import android.test.suitebuilder.annotation.MediumTest;
-import android.test.suitebuilder.annotation.Smoke;
+import android.support.test.filters.LargeTest;
+import android.support.test.filters.MediumTest;
 
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.tab.Tab;
@@ -55,8 +53,8 @@ public class GeolocationTest extends PermissionTestCaseBase {
      * Verify Geolocation creates an InfoBar and receives a mock location.
      * @throws Exception
      */
-    @Smoke
     @MediumTest
+    @CommandLineFlags.Add("disable-features=" + MODAL_FLAG)
     @Feature({"Location", "Main"})
     public void testGeolocationPlumbingAllowedInfoBar() throws Exception {
         runTest("initiate_getCurrentPosition()", 1, false, false, false, false);
@@ -66,7 +64,6 @@ public class GeolocationTest extends PermissionTestCaseBase {
      * Verify Geolocation creates a dialog and receives a mock location.
      * @throws Exception
      */
-    @Smoke
     @MediumTest
     @CommandLineFlags.Add("enable-features=" + MODAL_FLAG)
     @Feature({"Location", "Main"})
@@ -79,7 +76,6 @@ public class GeolocationTest extends PermissionTestCaseBase {
      * enabled and permitted to trigger without a gesture.
      * @throws Exception
      */
-    @Smoke
     @MediumTest
     @CommandLineFlags.Add({NO_GESTURE_FEATURE, FORCE_FIELDTRIAL, FORCE_FIELDTRIAL_PARAMS})
     @Feature({"Location", "Main"})
@@ -92,7 +88,6 @@ public class GeolocationTest extends PermissionTestCaseBase {
      * no user gesture is specified.
      * @throws Exception
      */
-    @Smoke
     @MediumTest
     @CommandLineFlags.Add("enable-features=" + MODAL_FLAG)
     @Feature({"Location", "Main"})
@@ -105,6 +100,7 @@ public class GeolocationTest extends PermissionTestCaseBase {
      * @throws Exception
      */
     @MediumTest
+    @CommandLineFlags.Add("disable-features=" + MODAL_FLAG)
     @Feature({"Location"})
     public void testGeolocationWatchInfoBar() throws Exception {
         runTest("initiate_watchPosition()", 2, false, false, false, false);
@@ -127,7 +123,7 @@ public class GeolocationTest extends PermissionTestCaseBase {
      * @throws Exception
      */
     @MediumTest
-    @CommandLineFlags.Add("enable-features=" + TOGGLE_FLAG)
+    @CommandLineFlags.Add({"enable-features=" + TOGGLE_FLAG, "disable-features=" + MODAL_FLAG})
     @Feature({"Location"})
     public void testGeolocationPersistenceAllowedInfoBar() throws Exception {
         runTest("initiate_getCurrentPosition()", 1, false, false, true, false);
@@ -151,7 +147,7 @@ public class GeolocationTest extends PermissionTestCaseBase {
      * @throws Exception
      */
     @MediumTest
-    @CommandLineFlags.Add("enable-features=" + TOGGLE_FLAG)
+    @CommandLineFlags.Add({"enable-features=" + TOGGLE_FLAG, "disable-features=" + MODAL_FLAG})
     @Feature({"Location"})
     public void testGeolocationPersistenceOffAllowedInfoBar() throws Exception {
         Tab tab = getActivity().getActivityTab();
@@ -179,7 +175,6 @@ public class GeolocationTest extends PermissionTestCaseBase {
      */
     @MediumTest
     @CommandLineFlags.Add("enable-features=" + MODAL_TOGGLE_FLAG)
-    @DisabledTest(message = "crbug.com/663677")  // Flaky.
     @Feature({"Location"})
     public void testGeolocationPersistenceOffAllowedDialog() throws Exception {
         Tab tab = getActivity().getActivityTab();
@@ -206,7 +201,7 @@ public class GeolocationTest extends PermissionTestCaseBase {
      * @throws Exception
      */
     @LargeTest
-    @CommandLineFlags.Add("enable-features=" + TOGGLE_FLAG)
+    @CommandLineFlags.Add({"enable-features=" + TOGGLE_FLAG, "disable-features=" + MODAL_FLAG})
     @Feature({"Location"})
     public void testGeolocationWatchPersistenceOffAllowedInfoBar() throws Exception {
         runTest("initiate_watchPosition()", 2, false, false, true, true);
@@ -219,7 +214,6 @@ public class GeolocationTest extends PermissionTestCaseBase {
      */
     @LargeTest
     @CommandLineFlags.Add("enable-features=" + MODAL_TOGGLE_FLAG)
-    @DisabledTest(message = "crbug.com/662294")  // Flaky.
     @Feature({"Location"})
     public void testGeolocationWatchPersistenceOffAllowedDialog() throws Exception {
         runTest("initiate_watchPosition()", 2, true, true, true, true);

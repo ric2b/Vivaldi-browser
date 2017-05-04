@@ -139,8 +139,10 @@ Sources.SourcesSearchScope = class {
     var uiSourceCodes = project.uiSourceCodes();
     for (var i = 0; i < uiSourceCodes.length; ++i) {
       var uiSourceCode = uiSourceCodes[i];
+      if (!uiSourceCode.contentType().isTextType())
+        continue;
       var binding = Persistence.persistence.binding(uiSourceCode);
-      if (binding && binding.fileSystem === uiSourceCode)
+      if (binding && binding.network === uiSourceCode)
         continue;
       if (dirtyOnly && !uiSourceCode.isDirty())
         continue;
@@ -220,15 +222,7 @@ Sources.SourcesSearchScope = class {
       if (uiSourceCode.isDirty())
         contentLoaded.call(this, uiSourceCode, uiSourceCode.workingCopy());
       else
-        uiSourceCode.checkContentUpdated(true, contentUpdated.bind(this, uiSourceCode));
-    }
-
-    /**
-     * @param {!Workspace.UISourceCode} uiSourceCode
-     * @this {Sources.SourcesSearchScope}
-     */
-    function contentUpdated(uiSourceCode) {
-      uiSourceCode.requestContent().then(contentLoaded.bind(this, uiSourceCode));
+        uiSourceCode.requestContent().then(contentLoaded.bind(this, uiSourceCode));
     }
 
     /**

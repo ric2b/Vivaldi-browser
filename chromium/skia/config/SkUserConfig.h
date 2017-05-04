@@ -193,17 +193,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 //
 // Remove these as we update our sites.
 //
-#ifndef    SK_SUPPORT_LEGACY_GETTOPDEVICE
-#   define SK_SUPPORT_LEGACY_GETTOPDEVICE
-#endif
-
-#ifndef    SK_SUPPORT_LEGACY_GETDEVICE
-#   define SK_SUPPORT_LEGACY_GETDEVICE
-#endif
-
-#ifndef SK_SUPPORT_LEGACY_CLIP_REGIONOPS
-#define SK_SUPPORT_LEGACY_CLIP_REGIONOPS
-#endif
 
 // Workaround for poor anisotropic mipmap quality,
 // pending Skia ripmap support.
@@ -212,28 +201,30 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_SUPPORT_LEGACY_ANISOTROPIC_MIPMAP_SCALE
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_CANVAS_IS_REFCNT
-#   define SK_SUPPORT_LEGACY_CANVAS_IS_REFCNT
-#endif
-
 #ifndef    SK_IGNORE_ETC1_SUPPORT
 #   define SK_IGNORE_ETC1_SUPPORT
-#endif
-
-#ifndef    SK_SUPPORT_LEGACY_XFERMODE_IS_PUBLIC
-#   define SK_SUPPORT_LEGACY_XFERMODE_IS_PUBLIC
 #endif
 
 #ifndef    SK_IGNORE_GPU_DITHER
 #   define SK_IGNORE_GPU_DITHER
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_EVAL_CUBIC
-#   define SK_SUPPORT_LEGACY_EVAL_CUBIC
+#ifndef    SK_DISABLE_COLOR_XFORM_PIPELINE
+#   define SK_DISABLE_COLOR_XFORM_PIPELINE
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_IMAGE_ENCODER_CLASS
-#   define SK_SUPPORT_LEGACY_IMAGE_ENCODER_CLASS
+#ifndef    SK_SUPPORT_LEGACY_BITMAP_SETPIXELREF
+#   define SK_SUPPORT_LEGACY_BITMAP_SETPIXELREF
+#endif
+
+// Remove this after we fixed all the issues related to the new SDF algorithm
+// (https://codereview.chromium.org/1643143002)
+#ifndef    SK_USE_LEGACY_DISTANCE_FIELDS
+#   define SK_USE_LEGACY_DISTANCE_FIELDS
+#endif
+
+#ifndef    SK_SUPPORT_LEGACY_CLIPOP_EXOTIC_NAMES
+#   define SK_SUPPORT_LEGACY_CLIPOP_EXOTIC_NAMES
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
@@ -269,9 +260,9 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 // Enabling the screenspace AA tessellating path renderer needs rebaselines.
 #define SK_DISABLE_SCREENSPACE_TESS_AA_PATH_RENDERER
 
-// Disable analytic AA until we fix all the Chrome tests.
-// (we now set analytic AA as default in Skia.)
-#define SK_NO_ANALYTIC_AA
+#ifndef    SK_SUPPORT_LEGACY_AAA
+#   define SK_SUPPORT_LEGACY_AAA
+#endif
 
 // ===== End Chrome-specific definitions =====
 

@@ -4,6 +4,7 @@
 
 import("//build/config/ui.gni")
 import("//chrome/common/features.gni")
+import("//ppapi/features/features.gni")
 import("//printing/features/features.gni")
 import("//services/service_manager/public/service_manifest.gni")
 import("//tools/grit/grit_rule.gni")
@@ -317,6 +318,8 @@ static_library("test_support") {
     "//components/startup_metric_utils/browser:lib",
     "//content/public/app:both",
     "//content/public/common",
+    "//pdf",
+    "//ppapi/features",
     "//printing/features",
     "//ui/base",
   ]
@@ -330,6 +333,7 @@ static_library("test_support") {
   if (is_win) {
     deps += [
       "//chrome:chrome_initial",
+      "//chrome/install_static:install_static_util",
       "//sandbox/win:sandbox",
     ]
   }
@@ -339,10 +343,6 @@ static_library("test_support") {
       "//chrome/browser/chromeos",
       "//components/metrics/leak_detector:leak_detector",
     ]
-  }
-
-  if (enable_pdf) {
-    deps += [ "//pdf" ]
   }
 
   if (enable_plugins && enable_nacl) {
@@ -355,8 +355,12 @@ static_library("test_support") {
 
 service_manifest_overlay("chrome_content_browser_manifest_overlay") {
   source = "//chrome/browser/chrome_content_browser_manifest_overlay.json"
-  packaged_services = [ "image_decoder" ]
+  packaged_services = [
+    "image_decoder",
+    "preferences",
+  ]
   deps = [
+    "//chrome/browser:preferences_manifest",
     "//services/image_decoder:manifest",
   ]
 }

@@ -6,7 +6,7 @@
 
 #include <map>
 
-#include "ash/aura/wm_window_aura.h"
+#include "ash/common/session/session_controller.h"
 #include "ash/common/shelf/shelf_layout_manager.h"
 #include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
@@ -15,6 +15,8 @@
 #include "ash/common/wm/panels/panel_layout_manager.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/workspace/workspace_window_resizer.h"
+#include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
@@ -50,7 +52,7 @@ std::string GetWindowNames(const aura::Window* window) {
   for (size_t i = 0; i < window->children().size(); ++i) {
     if (i != 0)
       result += " ";
-    result += window->children()[i]->name();
+    result += window->children()[i]->GetName();
   }
   return result;
 }
@@ -64,7 +66,7 @@ std::string GetLayerNames(const aura::Window* window) {
   LayerToWindowNameMap window_names;
   for (size_t i = 0; i < window->children().size(); ++i) {
     window_names[window->children()[i]->layer()] =
-        window->children()[i]->name();
+        window->children()[i]->GetName();
   }
 
   std::string result;
@@ -121,7 +123,7 @@ class WorkspaceControllerTest : public test::AshMDTestBase {
                                 const gfx::Rect& bounds) {
     aura::Window* window = CreateTestWindowInShellWithDelegateAndType(
         delegate, ui::wm::WINDOW_TYPE_PANEL, 0, bounds);
-    WmWindow* wm_window = WmWindowAura::Get(window);
+    WmWindow* wm_window = WmWindow::Get(window);
     test::TestShelfDelegate::instance()->AddShelfItem(wm_window);
     PanelLayoutManager::Get(wm_window)->Relayout();
     return window;
@@ -506,6 +508,12 @@ TEST_P(WorkspaceControllerTest, ShelfStateUpdated) {
 // Verifies going from maximized to minimized sets the right state for painting
 // the background of the launcher.
 TEST_P(WorkspaceControllerTest, MinimizeResetsVisibility) {
+  // TODO(bruthig|xiyuan): Move SessionState setup into AshTestBase or
+  // AshTestHelper.
+  mojom::SessionInfoPtr info = mojom::SessionInfo::New();
+  info->state = session_manager::SessionState::ACTIVE;
+  ash::WmShell::Get()->session_controller()->SetSessionInfo(std::move(info));
+
   std::unique_ptr<Window> w1(CreateTestWindow());
   w1->Show();
   wm::ActivateWindow(w1.get());
@@ -1059,8 +1067,8 @@ TEST_P(WorkspaceControllerTest, TestRestoreToUserModifiedBounds) {
 
   // A user moved the window.
   std::unique_ptr<WindowResizer> resizer(
-      CreateWindowResizer(WmWindowAura::Get(window1.get()), gfx::Point(),
-                          HTCAPTION, aura::client::WINDOW_MOVE_SOURCE_MOUSE)
+      CreateWindowResizer(WmWindow::Get(window1.get()), gfx::Point(), HTCAPTION,
+                          aura::client::WINDOW_MOVE_SOURCE_MOUSE)
           .release());
   gfx::Point location = resizer->GetInitialLocation();
   location.Offset(-50, 0);

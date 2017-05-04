@@ -38,14 +38,12 @@ class ECPrivateKey;
 namespace net {
 
 class BidirectionalStreamImpl;
-class ClientSocketHandle;
 class HttpAuthController;
 class HttpNetworkSession;
 class HttpStream;
 class HttpStreamRequest;
 class IOBuffer;
 class ProxyInfo;
-class SpdySession;
 class SSLPrivateKey;
 struct HttpRequestInfo;
 
@@ -124,23 +122,14 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
 
   // NetworkThrottleManager::Delegate methods:
-  void OnThrottleStateChanged() override;
+  void OnThrottleUnblocked(NetworkThrottleManager::Throttle* throttle) override;
 
  private:
-  friend class HttpNetworkTransactionSSLTest;
-
-  FRIEND_TEST_ALL_PREFIXES(HttpNetworkTransactionTest,
-                           ResetStateForRestart);
-  FRIEND_TEST_ALL_PREFIXES(HttpNetworkTransactionTest, EnableNPN);
-  FRIEND_TEST_ALL_PREFIXES(HttpNetworkTransactionTest, DisableNPN);
-  FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest,
-                           WindowUpdateReceived);
-  FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest,
-                           WindowUpdateSent);
-  FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest,
-                           WindowUpdateOverflow);
-  FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest,
-                           FlowControlStallResume);
+  FRIEND_TEST_ALL_PREFIXES(HttpNetworkTransactionTest, ResetStateForRestart);
+  FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest, WindowUpdateReceived);
+  FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest, WindowUpdateSent);
+  FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest, WindowUpdateOverflow);
+  FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest, FlowControlStallResume);
   FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest,
                            FlowControlStallResumeAfterSettings);
   FRIEND_TEST_ALL_PREFIXES(SpdyNetworkTransactionTest,

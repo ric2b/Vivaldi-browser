@@ -831,7 +831,7 @@ const BookmarkNode* BookmarkChangeProcessor::CreateBookmarkNode(
     const int64_t create_time_internal = specifics.creation_time_us();
     base::Time create_time = (create_time_internal == 0) ?
         base::Time::Now() : base::Time::FromInternalValue(create_time_internal);
-	base::string16 dummy;
+    base::string16 dummy;
     node = model->AddURLWithCreationTimeAndMetaInfo(
         parent, index, title, url, create_time,
         GetBookmarkMetaInfo(sync_node).get(),
@@ -839,6 +839,20 @@ const BookmarkNode* BookmarkChangeProcessor::CreateBookmarkNode(
         dummy,dummy,dummy);
     if (node)
       SetBookmarkFavicon(sync_node, node, model, sync_client);
+  }
+  {
+    const sync_pb::BookmarkSpecifics& specifics =
+      sync_node->GetBookmarkSpecifics();
+    BookmarkNode* mutable_node = const_cast<BookmarkNode*>(node);
+    if (specifics.has_special_node_type()) {
+      switch (specifics.special_node_type()) {
+      case sync_pb::BookmarkSpecifics::TRASH_NODE:
+        mutable_node->set_type(BookmarkNode::TRASH);
+        break;
+      default:
+        break;
+      }
+    }
   }
 
   return node;

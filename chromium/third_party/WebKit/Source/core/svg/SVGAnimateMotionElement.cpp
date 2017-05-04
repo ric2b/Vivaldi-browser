@@ -71,17 +71,16 @@ bool SVGAnimateMotionElement::hasValidTarget() {
          targetCanHaveMotionTransform(*targetElement());
 }
 
-void SVGAnimateMotionElement::parseAttribute(const QualifiedName& name,
-                                             const AtomicString& oldValue,
-                                             const AtomicString& value) {
-  if (name == SVGNames::pathAttr) {
+void SVGAnimateMotionElement::parseAttribute(
+    const AttributeModificationParams& params) {
+  if (params.name == SVGNames::pathAttr) {
     m_path = Path();
-    buildPathFromString(value, m_path);
+    buildPathFromString(params.newValue, m_path);
     updateAnimationPath();
     return;
   }
 
-  SVGAnimationElement::parseAttribute(name, oldValue, value);
+  SVGAnimationElement::parseAttribute(params);
 }
 
 SVGAnimateMotionElement::RotateMode SVGAnimateMotionElement::getRotateMode()
@@ -164,10 +163,8 @@ void SVGAnimateMotionElement::clearAnimatedType() {
 
   transform->makeIdentity();
 
-  if (LayoutObject* targetLayoutObject = targetElement->layoutObject()) {
-    targetLayoutObject->setNeedsTransformUpdate();
-    markForLayoutAndParentResourceInvalidation(targetLayoutObject);
-  }
+  if (LayoutObject* targetLayoutObject = targetElement->layoutObject())
+    invalidateForAnimateMotionTransformChange(*targetLayoutObject);
 }
 
 bool SVGAnimateMotionElement::calculateToAtEndOfDurationValue(
@@ -208,7 +205,7 @@ void SVGAnimateMotionElement::calculateAnimatedValue(float percentage,
     return;
 
   if (LayoutObject* targetLayoutObject = targetElement->layoutObject())
-    targetLayoutObject->setNeedsTransformUpdate();
+    invalidateForAnimateMotionTransformChange(*targetLayoutObject);
 
   if (!isAdditive())
     transform->makeIdentity();
@@ -261,9 +258,6 @@ void SVGAnimateMotionElement::applyResultsToTarget() {
   if (!targetElement)
     return;
 
-  if (LayoutObject* layoutObject = targetElement->layoutObject())
-    markForLayoutAndParentResourceInvalidation(layoutObject);
-
   AffineTransform* t = targetElement->animateMotionTransform();
   if (!t)
     return;
@@ -277,10 +271,8 @@ void SVGAnimateMotionElement::applyResultsToTarget() {
     if (!transform)
       continue;
     transform->setMatrix(t->a(), t->b(), t->c(), t->d(), t->e(), t->f());
-    if (LayoutObject* layoutObject = shadowTreeElement->layoutObject()) {
-      layoutObject->setNeedsTransformUpdate();
-      markForLayoutAndParentResourceInvalidation(layoutObject);
-    }
+    if (LayoutObject* layoutObject = shadowTreeElement->layoutObject())
+      invalidateForAnimateMotionTransformChange(*layoutObject);
   }
 }
 
@@ -301,6 +293,16 @@ void SVGAnimateMotionElement::updateAnimationMode() {
     setAnimationMode(PathAnimation);
   else
     SVGAnimationElement::updateAnimationMode();
+}
+
+void SVGAnimateMotionElement::invalidateForAnimateMotionTransformChange(
+    LayoutObject& object) {
+  object.setNeedsTransformUpdate();
+  if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled()) {
+    // The transform paint property relies on the SVG transform value.
+    object.setNeedsPaintPropertyUpdate();
+  }
+  markForLayoutAndParentResourceInvalidation(&object);
 }
 
 }  // namespace blink

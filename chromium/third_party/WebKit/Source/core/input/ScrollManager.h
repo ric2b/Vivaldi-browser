@@ -25,9 +25,9 @@ class LayoutObject;
 class LocalFrame;
 class PaintLayer;
 class PaintLayerScrollableArea;
-class PlatformGestureEvent;
 class Scrollbar;
 class ScrollState;
+class WebGestureEvent;
 
 // This class takes care of scrolling and resizing and the related states. The
 // user action that causes scrolling or resizing is determined in other *Manager
@@ -37,7 +37,7 @@ class CORE_EXPORT ScrollManager
   WTF_MAKE_NONCOPYABLE(ScrollManager);
 
  public:
-  explicit ScrollManager(LocalFrame*);
+  explicit ScrollManager(LocalFrame&);
   DECLARE_TRACE();
 
   void clear();
@@ -75,9 +75,9 @@ class CORE_EXPORT ScrollManager
 
   // Handle the provided scroll gesture event, propagating down to child frames
   // as necessary.
-  WebInputEventResult handleGestureScrollEvent(const PlatformGestureEvent&);
+  WebInputEventResult handleGestureScrollEvent(const WebGestureEvent&);
 
-  WebInputEventResult handleGestureScrollEnd(const PlatformGestureEvent&);
+  WebInputEventResult handleGestureScrollEnd(const WebGestureEvent&);
 
   bool isScrollbarHandlingGestures() const;
 
@@ -86,19 +86,18 @@ class CORE_EXPORT ScrollManager
 
   // These functions are related to |m_resizeScrollableArea|.
   bool inResizeMode() const;
-  void resize(const PlatformEvent&);
+  void resize(const PlatformMouseEvent&);
   // Clears |m_resizeScrollableArea|. if |shouldNotBeNull| is true this
   // function DCHECKs to make sure that variable is indeed not null.
   void clearResizeScrollableArea(bool shouldNotBeNull);
   void setResizeScrollableArea(PaintLayer*, IntPoint);
 
  private:
-  WebInputEventResult handleGestureScrollUpdate(const PlatformGestureEvent&);
-  WebInputEventResult handleGestureScrollBegin(const PlatformGestureEvent&);
+  WebInputEventResult handleGestureScrollUpdate(const WebGestureEvent&);
+  WebInputEventResult handleGestureScrollBegin(const WebGestureEvent&);
 
-  WebInputEventResult passScrollGestureEventToWidget(
-      const PlatformGestureEvent&,
-      LayoutObject*);
+  WebInputEventResult passScrollGestureEventToWidget(const WebGestureEvent&,
+                                                     LayoutObject*);
 
   void clearGestureScrollState();
 
@@ -106,9 +105,9 @@ class CORE_EXPORT ScrollManager
 
   FrameHost* frameHost() const;
 
-  bool isEffectiveRootScroller(const Node&) const;
+  bool isViewportScrollingElement(const Element&) const;
 
-  bool handleScrollGestureOnResizer(Node*, const PlatformGestureEvent&);
+  bool handleScrollGestureOnResizer(Node*, const WebGestureEvent&);
 
   void recomputeScrollChain(const Node& startNode,
                             std::deque<int>& scrollChain);
@@ -129,7 +128,7 @@ class CORE_EXPORT ScrollManager
   // sequence. Null if no native element has scrolled this scroll
   // sequence, or if the most recent element to scroll used scroll
   // customization.
-  Member<Node> m_previousGestureScrolledNode;
+  Member<Element> m_previousGestureScrolledElement;
 
   // True iff some of the delta has been consumed for the current
   // scroll sequence in this frame, or any child frames. Only used

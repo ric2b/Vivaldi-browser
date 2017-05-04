@@ -72,6 +72,9 @@ class SoftwareBrowserCompositorOutputSurfaceTest : public testing::Test {
   void SetUp() override;
   void TearDown() override;
 
+  void UpdateVSyncParameters(base::TimeTicks timebase,
+                             base::TimeDelta interval);
+
   std::unique_ptr<content::BrowserCompositorOutputSurface> CreateSurface(
       std::unique_ptr<cc::SoftwareOutputDevice> device);
 
@@ -84,6 +87,7 @@ class SoftwareBrowserCompositorOutputSurfaceTest : public testing::Test {
   base::TestMessageLoop message_loop_;
   cc::DelayBasedBeginFrameSource begin_frame_source_;
   std::unique_ptr<ui::Compositor> compositor_;
+  int update_vsync_parameters_call_count_ = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SoftwareBrowserCompositorOutputSurfaceTest);
@@ -91,11 +95,15 @@ class SoftwareBrowserCompositorOutputSurfaceTest : public testing::Test {
 
 void SoftwareBrowserCompositorOutputSurfaceTest::SetUp() {
   bool enable_pixel_output = false;
-  ui::ContextFactory* context_factory =
-      ui::InitializeContextFactoryForTests(enable_pixel_output);
+  ui::ContextFactory* context_factory = nullptr;
+  ui::ContextFactoryPrivate* context_factory_private = nullptr;
 
-  compositor_.reset(
-      new ui::Compositor(context_factory, message_loop_.task_runner().get()));
+  ui::InitializeContextFactoryForTests(enable_pixel_output, &context_factory,
+                                       &context_factory_private);
+
+  compositor_.reset(new ui::Compositor(
+      context_factory_private->AllocateFrameSinkId(), context_factory,
+      context_factory_private, message_loop_.task_runner().get()));
   compositor_->SetAcceleratedWidget(gfx::kNullAcceleratedWidget);
 }
 
@@ -109,8 +117,17 @@ std::unique_ptr<content::BrowserCompositorOutputSurface>
 SoftwareBrowserCompositorOutputSurfaceTest::CreateSurface(
     std::unique_ptr<cc::SoftwareOutputDevice> device) {
   return base::MakeUnique<content::SoftwareBrowserCompositorOutputSurface>(
-      std::move(device), compositor_->vsync_manager(), &begin_frame_source_,
+      std::move(device),
+      base::Bind(
+          &SoftwareBrowserCompositorOutputSurfaceTest::UpdateVSyncParameters,
+          base::Unretained(this)),
       base::ThreadTaskRunnerHandle::Get());
+}
+
+void SoftwareBrowserCompositorOutputSurfaceTest::UpdateVSyncParameters(
+    base::TimeTicks timebase,
+    base::TimeDelta interval) {
+  update_vsync_parameters_call_count_++;
 }
 
 TEST_F(SoftwareBrowserCompositorOutputSurfaceTest, NoVSyncProvider) {
@@ -122,6 +139,7 @@ TEST_F(SoftwareBrowserCompositorOutputSurfaceTest, NoVSyncProvider) {
 
   output_surface_->SwapBuffers(cc::OutputSurfaceFrame());
   EXPECT_EQ(NULL, output_surface_->software_device()->GetVSyncProvider());
+  EXPECT_EQ(0, update_vsync_parameters_call_count_);
 }
 
 TEST_F(SoftwareBrowserCompositorOutputSurfaceTest, VSyncProviderUpdates) {
@@ -137,4 +155,5 @@ TEST_F(SoftwareBrowserCompositorOutputSurfaceTest, VSyncProviderUpdates) {
 
   output_surface_->SwapBuffers(cc::OutputSurfaceFrame());
   EXPECT_EQ(1, vsync_provider->call_count());
+  EXPECT_EQ(1, update_vsync_parameters_call_count_);
 }

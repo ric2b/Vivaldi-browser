@@ -10,11 +10,14 @@ import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.res.Resources;
+import android.graphics.Canvas;
 import android.graphics.Region;
+import android.support.v4.view.ViewCompat;
 import android.support.v4.view.animation.FastOutLinearInInterpolator;
 import android.support.v4.view.animation.LinearOutSlowInInterpolator;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.helper.ItemTouchHelper;
 import android.util.AttributeSet;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
@@ -23,8 +26,10 @@ import android.view.animation.Interpolator;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 
+import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.chrome.R;
+import org.chromium.chrome.R.string;
 import org.chromium.chrome.browser.ntp.ContextMenuManager.TouchDisableableView;
 import org.chromium.chrome.browser.ntp.NewTabPageLayout;
 import org.chromium.chrome.browser.ntp.snippets.SectionHeaderViewHolder;
@@ -49,10 +54,9 @@ public class NewTabPageRecyclerView extends RecyclerView implements TouchDisable
     private static final int PEEKING_CARD_ANIMATION_TIME_MS = 1000;
     private static final int PEEKING_CARD_ANIMATION_START_DELAY_MS = 300;
 
-    private static final String PREF_ANIMATION_RUN_COUNT = "ntp_recycler_view_animation_run_count";
-
     private final GestureDetector mGestureDetector;
     private final LinearLayoutManager mLayoutManager;
+
     private final int mToolbarHeight;
     private final int mSearchBoxTransitionLength;
     private final int mPeekingHeight;
@@ -133,6 +137,14 @@ public class NewTabPageRecyclerView extends RecyclerView implements TouchDisable
         });
     }
 
+    /**
+     * Sets up swipe-to-dismiss functionality.
+     */
+    public void setUpSwipeToDismiss() {
+        ItemTouchHelper helper = new ItemTouchHelper(new ItemTouchCallbacks());
+        helper.attachToRecyclerView(this);
+    }
+
     public boolean isFirstItemVisible() {
         return mLayoutManager.findFirstVisibleItemPosition() == 0;
     }
@@ -208,7 +220,7 @@ public class NewTabPageRecyclerView extends RecyclerView implements TouchDisable
      * Updates the space added at the end of the list to make sure the above/below the fold
      * distinction can be preserved.
      */
-    public void refreshBottomSpacing() {
+    private void refreshBottomSpacing() {
         ViewHolder bottomSpacingViewHolder = findBottomSpacer();
 
         // It might not be in the layout yet if it's not visible or ready to be displayed.
@@ -230,7 +242,14 @@ public class NewTabPageRecyclerView extends RecyclerView implements TouchDisable
             return 0;
         }
 
-        if (firstVisiblePos > aboveTheFoldPosition && mHasRenderedAboveTheFoldView) {
+        // For the scroll below the fold experiment, the above the fold item must be scrolled away
+        // completely, so the spacer must be large enough even when we're not sure exactly how
+        // large it should be. Returning 0 would lead to http://crbug.com/674432.
+        boolean allowSpaceForInitiallyScrollingBelowTheFold =
+                CardsVariationParameters.isScrollBelowTheFoldEnabled()
+                && !mHasRenderedAboveTheFoldView;
+        if (firstVisiblePos > aboveTheFoldPosition
+                && !allowSpaceForInitiallyScrollingBelowTheFold) {
             // We have enough items to fill the viewport, since we have scrolled past the
             // above-the-fold item. We must check whether the above-the-fold view has been rendered
             // at least once, because it's possible to skip right over it if the initial scroll
@@ -490,9 +509,7 @@ public class NewTabPageRecyclerView extends RecyclerView implements TouchDisable
             // The height of the region in which the the peeking card will snap.
             int snapScrollHeight = mPeekingHeight + headerView.getHeight();
 
-            scrollOutOfRegion(start,
-                              start + snapScrollHeight,
-                              start + snapScrollHeight);
+            scrollOutOfRegion(start, start + snapScrollHeight, start + snapScrollHeight);
         }
     }
 
@@ -504,14 +521,11 @@ public class NewTabPageRecyclerView extends RecyclerView implements TouchDisable
 
     /**
      * Animates the card being swiped to the right as if the user had dismissed it. Any changes to
-     * the animation here should be reflected also in
-     * {@link #updateViewStateForDismiss(float, ViewHolder)} and reset in
-     * {@link CardViewHolder#onBindViewHolder()}.
+     * the animation here should be reflected also in {@link #updateViewStateForDismiss} and reset
+     * in {@link CardViewHolder#onBindViewHolder()}.
      */
     public void dismissItemWithAnimation(final ViewHolder viewHolder) {
-        // We need to check the position, as the view holder might have been removed.
-        final int position = viewHolder.getAdapterPosition();
-        if (position == RecyclerView.NO_POSITION) {
+        if (viewHolder.getAdapterPosition() == RecyclerView.NO_POSITION) {
             // The item does not exist anymore, so ignore.
             return;
         }
@@ -539,11 +553,31 @@ public class NewTabPageRecyclerView extends RecyclerView implements TouchDisable
 
             @Override
             public void onAnimationEnd(Animator animation) {
-                getNewTabPageAdapter().dismissItem(position);
+                // It is possible that by the time the animation ends, we navigated away from the
+                // container and it got destroyed. In that case, abort. (https://crbug.com/668945)
+                if (!ViewCompat.isAttachedToWindow(viewHolder.itemView)) return;
+
+                dismissItemInternal(viewHolder);
                 NewTabPageRecyclerView.this.onItemDismissFinished(viewHolder);
             }
         });
         animation.start();
+    }
+
+    private void dismissItemInternal(ViewHolder viewHolder) {
+        // Re-check the position in case the adapter has changed.
+        final int position = viewHolder.getAdapterPosition();
+        if (position == RecyclerView.NO_POSITION) {
+            // The item does not exist anymore, so ignore.
+            return;
+        }
+        getNewTabPageAdapter().dismissItem(position, new Callback<String>() {
+            @Override
+            public void onResult(String removedItemTitle) {
+                announceForAccessibility(getResources().getString(
+                        string.ntp_accessibility_item_removed, removedItemTitle));
+            }
+        });
     }
 
     /**
@@ -562,8 +596,8 @@ public class NewTabPageRecyclerView extends RecyclerView implements TouchDisable
      * @param dX The amount of horizontal displacement caused by user's action.
      * @param viewHolder The view holder containing the view to be updated.
      */
-    public void updateViewStateForDismiss(float dX, ViewHolder viewHolder) {
-        if (!((NewTabPageViewHolder) viewHolder).isDismissable()) return;
+    public void updateViewStateForDismiss(float dX, NewTabPageViewHolder viewHolder) {
+        if (!viewHolder.isDismissable()) return;
 
         viewHolder.itemView.setTranslationX(dX);
 
@@ -576,6 +610,7 @@ public class NewTabPageRecyclerView extends RecyclerView implements TouchDisable
      * To be triggered when a snippet is bound to a ViewHolder.
      */
     public void onSnippetBound(View cardView) {
+        // Animate the peeking card.
         // We only run if the feature is enabled and once per NTP.
         if (!SnippetsConfig.isIncreasedCardVisibilityEnabled() || mFirstCardAnimationRun) return;
         mFirstCardAnimationRun = true;
@@ -611,5 +646,66 @@ public class NewTabPageRecyclerView extends RecyclerView implements TouchDisable
 
         ChromePreferenceManager.getInstance(getContext()).setCardsImpressionAfterAnimation(true);
         mCardImpressionAfterAnimationTracked = true;
+    }
+
+    private class ItemTouchCallbacks extends ItemTouchHelper.Callback {
+        @Override
+        public void onSwiped(ViewHolder viewHolder, int direction) {
+            onItemDismissStarted(viewHolder);
+            dismissItemInternal(viewHolder);
+        }
+
+        @Override
+        public void clearView(RecyclerView recyclerView, ViewHolder viewHolder) {
+            // clearView() is called when an interaction with the item is finished, which does
+            // not mean that the user went all the way and dismissed the item before releasing it.
+            // We need to check that the item has been removed.
+            if (viewHolder.getAdapterPosition() == RecyclerView.NO_POSITION) {
+                onItemDismissFinished(viewHolder);
+            }
+
+            super.clearView(recyclerView, viewHolder);
+        }
+
+        @Override
+        public boolean onMove(RecyclerView recyclerView, ViewHolder viewHolder, ViewHolder target) {
+            assert false; // Drag and drop not supported, the method will never be called.
+            return false;
+        }
+
+        @Override
+        public int getMovementFlags(RecyclerView recyclerView, ViewHolder viewHolder) {
+            assert viewHolder instanceof NewTabPageViewHolder;
+
+            int swipeFlags = 0;
+            if (((NewTabPageViewHolder) viewHolder).isDismissable()) {
+                swipeFlags = ItemTouchHelper.START | ItemTouchHelper.END;
+            }
+
+            return makeMovementFlags(0 /* dragFlags */, swipeFlags);
+        }
+
+        @Override
+        public void onChildDraw(Canvas c, RecyclerView recyclerView, ViewHolder viewHolder,
+                float dX, float dY, int actionState, boolean isCurrentlyActive) {
+            assert viewHolder instanceof NewTabPageViewHolder;
+
+            // The item has already been removed. We have nothing more to do.
+            // In some cases a removed child may call this method when unrelated items are
+            // interacted with, but this check also covers the case.
+            // See https://crbug.com/664466, b/32900699
+            if (viewHolder.getAdapterPosition() == RecyclerView.NO_POSITION) return;
+
+            // We use our own implementation of the dismissal animation, so we don't call the
+            // parent implementation. (by default it changes the translation-X and elevation)
+            updateViewStateForDismiss(dX, (NewTabPageViewHolder) viewHolder);
+
+            // If there is another item that should be animated at the same time, do the same to it.
+            NewTabPageViewHolder siblingViewHolder =
+                    getNewTabPageAdapter().getDismissSibling(viewHolder);
+            if (siblingViewHolder != null) {
+                updateViewStateForDismiss(dX, siblingViewHolder);
+            }
+        }
     }
 }

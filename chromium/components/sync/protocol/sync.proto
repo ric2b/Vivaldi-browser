@@ -53,6 +53,7 @@ import "theme_specifics.proto";
 import "typed_url_specifics.proto";
 import "unique_position.proto";
 import "wifi_credential_specifics.proto";
+import "notes_specifics.proto";
 
 // Used for inspecting how long we spent performing operations in different
 // backends. All times must be in millis.
@@ -135,6 +136,7 @@ message EntitySpecifics {
   optional ArticleSpecifics article = 223759;
   optional AppListSpecifics app_list = 229170;
   optional WifiCredentialSpecifics wifi_credential = 218175;
+  optional NotesSpecifics notes = 229171;
   optional AutofillWalletSpecifics autofill_wallet = 306270;
   optional WalletMetadataSpecifics wallet_metadata = 330441;
   optional ArcPackageSpecifics arc_package = 340906;

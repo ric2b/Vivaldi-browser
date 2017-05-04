@@ -33,12 +33,12 @@ bool IsUsingTestContext() {
 
 WindowTreeHostMus::WindowTreeHostMus(
     std::unique_ptr<WindowPortMus> window_port,
-    WindowTreeHostMusDelegate* delegate,
+    WindowTreeClient* window_tree_client,
     int64_t display_id,
     const std::map<std::string, std::vector<uint8_t>>* properties)
     : WindowTreeHostPlatform(std::move(window_port)),
       display_id_(display_id),
-      delegate_(delegate) {
+      delegate_(window_tree_client) {
   // TODO(sky): find a cleaner way to set this! Better solution is to likely
   // have constructor take aura::Window.
   WindowPortMus::Get(window())->window_ = window();
@@ -49,7 +49,10 @@ WindowTreeHostMus::WindowTreeHostMus(
     for (auto& pair : *properties)
       window_mus->SetPropertyFromServer(pair.first, &pair.second);
   }
-  CreateCompositor();
+  Id server_id = WindowMus::Get(window())->server_id();
+  cc::FrameSinkId frame_sink_id(server_id, 0);
+  DCHECK(frame_sink_id.is_valid());
+  CreateCompositor(frame_sink_id);
   gfx::AcceleratedWidget accelerated_widget;
   if (IsUsingTestContext()) {
     accelerated_widget = gfx::kNullAcceleratedWidget;
@@ -65,8 +68,8 @@ WindowTreeHostMus::WindowTreeHostMus(
         static_cast<gfx::AcceleratedWidget>(accelerated_widget_count++);
 #endif
   }
-  // TODO(markdittmer): Use correct device-scale-factor from |window|.
-  OnAcceleratedWidgetAvailable(accelerated_widget, 1.f);
+  OnAcceleratedWidgetAvailable(accelerated_widget,
+                               GetDisplay().device_scale_factor());
 
   delegate_->OnWindowTreeHostCreated(this);
 
@@ -75,6 +78,8 @@ WindowTreeHostMus::WindowTreeHostMus(
       false));  // Do not advertise accelerated widget; already set manually.
 
   input_method_ = base::MakeUnique<InputMethodMus>(this, window());
+  input_method_->Init(window_tree_client->connector());
+  SetSharedInputMethod(input_method_.get());
 
   compositor()->SetHostHasTransparentBackground(true);
 
@@ -82,12 +87,16 @@ WindowTreeHostMus::WindowTreeHostMus(
   compositor()->SetVisible(false);
 }
 
+// Pass |properties| to CreateWindowPortForTopLevel() so that |properties|
+// are passed to the server *and* pass |properties| to the WindowTreeHostMus
+// constructor (above) which applies the properties to the Window. Some of the
+// properties may be server specific and not applied to the Window.
 WindowTreeHostMus::WindowTreeHostMus(
     WindowTreeClient* window_tree_client,
     const std::map<std::string, std::vector<uint8_t>>* properties)
     : WindowTreeHostMus(
           static_cast<WindowTreeHostMusDelegate*>(window_tree_client)
-              ->CreateWindowPortForTopLevel(),
+              ->CreateWindowPortForTopLevel(properties),
           window_tree_client,
           display::Screen::GetScreen()->GetPrimaryDisplay().id(),
           properties) {}
@@ -97,23 +106,30 @@ WindowTreeHostMus::~WindowTreeHostMus() {
   DestroyDispatcher();
 }
 
-void WindowTreeHostMus::SetBoundsFromServer(const gfx::Rect& bounds) {
+void WindowTreeHostMus::SetBoundsFromServer(const gfx::Rect& bounds_in_pixels) {
   base::AutoReset<bool> resetter(&in_set_bounds_from_server_, true);
-  SetBounds(bounds);
+  SetBoundsInPixels(bounds_in_pixels);
+}
+
+void WindowTreeHostMus::SetClientArea(
+    const gfx::Insets& insets,
+    const std::vector<gfx::Rect>& additional_client_area) {
+  delegate_->OnWindowTreeHostClientAreaWillChange(this, insets,
+                                                  additional_client_area);
+}
+
+void WindowTreeHostMus::SetHitTestMask(const base::Optional<gfx::Rect>& rect) {
+  delegate_->OnWindowTreeHostHitTestMaskWillChange(this, rect);
+}
+
+void WindowTreeHostMus::DeactivateWindow() {
+  delegate_->OnWindowTreeHostDeactivateWindow(this);
 }
 
 display::Display WindowTreeHostMus::GetDisplay() const {
-  for (const display::Display& display :
-       display::Screen::GetScreen()->GetAllDisplays()) {
-    if (display.id() == display_id_)
-      return display;
-  }
-  return display::Display();
-}
-
-void WindowTreeHostMus::ShowImpl() {
-  WindowTreeHostPlatform::ShowImpl();
-  window()->Show();
+  display::Display display;
+  display::Screen::GetScreen()->GetDisplayWithDisplayId(display_id_, &display);
+  return display;
 }
 
 void WindowTreeHostMus::HideImpl() {
@@ -121,10 +137,10 @@ void WindowTreeHostMus::HideImpl() {
   window()->Hide();
 }
 
-void WindowTreeHostMus::SetBounds(const gfx::Rect& bounds) {
+void WindowTreeHostMus::SetBoundsInPixels(const gfx::Rect& bounds) {
   if (!in_set_bounds_from_server_)
     delegate_->OnWindowTreeHostBoundsWillChange(this, bounds);
-  WindowTreeHostPlatform::SetBounds(bounds);
+  WindowTreeHostPlatform::SetBoundsInPixels(bounds);
 }
 
 void WindowTreeHostMus::DispatchEvent(ui::Event* event) {

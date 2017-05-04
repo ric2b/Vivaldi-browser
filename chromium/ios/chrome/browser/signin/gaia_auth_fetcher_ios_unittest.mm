@@ -10,7 +10,7 @@
 #include "base/run_loop.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "ios/chrome/browser/signin/gaia_auth_fetcher_ios_private.h"
-#include "ios/web/public/test/test_browser_state.h"
+#include "ios/web/public/test/fakes/test_browser_state.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -29,13 +29,14 @@ class FakeGaiaAuthFetcherIOSBridge : public GaiaAuthFetcherIOSBridge {
       : GaiaAuthFetcherIOSBridge(fetcher, browser_state), mock_web_view_(nil) {}
 
  private:
-  WKWebView* CreateWKWebView() override {
+  WKWebView* BuildWKWebView() override {
     if (!mock_web_view_) {
-      mock_web_view_ = [OCMockObject niceMockForClass:[WKWebView class]];
+      mock_web_view_.reset(
+          [[OCMockObject niceMockForClass:[WKWebView class]] retain]);
     }
-    return [mock_web_view_ retain];
+    return mock_web_view_;
   }
-  id mock_web_view_;
+  base::scoped_nsobject<id> mock_web_view_;
 };
 
 class MockGaiaConsumer : public GaiaAuthConsumer {

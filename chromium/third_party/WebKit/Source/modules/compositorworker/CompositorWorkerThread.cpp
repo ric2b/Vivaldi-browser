@@ -7,7 +7,7 @@
 #include "core/workers/InProcessWorkerObjectProxy.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "modules/compositorworker/CompositorWorkerGlobalScope.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "wtf/Assertions.h"
 #include <memory>
 
@@ -20,8 +20,8 @@ std::unique_ptr<CompositorWorkerThread> CompositorWorkerThread::create(
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
                "CompositorWorkerThread::create");
   ASSERT(isMainThread());
-  return wrapUnique(new CompositorWorkerThread(std::move(workerLoaderProxy),
-                                               workerObjectProxy, timeOrigin));
+  return WTF::wrapUnique(new CompositorWorkerThread(
+      std::move(workerLoaderProxy), workerObjectProxy, timeOrigin));
 }
 
 CompositorWorkerThread::CompositorWorkerThread(

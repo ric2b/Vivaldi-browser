@@ -63,12 +63,24 @@ class CSSAnimations final {
   static const StylePropertyShorthand& propertiesForTransitionAll();
   static bool isAnimationAffectingProperty(CSSPropertyID);
   static bool isAffectedByKeyframesFromScope(const Element&, const TreeScope&);
-  static void calculateUpdate(const Element* animatingElement,
-                              Element&,
-                              const ComputedStyle&,
-                              ComputedStyle* parentStyle,
-                              CSSAnimationUpdate&,
-                              StyleResolver*);
+  static bool isAnimatingCustomProperties(const ElementAnimations*);
+  static bool isCustomPropertyHandle(const PropertyHandle&);
+  static void calculateAnimationUpdate(CSSAnimationUpdate&,
+                                       const Element* animatingElement,
+                                       Element&,
+                                       const ComputedStyle&,
+                                       ComputedStyle* parentStyle,
+                                       StyleResolver*);
+  static void calculateCompositorAnimationUpdate(
+      CSSAnimationUpdate&,
+      const Element* animatingElement,
+      Element&,
+      const ComputedStyle&,
+      const ComputedStyle* parentStyle,
+      bool wasViewportChanged);
+  static void calculateTransitionUpdate(CSSAnimationUpdate&,
+                                        const Element* animatingElement,
+                                        const ComputedStyle&);
   static void snapshotCompositorKeyframes(Element&,
                                           CSSAnimationUpdate&,
                                           const ComputedStyle&,
@@ -142,21 +154,6 @@ class CSSAnimations final {
 
   ActiveInterpolationsMap m_previousActiveInterpolationsForAnimations;
 
-  static void calculateCompositorAnimationUpdate(
-      CSSAnimationUpdate&,
-      const Element* animatingElement,
-      Element&,
-      const ComputedStyle&,
-      const ComputedStyle* parentStyle);
-  static void calculateAnimationUpdate(CSSAnimationUpdate&,
-                                       const Element* animatingElement,
-                                       Element&,
-                                       const ComputedStyle&,
-                                       ComputedStyle* parentStyle,
-                                       StyleResolver*);
-  static void calculateTransitionUpdate(CSSAnimationUpdate&,
-                                        const Element* animatingElement,
-                                        const ComputedStyle&);
   static void calculateTransitionUpdateForProperty(
       CSSPropertyID,
       const CSSTransitionData&,

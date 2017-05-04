@@ -11,10 +11,7 @@
 
 namespace content {
 
-namespace devtools { namespace schema { class SchemaHandler; }}
-
 class BrowserContext;
-class DevToolsProtocolHandler;
 
 class WorkerDevToolsAgentHost : public DevToolsAgentHostImpl,
                                 public IPC::Listener {
@@ -23,11 +20,13 @@ class WorkerDevToolsAgentHost : public DevToolsAgentHostImpl,
 
   // DevToolsAgentHost override.
   BrowserContext* GetBrowserContext() override;
-  bool DispatchProtocolMessage(const std::string& message) override;
 
   // DevToolsAgentHostImpl overrides.
-  void Attach() override;
-  void Detach() override;
+  void AttachSession(DevToolsSession* session) override;
+  void DetachSession(int session_id) override;
+  bool DispatchProtocolMessage(
+      DevToolsSession* session,
+      const std::string& message) override;
 
   // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& msg) override;
@@ -54,9 +53,6 @@ class WorkerDevToolsAgentHost : public DevToolsAgentHostImpl,
 
   virtual void OnAttachedStateChanged(bool attached);
   const WorkerId& worker_id() const { return worker_id_; }
-  DevToolsProtocolHandler* protocol_handler() {
-    return protocol_handler_.get();
-  }
 
  private:
   friend class SharedWorkerDevToolsManagerTest;
@@ -66,8 +62,6 @@ class WorkerDevToolsAgentHost : public DevToolsAgentHostImpl,
   void WorkerCreated();
   void OnDispatchOnInspectorFrontend(const DevToolsMessageChunk& message);
 
-  std::unique_ptr<devtools::schema::SchemaHandler> schema_handler_;
-  std::unique_ptr<DevToolsProtocolHandler> protocol_handler_;
   DevToolsMessageChunkProcessor chunk_processor_;
   WorkerState state_;
   WorkerId worker_id_;

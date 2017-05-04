@@ -53,8 +53,9 @@ source_set("cronet_sources") {
     "../url_request_context_config.h",
     "Cronet.h",
     "Cronet.mm",
-    "cronet_environment.cc",
+    "cronet_c_for_grpc.h",
     "cronet_environment.h",
+    "cronet_environment.mm",
   ]
 
   include_dirs = [ "//components/grpc_support/include" ]
@@ -153,7 +154,10 @@ ios_framework_bundle("cronet_framework") {
     "//components/grpc_support",
   ]
 
-  public_headers = [ "Cronet.h" ]
+  public_headers = [
+    "Cronet.h",
+    "cronet_c_for_grpc.h",
+  ]
   public_headers += grpc_public_headers
 
   sources = [

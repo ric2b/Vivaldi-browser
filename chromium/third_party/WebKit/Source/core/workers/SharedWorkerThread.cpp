@@ -42,8 +42,8 @@ std::unique_ptr<SharedWorkerThread> SharedWorkerThread::create(
     const String& name,
     PassRefPtr<WorkerLoaderProxy> workerLoaderProxy,
     WorkerReportingProxy& workerReportingProxy) {
-  return wrapUnique(new SharedWorkerThread(name, std::move(workerLoaderProxy),
-                                           workerReportingProxy));
+  return WTF::wrapUnique(new SharedWorkerThread(
+      name, std::move(workerLoaderProxy), workerReportingProxy));
 }
 
 SharedWorkerThread::SharedWorkerThread(
@@ -51,9 +51,7 @@ SharedWorkerThread::SharedWorkerThread(
     PassRefPtr<WorkerLoaderProxy> workerLoaderProxy,
     WorkerReportingProxy& workerReportingProxy)
     : WorkerThread(std::move(workerLoaderProxy), workerReportingProxy),
-      m_workerBackingThread(
-          WorkerBackingThread::create("SharedWorker Thread",
-                                      BlinkGC::PerThreadHeapMode)),
+      m_workerBackingThread(WorkerBackingThread::create("SharedWorker Thread")),
       m_name(name.isolatedCopy()) {}
 
 SharedWorkerThread::~SharedWorkerThread() {}

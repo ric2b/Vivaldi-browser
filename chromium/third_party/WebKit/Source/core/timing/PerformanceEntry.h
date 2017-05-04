@@ -34,6 +34,7 @@
 
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
+#include "core/dom/DOMHighResTimeStamp.h"
 #include "platform/heap/Handle.h"
 #include "wtf/text/WTFString.h"
 
@@ -43,8 +44,8 @@ class ScriptState;
 class ScriptValue;
 class V8ObjectBuilder;
 
-using PerformanceEntryType = unsigned char;
-using PerformanceEntryTypeMask = unsigned char;
+using PerformanceEntryType = unsigned;
+using PerformanceEntryTypeMask = unsigned;
 
 class CORE_EXPORT PerformanceEntry
     : public GarbageCollectedFinalized<PerformanceEntry>,
@@ -54,20 +55,23 @@ class CORE_EXPORT PerformanceEntry
  public:
   virtual ~PerformanceEntry();
 
-  enum EntryType {
+  enum EntryType : PerformanceEntryType {
     Invalid = 0,
+    Navigation = 1 << 0,
     Composite = 1 << 1,
     Mark = 1 << 2,
     Measure = 1 << 3,
     Render = 1 << 4,
     Resource = 1 << 5,
     LongTask = 1 << 6,
+    TaskAttribution = 1 << 7,
+    Paint = 1 << 8
   };
 
   String name() const;
   String entryType() const;
-  double startTime() const;
-  double duration() const;
+  DOMHighResTimeStamp startTime() const;
+  DOMHighResTimeStamp duration() const;
 
   ScriptValue toJSONForBinding(ScriptState*) const;
 
@@ -84,7 +88,7 @@ class CORE_EXPORT PerformanceEntry
     return a->startTime() < b->startTime();
   }
 
-  static EntryType toEntryTypeEnum(const String& entryType);
+  static PerformanceEntry::EntryType toEntryTypeEnum(const String& entryType);
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 

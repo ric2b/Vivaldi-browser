@@ -7,12 +7,14 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <vector>
 
 #include "base/android/build_info.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/logging.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "jni/MediaCodecUtil_jni.h"
 #include "media/base/android/media_codec_bridge.h"
@@ -23,6 +25,9 @@ using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaIntArrayToIntVector;
 using base::android::ScopedJavaLocalRef;
+using base::android::SDK_VERSION_JELLY_BEAN_MR2;
+using base::android::SDK_VERSION_KITKAT;
+using base::android::SDK_VERSION_LOLLIPOP_MR1;
 
 namespace media {
 
@@ -31,6 +36,8 @@ namespace {
 const char kMp4aMimeType[] = "audio/mp4a-latm";
 const char kOpusMimeType[] = "audio/opus";
 const char kVorbisMimeType[] = "audio/vorbis";
+const char kAc3MimeType[] = "audio/ac3";
+const char kEac3MimeType[] = "audio/eac3";
 const char kAvcMimeType[] = "video/avc";
 const char kHevcMimeType[] = "video/hevc";
 const char kVp8MimeType[] = "video/x-vnd.on2.vp8";
@@ -54,6 +61,11 @@ static std::string CodecTypeToAndroidMimeType(const std::string& codec) {
     return kVorbisMimeType;
   if (codec == "opus")
     return kOpusMimeType;
+  if (codec == "ac3")
+    return kAc3MimeType;
+  if (codec == "eac3")
+    return kEac3MimeType;
+
   DLOG(WARNING) << "Cannot convert codec to Android MIME type: " << codec;
   return std::string();
 }
@@ -97,26 +109,57 @@ static bool IsEncoderSupportedByDevice(const std::string& android_mime_type) {
 
 // static
 bool MediaCodecUtil::IsMediaCodecAvailable() {
-  // Blacklist some devices on Jellybean as MediaCodec is buggy.
-  // http://crbug.com/365494, http://crbug.com/615872
-  // Blacklist Lenovo A6600 / A6800 on KitKat, which tends to crash a lot.
-  // See crbug.com/628059 .  We include < K since they don't exist.
-  // Blacklist Samsung Galaxy Star Pro (GT-S7262) (crbug.com/634920).
-  // GT-S5282 and GT-I8552 are for crbug.com/634920 .
-  if (base::android::BuildInfo::GetInstance()->sdk_int() <= 19) {
-    std::string model(base::android::BuildInfo::GetInstance()->model());
-    return model != "GT-I9100" && model != "GT-I9300" && model != "GT-N7000" &&
-           model != "GT-N7100" && model != "A6600" && model != "A6800" &&
-           model != "GT-S7262" && model != "GT-S5282" && model != "GT-I8552";
-  } else if (base::android::BuildInfo::GetInstance()->sdk_int() < 19) {
-    // For JB, these tend to fail often (crbug.com/654905), but not with K+.
-    std::string model(base::android::BuildInfo::GetInstance()->model());
-    return model != "GT-P3113" && model != "GT-P5110" && model != "GT-P5100" &&
-           model != "GT-P5113" && model != "GT-P3110" && model != "GT-N5110" &&
-           model != "e-tab4" && model != "GT-I8200Q";
-  }
+  return IsMediaCodecAvailableFor(
+      base::android::BuildInfo::GetInstance()->sdk_int(),
+      base::android::BuildInfo::GetInstance()->model());
+}
 
-  return true;
+// static
+bool MediaCodecUtil::IsMediaCodecAvailableFor(int sdk, const char* model) {
+  // We will blacklist the model on any sdk that is as old or older than
+  // |last_bad_sdk| for the given model.
+  struct BlacklistEntry {
+    BlacklistEntry(const char* m, int s) : model(m), last_bad_sdk(s) {}
+    base::StringPiece model;
+    int last_bad_sdk;
+    bool operator==(const BlacklistEntry& other) const {
+      // Search on name only.  Ignore |last_bad_sdk|.
+      return model == other.model;
+    }
+  };
+  static const std::vector<BlacklistEntry> blacklist = {
+      // crbug.com/653905
+      {"LGMS330", SDK_VERSION_LOLLIPOP_MR1},
+
+      // crbug.com/615872
+      {"GT-I9100", SDK_VERSION_KITKAT},
+      {"GT-I9300", SDK_VERSION_KITKAT},
+      {"GT-N7000", SDK_VERSION_KITKAT},
+      {"GT-N7100", SDK_VERSION_KITKAT},
+
+      // crbug.com/628509
+      {"A6600", SDK_VERSION_KITKAT},
+      {"A6800", SDK_VERSION_KITKAT},
+
+      // crbug.com/634920
+      {"GT-S7262", SDK_VERSION_KITKAT},
+      {"GT-S5282", SDK_VERSION_KITKAT},
+      {"GT-I8552", SDK_VERSION_KITKAT},
+
+      // crbug.com/365494, crbug.com/615872
+      {"GT-P3113", SDK_VERSION_JELLY_BEAN_MR2},
+      {"GT-P5110", SDK_VERSION_JELLY_BEAN_MR2},
+      {"GT-P5100", SDK_VERSION_JELLY_BEAN_MR2},
+      {"GT-P5113", SDK_VERSION_JELLY_BEAN_MR2},
+      {"GT-P3110", SDK_VERSION_JELLY_BEAN_MR2},
+      {"GT-N5110", SDK_VERSION_JELLY_BEAN_MR2},
+      {"e-tab4", SDK_VERSION_JELLY_BEAN_MR2},
+      {"GT-I8200Q", SDK_VERSION_JELLY_BEAN_MR2},
+  };
+
+  const auto iter =
+      std::find(blacklist.begin(), blacklist.end(), BlacklistEntry(model, 0));
+  return iter == blacklist.end() || sdk > iter->last_bad_sdk;
 }
 
 // static
@@ -168,7 +211,7 @@ bool MediaCodecUtil::IsKnownUnaccelerated(const std::string& android_mime_type,
 
   std::string codec_name =
       GetDefaultCodecName(android_mime_type, direction, false);
-  DVLOG(1) << __FUNCTION__ << "Default codec for " << android_mime_type << " : "
+  DVLOG(1) << __func__ << "Default codec for " << android_mime_type << " : "
            << codec_name << ", direction: " << direction;
   if (codec_name.empty())
     return true;
@@ -255,6 +298,12 @@ bool MediaCodecUtil::IsSurfaceViewOutputSupported() {
   }
 
   return true;
+}
+
+// static
+bool MediaCodecUtil::IsSetOutputSurfaceSupported() {
+  JNIEnv* env = AttachCurrentThread();
+  return Java_MediaCodecUtil_isSetOutputSurfaceSupported(env);
 }
 
 // static

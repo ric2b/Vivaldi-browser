@@ -30,10 +30,10 @@
 #include "core/fetch/IntegrityMetadata.h"
 #include "core/fetch/ResourceClientWalker.h"
 #include "core/fetch/ResourceFetcher.h"
-#include "platform/MIMETypeRegistry.h"
 #include "platform/SharedBuffer.h"
-#include "platform/tracing/web_memory_allocator_dump.h"
-#include "platform/tracing/web_process_memory_dump.h"
+#include "platform/instrumentation/tracing/web_memory_allocator_dump.h"
+#include "platform/instrumentation/tracing/web_process_memory_dump.h"
+#include "platform/network/mime/MIMETypeRegistry.h"
 
 namespace blink {
 

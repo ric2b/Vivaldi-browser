@@ -36,8 +36,8 @@ struct PaintPropertyTreeBuilderContext {
     // to immediate children.
     bool shouldFlattenInheritedTransform = false;
     // Rendering context for 3D sorting. See
-    // TransformPaintPropertyNode::renderingContextID.
-    unsigned renderingContextID = 0;
+    // TransformPaintPropertyNode::renderingContextId.
+    unsigned renderingContextId = 0;
     // The clip node describes the accumulated raster clip for the current
     // subtree.  Note that the computed raster region in canvas space for a clip
     // node is independent from the transform and paint offset above. Also the
@@ -48,7 +48,7 @@ struct PaintPropertyTreeBuilderContext {
     // scroll space, the extent that can be scrolled, etc. Because scroll nodes
     // reference a scroll offset transform, scroll nodes should be updated if
     // the transform tree changes.
-    ScrollPaintPropertyNode* scroll = nullptr;
+    const ScrollPaintPropertyNode* scroll = nullptr;
   };
 
   ContainingBlockContext current;
@@ -65,13 +65,26 @@ struct PaintPropertyTreeBuilderContext {
 
   ContainingBlockContext fixedPosition;
 
+  // This is the same as current.paintOffset except when a floating object has
+  // non-block ancestors under its containing block. Paint offsets of the
+  // non-block ancestors should not be accumulated for the floating object.
+  LayoutPoint paintOffsetForFloat;
+
   // The effect hierarchy is applied by the stacking context tree. It is
   // guaranteed that every DOM descendant is also a stacking context descendant.
   // Therefore, we don't need extra bookkeeping for effect nodes and can
   // generate the effect tree from a DOM-order traversal.
   const EffectPaintPropertyNode* currentEffect = nullptr;
+  // Some effects are spatial, i.e. may refer to input pixels outside of output
+  // clip. The cull rect for its input shall be derived from its output clip.
+  // This variable represents the input cull of current effect, also serves as
+  // output clip of child effects that don't have a hard clip.
+  const ClipPaintPropertyNode* inputClipOfCurrentEffect = nullptr;
 
-  bool isUnderMultiColumnSpanner = false;
+  // True if a change has forced all properties in a subtree to be updated. This
+  // can be set due to paint offset changes or when the structure of the
+  // property tree changes (i.e., a node is added or removed).
+  bool forceSubtreeUpdate = false;
 };
 
 // Creates paint property tree nodes for special things in the layout tree.
@@ -86,8 +99,15 @@ class PaintPropertyTreeBuilder {
   // date.
   void updateProperties(FrameView&, PaintPropertyTreeBuilderContext&);
 
+  // Update the context to account for positioning. No paint properties are
+  // updated but this can affect the current paint offset which will force a
+  // subtree update.
+  void updateContextForBoxPosition(const LayoutObject&,
+                                   PaintPropertyTreeBuilderContext&);
+
   // Update the paint properties that affect this object (e.g., properties like
-  // paint offset translation) and ensure the context is up to date.
+  // paint offset translation) and ensure the context is up to date. Also
+  // handles updating the object's paintOffset.
   void updatePropertiesForSelf(const LayoutObject&,
                                PaintPropertyTreeBuilderContext&);
   // Update the paint properties that affect children of this object (e.g.,
@@ -96,36 +116,38 @@ class PaintPropertyTreeBuilder {
                                    PaintPropertyTreeBuilderContext&);
 
  private:
-  static void updatePaintOffsetTranslation(const LayoutObject&,
-                                           PaintPropertyTreeBuilderContext&);
-  static void updateTransform(const LayoutObject&,
-                              PaintPropertyTreeBuilderContext&);
-  static void updateTransformForNonRootSVG(const LayoutObject&,
-                                           PaintPropertyTreeBuilderContext&);
-  static void updateEffect(const LayoutObject&,
-                           PaintPropertyTreeBuilderContext&);
-  static void updateCssClip(const LayoutObject&,
-                            PaintPropertyTreeBuilderContext&);
-  static void updateLocalBorderBoxContext(const LayoutObject&,
+  ALWAYS_INLINE static void updatePaintOffsetTranslation(
+      const LayoutObject&,
+      PaintPropertyTreeBuilderContext&);
+  ALWAYS_INLINE static void updateTransform(const LayoutObject&,
+                                            PaintPropertyTreeBuilderContext&);
+  ALWAYS_INLINE static void updateTransformForNonRootSVG(
+      const LayoutObject&,
+      PaintPropertyTreeBuilderContext&);
+  ALWAYS_INLINE static void updateEffect(const LayoutObject&,
+                                         PaintPropertyTreeBuilderContext&);
+  ALWAYS_INLINE static void updateCssClip(const LayoutObject&,
                                           PaintPropertyTreeBuilderContext&);
-  static void updateScrollbarPaintOffset(
-      const LayoutObject&,
-      const PaintPropertyTreeBuilderContext&);
-  static void updateMainThreadScrollingReasons(
+  ALWAYS_INLINE static void updateLocalBorderBoxContext(
       const LayoutObject&,
       PaintPropertyTreeBuilderContext&);
-  static void updateOverflowClip(const LayoutObject&,
-                                 PaintPropertyTreeBuilderContext&);
-  static void updatePerspective(const LayoutObject&,
-                                PaintPropertyTreeBuilderContext&);
-  static void updateSvgLocalToBorderBoxTransform(
+  ALWAYS_INLINE static void updateScrollbarPaintOffset(
       const LayoutObject&,
       PaintPropertyTreeBuilderContext&);
-  static void updateScrollAndScrollTranslation(
+  ALWAYS_INLINE static void updateOverflowClip(
       const LayoutObject&,
       PaintPropertyTreeBuilderContext&);
-  static void updateOutOfFlowContext(const LayoutObject&,
-                                     PaintPropertyTreeBuilderContext&);
+  ALWAYS_INLINE static void updatePerspective(const LayoutObject&,
+                                              PaintPropertyTreeBuilderContext&);
+  ALWAYS_INLINE static void updateSvgLocalToBorderBoxTransform(
+      const LayoutObject&,
+      PaintPropertyTreeBuilderContext&);
+  ALWAYS_INLINE static void updateScrollAndScrollTranslation(
+      const LayoutObject&,
+      PaintPropertyTreeBuilderContext&);
+  ALWAYS_INLINE static void updateOutOfFlowContext(
+      const LayoutObject&,
+      PaintPropertyTreeBuilderContext&);
 };
 
 }  // namespace blink

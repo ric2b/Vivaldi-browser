@@ -12,13 +12,14 @@
 #include "base/time/time.h"
 #include "cc/animation/animation.h"
 #include "cc/animation/animation_curve.h"
+#include "cc/animation/animation_export.h"
 #include "cc/animation/element_animations.h"
-#include "cc/base/cc_export.h"
 #include "cc/trees/element_id.h"
 
 namespace cc {
 
 class AnimationDelegate;
+class AnimationEvents;
 class AnimationHost;
 class AnimationTimeline;
 struct AnimationEvent;
@@ -32,7 +33,8 @@ struct PropertyAnimationState;
 // same-property animations.
 // Each AnimationPlayer has its copy on the impl thread.
 // This is a CC counterpart for blink::AnimationPlayer (in 1:1 relationship).
-class CC_EXPORT AnimationPlayer : public base::RefCounted<AnimationPlayer> {
+class CC_ANIMATION_EXPORT AnimationPlayer
+    : public base::RefCounted<AnimationPlayer> {
  public:
   static scoped_refptr<AnimationPlayer> Create(int id);
   scoped_refptr<AnimationPlayer> CreateImplInstance() const;
@@ -74,6 +76,12 @@ class CC_EXPORT AnimationPlayer : public base::RefCounted<AnimationPlayer> {
 
   void PushPropertiesTo(AnimationPlayer* player_impl);
 
+  void Tick(base::TimeTicks monotonic_time);
+  void UpdateState(bool start_ready_animations, AnimationEvents* events);
+
+  void UpdateTickingState(UpdateTickingType type);
+  void RemoveFromTicking();
+
   // AnimationDelegate routing.
   bool NotifyAnimationStarted(const AnimationEvent& event);
   bool NotifyAnimationFinished(const AnimationEvent& event);
@@ -84,7 +92,7 @@ class CC_EXPORT AnimationPlayer : public base::RefCounted<AnimationPlayer> {
 
   // Returns true if there are any animations that have neither finished nor
   // aborted.
-  bool HasActiveAnimation() const;
+  bool HasTickingAnimation() const;
 
   // Returns true if there are any animations at all to process.
   bool has_any_animation() const { return !animations_.empty(); }
@@ -141,15 +149,26 @@ class CC_EXPORT AnimationPlayer : public base::RefCounted<AnimationPlayer> {
   bool HasElementInActiveList() const;
   gfx::ScrollOffset ScrollOffsetForAnimation() const;
 
-  // Returns the active animation animating the given property that is either
+  // Returns the animation animating the given property that is either
   // running, or is next to run, if such an animation exists.
   Animation* GetAnimation(TargetProperty::Type target_property) const;
 
-  // Returns the active animation for the given unique animation id.
+  // Returns animation for the given unique animation id.
   Animation* GetAnimationById(int animation_id) const;
 
   void GetPropertyAnimationState(PropertyAnimationState* pending_state,
                                  PropertyAnimationState* active_state) const;
+
+  // When a scroll animation is removed on the main thread, its compositor
+  // thread counterpart continues producing scroll deltas until activation.
+  // These scroll deltas need to be cleared at activation, so that the active
+  // element's scroll offset matches the offset provided by the main thread
+  // rather than a combination of this offset and scroll deltas produced by
+  // the removed animation. This is to provide the illusion of synchronicity to
+  // JS that simultaneously removes an animation and sets the scroll offset.
+  bool scroll_offset_animation_was_interrupted() const {
+    return scroll_offset_animation_was_interrupted_;
+  }
 
  private:
   friend class base::RefCounted<AnimationPlayer>;
@@ -193,6 +212,11 @@ class CC_EXPORT AnimationPlayer : public base::RefCounted<AnimationPlayer> {
   // Only try to start animations when new animations are added or when the
   // previous attempt at starting animations failed to start all animations.
   bool needs_to_start_animations_;
+
+  // This is used to ensure that we don't spam the animation host.
+  bool is_ticking_;
+
+  bool scroll_offset_animation_was_interrupted_;
 
   DISALLOW_COPY_AND_ASSIGN(AnimationPlayer);
 };

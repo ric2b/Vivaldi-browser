@@ -52,27 +52,11 @@ class SVGMarkerData {
         m_autoStartReverse(autoStartReverse) {}
 
   static void updateFromPathElement(void* info, const PathElement* element) {
-    SVGMarkerData* markerData = static_cast<SVGMarkerData*>(info);
-
-    // First update the outslope for the previous element.
-    markerData->updateOutslope(element->points[0]);
-
-    // Record the marker for the previous element.
-    if (markerData->m_elementIndex > 0) {
-      SVGMarkerType markerType =
-          markerData->m_elementIndex == 1 ? StartMarker : MidMarker;
-      markerData->m_positions.append(
-          MarkerPosition(markerType, markerData->m_origin,
-                         markerData->currentAngle(markerType)));
-    }
-
-    // Update our marker data for this element.
-    markerData->updateMarkerDataForPathElement(element);
-    ++markerData->m_elementIndex;
+    static_cast<SVGMarkerData*>(info)->updateFromPathElement(*element);
   }
 
   void pathIsDone() {
-    m_positions.append(
+    m_positions.push_back(
         MarkerPosition(EndMarker, m_origin, currentAngle(EndMarker)));
   }
 
@@ -122,15 +106,34 @@ class SVGMarkerData {
     return 0;
   }
 
-  void updateOutslope(const FloatPoint& point) {
+  void updateOutslope(const PathElement& element) {
     m_outslopePoints[0] = m_origin;
+    FloatPoint point = element.type == PathElementCloseSubpath
+                           ? m_subpathStart
+                           : element.points[0];
     m_outslopePoints[1] = point;
   }
 
-  void updateMarkerDataForPathElement(const PathElement* element) {
-    FloatPoint* points = element->points;
+  void updateFromPathElement(const PathElement& element) {
+    // First update the outslope for the previous element.
+    updateOutslope(element);
 
-    switch (element->type) {
+    // Record the marker for the previous element.
+    if (m_elementIndex > 0) {
+      SVGMarkerType markerType = m_elementIndex == 1 ? StartMarker : MidMarker;
+      m_positions.push_back(
+          MarkerPosition(markerType, m_origin, currentAngle(markerType)));
+    }
+
+    // Update our marker data for this element.
+    updateMarkerDataForPathElement(element);
+    ++m_elementIndex;
+  }
+
+  void updateMarkerDataForPathElement(const PathElement& element) {
+    const FloatPoint* points = element.points;
+
+    switch (element.type) {
       case PathElementAddQuadCurveToPoint:
         m_inslopePoints[0] = points[0];
         m_inslopePoints[1] = points[1];
@@ -148,7 +151,7 @@ class SVGMarkerData {
         m_origin = points[0];
         break;
       case PathElementCloseSubpath:
-        updateInslope(points[0]);
+        updateInslope(m_subpathStart);
         m_origin = m_subpathStart;
         m_subpathStart = FloatPoint();
     }

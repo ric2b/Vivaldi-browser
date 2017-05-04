@@ -48,10 +48,6 @@ PaintInvalidationState::PaintInvalidationState(
       m_containerForAbsolutePosition(layoutView),
       m_pendingDelayedPaintInvalidations(pendingDelayedPaintInvalidations),
       m_paintingLayer(*layoutView.layer())
-#if ENABLE(ASSERT)
-      ,
-      m_didUpdateForChildren(false)
-#endif
 #ifdef CHECK_FAST_PATH_SLOW_PATH_EQUALITY
       ,
       m_canCheckFastPathSlowPathEquality(layoutView ==
@@ -98,15 +94,7 @@ PaintInvalidationState::PaintInvalidationState(
       m_svgTransform(parentState.m_svgTransform),
       m_pendingDelayedPaintInvalidations(
           parentState.m_pendingDelayedPaintInvalidations),
-      m_paintingLayer(
-          currentObject.hasLayer() &&
-                  toLayoutBoxModelObject(currentObject).hasSelfPaintingLayer()
-              ? *toLayoutBoxModelObject(currentObject).layer()
-              : parentState.m_paintingLayer)
-#if ENABLE(ASSERT)
-      ,
-      m_didUpdateForChildren(false)
-#endif
+      m_paintingLayer(parentState.childPaintingLayer(currentObject))
 #ifdef CHECK_FAST_PATH_SLOW_PATH_EQUALITY
       ,
       m_canCheckFastPathSlowPathEquality(
@@ -122,13 +110,13 @@ PaintInvalidationState::PaintInvalidationState(
 // LayoutBlock::invalidatePaintOfSubtreesIfNeeded()).
 // TODO(wangxianzhu): Avoid this for
 // RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled().
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     m_didUpdateForChildren = parentState.m_didUpdateForChildren;
 #endif
     return;
   }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   DCHECK(parentState.m_didUpdateForChildren);
 #endif
 
@@ -145,6 +133,12 @@ PaintInvalidationState::PaintInvalidationState(
     // paintInvalidationContainer.
     m_paintInvalidationContainerForStackedContents =
         m_paintInvalidationContainer;
+  } else if (currentObject.isFloating() &&
+             !currentObject.parent()->isLayoutBlock()) {
+    // See LayoutObject::paintingLayer() for specialty of floating objects.
+    m_paintInvalidationContainer =
+        &currentObject.containerForPaintInvalidation();
+    m_cachedOffsetsEnabled = false;
   } else if (currentObject.styleRef().isStacked() &&
              // This is to exclude some objects (e.g. LayoutText) inheriting
              // stacked style from parent but aren't actually stacked.
@@ -230,6 +224,18 @@ PaintInvalidationState::PaintInvalidationState(
   updateForCurrentObject(parentState);
 }
 
+PaintLayer& PaintInvalidationState::childPaintingLayer(
+    const LayoutObject& child) const {
+  if (child.hasLayer() && toLayoutBoxModelObject(child).hasSelfPaintingLayer())
+    return *toLayoutBoxModelObject(child).layer();
+  // See LayoutObject::paintingLayer() for the special-cases of floating under
+  // inline and multicolumn.
+  if (child.isColumnSpanAll() ||
+      (child.isFloating() && !m_currentObject.isLayoutBlock()))
+    return *child.paintingLayer();
+  return m_paintingLayer;
+}
+
 void PaintInvalidationState::updateForCurrentObject(
     const PaintInvalidationState& parentState) {
   if (!m_cachedOffsetsEnabled)
@@ -299,14 +305,14 @@ void PaintInvalidationState::updateForCurrentObject(
 }
 
 void PaintInvalidationState::updateForChildren(PaintInvalidationReason reason) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   DCHECK(!m_didUpdateForChildren);
   m_didUpdateForChildren = true;
 #endif
 
   switch (reason) {
     case PaintInvalidationDelayedFull:
-      m_pendingDelayedPaintInvalidations.append(&m_currentObject);
+      m_pendingDelayedPaintInvalidations.push_back(&m_currentObject);
       break;
     case PaintInvalidationSubtree:
       m_forcedSubtreeInvalidationFlags |=
@@ -358,7 +364,7 @@ void PaintInvalidationState::updateForNormalChildren() {
     if (!RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
       if (box != m_paintInvalidationContainer) {
         m_paintOffset -=
-            LayoutSize(toLayoutView(box).frameView()->scrollOffset());
+            LayoutSize(toLayoutView(box).frameView()->getScrollOffset());
         addClipRectRelativeToPaintOffset(toLayoutView(box).viewRect());
       }
       return;
@@ -412,7 +418,7 @@ static FloatPoint slowLocalToAncestorPoint(const LayoutObject& object,
 
 LayoutPoint PaintInvalidationState::computeLocationInBacking(
     const LayoutPoint& visualRectLocation) const {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   DCHECK(!m_didUpdateForChildren);
 #endif
 
@@ -424,7 +430,7 @@ LayoutPoint PaintInvalidationState::computeLocationInBacking(
   FloatPoint point;
   if (m_paintInvalidationContainer != &m_currentObject) {
     if (m_cachedOffsetsEnabled) {
-      if (m_currentObject.isSVG() && !m_currentObject.isSVGRoot())
+      if (m_currentObject.isSVGChild())
         point = m_svgTransform.mapPoint(point);
       point += FloatPoint(m_paintOffset);
 #ifdef CHECK_FAST_PATH_SLOW_PATH_EQUALITY
@@ -438,19 +444,18 @@ LayoutPoint PaintInvalidationState::computeLocationInBacking(
     }
   }
 
-  if (m_paintInvalidationContainer->layer()->groupedMapping())
-    PaintLayer::mapPointInPaintInvalidationContainerToBacking(
-        *m_paintInvalidationContainer, point);
+  PaintLayer::mapPointInPaintInvalidationContainerToBacking(
+      *m_paintInvalidationContainer, point);
 
   return LayoutPoint(point);
 }
 
 LayoutRect PaintInvalidationState::computeVisualRectInBacking() const {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   DCHECK(!m_didUpdateForChildren);
 #endif
 
-  if (m_currentObject.isSVG() && !m_currentObject.isSVGRoot())
+  if (m_currentObject.isSVGChild())
     return computeVisualRectInBackingForSVG();
 
   LayoutRect rect = m_currentObject.localVisualRect();
@@ -480,9 +485,9 @@ LayoutRect PaintInvalidationState::computeVisualRectInBackingForSVG() const {
         m_currentObject, *m_paintInvalidationContainer);
   }
 
-  if (m_paintInvalidationContainer->layer()->groupedMapping())
-    PaintLayer::mapRectInPaintInvalidationContainerToBacking(
-        *m_paintInvalidationContainer, rect);
+  PaintLayer::mapRectInPaintInvalidationContainerToBacking(
+      *m_paintInvalidationContainer, rect);
+
   return rect;
 }
 
@@ -506,7 +511,7 @@ static void slowMapToVisualRectInAncestorSpace(
 
 void PaintInvalidationState::mapLocalRectToPaintInvalidationContainer(
     LayoutRect& rect) const {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   DCHECK(!m_didUpdateForChildren);
 #endif
 
@@ -532,9 +537,8 @@ void PaintInvalidationState::mapLocalRectToPaintInvalidationBacking(
     LayoutRect& rect) const {
   mapLocalRectToPaintInvalidationContainer(rect);
 
-  if (m_paintInvalidationContainer->layer()->groupedMapping())
-    PaintLayer::mapRectInPaintInvalidationContainerToBacking(
-        *m_paintInvalidationContainer, rect);
+  PaintLayer::mapRectInPaintInvalidationContainerToBacking(
+      *m_paintInvalidationContainer, rect);
 }
 
 void PaintInvalidationState::addClipRectRelativeToPaintOffset(

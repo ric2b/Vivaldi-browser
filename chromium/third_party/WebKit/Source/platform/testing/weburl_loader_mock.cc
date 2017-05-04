@@ -15,9 +15,8 @@ namespace blink {
 WebURLLoaderMock::WebURLLoaderMock(WebURLLoaderMockFactoryImpl* factory,
                                    WebURLLoader* default_loader)
     : factory_(factory),
-      default_loader_(wrapUnique(default_loader)),
-      weak_factory_(this) {
-}
+      default_loader_(WTF::wrapUnique(default_loader)),
+      weak_factory_(this) {}
 
 WebURLLoaderMock::~WebURLLoaderMock() {
   cancel();
@@ -36,7 +35,7 @@ void WebURLLoaderMock::ServeAsynchronousRequest(
   // will just proxy to the client.
   std::unique_ptr<WebURLLoaderTestDelegate> default_delegate;
   if (!delegate) {
-    default_delegate = wrapUnique(new WebURLLoaderTestDelegate());
+    default_delegate = WTF::wrapUnique(new WebURLLoaderTestDelegate());
     delegate = default_delegate.get();
   }
 
@@ -44,20 +43,19 @@ void WebURLLoaderMock::ServeAsynchronousRequest(
   // to be called which will make the ResourceLoader to delete |this|.
   WeakPtr<WebURLLoaderMock> self = weak_factory_.createWeakPtr();
 
-  delegate->didReceiveResponse(client_, this, response);
+  delegate->didReceiveResponse(client_, response);
   if (!self)
     return;
 
   if (error.reason) {
-    delegate->didFail(client_, this, error);
+    delegate->didFail(client_, error, data.size(), 0);
     return;
   }
-  delegate->didReceiveData(client_, this, data.data(), data.size(),
-                           data.size());
+  delegate->didReceiveData(client_, data.data(), data.size());
   if (!self)
     return;
 
-  delegate->didFinishLoading(client_, this, 0, data.size());
+  delegate->didFinishLoading(client_, 0, data.size(), data.size());
 }
 
 WebURLRequest WebURLLoaderMock::ServeRedirect(
@@ -81,7 +79,7 @@ WebURLRequest WebURLLoaderMock::ServeRedirect(
 
   WeakPtr<WebURLLoaderMock> self = weak_factory_.createWeakPtr();
 
-  bool follow = client_->willFollowRedirect(this, newRequest, redirectResponse);
+  bool follow = client_->willFollowRedirect(newRequest, redirectResponse);
   if (!follow)
     newRequest = WebURLRequest();
 
@@ -99,7 +97,8 @@ void WebURLLoaderMock::loadSynchronously(const WebURLRequest& request,
                                          WebURLResponse& response,
                                          WebURLError& error,
                                          WebData& data,
-                                         int64_t& encoded_data_length) {
+                                         int64_t& encoded_data_length,
+                                         int64_t& encoded_body_length) {
   if (factory_->IsMockedURL(request.url())) {
       factory_->LoadSynchronously(request, &response, &error, &data,
                                   &encoded_data_length);
@@ -110,7 +109,7 @@ void WebURLLoaderMock::loadSynchronously(const WebURLRequest& request,
       << request.url().string().utf8();
   using_default_loader_ = true;
   default_loader_->loadSynchronously(request, response, error, data,
-                                     encoded_data_length);
+                                     encoded_data_length, encoded_body_length);
 }
 
 void WebURLLoaderMock::loadAsynchronously(const WebURLRequest& request,

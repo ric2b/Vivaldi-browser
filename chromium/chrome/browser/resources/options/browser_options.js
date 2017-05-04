@@ -339,12 +339,10 @@ cr.define('options', function() {
 
       // Device section (ChromeOS only).
       if (cr.isChromeOS) {
-        if (loadTimeData.getBoolean('showStylusSettings')) {
-          $('stylus-settings-link').onclick = function(event) {
-            PageManager.showPageByName('stylus-overlay');
-          };
-          $('stylus-row').hidden = false;
-        }
+        // Probe for stylus hardware state. C++ will invoke
+        // BrowserOptions.setStylusInputStatus_ when the data is available.
+        chrome.send('requestStylusHardwareState');
+
         if (loadTimeData.getBoolean('showPowerStatus')) {
           $('power-settings-link').onclick = function(evt) {
             PageManager.showPageByName('power-overlay');
@@ -441,6 +439,8 @@ cr.define('options', function() {
         if (loadTimeData.getBoolean('showQuickUnlockSettings')) {
           $('manage-screenlock').onclick = function(event) {
             PageManager.showPageByName('quickUnlockConfigureOverlay');
+            settings.recordLockScreenProgress(
+                LockScreenProgress.START_SCREEN_LOCK);
           };
           $('manage-screenlock').hidden = false;
         }
@@ -860,13 +860,9 @@ cr.define('options', function() {
             return;
 
           var isArcEnabled = !e.value.value;
-          var androidAppSettings = $('android-apps-settings');
-          if (androidAppSettings != null)
-            androidAppSettings.hidden = isArcEnabled;
-
-          var talkbackSettingsButton = $('talkback-settings-button');
-          if (talkbackSettingsButton != null)
-            talkbackSettingsButton.hidden = isArcEnabled;
+          $('android-apps-settings').hidden = isArcEnabled;
+          $('talkback-settings-button').hidden = isArcEnabled;
+          $('stylus-find-more-link').hidden = isArcEnabled;
         });
 
         $('android-apps-settings-link').addEventListener('click', function(e) {
@@ -1227,12 +1223,12 @@ cr.define('options', function() {
             SyncSetupOverlay.startSignIn(false /* creatingSupervisedUser */);
             break;
           case 'signOutAndSignIn':
-<if expr="chromeos">
+// <if expr="chromeos">
             // On Chrome OS, sign out the user and sign in again to get fresh
             // credentials on auth errors.
             SyncSetupOverlay.doSignOutOnAuthError();
-</if>
-<if expr="not chromeos">
+// </if>
+// <if expr="not chromeos">
             if (syncData.signoutAllowed) {
               // Silently sign the user out without deleting their profile and
               // prompt them to sign back in.
@@ -1241,7 +1237,7 @@ cr.define('options', function() {
             } else {
               chrome.send('showDisconnectManagedProfileDialog');
             }
-</if>
+// </if>
             break;
           case 'upgradeClient':
             PageManager.showPageByName('help');
@@ -1809,6 +1805,21 @@ cr.define('options', function() {
         $('resolve-timezone-by-geolocation')
             .checked = this.resolveTimezoneByGeolocation_;
       }
+    },
+
+    /**
+     * Called when stylus hardware detection probing is complete.
+     * @param {boolean} hasStylus
+     * @private
+     */
+    setStylusInputStatus_: function(hasStylus) {
+      if (!hasStylus)
+        return;
+
+      $('stylus-settings-link').onclick = function(event) {
+        PageManager.showPageByName('stylus-overlay');
+      };
+      $('stylus-row').hidden = false;
     },
 
     /**
@@ -2410,6 +2421,7 @@ cr.define('options', function() {
     'setNowSectionVisible',
     'setProfilesInfo',
     'setSpokenFeedbackCheckboxState',
+    'setStylusInputStatus',
     'setSystemTimezoneAutomaticDetectionManaged',
     'setSystemTimezoneManaged',
     'setThemesResetButtonEnabled',

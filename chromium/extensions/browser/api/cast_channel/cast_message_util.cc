@@ -40,14 +40,14 @@ bool MessageInfoToCastMessage(const MessageInfo& message,
   base::BinaryValue* real_value;
   switch (message.data->GetType()) {
     // JS string
-    case base::Value::TYPE_STRING:
+    case base::Value::Type::STRING:
       if (message.data->GetAsString(&data)) {
         message_proto->set_payload_type(CastMessage_PayloadType_STRING);
         message_proto->set_payload_utf8(data);
       }
       break;
     // JS ArrayBuffer
-    case base::Value::TYPE_BINARY:
+    case base::Value::Type::BINARY:
       real_value = static_cast<base::BinaryValue*>(message.data.get());
       if (real_value->GetBuffer()) {
         message_proto->set_payload_type(CastMessage_PayloadType_BINARY);
@@ -99,7 +99,7 @@ bool CastMessageToMessageInfo(const CastMessage& message_proto,
   }
   if (value.get()) {
     DCHECK(!message->data.get());
-    message->data.reset(value.release());
+    message->data = std::move(value);
     return true;
   } else {
     return false;

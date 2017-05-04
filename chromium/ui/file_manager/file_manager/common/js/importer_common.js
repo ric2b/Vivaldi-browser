@@ -13,6 +13,19 @@ importer.ScanEvent = {
 };
 
 /**
+ * Mode of the scan to find new files.
+ *
+ * @enum {string}
+ */
+importer.ScanMode = {
+  // Faster scan using import history to get candidates of new files.
+  HISTORY: 'HISTORY',
+  // Verifies content hash to eliminate content duplications from candidates
+  // chosen by HISTORY.
+  CONTENT: 'CONTENT',
+};
+
+/**
  * Disposition of an entry with respect to it's
  * presence in import history, drive, and so on.
  * @enum {string}
@@ -34,12 +47,6 @@ importer.Setting = {
   PHOTOS_APP_ENABLED: 'importer-photo-app-enabled',
   LAST_KNOWN_LOG_ID: 'importer-last-known-log-id'
 };
-
-/**
- * @typedef {function(
- *     !importer.ScanEvent, importer.ScanResult)}
- */
-importer.ScanObserver;
 
 /**
  * Volume types eligible for the affections of Cloud Import.
@@ -960,8 +967,7 @@ importer.getTracker_ = function() {
   return new Promise(
       function(resolve, reject) {
         chrome.runtime.getBackgroundPage(
-          /** @param {Window=} opt_background */
-          function(opt_background) {
+          function(/** BackgroundWindow */ opt_background) {
             if (chrome.runtime.lastError) {
               reject(chrome.runtime.lastError);
             }

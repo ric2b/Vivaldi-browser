@@ -55,6 +55,7 @@
 #include "core/layout/shapes/ShapeOutsideInfo.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/Page.h"
+#include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/page/scrolling/SnapCoordinator.h"
 #include "core/paint/BackgroundImageGeometry.h"
 #include "core/paint/BoxPaintInvalidator.h"
@@ -271,10 +272,10 @@ void LayoutBox::styleDidChange(StyleDifference diff,
       oldStyle->effectiveZoom() != newStyle.effectiveZoom()) {
     PaintLayerScrollableArea* scrollableArea = this->getScrollableArea();
     ASSERT(scrollableArea);
-    // We use scrollOffset() rather than scrollPosition(), because scrollOffset
-    // is the distance from the beginning of flow for the box, which is the
-    // dimension we want to preserve.
-    ScrollOffset oldOffset = scrollableArea->scrollOffset();
+    // We use getScrollOffset() rather than scrollPosition(), because scroll
+    // offset is the distance from the beginning of flow for the box, which is
+    // the dimension we want to preserve.
+    ScrollOffset oldOffset = scrollableArea->getScrollOffset();
     if (oldOffset.width() || oldOffset.height()) {
       ScrollOffset newOffset = oldOffset.scaledBy(newStyle.effectiveZoom() /
                                                   oldStyle->effectiveZoom());
@@ -311,6 +312,14 @@ void LayoutBox::styleDidChange(StyleDifference diff,
   updateShapeOutsideInfoAfterStyleChange(*style(), oldStyle);
   updateGridPositionAfterStyleChange(oldStyle);
 
+  // When we're no longer a flex item because we're now absolutely positioned,
+  // we need to clear the override size so we're not affected by it anymore.
+  // This technically covers too many cases (even when out-of-flow did not
+  // change) but that should be harmless.
+  if (isOutOfFlowPositioned() && parent() &&
+      parent()->styleRef().isDisplayFlexibleOrGridBox())
+    clearOverrideSize();
+
   if (LayoutMultiColumnSpannerPlaceholder* placeholder =
           this->spannerPlaceholder())
     placeholder->layoutObjectInFlowThreadStyleDidChange(oldStyle);
@@ -323,8 +332,23 @@ void LayoutBox::styleDidChange(StyleDifference diff,
       flowThread->flowThreadDescendantStyleDidChange(this, diff, *oldStyle);
 
     updateScrollSnapMappingAfterStyleChange(&newStyle, oldStyle);
+
+    if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled() &&
+        shouldClipOverflow()) {
+      // The overflow clip paint property depends on border sizes through
+      // overflowClipRect(), and border radii, so we update properties on
+      // border size or radii change.
+      if (!oldStyle->border().sizeEquals(newStyle.border()) ||
+          !oldStyle->border().radiiEqual(newStyle.border()))
+        setNeedsPaintPropertyUpdate();
+    }
   }
 
+  if (diff.transformChanged()) {
+    if (ScrollingCoordinator* scrollingCoordinator =
+            document().frame()->page()->scrollingCoordinator())
+      scrollingCoordinator->notifyTransformChanged(*this);
+  }
   // Non-atomic inlines should be LayoutInline or LayoutText, not LayoutBox.
   DCHECK(!isInline() || isAtomicInlineLevel());
 }
@@ -673,10 +697,10 @@ void LayoutBox::scrollRectToVisible(const LayoutRect& rect,
     }
   }
 
-  // If we are fixed-position and scroll with the viewport, it is useless to
+  // If we are fixed-position and stick to the viewport, it is useless to
   // scroll the parent.
-  if (style()->position() == FixedPosition && hasLayer() &&
-      layer()->scrollsWithViewport()) {
+  if (style()->position() == FixedPosition &&
+      containerForFixedPosition() == view()) {
     return;
   }
 
@@ -690,16 +714,19 @@ void LayoutBox::scrollRectToVisible(const LayoutRect& rect,
 
 void LayoutBox::absoluteRects(Vector<IntRect>& rects,
                               const LayoutPoint& accumulatedOffset) const {
-  rects.append(pixelSnappedIntRect(accumulatedOffset, size()));
+  rects.push_back(pixelSnappedIntRect(accumulatedOffset, size()));
 }
 
-void LayoutBox::absoluteQuads(Vector<FloatQuad>& quads) const {
+void LayoutBox::absoluteQuads(Vector<FloatQuad>& quads,
+                              MapCoordinatesFlags mode) const {
   if (LayoutFlowThread* flowThread = flowThreadContainingBlock()) {
-    flowThread->absoluteQuadsForDescendant(*this, quads);
+    flowThread->absoluteQuadsForDescendant(*this, quads, mode);
     return;
   }
-  quads.append(localToAbsoluteQuad(FloatRect(
-      0, 0, m_frameRect.width().toFloat(), m_frameRect.height().toFloat())));
+  quads.push_back(
+      localToAbsoluteQuad(FloatRect(0, 0, m_frameRect.width().toFloat(),
+                                    m_frameRect.height().toFloat()),
+                          mode));
 }
 
 FloatRect LayoutBox::localBoundingBoxRectForAccessibility() const {
@@ -893,7 +920,7 @@ LayoutRect LayoutBox::backgroundRect(BackgroundRectType rectType) const {
 void LayoutBox::addOutlineRects(Vector<LayoutRect>& rects,
                                 const LayoutPoint& additionalOffset,
                                 IncludeBlockVisualOverflowOrNot) const {
-  rects.append(LayoutRect(additionalOffset, size()));
+  rects.push_back(LayoutRect(additionalOffset, size()));
 }
 
 bool LayoutBox::canResize() const {
@@ -916,18 +943,18 @@ void LayoutBox::addLayerHitTestRects(LayerHitTestRects& layerRects,
 void LayoutBox::computeSelfHitTestRects(Vector<LayoutRect>& rects,
                                         const LayoutPoint& layerOffset) const {
   if (!size().isEmpty())
-    rects.append(LayoutRect(layerOffset, size()));
+    rects.push_back(LayoutRect(layerOffset, size()));
 }
 
 int LayoutBox::verticalScrollbarWidth() const {
-  if (!hasOverflowClip() || style()->overflowY() == OverflowOverlay)
+  if (!hasOverflowClip() || style()->overflowY() == EOverflow::Overlay)
     return 0;
 
   return getScrollableArea()->verticalScrollbarWidth();
 }
 
 int LayoutBox::horizontalScrollbarHeight() const {
-  if (!hasOverflowClip() || style()->overflowX() == OverflowOverlay)
+  if (!hasOverflowClip() || style()->overflowX() == EOverflow::Overlay)
     return 0;
 
   return getScrollableArea()->horizontalScrollbarHeight();
@@ -1027,7 +1054,7 @@ LayoutBox* LayoutBox::findAutoscrollable(LayoutObject* layoutObject) {
       !(layoutObject->isBox() && toLayoutBox(layoutObject)->canAutoscroll())) {
     // Do not start autoscroll when the node is inside a fixed-position element.
     if (layoutObject->isBox() && toLayoutBox(layoutObject)->hasLayer() &&
-        toLayoutBox(layoutObject)->layer()->scrollsWithViewport()) {
+        toLayoutBox(layoutObject)->layer()->sticksToViewport()) {
       return nullptr;
     }
 
@@ -1055,13 +1082,13 @@ void LayoutBox::scrollByRecursively(const ScrollOffset& delta) {
     PaintLayerScrollableArea* scrollableArea = this->getScrollableArea();
     ASSERT(scrollableArea);
 
-    ScrollOffset newScrollOffset = scrollableArea->scrollOffset() + delta;
+    ScrollOffset newScrollOffset = scrollableArea->getScrollOffset() + delta;
     scrollableArea->setScrollOffset(newScrollOffset, ProgrammaticScroll);
 
     // If this layer can't do the scroll we ask the next layer up that can
     // scroll to try.
     ScrollOffset remainingScrollOffset =
-        newScrollOffset - scrollableArea->scrollOffset();
+        newScrollOffset - scrollableArea->getScrollOffset();
     if (!remainingScrollOffset.isZero() && parent()) {
       if (LayoutBox* scrollableBox = enclosingScrollableBox())
         scrollableBox->scrollByRecursively(remainingScrollOffset);
@@ -1159,7 +1186,7 @@ void LayoutBox::computeIntrinsicLogicalWidths(
 
 LayoutUnit LayoutBox::minPreferredLogicalWidth() const {
   if (preferredLogicalWidthsDirty()) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     SetLayoutNeededForbiddenScope layoutForbiddenScope(
         const_cast<LayoutBox&>(*this));
 #endif
@@ -1173,7 +1200,7 @@ LayoutUnit LayoutBox::minPreferredLogicalWidth() const {
 DISABLE_CFI_PERF
 LayoutUnit LayoutBox::maxPreferredLogicalWidth() const {
   if (preferredLogicalWidthsDirty()) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     SetLayoutNeededForbiddenScope layoutForbiddenScope(
         const_cast<LayoutBox&>(*this));
 #endif
@@ -1323,7 +1350,7 @@ LayoutUnit LayoutBox::adjustBorderBoxLogicalWidthForBoxSizing(
     float width) const {
   LayoutUnit bordersPlusPadding = collapsedBorderAndCSSPaddingLogicalWidth();
   LayoutUnit result(width);
-  if (style()->boxSizing() == BoxSizingContentBox)
+  if (style()->boxSizing() == EBoxSizing::kContentBox)
     return result + bordersPlusPadding;
   return std::max(result, bordersPlusPadding);
 }
@@ -1332,7 +1359,7 @@ LayoutUnit LayoutBox::adjustBorderBoxLogicalHeightForBoxSizing(
     float height) const {
   LayoutUnit bordersPlusPadding = collapsedBorderAndCSSPaddingLogicalHeight();
   LayoutUnit result(height);
-  if (style()->boxSizing() == BoxSizingContentBox)
+  if (style()->boxSizing() == EBoxSizing::kContentBox)
     return result + bordersPlusPadding;
   return std::max(result, bordersPlusPadding);
 }
@@ -1340,7 +1367,7 @@ LayoutUnit LayoutBox::adjustBorderBoxLogicalHeightForBoxSizing(
 LayoutUnit LayoutBox::adjustContentBoxLogicalWidthForBoxSizing(
     float width) const {
   LayoutUnit result(width);
-  if (style()->boxSizing() == BoxSizingBorderBox)
+  if (style()->boxSizing() == EBoxSizing::kBorderBox)
     result -= collapsedBorderAndCSSPaddingLogicalWidth();
   return std::max(LayoutUnit(), result);
 }
@@ -1348,7 +1375,7 @@ LayoutUnit LayoutBox::adjustContentBoxLogicalWidthForBoxSizing(
 LayoutUnit LayoutBox::adjustContentBoxLogicalHeightForBoxSizing(
     float height) const {
   LayoutUnit result(height);
-  if (style()->boxSizing() == BoxSizingBorderBox)
+  if (style()->boxSizing() == EBoxSizing::kBorderBox)
     result -= collapsedBorderAndCSSPaddingLogicalHeight();
   return std::max(LayoutUnit(), result);
 }
@@ -1403,7 +1430,8 @@ bool LayoutBox::nodeAtPoint(HitTestResult& result,
       hitTestChildren(result, locationInContainer, adjustedLocation, action))
     return true;
 
-  if (hitTestClippedOutByRoundedBorder(locationInContainer, adjustedLocation))
+  if (style()->hasBorderRadius() &&
+      hitTestClippedOutByBorder(locationInContainer, adjustedLocation))
     return false;
 
   // Now hit test ourselves.
@@ -1439,12 +1467,9 @@ bool LayoutBox::hitTestChildren(HitTestResult& result,
   return false;
 }
 
-bool LayoutBox::hitTestClippedOutByRoundedBorder(
+bool LayoutBox::hitTestClippedOutByBorder(
     const HitTestLocation& locationInContainer,
     const LayoutPoint& borderBoxLocation) const {
-  if (!style()->hasBorderRadius())
-    return false;
-
   LayoutRect borderRect = borderBoxRect();
   borderRect.moveBy(borderBoxLocation);
   return !locationInContainer.intersects(
@@ -1523,7 +1548,7 @@ static bool isCandidateForOpaquenessTest(const LayoutBox& childBox) {
   if (childStyle.position() != StaticPosition &&
       childBox.containingBlock() != childBox.parent())
     return false;
-  if (childStyle.visibility() != EVisibility::Visible ||
+  if (childStyle.visibility() != EVisibility::kVisible ||
       childStyle.shapeOutside())
     return false;
   if (childBox.size().isZero())
@@ -1683,15 +1708,39 @@ ResourcePriority LayoutBox::computeResourcePriority() const {
       screenArea);
 }
 
-void LayoutBox::frameRectChanged() {
+void LayoutBox::locationChanged() {
+  // The location may change because of layout of other objects. Should check
+  // this object for paint invalidation.
+  if (!needsLayout())
+    setMayNeedPaintInvalidation();
+}
+
+void LayoutBox::sizeChanged() {
+  // The size may change because of layout of other objects. Should check this
+  // object for paint invalidation.
+  if (!needsLayout())
+    setMayNeedPaintInvalidation();
+
   if (node() && node()->isElementNode()) {
     Element& element = toElement(*node());
     element.setNeedsResizeObserverUpdate();
   }
-  // The frame rect may change because of layout of other objects.
-  // Should check this object for paint invalidation.
-  if (!needsLayout())
-    setMayNeedPaintInvalidation();
+
+  if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled()) {
+    if (shouldClipOverflow()) {
+      // The overflow clip paint property depends on the border box rect through
+      // overflowClipRect(). The border box rect's size equals the frame rect's
+      // size so we trigger a paint property update when the frame rect changes.
+      setNeedsPaintPropertyUpdate();
+    } else if (styleRef().hasTransform() || styleRef().hasPerspective()) {
+      // Relative lengths (e.g., percentage values) in transform, perspective,
+      // transform-origin, and perspective-origin can depend on the size of the
+      // frame rect, so force a property update if it changes.
+      // TODO(pdr): We only need to update properties if there are relative
+      // lengths.
+      setNeedsPaintPropertyUpdate();
+    }
+  }
 }
 
 bool LayoutBox::intersectsVisibleViewport() const {
@@ -1972,7 +2021,7 @@ LayoutSize LayoutBox::offsetFromContainer(const LayoutObject* o) const {
   if (isInFlowPositioned())
     offset += offsetForInFlowPosition();
 
-  offset += topLeftLocationOffset();
+  offset += physicalLocationOffset();
 
   if (o->hasOverflowClip())
     offset -= toLayoutBox(o)->scrolledContentOffset();
@@ -2025,7 +2074,7 @@ void LayoutBox::positionLineBox(InlineBox* box) {
     box->remove(DontMarkLineBoxes);
     box->destroy();
   } else if (isAtomicInlineLevel()) {
-    setLocationAndUpdateOverflowControlsIfNeeded(box->topLeft());
+    setLocationAndUpdateOverflowControlsIfNeeded(box->location());
     setInlineBoxWrapper(box);
   }
 }
@@ -2236,17 +2285,26 @@ bool LayoutBox::paintedOutputOfObjectHasNoEffectRegardlessOfSize() const {
   // the changed part of children when the box got resized. In SPv2 this is
   // handled by detecting paint property changes.
   if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-    if (hasClipRelatedProperty() || hasControlClip() || hasMask())
+    if (hasClipRelatedProperty() || hasMask())
       return false;
   }
+
+  // If the box paints into its own backing, we can assume that it's painting
+  // may have some effect. For example, honoring the border-radius clip on
+  // a composited child paints into a mask for an otherwise non-painting
+  // element, because children of that element will require the mask.
+  if (hasLayer() && layer()->compositingState() == PaintsIntoOwnBacking)
+    return false;
 
   return true;
 }
 
 LayoutRect LayoutBox::localVisualRect() const {
-  if (style()->visibility() != EVisibility::Visible)
+  if (style()->visibility() != EVisibility::kVisible)
     return LayoutRect();
 
+  if (hasMask() && !RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+    return LayoutRect(layer()->boxForFilterOrMask());
   return selfVisualOverflowRect();
 }
 
@@ -2284,10 +2342,8 @@ bool LayoutBox::mapToVisualRectInAncestorSpace(
   if (ancestor == this)
     return true;
 
-  bool ancestorSkipped;
-  bool filterSkipped;
-  LayoutObject* container =
-      this->container(ancestor, &ancestorSkipped, &filterSkipped);
+  AncestorSkipInfo skipInfo(ancestor, true);
+  LayoutObject* container = this->container(&skipInfo);
   LayoutBox* tableRowContainer = nullptr;
   // Skip table row because cells and rows are in the same coordinate space (see
   // below, however for more comments about when |ancestor| is the table row).
@@ -2301,7 +2357,7 @@ bool LayoutBox::mapToVisualRectInAncestorSpace(
   if (!container)
     return true;
 
-  if (filterSkipped)
+  if (skipInfo.filterSkipped())
     inflateVisualRectForFilterUnderContainer(rect, *container, ancestor);
 
   // We are now in our parent container's coordinate space. Apply our transform
@@ -2315,18 +2371,19 @@ bool LayoutBox::mapToVisualRectInAncestorSpace(
   }
   LayoutPoint topLeft = rect.location();
   if (container->isBox()) {
-    topLeft.moveBy(topLeftLocation(toLayoutBox(container)));
+    topLeft.moveBy(physicalLocation(toLayoutBox(container)));
     // If the row is the ancestor, however, add its offset back in. In effect,
     // this passes from the joint <td> / <tr> coordinate space to the parent
     // space, then back to <tr> / <td>.
-    if (tableRowContainer)
+    if (tableRowContainer) {
       topLeft.moveBy(
-          -tableRowContainer->topLeftLocation(toLayoutBox(container)));
+          -tableRowContainer->physicalLocation(toLayoutBox(container)));
+    }
   } else if (container->isRuby()) {
     // TODO(wkorman): Generalize Ruby specialization and/or document more
     // clearly. See the accompanying specialization in
     // LayoutInline::mapToVisualRectInAncestorSpace.
-    topLeft.moveBy(topLeftLocation());
+    topLeft.moveBy(physicalLocation());
   } else {
     topLeft.moveBy(location());
   }
@@ -2356,7 +2413,7 @@ bool LayoutBox::mapToVisualRectInAncestorSpace(
           rect, visualRectFlags))
     return false;
 
-  if (ancestorSkipped) {
+  if (skipInfo.ancestorSkipped()) {
     // If the ancestor is below the container, then we need to map the rect into
     // ancestor's coordinates.
     LayoutSize containerOffset =
@@ -2395,7 +2452,7 @@ void LayoutBox::updateLogicalWidth() {
 }
 
 static float getMaxWidthListMarker(const LayoutBox* layoutObject) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   ASSERT(layoutObject);
   Node* parentNode = layoutObject->generatingNode();
   ASSERT(parentNode);
@@ -2434,19 +2491,16 @@ void LayoutBox::computeLogicalWidth(
   computedValues.m_margins.m_start = marginStart();
   computedValues.m_margins.m_end = marginEnd();
 
-  if (isOutOfFlowPositioned()) {
-    computePositionedLogicalWidth(computedValues);
+  // The parent box is flexing us, so it has increased or decreased our
+  // width.  Use the width from the style context.
+  if (hasOverrideLogicalContentWidth()) {
+    computedValues.m_extent =
+        overrideLogicalContentWidth() + borderAndPaddingLogicalWidth();
     return;
   }
 
-  // The parent box is flexing us, so it has increased or decreased our
-  // width.  Use the width from the style context.
-  // FIXME: Account for writing-mode in flexible boxes.
-  // https://bugs.webkit.org/show_bug.cgi?id=46418
-  if (hasOverrideLogicalContentWidth() &&
-      parent()->isFlexibleBoxIncludingDeprecated()) {
-    computedValues.m_extent =
-        overrideLogicalContentWidth() + borderAndPaddingLogicalWidth();
+  if (isOutOfFlowPositioned()) {
+    computePositionedLogicalWidth(computedValues);
     return;
   }
 
@@ -2810,7 +2864,7 @@ void LayoutBox::computeMarginsForDirection(MarginDirection flowDirection,
     const ComputedStyle& containingBlockStyle = containingBlock->styleRef();
     if ((marginStartLength.isAuto() && marginEndLength.isAuto()) ||
         (!marginStartLength.isAuto() && !marginEndLength.isAuto() &&
-         containingBlockStyle.textAlign() == ETextAlign::WebkitCenter)) {
+         containingBlockStyle.textAlign() == ETextAlign::kWebkitCenter)) {
       // Other browsers center the margin box for align=center elements so we
       // match them here.
       LayoutUnit centeredMarginBoxStart = std::max(
@@ -2824,9 +2878,9 @@ void LayoutBox::computeMarginsForDirection(MarginDirection flowDirection,
 
     // Adjust margins for the align attribute
     if ((!containingBlockStyle.isLeftToRightDirection() &&
-         containingBlockStyle.textAlign() == ETextAlign::WebkitLeft) ||
+         containingBlockStyle.textAlign() == ETextAlign::kWebkitLeft) ||
         (containingBlockStyle.isLeftToRightDirection() &&
-         containingBlockStyle.textAlign() == ETextAlign::WebkitRight)) {
+         containingBlockStyle.textAlign() == ETextAlign::kWebkitRight)) {
       if (containingBlockStyle.isLeftToRightDirection() !=
           styleRef().isLeftToRightDirection()) {
         if (!marginStartLength.isAuto())
@@ -2934,8 +2988,6 @@ void LayoutBox::computeLogicalHeight(
 
     // The parent box is flexing us, so it has increased or decreased our
     // height. We have to grab our cached flexible height.
-    // FIXME: Account for writing-mode in flexible boxes.
-    // https://bugs.webkit.org/show_bug.cgi?id=46418
     if (hasOverrideLogicalContentHeight()) {
       h = Length(overrideLogicalContentHeight(), Fixed);
     } else if (treatAsReplaced) {
@@ -3172,8 +3224,8 @@ LayoutUnit LayoutBox::computePercentageLogicalHeight(
         // height if they have overflow set to visible or hidden or if
         // they are replaced elements, and a 0px height if they have not.
         LayoutTableCell* cell = toLayoutTableCell(cb);
-        if (style()->overflowY() != OverflowVisible &&
-            style()->overflowY() != OverflowHidden &&
+        if (style()->overflowY() != EOverflow::Visible &&
+            style()->overflowY() != EOverflow::Hidden &&
             !shouldBeConsideredAsReplaced() &&
             (!cell->style()->logicalHeight().isAuto() ||
              !cell->table()->style()->logicalHeight().isAuto()))
@@ -3204,7 +3256,7 @@ LayoutUnit LayoutBox::computePercentageLogicalHeight(
   bool subtractBorderAndPadding =
       isTable() || (cb->isTableCell() && !skippedAutoHeightContainingBlock &&
                     cb->hasOverrideLogicalContentHeight() &&
-                    style()->boxSizing() == BoxSizingContentBox);
+                    style()->boxSizing() == EBoxSizing::kContentBox);
   if (subtractBorderAndPadding) {
     result -= borderAndPaddingLogicalHeight();
     return std::max(LayoutUnit(), result);
@@ -3687,7 +3739,7 @@ void LayoutBox::computeInlineStaticDistance(
 
   // FIXME: The static distance computation has not been patched for mixed
   // writing modes yet.
-  if (child->parent()->style()->direction() == LTR) {
+  if (child->parent()->style()->direction() == TextDirection::kLtr) {
     LayoutUnit staticPosition = child->layer()->staticInlinePosition() -
                                 containerBlock->borderLogicalLeft();
     for (LayoutObject* curr = child->parent(); curr && curr != containerBlock;
@@ -3985,7 +4037,7 @@ void LayoutBox::computePositionedLogicalWidthUsing(
       } else {
         // Use the containing block's direction rather than the parent block's
         // per CSS 2.1 reference test abspos-non-replaced-width-margin-000.
-        if (containerDirection == LTR) {
+        if (containerDirection == TextDirection::kLtr) {
           marginLogicalLeftValue = LayoutUnit();
           marginLogicalRightValue = availableSpace;  // will be negative
         } else {
@@ -4012,7 +4064,7 @@ void LayoutBox::computePositionedLogicalWidthUsing(
 
       // Use the containing block's direction rather than the parent block's
       // per CSS 2.1 reference test abspos-non-replaced-width-margin-000.
-      if (containerDirection == RTL)
+      if (containerDirection == TextDirection::kRtl)
         logicalLeftValue = (availableSpace + logicalLeftValue) -
                            marginLogicalLeftValue - marginLogicalRightValue;
     }
@@ -4150,6 +4202,8 @@ void LayoutBox::computeBlockStaticDistance(
       continue;
     const LayoutBox& box = *toLayoutBox(curr);
     staticLogicalTop += box.logicalTop();
+    if (box.isInFlowPositioned())
+      staticLogicalTop += box.offsetForInFlowPosition().height();
     if (!box.isLayoutFlowThread())
       continue;
     // We're walking out of a flowthread here. This flow thread is not in the
@@ -4573,7 +4627,7 @@ PositionWithAffinity LayoutBox::positionForPoint(const LayoutPoint& point) {
        layoutObject = layoutObject->nextSibling()) {
     if ((!layoutObject->slowFirstChild() && !layoutObject->isInline() &&
          !layoutObject->isLayoutBlockFlow()) ||
-        layoutObject->style()->visibility() != EVisibility::Visible)
+        layoutObject->style()->visibility() != EVisibility::kVisible)
       continue;
 
     if (!layoutObject->isBox())
@@ -4700,6 +4754,7 @@ bool LayoutBox::childNeedsRelayoutForPagination(const LayoutBox& child) const {
   // just marking and bailing here.
   if (child.isFloating())
     return true;
+  const LayoutFlowThread* flowThread = child.flowThreadContainingBlock();
   LayoutUnit logicalTop = child.logicalTop();
   // Figure out if we really need to force re-layout of the child. We only need
   // to do this if there's a chance that we need to recalculate pagination
@@ -4712,6 +4767,10 @@ bool LayoutBox::childNeedsRelayoutForPagination(const LayoutBox& child) const {
       // We need to relayout unless we're going to break at the exact same
       // location as before.
       if (child.offsetToNextPage() != remainingSpace)
+        return true;
+      // If column height isn't guaranteed to be uniform, we have no way of
+      // telling what has happened after the first break.
+      if (flowThread && flowThread->mayHaveNonUniformPageLogicalHeight())
         return true;
     } else if (logicalHeight > remainingSpace) {
       // Last time we laid out this child, we didn't need to break, but now we
@@ -4727,7 +4786,6 @@ bool LayoutBox::childNeedsRelayoutForPagination(const LayoutBox& child) const {
   // It seems that we can skip layout of this child, but we need to ask the flow
   // thread for permission first. We currently cannot skip over objects
   // containing column spanners.
-  LayoutFlowThread* flowThread = child.flowThreadContainingBlock();
   return flowThread && !flowThread->canSkipLayout(child);
 }
 
@@ -4880,8 +4938,10 @@ void LayoutBox::addLayoutOverflow(const LayoutRect& rect) {
       return;
   }
 
-  if (!m_overflow)
-    m_overflow = wrapUnique(new BoxOverflowModel(clientBox, borderBoxRect()));
+  if (!m_overflow) {
+    m_overflow =
+        WTF::wrapUnique(new BoxOverflowModel(clientBox, borderBoxRect()));
+  }
 
   m_overflow->addLayoutOverflow(overflowRect);
 }
@@ -4894,8 +4954,10 @@ void LayoutBox::addSelfVisualOverflow(const LayoutRect& rect) {
   if (borderBox.contains(rect))
     return;
 
-  if (!m_overflow)
-    m_overflow = wrapUnique(new BoxOverflowModel(noOverflowRect(), borderBox));
+  if (!m_overflow) {
+    m_overflow =
+        WTF::wrapUnique(new BoxOverflowModel(noOverflowRect(), borderBox));
+  }
 
   m_overflow->addSelfVisualOverflow(rect);
 }
@@ -4913,8 +4975,10 @@ void LayoutBox::addContentsVisualOverflow(const LayoutRect& rect) {
   if (!hasOverflowClip() && borderBox.contains(rect))
     return;
 
-  if (!m_overflow)
-    m_overflow = wrapUnique(new BoxOverflowModel(noOverflowRect(), borderBox));
+  if (!m_overflow) {
+    m_overflow =
+        WTF::wrapUnique(new BoxOverflowModel(noOverflowRect(), borderBox));
+  }
   m_overflow->addContentsVisualOverflow(rect);
 }
 
@@ -5041,8 +5105,8 @@ LayoutRect LayoutBox::visualOverflowRectForPropagation(
   // We are putting ourselves into our parent's coordinate space. If there is a
   // flipped block mismatch in a particular axis, then we have to flip the rect
   // along that axis.
-  if (style()->getWritingMode() == RightToLeftWritingMode ||
-      parentStyle.getWritingMode() == RightToLeftWritingMode)
+  if (isFlippedBlocksWritingMode(style()->getWritingMode()) ||
+      isFlippedBlocksWritingMode(parentStyle.getWritingMode()))
     rect.setX(size().width() - rect.maxX());
 
   return rect;
@@ -5097,8 +5161,8 @@ LayoutRect LayoutBox::layoutOverflowRectForPropagation(
   // We are putting ourselves into our parent's coordinate space. If there is a
   // flipped block mismatch in a particular axis, then we have to flip the rect
   // along that axis.
-  if (style()->getWritingMode() == RightToLeftWritingMode ||
-      parentStyle.getWritingMode() == RightToLeftWritingMode)
+  if (isFlippedBlocksWritingMode(style()->getWritingMode()) ||
+      isFlippedBlocksWritingMode(parentStyle.getWritingMode()))
     rect.setX(size().width() - rect.maxX());
 
   return rect;
@@ -5152,11 +5216,11 @@ LayoutRect LayoutBox::visualOverflowRect() const {
 }
 
 LayoutUnit LayoutBox::offsetLeft(const Element* parent) const {
-  return adjustedPositionRelativeTo(topLeftLocation(), parent).x();
+  return adjustedPositionRelativeTo(physicalLocation(), parent).x();
 }
 
 LayoutUnit LayoutBox::offsetTop(const Element* parent) const {
-  return adjustedPositionRelativeTo(topLeftLocation(), parent).y();
+  return adjustedPositionRelativeTo(physicalLocation(), parent).y();
 }
 
 LayoutPoint LayoutBox::flipForWritingModeForChild(
@@ -5173,6 +5237,11 @@ LayoutPoint LayoutBox::flipForWritingModeForChild(
 }
 
 LayoutBox* LayoutBox::locationContainer() const {
+  // Location of a non-root SVG object derived from LayoutBox should not be
+  // affected by writing-mode of the containing box (SVGRoot).
+  if (isSVGChild())
+    return nullptr;
+
   // Normally the box's location is relative to its containing box.
   LayoutObject* container = this->container();
   while (container && !container->isBox())
@@ -5180,7 +5249,7 @@ LayoutBox* LayoutBox::locationContainer() const {
   return toLayoutBox(container);
 }
 
-LayoutPoint LayoutBox::topLeftLocation(
+LayoutPoint LayoutBox::physicalLocation(
     const LayoutBox* flippedBlocksContainer) const {
   const LayoutBox* containerBox;
   if (flippedBlocksContainer) {
@@ -5508,6 +5577,12 @@ LayoutUnit LayoutBox::pageLogicalHeightForOffset(LayoutUnit offset) const {
       offset + offsetFromLogicalTopOfFirstPage());
 }
 
+bool LayoutBox::isPageLogicalHeightKnown() const {
+  if (const LayoutFlowThread* flowThread = flowThreadContainingBlock())
+    return flowThread->isPageLogicalHeightKnown();
+  return view()->pageLogicalHeight();
+}
+
 LayoutUnit LayoutBox::pageRemainingLogicalHeightForOffset(
     LayoutUnit offset,
     PageBoundaryRule pageBoundaryRule) const {
@@ -5546,6 +5621,13 @@ LayoutUnit LayoutBox::calculatePaginationStrutToFitContent(
     LayoutUnit contentLogicalHeight) const {
   ASSERT(strutToNextPage ==
          pageRemainingLogicalHeightForOffset(offset, AssociateWithLatterPage));
+  // If we're a cell in a row that straddles a page then avoid the repeating
+  // header group if necessary.
+  if (isTableCell()) {
+    const LayoutTableCell* cell = toLayoutTableCell(this);
+    if (!cell->row()->isFirstRowInSectionAfterHeader())
+      strutToNextPage += cell->table()->rowOffsetFromRepeatingHeader();
+  }
   LayoutUnit nextPageLogicalTop = offset + strutToNextPage;
   if (pageLogicalHeightForOffset(nextPageLogicalTop) >= contentLogicalHeight)
     return strutToNextPage;  // Content fits just fine in the next page or
@@ -5619,6 +5701,10 @@ LayoutRect LayoutBox::debugRect() const {
     block->adjustChildDebugRect(rect);
 
   return rect;
+}
+
+bool LayoutBox::shouldClipOverflow() const {
+  return hasOverflowClip() || styleRef().containsPaint() || hasControlClip();
 }
 
 }  // namespace blink

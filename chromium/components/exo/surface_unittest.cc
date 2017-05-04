@@ -4,7 +4,6 @@
 
 #include "base/bind.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/output/delegated_frame_data.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_manager.h"
@@ -51,6 +50,11 @@ TEST_F(SurfaceTest, Attach) {
   // attached buffer.
   surface->Attach(nullptr);
   surface->Commit();
+  // CompositorFrameSinkHolder::ReclaimResources() gets called via
+  // MojoCompositorFrameSinkClient interface. We need to wait here for the mojo
+  // call to finish so that the release callback finishes running before
+  // the assertion below.
+  RunAllPendingInMessageLoop();
   ASSERT_EQ(1, release_buffer_call_count);
 }
 
@@ -188,13 +192,13 @@ TEST_F(SurfaceTest, SetCrop) {
   EXPECT_EQ(crop_size.ToString(), surface->content_size().ToString());
 }
 
-const cc::DelegatedFrameData* GetFrameFromSurface(Surface* surface) {
+const cc::CompositorFrame& GetFrameFromSurface(Surface* surface) {
   cc::SurfaceId surface_id = surface->GetSurfaceId();
   cc::SurfaceManager* surface_manager =
-      aura::Env::GetInstance()->context_factory()->GetSurfaceManager();
+      aura::Env::GetInstance()->context_factory_private()->GetSurfaceManager();
   const cc::CompositorFrame& frame =
       surface_manager->GetSurfaceForId(surface_id)->GetEligibleFrame();
-  return frame.delegated_frame_data.get();
+  return frame;
 }
 
 TEST_F(SurfaceTest, SetBlendMode) {
@@ -204,13 +208,14 @@ TEST_F(SurfaceTest, SetBlendMode) {
   std::unique_ptr<Surface> surface(new Surface);
 
   surface->Attach(buffer.get());
-  surface->SetBlendMode(SkXfermode::kSrc_Mode);
+  surface->SetBlendMode(SkBlendMode::kSrc);
   surface->Commit();
+  RunAllPendingInMessageLoop();
 
-  const cc::DelegatedFrameData* frame_data = GetFrameFromSurface(surface.get());
-  ASSERT_EQ(1u, frame_data->render_pass_list.size());
-  ASSERT_EQ(1u, frame_data->render_pass_list.back()->quad_list.size());
-  EXPECT_FALSE(frame_data->render_pass_list.back()
+  const cc::CompositorFrame& frame = GetFrameFromSurface(surface.get());
+  ASSERT_EQ(1u, frame.render_pass_list.size());
+  ASSERT_EQ(1u, frame.render_pass_list.back()->quad_list.size());
+  EXPECT_FALSE(frame.render_pass_list.back()
                    ->quad_list.back()
                    ->ShouldDrawWithBlending());
 }
@@ -223,12 +228,12 @@ TEST_F(SurfaceTest, OverlayCandidate) {
 
   surface->Attach(buffer.get());
   surface->Commit();
+  RunAllPendingInMessageLoop();
 
-  const cc::DelegatedFrameData* frame_data = GetFrameFromSurface(surface.get());
-  ASSERT_EQ(1u, frame_data->render_pass_list.size());
-  ASSERT_EQ(1u, frame_data->render_pass_list.back()->quad_list.size());
-  cc::DrawQuad* draw_quad =
-      frame_data->render_pass_list.back()->quad_list.back();
+  const cc::CompositorFrame& frame = GetFrameFromSurface(surface.get());
+  ASSERT_EQ(1u, frame.render_pass_list.size());
+  ASSERT_EQ(1u, frame.render_pass_list.back()->quad_list.size());
+  cc::DrawQuad* draw_quad = frame.render_pass_list.back()->quad_list.back();
   ASSERT_EQ(cc::DrawQuad::TEXTURE_CONTENT, draw_quad->material);
 
   const cc::TextureDrawQuad* texture_quad =

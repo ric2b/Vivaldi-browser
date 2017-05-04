@@ -5,6 +5,7 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 
 #include <memory>
+#include <string>
 
 #if defined(OS_WIN)
 #include <windows.h>
@@ -36,6 +37,7 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
+#include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_details.h"
@@ -53,7 +55,6 @@
 #if defined(OS_WIN)
 #include "base/win/win_util.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
-#include "chrome/common/chrome_constants.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -329,6 +330,9 @@ void SessionEnding() {
   // exit this function.
   ShutdownWatcherHelper shutdown_watcher;
   shutdown_watcher.Arm(base::TimeDelta::FromSeconds(90));
+  metrics::MetricsService::SetExecutionPhase(
+      metrics::MetricsService::SHUTDOWN_TIMEBOMB_ARM,
+      g_browser_process->local_state());
 
   browser_shutdown::OnShutdownStarting(browser_shutdown::END_SESSION);
 
@@ -378,6 +382,10 @@ void NotifyAppTerminating() {
 }
 
 void NotifyAndTerminate(bool fast_path) {
+  NotifyAndTerminate(fast_path, RebootPolicy::kOptionalReboot);
+}
+
+void NotifyAndTerminate(bool fast_path, RebootPolicy reboot_policy) {
 #if defined(OS_CHROMEOS)
   static bool notified = false;
   // Return if a shutdown request has already been sent.
@@ -396,15 +404,17 @@ void NotifyAndTerminate(bool fast_path) {
   if (base::SysInfo::IsRunningOnChromeOS()) {
     // If we're on a ChromeOS device, reboot if an update has been applied,
     // or else signal the session manager to log out.
-    chromeos::UpdateEngineClient* update_engine_client
-        = chromeos::DBusThreadManager::Get()->GetUpdateEngineClient();
+    chromeos::UpdateEngineClient* update_engine_client =
+        chromeos::DBusThreadManager::Get()->GetUpdateEngineClient();
     if (update_engine_client->GetLastStatus().status ==
-        chromeos::UpdateEngineClient::UPDATE_STATUS_UPDATED_NEED_REBOOT) {
+            chromeos::UpdateEngineClient::UPDATE_STATUS_UPDATED_NEED_REBOOT ||
+        reboot_policy == RebootPolicy::kForceReboot) {
       update_engine_client->RebootAfterUpdate();
     } else if (g_send_stop_request_to_session_manager) {
       // Don't ask SessionManager to stop session if the shutdown request comes
       // from session manager.
-      chromeos::DBusThreadManager::Get()->GetSessionManagerClient()
+      chromeos::DBusThreadManager::Get()
+          ->GetSessionManagerClient()
           ->StopSession();
     }
   } else {

@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <string.h>
 
+#include <algorithm>
 #include <utility>
 
 #include "base/bind.h"
@@ -21,14 +22,17 @@
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_local.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "crypto/ec_private_key.h"
 #include "crypto/openssl_util.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
+#include "net/base/trace_constants.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_ev_whitelist.h"
 #include "net/cert/ct_policy_enforcer.h"
@@ -169,10 +173,7 @@ std::unique_ptr<base::Value> NetLogChannelIDLookupCompleteCallback(
   dict->SetInteger("net_error", result);
   std::string raw_key;
   if (result == OK && key && key->ExportRawPublicKey(&raw_key)) {
-    std::string key_to_log = "redacted";
-    if (capture_mode.include_cookies_and_credentials()) {
-      key_to_log = base::HexEncode(raw_key.data(), raw_key.length());
-    }
+    std::string key_to_log = base::HexEncode(raw_key.data(), raw_key.length());
     dict->SetString("key", key_to_log);
   }
   return std::move(dict);
@@ -232,12 +233,16 @@ bool AreLegacyECDSACiphersEnabled() {
 }
 #endif
 
+const base::Feature kShortRecordHeaderFeature{
+    "SSLShortRecordHeader", base::FEATURE_DISABLED_BY_DEFAULT};
+
 }  // namespace
 
 class SSLClientSocketImpl::SSLContext {
  public:
   static SSLContext* GetInstance() {
-    return base::Singleton<SSLContext>::get();
+    return base::Singleton<SSLContext,
+                           base::LeakySingletonTraits<SSLContext>>::get();
   }
   SSL_CTX* ssl_ctx() { return ssl_ctx_.get(); }
   SSLClientSessionCache* session_cache() { return &session_cache_; }
@@ -286,6 +291,10 @@ class SSLClientSocketImpl::SSLContext {
     SSL_CTX_set_timeout(ssl_ctx_.get(), 1 * 60 * 60 /* one hour */);
 
     SSL_CTX_set_grease_enabled(ssl_ctx_.get(), 1);
+
+    if (base::FeatureList::IsEnabled(kShortRecordHeaderFeature)) {
+      SSL_CTX_set_short_header_enabled(ssl_ctx_.get(), 1);
+    }
 
     if (!SSL_CTX_add_client_custom_ext(ssl_ctx_.get(), kTbExtNum,
                                        &TokenBindingAddCallback,
@@ -556,9 +565,36 @@ void SSLClientSocketImpl::SetSSLKeyLogFile(
 
 void SSLClientSocketImpl::GetSSLCertRequestInfo(
     SSLCertRequestInfo* cert_request_info) {
+  if (!ssl_) {
+    NOTREACHED();
+    return;
+  }
+
   cert_request_info->host_and_port = host_and_port_;
-  cert_request_info->cert_authorities = cert_authorities_;
-  cert_request_info->cert_key_types = cert_key_types_;
+
+  cert_request_info->cert_authorities.clear();
+  STACK_OF(X509_NAME)* authorities = SSL_get_client_CA_list(ssl_.get());
+  for (size_t i = 0; i < sk_X509_NAME_num(authorities); i++) {
+    X509_NAME* ca_name = sk_X509_NAME_value(authorities, i);
+    uint8_t* str = nullptr;
+    int length = i2d_X509_NAME(ca_name, &str);
+    if (length > 0) {
+      cert_request_info->cert_authorities.push_back(std::string(
+          reinterpret_cast<const char*>(str), static_cast<size_t>(length)));
+    } else {
+      NOTREACHED();  // Error serializing |ca_name|.
+    }
+    OPENSSL_free(str);
+  }
+
+  cert_request_info->cert_key_types.clear();
+  const uint8_t* client_cert_types;
+  size_t num_client_cert_types =
+      SSL_get0_certificate_types(ssl_.get(), &client_cert_types);
+  for (size_t i = 0; i < num_client_cert_types; i++) {
+    cert_request_info->cert_key_types.push_back(
+        static_cast<SSLClientCertType>(client_cert_types[i]));
+  }
 }
 
 ChannelIDService* SSLClientSocketImpl::GetChannelIDService() const {
@@ -742,7 +778,7 @@ bool SSLClientSocketImpl::WasEverUsed() const {
   return was_ever_used_;
 }
 
-bool SSLClientSocketImpl::WasNpnNegotiated() const {
+bool SSLClientSocketImpl::WasAlpnNegotiated() const {
   return negotiated_protocol_ != kProtoUnknown;
 }
 
@@ -784,9 +820,6 @@ bool SSLClientSocketImpl::GetSSLInfo(SSLInfo* ssl_info) {
   SSLConnectionStatusSetVersion(GetNetSSLVersion(ssl_.get()),
                                 &ssl_info->connection_status);
 
-  if (!SSL_get_secure_renegotiation_support(ssl_.get()))
-    ssl_info->connection_status |= SSL_CONNECTION_NO_RENEGOTIATION_EXTENSION;
-
   ssl_info->handshake_type = SSL_session_reused(ssl_.get())
                                  ? SSLInfo::HANDSHAKE_RESUME
                                  : SSLInfo::HANDSHAKE_FULL;
@@ -800,6 +833,28 @@ void SSLClientSocketImpl::GetConnectionAttempts(ConnectionAttempts* out) const {
 
 int64_t SSLClientSocketImpl::GetTotalReceivedBytes() const {
   return transport_->socket()->GetTotalReceivedBytes();
+}
+
+void SSLClientSocketImpl::DumpMemoryStats(SocketMemoryStats* stats) const {
+  if (transport_adapter_)
+    stats->buffer_size = transport_adapter_->GetAllocationSize();
+  if (server_cert_chain_) {
+    for (size_t i = 0; i < server_cert_chain_->size(); ++i) {
+      X509* cert = server_cert_chain_->Get(i);
+      // This measures the lower bound of the serialized certificate. It doesn't
+      // measure the actual memory used, which is 4x this amount (see
+      // crbug.com/671420 for more details).
+      stats->serialized_cert_size += i2d_X509(cert, nullptr);
+    }
+    stats->cert_count = server_cert_chain_->size();
+  }
+  stats->total_size = stats->buffer_size + stats->serialized_cert_size;
+}
+
+// static
+void SSLClientSocketImpl::DumpSSLClientSessionMemoryStats(
+    base::trace_event::ProcessMemoryDump* pmd) {
+  SSLContext::GetInstance()->session_cache()->DumpMemoryStats(pmd);
 }
 
 int SSLClientSocketImpl::Read(IOBuffer* buf,
@@ -891,8 +946,8 @@ int SSLClientSocketImpl::Init() {
     return ERR_UNEXPECTED;
   }
 
-  bssl::UniquePtr<SSL_SESSION> session =
-      context->session_cache()->Lookup(GetSessionCacheKey());
+  bssl::UniquePtr<SSL_SESSION> session = context->session_cache()->Lookup(
+      GetSessionCacheKey(), &ssl_session_cache_lookup_count_);
   if (session)
     SSL_set_session(ssl_.get(), session.get());
 
@@ -937,27 +992,6 @@ int SSLClientSocketImpl::Init() {
   SSL_set_mode(ssl_.get(), mode.set_mask);
   SSL_clear_mode(ssl_.get(), mode.clear_mask);
 
-  std::string command;
-  if (SSLClientSocket::IsPostQuantumExperimentEnabled()) {
-    // These are experimental, non-standard ciphersuites.  They are part of an
-    // experiment in post-quantum cryptography.  They're not intended to
-    // represent a de-facto standard, and will be removed from BoringSSL in
-    // ~2018.
-    if (EVP_has_aes_hardware()) {
-      command.append(
-          "CECPQ1-RSA-AES256-GCM-SHA384:"
-          "CECPQ1-ECDSA-AES256-GCM-SHA384:");
-    }
-    command.append(
-        "CECPQ1-RSA-CHACHA20-POLY1305-SHA256:"
-        "CECPQ1-ECDSA-CHACHA20-POLY1305-SHA256:");
-    if (!EVP_has_aes_hardware()) {
-      command.append(
-          "CECPQ1-RSA-AES256-GCM-SHA384:"
-          "CECPQ1-ECDSA-AES256-GCM-SHA384:");
-    }
-  }
-
   // Use BoringSSL defaults, but disable HMAC-SHA256 and HMAC-SHA384 ciphers
   // (note that SHA256 and SHA384 only select legacy CBC ciphers). Also disable
   // DHE_RSA_WITH_AES_256_GCM_SHA384. Historically, AES_256_GCM was not
@@ -966,7 +1000,8 @@ int SSLClientSocketImpl::Init() {
   //
   // TODO(davidben): Remove the DHE_RSA_WITH_AES_256_GCM_SHA384 exclusion when
   // the DHEEnabled administrative policy expires.
-  command.append("ALL:!SHA256:!SHA384:!DHE-RSA-AES256-GCM-SHA384:!aPSK:!RC4");
+  std::string command(
+      "ALL:!SHA256:!SHA384:!DHE-RSA-AES256-GCM-SHA384:!aPSK:!RC4");
 
   if (ssl_config_.require_ecdhe)
     command.append(":!kRSA:!kDHE");
@@ -1113,6 +1148,19 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
   if (result < 0)
     return result;
 
+  SSLContext::GetInstance()->session_cache()->ResetLookupCount(
+      GetSessionCacheKey());
+  // If we got a session from the session cache, log how many concurrent
+  // handshakes that session was used in before we finished our handshake. This
+  // is only recorded if the session from the cache was actually used, and only
+  // if the ALPN protocol is h2 (under the assumption that TLS 1.3 servers will
+  // be speaking h2). See https://crbug.com/631988.
+  if (ssl_session_cache_lookup_count_ && negotiated_protocol_ == kProtoHTTP2 &&
+      SSL_session_reused(ssl_.get())) {
+    UMA_HISTOGRAM_EXACT_LINEAR("Net.SSLSessionConcurrentLookupCount",
+                               ssl_session_cache_lookup_count_, 20);
+  }
+
   // DHE is offered on the deprecated cipher fallback and then rejected
   // afterwards. This is to aid in diagnosing connection failures because a
   // server requires DHE ciphers.
@@ -1146,11 +1194,6 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
   const uint8_t* ocsp_response_raw;
   size_t ocsp_response_len;
   SSL_get0_ocsp_response(ssl_.get(), &ocsp_response_raw, &ocsp_response_len);
-  std::string ocsp_response;
-  if (ocsp_response_len > 0) {
-    ocsp_response_.assign(reinterpret_cast<const char*>(ocsp_response_raw),
-                          ocsp_response_len);
-  }
   set_stapled_ocsp_response_received(ocsp_response_len != 0);
   UMA_HISTOGRAM_BOOLEAN("Net.OCSPResponseStapled", ocsp_response_len != 0);
 
@@ -1232,10 +1275,16 @@ int SSLClientSocketImpl::DoVerifyCert(int result) {
 
   start_cert_verification_time_ = base::TimeTicks::Now();
 
+  const uint8_t* ocsp_response_raw;
+  size_t ocsp_response_len;
+  SSL_get0_ocsp_response(ssl_.get(), &ocsp_response_raw, &ocsp_response_len);
+  base::StringPiece ocsp_response(
+      reinterpret_cast<const char*>(ocsp_response_raw), ocsp_response_len);
+
   return cert_verifier_->Verify(
       CertVerifier::RequestParams(server_cert_, host_and_port_.host(),
                                   ssl_config_.GetCertVerifyFlags(),
-                                  ocsp_response_, CertificateList()),
+                                  ocsp_response.as_string(), CertificateList()),
       // TODO(davidben): Route the CRLSet through SSLConfig so
       // SSLClientSocket doesn't depend on SSLConfigService.
       SSLConfigService::GetCRLSet().get(), &server_cert_verify_result_,
@@ -1293,8 +1342,15 @@ int SSLClientSocketImpl::DoVerifyCertComplete(int result) {
     SSLInfo ssl_info;
     bool ok = GetSSLInfo(&ssl_info);
     DCHECK(ok);
+
+    const uint8_t* ocsp_response_raw;
+    size_t ocsp_response_len;
+    SSL_get0_ocsp_response(ssl_.get(), &ocsp_response_raw, &ocsp_response_len);
+    base::StringPiece ocsp_response(
+        reinterpret_cast<const char*>(ocsp_response_raw), ocsp_response_len);
+
     transport_security_state_->CheckExpectStaple(host_and_port_, ssl_info,
-                                                 ocsp_response_);
+                                                 ocsp_response);
   }
 
   completed_connect_ = true;
@@ -1330,7 +1386,7 @@ void SSLClientSocketImpl::OnHandshakeIOComplete(int result) {
 }
 
 int SSLClientSocketImpl::DoHandshakeLoop(int last_io_result) {
-  TRACE_EVENT0("net", "SSLClientSocketImpl::DoHandshakeLoop");
+  TRACE_EVENT0(kNetTracingCategory, "SSLClientSocketImpl::DoHandshakeLoop");
   int rv = last_io_result;
   do {
     // Default to STATE_NONE for next state.
@@ -1531,15 +1587,20 @@ int SSLClientSocketImpl::VerifyCT() {
   const uint8_t* sct_list_raw;
   size_t sct_list_len;
   SSL_get0_signed_cert_timestamp_list(ssl_.get(), &sct_list_raw, &sct_list_len);
-  std::string sct_list;
-  if (sct_list_len > 0)
-    sct_list.assign(reinterpret_cast<const char*>(sct_list_raw), sct_list_len);
+  base::StringPiece sct_list(reinterpret_cast<const char*>(sct_list_raw),
+                             sct_list_len);
+
+  const uint8_t* ocsp_response_raw;
+  size_t ocsp_response_len;
+  SSL_get0_ocsp_response(ssl_.get(), &ocsp_response_raw, &ocsp_response_len);
+  base::StringPiece ocsp_response(
+      reinterpret_cast<const char*>(ocsp_response_raw), ocsp_response_len);
 
   // Note that this is a completely synchronous operation: The CT Log Verifier
   // gets all the data it needs for SCT verification and does not do any
   // external communication.
   cert_transparency_verifier_->Verify(
-      server_cert_verify_result_.verified_cert.get(), ocsp_response_, sct_list,
+      server_cert_verify_result_.verified_cert.get(), ocsp_response, sct_list,
       &ct_verify_result_.scts, net_log_);
 
   ct_verify_result_.ct_policies_applied = true;
@@ -1603,26 +1664,8 @@ int SSLClientSocketImpl::ClientCertRequestCallback(SSL* ssl) {
 #else   // !defined(OS_IOS)
   if (!ssl_config_.send_client_cert) {
     // First pass: we know that a client certificate is needed, but we do not
-    // have one at hand.
-    STACK_OF(X509_NAME)* authorities = SSL_get_client_CA_list(ssl);
-    for (size_t i = 0; i < sk_X509_NAME_num(authorities); i++) {
-      X509_NAME* ca_name = (X509_NAME*)sk_X509_NAME_value(authorities, i);
-      unsigned char* str = NULL;
-      int length = i2d_X509_NAME(ca_name, &str);
-      cert_authorities_.push_back(std::string(
-          reinterpret_cast<const char*>(str), static_cast<size_t>(length)));
-      OPENSSL_free(str);
-    }
-
-    const unsigned char* client_cert_types;
-    size_t num_client_cert_types =
-        SSL_get0_certificate_types(ssl, &client_cert_types);
-    for (size_t i = 0; i < num_client_cert_types; i++) {
-      cert_key_types_.push_back(
-          static_cast<SSLClientCertType>(client_cert_types[i]));
-    }
-
-    // Suspends handshake. SSL_get_error will return SSL_ERROR_WANT_X509_LOOKUP.
+    // have one at hand. Suspend the handshake. SSL_get_error will return
+    // SSL_ERROR_WANT_X509_LOOKUP.
     return -1;
   }
 

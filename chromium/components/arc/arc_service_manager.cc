@@ -4,84 +4,42 @@
 
 #include "components/arc/arc_service_manager.h"
 
-#include <utility>
-
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/sequenced_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task_runner.h"
 #include "components/arc/arc_bridge_service.h"
-#include "components/arc/arc_bridge_service_impl.h"
-#include "components/arc/audio/arc_audio_bridge.h"
-#include "components/arc/bluetooth/arc_bluetooth_bridge.h"
-#include "components/arc/boot_phase_monitor/arc_boot_phase_monitor_bridge.h"
-#include "components/arc/clipboard/arc_clipboard_bridge.h"
-#include "components/arc/crash_collector/arc_crash_collector_bridge.h"
-#include "components/arc/ime/arc_ime_service.h"
-#include "components/arc/intent_helper/activity_icon_loader.h"
-#include "components/arc/kiosk/arc_kiosk_bridge.h"
-#include "components/arc/metrics/arc_metrics_service.h"
-#include "components/arc/net/arc_net_host_impl.h"
-#include "components/arc/obb_mounter/arc_obb_mounter_bridge.h"
-#include "components/arc/power/arc_power_bridge.h"
-#include "components/arc/storage_manager/arc_storage_manager.h"
-#include "components/arc/user_data/arc_user_data_service.h"
-#include "components/prefs/pref_member.h"
-#include "ui/arc/notification/arc_notification_manager.h"
+#include "components/arc/arc_session.h"
+#include "components/arc/arc_session_runner.h"
+#include "components/arc/intent_helper/arc_intent_helper_observer.h"
 
 namespace arc {
-
 namespace {
 
-// Weak pointer.  This class is owned by ChromeBrowserMainPartsChromeos.
+// Weak pointer.  This class is owned by arc::ArcServiceLauncher.
 ArcServiceManager* g_arc_service_manager = nullptr;
-
-// This pointer is owned by ArcServiceManager.
-ArcBridgeService* g_arc_bridge_service_for_testing = nullptr;
 
 }  // namespace
 
 ArcServiceManager::ArcServiceManager(
     scoped_refptr<base::TaskRunner> blocking_task_runner)
     : blocking_task_runner_(blocking_task_runner),
+      arc_bridge_service_(base::MakeUnique<ArcBridgeService>()),
       icon_loader_(new ActivityIconLoader()),
       activity_resolver_(new LocalActivityResolver()) {
   DCHECK(!g_arc_service_manager);
   g_arc_service_manager = this;
-
-  if (g_arc_bridge_service_for_testing) {
-    arc_bridge_service_.reset(g_arc_bridge_service_for_testing);
-    g_arc_bridge_service_for_testing = nullptr;
-  } else {
-    arc_bridge_service_.reset(new ArcBridgeServiceImpl(blocking_task_runner));
-  }
-
-  AddService(base::MakeUnique<ArcAudioBridge>(arc_bridge_service()));
-  AddService(base::MakeUnique<ArcBluetoothBridge>(arc_bridge_service()));
-  AddService(base::MakeUnique<ArcBootPhaseMonitorBridge>(arc_bridge_service()));
-  AddService(base::MakeUnique<ArcClipboardBridge>(arc_bridge_service()));
-  AddService(base::MakeUnique<ArcCrashCollectorBridge>(arc_bridge_service(),
-                                                       blocking_task_runner_));
-  AddService(base::MakeUnique<ArcImeService>(arc_bridge_service()));
-  AddService(base::MakeUnique<ArcKioskBridge>(arc_bridge_service()));
-  AddService(base::MakeUnique<ArcMetricsService>(arc_bridge_service()));
-  AddService(base::MakeUnique<ArcNetHostImpl>(arc_bridge_service()));
-  AddService(base::MakeUnique<ArcObbMounterBridge>(arc_bridge_service()));
-  AddService(base::MakeUnique<ArcPowerBridge>(arc_bridge_service()));
-  AddService(base::MakeUnique<ArcStorageManager>(arc_bridge_service()));
 }
 
 ArcServiceManager::~ArcServiceManager() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(g_arc_service_manager == this);
+  DCHECK_EQ(g_arc_service_manager, this);
   g_arc_service_manager = nullptr;
-  if (g_arc_bridge_service_for_testing) {
-    delete g_arc_bridge_service_for_testing;
-  }
 }
 
 // static
 ArcServiceManager* ArcServiceManager::Get() {
-  DCHECK(g_arc_service_manager);
+  if (!g_arc_service_manager)
+    return nullptr;
   DCHECK(g_arc_service_manager->thread_checker_.CalledOnValidThread());
   return g_arc_service_manager;
 }
@@ -91,34 +49,39 @@ ArcBridgeService* ArcServiceManager::arc_bridge_service() {
   return arc_bridge_service_.get();
 }
 
-void ArcServiceManager::AddService(std::unique_ptr<ArcService> service) {
+bool ArcServiceManager::AddServiceInternal(
+    const std::string& name,
+    std::unique_ptr<ArcService> service) {
   DCHECK(thread_checker_.CalledOnValidThread());
-
-  services_.emplace_back(std::move(service));
+  if (!name.empty() && services_.count(name) != 0) {
+    LOG(ERROR) << "Ignoring registration of service with duplicate name: "
+               << name;
+    return false;
+  }
+  services_.insert(std::make_pair(name, std::move(service)));
+  return true;
 }
 
-void ArcServiceManager::OnPrimaryUserProfilePrepared(
-    const AccountId& account_id,
-    std::unique_ptr<BooleanPrefMember> arc_enabled_pref) {
+ArcService* ArcServiceManager::GetNamedServiceInternal(
+    const std::string& name) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  AddService(base::MakeUnique<ArcNotificationManager>(arc_bridge_service(),
-                                                      account_id));
+  if (name.empty()) {
+    LOG(ERROR) << "kArcServiceName[] should be a fully-qualified class name.";
+    return nullptr;
+  }
+  auto service = services_.find(name);
+  if (service == services_.end()) {
+    LOG(ERROR) << "Named service " << name << " not found";
+    return nullptr;
+  }
+  return service->second.get();
 }
 
 void ArcServiceManager::Shutdown() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   icon_loader_ = nullptr;
   activity_resolver_ = nullptr;
   services_.clear();
-  arc_bridge_service_->OnShutdown();
-}
-
-// static
-void ArcServiceManager::SetArcBridgeServiceForTesting(
-    std::unique_ptr<ArcBridgeService> arc_bridge_service) {
-  if (g_arc_bridge_service_for_testing) {
-    delete g_arc_bridge_service_for_testing;
-  }
-  g_arc_bridge_service_for_testing = arc_bridge_service.release();
 }
 
 }  // namespace arc

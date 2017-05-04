@@ -37,12 +37,16 @@ class CanvasContextCreationAttributes;
 class EXTBlendMinMax;
 class EXTFragDepth;
 class EXTShaderTextureLOD;
+class EXTsRGB;
 class EXTTextureFilterAnisotropic;
 class OESElementIndexUint;
 class OESStandardDerivatives;
+class OESTextureFloat;
 class OESTextureFloatLinear;
+class OESTextureHalfFloat;
 class OESTextureHalfFloatLinear;
 class WebGLDebugRendererInfo;
+class WebGLDepthTexture;
 class WebGLLoseContext;
 
 class WebGLRenderingContext final : public WebGLRenderingContextBase {
@@ -69,8 +73,6 @@ class WebGLRenderingContext final : public WebGLRenderingContextBase {
     void onError(HTMLCanvasElement*, const String& error) override;
   };
 
-  ~WebGLRenderingContext() override;
-
   CanvasRenderingContext::ContextType getContextType() const override {
     return CanvasRenderingContext::ContextWebgl;
   }
@@ -80,7 +82,6 @@ class WebGLRenderingContext final : public WebGLRenderingContextBase {
   void setCanvasGetContextResult(RenderingContext&) final;
   void setOffscreenCanvasGetContextResult(OffscreenRenderingContext&) final;
 
-  EAGERLY_FINALIZE();
   DECLARE_VIRTUAL_TRACE();
 
   DECLARE_VIRTUAL_TRACE_WRAPPERS();

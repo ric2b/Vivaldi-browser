@@ -30,17 +30,20 @@
 namespace blink {
 
 WebGLContextObject::WebGLContextObject(WebGLRenderingContextBase* context)
-    : WebGLObject(context), m_context(context) {}
+    : WebGLObject(context), m_context(this, context) {}
 
-WebGLContextObject::~WebGLContextObject() {}
+bool WebGLContextObject::validate(
+    const WebGLContextGroup*,
+    const WebGLRenderingContextBase* context) const {
+  // The contexts and context groups no longer maintain references to all
+  // the objects they ever created, so there's no way to invalidate them
+  // eagerly during context loss. The invalidation is discovered lazily.
+  return context == m_context &&
+         cachedNumberOfContextLosses() == context->numberOfContextLosses();
+}
 
-void WebGLContextObject::detachContext() {
-  detach();
-  if (m_context) {
-    deleteObject(m_context->contextGL());
-    m_context->removeContextObject(this);
-    m_context = nullptr;
-  }
+uint32_t WebGLContextObject::currentNumberOfContextLosses() const {
+  return m_context->numberOfContextLosses();
 }
 
 gpu::gles2::GLES2Interface* WebGLContextObject::getAGLInterface() const {
@@ -50,6 +53,11 @@ gpu::gles2::GLES2Interface* WebGLContextObject::getAGLInterface() const {
 DEFINE_TRACE(WebGLContextObject) {
   visitor->trace(m_context);
   WebGLObject::trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(WebGLContextObject) {
+  visitor->traceWrappers(m_context);
+  WebGLObject::traceWrappers(visitor);
 }
 
 }  // namespace blink

@@ -101,7 +101,7 @@ class ScriptPromisePropertyTestBase {
     v8::HandleScope handleScope(isolate());
     m_otherScriptState = ScriptStateForTesting::create(
         v8::Context::New(isolate()),
-        DOMWrapperWorld::ensureIsolatedWorld(isolate(), 1, -1));
+        DOMWrapperWorld::ensureIsolatedWorld(isolate(), 1));
   }
 
   virtual ~ScriptPromisePropertyTestBase() { destroyContext(); }
@@ -144,7 +144,7 @@ class ScriptPromisePropertyTestBase {
         ScriptState::from(toV8Context(&document(), world));
     ScriptState::Scope scope(scriptState);
     return ScriptValue(
-        scriptState, toV8(value, scriptState->context()->Global(), isolate()));
+        scriptState, ToV8(value, scriptState->context()->Global(), isolate()));
   }
 
  private:
@@ -375,9 +375,8 @@ TEST_F(ScriptPromisePropertyGarbageCollectedTest, Resolve_DeadContext) {
   }
 
   destroyContext();
-  EXPECT_TRUE(
-      !getProperty()->getExecutionContext() ||
-      getProperty()->getExecutionContext()->activeDOMObjectsAreStopped());
+  EXPECT_TRUE(!getProperty()->getExecutionContext() ||
+              getProperty()->getExecutionContext()->isContextDestroyed());
 
   getProperty()->resolve(new GarbageCollectedScriptWrappable("value"));
   EXPECT_EQ(Property::Pending, getProperty()->getState());

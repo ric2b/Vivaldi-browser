@@ -8,27 +8,26 @@
 #include <set>
 #include <vector>
 
-#include "cc/tiles/software_image_decode_controller.h"
+#include "cc/tiles/software_image_decode_cache.h"
 #include "cc/tiles/tile_manager.h"
 
 namespace cc {
 
 class FakeTileManager : public TileManager {
  public:
-  explicit FakeTileManager(TileManagerClient* client);
-  FakeTileManager(TileManagerClient* client, ResourcePool* resource_pool);
+  FakeTileManager(TileManagerClient* client,
+                  ResourcePool* resource_pool = nullptr);
   ~FakeTileManager() override;
 
   bool HasBeenAssignedMemory(Tile* tile);
   void AssignMemoryToTiles(
       const GlobalStateThatImpactsTilePriority& state);
 
-  void Release(Tile* tile) override;
-
   std::vector<Tile*> tiles_for_raster;
 
  private:
-  SoftwareImageDecodeController image_decode_controller_;
+  SoftwareImageDecodeCache image_decode_cache_;
+  DecodedImageTracker decoded_image_tracker_;
 };
 
 }  // namespace cc

@@ -27,7 +27,6 @@ namespace views {
 class Label;
 class LabelButton;
 class TreeView;
-class Widget;
 }
 
 // This is the Views implementation of the collected cookies dialog.
@@ -63,6 +62,7 @@ class CollectedCookiesViews : public views::DialogDelegateView,
 
   // views::View:
   gfx::Size GetMinimumSize() const override;
+  gfx::Size GetPreferredSize() const override;
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
 

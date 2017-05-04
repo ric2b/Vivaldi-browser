@@ -138,8 +138,8 @@ source_set("unit_tests") {
     ]
     deps += [
       "//components/gcm_driver:test_support",
-      "//components/pref_registry:test_support",
       "//components/signin/core/browser:test_support",
+      "//components/sync_preferences:test_support",
       "//google_apis:test_support",
       "//net",
     ]
@@ -234,6 +234,7 @@ if (is_android) {
       "//base:base_java_test_support",
       "//components/signin/core/browser/android:java",
       "//components/sync/android:sync_java",
+      "//third_party/android_support_test_runner:runner_java",
       "//third_party/cacheinvalidation:cacheinvalidation_javalib",
       "//third_party/cacheinvalidation:cacheinvalidation_proto_java",
     ]

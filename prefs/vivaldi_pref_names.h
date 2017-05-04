@@ -10,15 +10,18 @@ namespace vivaldiprefs {
 // Profile prefs go here.
 
 extern const char kAlwaysLoadPinnedTabAfterRestore[];
+extern const char kAutoUpdateEnabled[];
 extern const char kDeferredTabLoadingAfterRestore[];
 extern const char kMousegesturesEnabled[];
+extern const char kPluginsWidevideEnabled[];
 extern const char kRockerGesturesEnabled[];
 extern const char kSmoothScrollingEnabled[];
-extern const char kVivaldiTabsToLinks[];
-extern const char kVivaldiLastTopSitesVacuumDate[];
-extern const char kVivaldiTabZoom[];
 extern const char kVivaldiHomepage[];
+extern const char kVivaldiLastTopSitesVacuumDate[];
 extern const char kVivaldiNumberOfDaysToKeepVisits[];
+extern const char kVivaldiTabZoom[];
+extern const char kVivaldiTabsToLinks[];
+
 extern const char kVivaldiExperiments[];
 
 #if defined(USE_AURA)

@@ -4,19 +4,28 @@
 
 #include "components/sync/syncable/directory.h"
 
+#include <inttypes.h>
+
 #include <algorithm>
 #include <iterator>
 #include <utility>
 
 #include "base/base64.h"
+#include "base/files/file_enumerator.h"
 #include "base/guid.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
+#include "base/trace_event/memory_dump_manager.h"
+#include "base/trace_event/memory_usage_estimator.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "components/sync/base/attachment_id_proto.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/base/unrecoverable_error_handler.h"
+#include "components/sync/protocol/proto_memory_estimations.h"
 #include "components/sync/syncable/in_memory_directory_backing_store.h"
 #include "components/sync/syncable/model_neutral_mutable_entry.h"
 #include "components/sync/syncable/on_disk_directory_backing_store.h"
@@ -64,6 +73,13 @@ bool Directory::PersistedKernelInfo::HasEmptyDownloadProgress(
   const sync_pb::DataTypeProgressMarker& progress_marker =
       download_progress[model_type];
   return progress_marker.token().empty();
+}
+
+size_t Directory::PersistedKernelInfo::EstimateMemoryUsage() const {
+  using base::trace_event::EstimateMemoryUsage;
+  return EstimateMemoryUsage(store_birthday) +
+         EstimateMemoryUsage(bag_of_chips) +
+         EstimateMemoryUsage(datatype_context);
 }
 
 Directory::SaveChangesSnapshot::SaveChangesSnapshot()
@@ -418,6 +434,23 @@ bool Directory::ReindexParentId(BaseWriteTransaction* trans,
   return true;
 }
 
+// static
+void Directory::DeleteDirectoryFiles(const base::FilePath& directory_path) {
+  // We assume that the directory database files are all top level files, and
+  // use no folders. We also assume that there might be child folders under
+  // |directory_path| that are used for non-directory things, like storing
+  // ModelTypeStore/LevelDB data, and we expressly do not want to delete those.
+  if (base::DirectoryExists(directory_path)) {
+    base::FileEnumerator fe(directory_path, false, base::FileEnumerator::FILES);
+    for (base::FilePath current = fe.Next(); !current.empty();
+         current = fe.Next()) {
+      if (!base::DeleteFile(current, false)) {
+        LOG(DFATAL) << "Could not delete all sync directory files.";
+      }
+    }
+  }
+}
+
 void Directory::RemoveFromAttachmentIndex(
     const ScopedKernelLock& lock,
     const int64_t metahandle,
@@ -715,81 +748,77 @@ void Directory::DeleteEntry(const ScopedKernelLock& lock,
   }
 }
 
-bool Directory::PurgeEntriesWithTypeIn(ModelTypeSet disabled_types,
+void Directory::PurgeEntriesWithTypeIn(ModelTypeSet disabled_types,
                                        ModelTypeSet types_to_journal,
                                        ModelTypeSet types_to_unapply) {
   disabled_types.RemoveAll(ProxyTypes());
-
   if (disabled_types.Empty())
-    return true;
+    return;
+
+  WriteTransaction trans(FROM_HERE, PURGE_ENTRIES, this);
+
+  OwnedEntryKernelSet entries_to_journal;
 
   {
-    WriteTransaction trans(FROM_HERE, PURGE_ENTRIES, this);
+    ScopedKernelLock lock(this);
 
-    OwnedEntryKernelSet entries_to_journal;
-
-    {
-      ScopedKernelLock lock(this);
-
-      bool found_progress = false;
-      for (ModelTypeSet::Iterator iter = disabled_types.First(); iter.Good();
-           iter.Inc()) {
-        if (!kernel_->persisted_info.HasEmptyDownloadProgress(iter.Get()))
-          found_progress = true;
-      }
-
-      // If none of the disabled types have progress markers, there's nothing to
-      // purge.
-      if (!found_progress)
-        return true;
-
-      for (MetahandlesMap::iterator it = kernel_->metahandles_map.begin();
-           it != kernel_->metahandles_map.end();) {
-        EntryKernel* entry = it->second.get();
-        const sync_pb::EntitySpecifics& local_specifics = entry->ref(SPECIFICS);
-        const sync_pb::EntitySpecifics& server_specifics =
-            entry->ref(SERVER_SPECIFICS);
-        ModelType local_type = GetModelTypeFromSpecifics(local_specifics);
-        ModelType server_type = GetModelTypeFromSpecifics(server_specifics);
-
-        // Increment the iterator before (potentially) calling DeleteEntry,
-        // otherwise our iterator may be invalidated.
-        ++it;
-
-        if ((IsRealDataType(local_type) && disabled_types.Has(local_type)) ||
-            (IsRealDataType(server_type) && disabled_types.Has(server_type))) {
-          if (types_to_unapply.Has(local_type) ||
-              types_to_unapply.Has(server_type)) {
-            UnapplyEntry(entry);
-          } else {
-            bool save_to_journal =
-                (types_to_journal.Has(local_type) ||
-                 types_to_journal.Has(server_type)) &&
-                (delete_journal_->IsDeleteJournalEnabled(local_type) ||
-                 delete_journal_->IsDeleteJournalEnabled(server_type));
-            DeleteEntry(lock, save_to_journal, entry, &entries_to_journal);
-          }
-        }
-      }
-
-      delete_journal_->AddJournalBatch(&trans, entries_to_journal);
-
-      // Ensure meta tracking for these data types reflects the purged state.
-      for (ModelTypeSet::Iterator it = disabled_types.First(); it.Good();
-           it.Inc()) {
-        kernel_->persisted_info.transaction_version[it.Get()] = 0;
-
-        // Don't discard progress markers or context for unapplied types.
-        if (!types_to_unapply.Has(it.Get())) {
-          kernel_->persisted_info.ResetDownloadProgress(it.Get());
-          kernel_->persisted_info.datatype_context[it.Get()].Clear();
-        }
-      }
-
-      kernel_->info_status = KERNEL_SHARE_INFO_DIRTY;
+    bool found_progress = false;
+    for (ModelTypeSet::Iterator iter = disabled_types.First(); iter.Good();
+         iter.Inc()) {
+      if (!kernel_->persisted_info.HasEmptyDownloadProgress(iter.Get()))
+        found_progress = true;
     }
+
+    // If none of the disabled types have progress markers, there's nothing to
+    // purge.
+    if (!found_progress)
+      return;
+
+    for (MetahandlesMap::iterator it = kernel_->metahandles_map.begin();
+         it != kernel_->metahandles_map.end();) {
+      EntryKernel* entry = it->second.get();
+      const sync_pb::EntitySpecifics& local_specifics = entry->ref(SPECIFICS);
+      const sync_pb::EntitySpecifics& server_specifics =
+          entry->ref(SERVER_SPECIFICS);
+      ModelType local_type = GetModelTypeFromSpecifics(local_specifics);
+      ModelType server_type = GetModelTypeFromSpecifics(server_specifics);
+
+      // Increment the iterator before (potentially) calling DeleteEntry,
+      // otherwise our iterator may be invalidated.
+      ++it;
+
+      if ((IsRealDataType(local_type) && disabled_types.Has(local_type)) ||
+          (IsRealDataType(server_type) && disabled_types.Has(server_type))) {
+        if (types_to_unapply.Has(local_type) ||
+            types_to_unapply.Has(server_type)) {
+          UnapplyEntry(entry);
+        } else {
+          bool save_to_journal =
+              (types_to_journal.Has(local_type) ||
+               types_to_journal.Has(server_type)) &&
+              (delete_journal_->IsDeleteJournalEnabled(local_type) ||
+               delete_journal_->IsDeleteJournalEnabled(server_type));
+          DeleteEntry(lock, save_to_journal, entry, &entries_to_journal);
+        }
+      }
+    }
+
+    delete_journal_->AddJournalBatch(&trans, entries_to_journal);
+
+    // Ensure meta tracking for these data types reflects the purged state.
+    for (ModelTypeSet::Iterator it = disabled_types.First(); it.Good();
+         it.Inc()) {
+      kernel_->persisted_info.transaction_version[it.Get()] = 0;
+
+      // Don't discard progress markers or context for unapplied types.
+      if (!types_to_unapply.Has(it.Get())) {
+        kernel_->persisted_info.ResetDownloadProgress(it.Get());
+        kernel_->persisted_info.datatype_context[it.Get()].Clear();
+      }
+    }
+
+    kernel_->info_status = KERNEL_SHARE_INFO_DIRTY;
   }
-  return true;
 }
 
 bool Directory::ResetVersionsForType(BaseWriteTransaction* trans,
@@ -797,6 +826,7 @@ bool Directory::ResetVersionsForType(BaseWriteTransaction* trans,
   if (!ProtocolTypes().Has(type))
     return false;
   DCHECK_NE(type, BOOKMARKS) << "Only non-hierarchical types are supported";
+  DCHECK_NE(type, NOTES) << "Only non-hierarchical types are supported";
 
   EntryKernel* type_root = GetEntryByServerTag(ModelTypeToRootTag(type));
   if (!type_root)
@@ -883,6 +913,55 @@ void Directory::GetDownloadProgressAsString(ModelType model_type,
 size_t Directory::GetEntriesCount() const {
   ScopedKernelLock lock(this);
   return kernel_->metahandles_map.size();
+}
+
+void Directory::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) {
+  std::string dump_name_base =
+      base::StringPrintf("sync/0x%" PRIXPTR, reinterpret_cast<uintptr_t>(this));
+
+  size_t kernel_memory_usage;
+  {
+    using base::trace_event::EstimateMemoryUsage;
+
+    ReadTransaction trans(FROM_HERE, this);
+    ScopedKernelLock lock(this);
+    kernel_memory_usage =
+        EstimateMemoryUsage(kernel_->name) +
+        EstimateMemoryUsage(kernel_->metahandles_map) +
+        EstimateMemoryUsage(kernel_->ids_map) +
+        EstimateMemoryUsage(kernel_->server_tags_map) +
+        EstimateMemoryUsage(kernel_->client_tags_map) +
+        EstimateMemoryUsage(kernel_->parent_child_index) +
+        EstimateMemoryUsage(kernel_->index_by_attachment_id) +
+        EstimateMemoryUsage(kernel_->unapplied_update_metahandles) +
+        EstimateMemoryUsage(kernel_->unsynced_metahandles) +
+        EstimateMemoryUsage(kernel_->dirty_metahandles) +
+        EstimateMemoryUsage(kernel_->metahandles_to_purge) +
+        EstimateMemoryUsage(kernel_->persisted_info) +
+        EstimateMemoryUsage(kernel_->cache_guid);
+  }
+
+  {
+    std::string dump_name =
+        base::StringPrintf("%s/kernel", dump_name_base.c_str());
+
+    auto* dump = pmd->CreateAllocatorDump(dump_name);
+    dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                    base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                    kernel_memory_usage);
+    const char* system_allocator_name =
+        base::trace_event::MemoryDumpManager::GetInstance()
+            ->system_allocator_pool_name();
+    if (system_allocator_name) {
+      pmd->AddSuballocation(dump->guid(), system_allocator_name);
+    }
+  }
+
+  if (store_) {
+    std::string dump_name =
+        base::StringPrintf("%s/store", dump_name_base.c_str());
+    store_->ReportMemoryUsage(pmd, dump_name);
+  }
 }
 
 void Directory::SetDownloadProgress(
@@ -1372,7 +1451,9 @@ void Directory::PutPredecessor(EntryKernel* e, EntryKernel* predecessor) {
     DCHECK(!e->ref(UNIQUE_POSITION).IsValid());
     return;
   }
-  std::string suffix = e->ref(UNIQUE_BOOKMARK_TAG);
+  std::string suffix = (e->GetModelType() == BOOKMARKS ?
+                        e->ref(UNIQUE_BOOKMARK_TAG) :
+                        e->ref(UNIQUE_NOTES_TAG));
   DCHECK(!suffix.empty());
 
   // Remove our item from the ParentChildIndex and remember to re-add it later.

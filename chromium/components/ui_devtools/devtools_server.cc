@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "components/ui_devtools/switches.h"
 #include "net/base/net_errors.h"
@@ -25,38 +26,75 @@ namespace devtools {
 namespace {
 const char kChromeDeveloperToolsPrefix[] =
     "chrome-devtools://devtools/bundled/inspector.html?ws=";
+
+bool IsUiDevToolsEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(kEnableUiDevTools);
+}
+
+int GetUiDevToolsPort() {
+  DCHECK(IsUiDevToolsEnabled());
+  constexpr int kDefaultPort = 9223;
+  int port;
+  if (!base::StringToInt(
+          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+              kEnableUiDevTools),
+          &port))
+    port = kDefaultPort;
+  return port;
+}
+
 }  // namespace
 
+UiDevToolsServer* UiDevToolsServer::devtools_server_ = nullptr;
+
 UiDevToolsServer::UiDevToolsServer(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-    : task_runner_(task_runner) {
-  if (task_runner_)
+    scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner)
+    : io_thread_task_runner_(io_thread_task_runner) {
+  DCHECK(!devtools_server_);
+  main_thread_task_runner_ = base::ThreadTaskRunnerHandle::Get();
+  devtools_server_ = this;
+  if (io_thread_task_runner_)
     return;
-  // If task_runner not passed in, create an I/O thread the server can run on
+  // If io_thread_task_runner not passed in, create an I/O thread
   thread_.reset(new base::Thread("UiDevToolsServerThread"));
   base::Thread::Options options;
   options.message_loop_type = base::MessageLoop::TYPE_IO;
   CHECK(thread_->StartWithOptions(options));
-  task_runner_ = thread_->task_runner();
+  io_thread_task_runner_ = thread_->task_runner();
 }
 
-UiDevToolsServer::~UiDevToolsServer() {}
+UiDevToolsServer::~UiDevToolsServer() {
+  devtools_server_ = nullptr;
+}
 
 // static
 std::unique_ptr<UiDevToolsServer> UiDevToolsServer::Create(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+    scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner) {
   std::unique_ptr<UiDevToolsServer> server;
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(kEnableUiDevTools)) {
+  if (IsUiDevToolsEnabled() && !devtools_server_) {
     // TODO(mhashmi): Change port if more than one inspectable clients
-    int port = 9223;  // Default port is 9223
-    base::StringToInt(
-        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-            kEnableUiDevTools),
-        &port);
-    server.reset(new UiDevToolsServer(task_runner));
-    server->Start("127.0.0.1", port);
+    server.reset(new UiDevToolsServer(io_thread_task_runner));
+    server->Start("127.0.0.1", GetUiDevToolsPort());
   }
   return server;
+}
+
+// static
+std::vector<UiDevToolsServer::NameUrlPair>
+UiDevToolsServer::GetClientNamesAndUrls() {
+  std::vector<NameUrlPair> pairs;
+  if (!devtools_server_)
+    return pairs;
+
+  for (ClientsList::size_type i = 0; i != devtools_server_->clients_.size();
+       i++) {
+    pairs.push_back(std::pair<std::string, std::string>(
+        devtools_server_->clients_[i]->name(),
+        base::StringPrintf("%slocalhost:%d/%" PRIuS,
+                           kChromeDeveloperToolsPrefix, GetUiDevToolsPort(),
+                           i)));
+  }
+  return pairs;
 }
 
 void UiDevToolsServer::AttachClient(std::unique_ptr<UiDevToolsClient> client) {
@@ -65,14 +103,14 @@ void UiDevToolsServer::AttachClient(std::unique_ptr<UiDevToolsClient> client) {
 
 void UiDevToolsServer::SendOverWebSocket(int connection_id,
                                          const String& message) {
-  task_runner_->PostTask(
+  io_thread_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&net::HttpServer::SendOverWebSocket,
                  base::Unretained(server_.get()), connection_id, message));
 }
 
 void UiDevToolsServer::Start(const std::string& address_string, uint16_t port) {
-  task_runner_->PostTask(
+  io_thread_task_runner_->PostTask(
       FROM_HERE, base::Bind(&UiDevToolsServer::StartServer,
                             base::Unretained(this), address_string, port));
 }
@@ -96,32 +134,7 @@ void UiDevToolsServer::OnConnect(int connection_id) {
 
 void UiDevToolsServer::OnHttpRequest(int connection_id,
                                      const net::HttpServerRequestInfo& info) {
-  // Display a simple html page with all the clients and the corresponding
-  // devtools links
-  // TODO(mhashmi): Remove and display all clients under chrome://inspect/#other
-  if (info.path.empty() || info.path == "/") {
-    std::string clientHTML = "<html>";
-    clientHTML +=
-        "<h3>Copy paste the corresponding links in your browser to inspect "
-        "them:</h3>";
-    net::IPEndPoint ip;
-    server_->GetLocalAddress(&ip);
-    for (ClientsList::size_type i = 0; i != clients_.size(); i++) {
-      clientHTML += base::StringPrintf(
-          "<p><strong>%s</strong> (%s%s/%" PRIuS ")</p>",
-          clients_[i]->name().c_str(), kChromeDeveloperToolsPrefix,
-          ip.ToString().c_str(), i);
-    }
-    clientHTML += "</html>";
-    task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&net::HttpServer::Send200, base::Unretained(server_.get()),
-                   connection_id, clientHTML, "text/html"));
-    return;
-  }
-  task_runner_->PostTask(
-      FROM_HERE, base::Bind(&net::HttpServer::Send404,
-                            base::Unretained(server_.get()), connection_id));
+  NOTIMPLEMENTED();
 }
 
 void UiDevToolsServer::OnWebSocketRequest(
@@ -139,7 +152,7 @@ void UiDevToolsServer::OnWebSocketRequest(
     return;
   client->set_connection_id(connection_id);
   connections_[connection_id] = client;
-  task_runner_->PostTask(
+  io_thread_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&net::HttpServer::AcceptWebSocket,
                  base::Unretained(server_.get()), connection_id, info));
@@ -151,8 +164,9 @@ void UiDevToolsServer::OnWebSocketMessage(int connection_id,
   DCHECK(it != connections_.end());
   UiDevToolsClient* client = it->second;
   DCHECK(client);
-  task_runner_->PostTask(FROM_HERE, base::Bind(&UiDevToolsClient::Dispatch,
-                                               base::Unretained(client), data));
+  main_thread_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&UiDevToolsClient::Dispatch, base::Unretained(client), data));
 }
 
 void UiDevToolsServer::OnClose(int connection_id) {
@@ -161,7 +175,9 @@ void UiDevToolsServer::OnClose(int connection_id) {
     return;
   UiDevToolsClient* client = it->second;
   DCHECK(client);
-  client->Disconnect();
+  main_thread_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&UiDevToolsClient::Disconnect, base::Unretained(client)));
   connections_.erase(it);
 }
 

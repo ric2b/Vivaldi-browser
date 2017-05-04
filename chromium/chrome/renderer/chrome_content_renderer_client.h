@@ -21,11 +21,18 @@
 #include "content/public/renderer/content_renderer_client.h"
 #include "extensions/features/features.h"
 #include "ipc/ipc_channel_proxy.h"
+#include "media/media_features.h"
+#include "ppapi/features/features.h"
 #include "printing/features/features.h"
 #include "v8/include/v8.h"
 
 #if defined (OS_CHROMEOS)
 #include "chrome/renderer/leak_detector/leak_detector_remote_client.h"
+#endif
+
+#if defined(OS_WIN)
+#include "chrome/common/conflicts/module_event_sink_win.mojom.h"
+#include "chrome/common/conflicts/module_watcher_win.h"
 #endif
 
 class ChromeRenderThreadObserver;
@@ -35,7 +42,6 @@ class ChromePDFPrintClient;
 class PrescientNetworkingDispatcher;
 #if BUILDFLAG(ENABLE_SPELLCHECK)
 class SpellCheck;
-class SpellCheckProvider;
 #endif
 
 struct ChromeViewHostMsg_GetPluginInfo_Output;
@@ -50,7 +56,6 @@ class PrescientNetworkingDispatcher;
 }
 
 namespace extensions {
-class Dispatcher;
 class Extension;
 }
 
@@ -70,11 +75,7 @@ namespace web_cache {
 class WebCacheImpl;
 }
 
-namespace blink {
-class WebSecurityOrigin;
-}
-
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 class WebRtcLoggingMessageFilter;
 #endif
 
@@ -135,7 +136,7 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
                   bool is_initial_navigation,
                   bool is_server_redirect,
                   bool* send_referrer) override;
-  bool WillSendRequest(blink::WebFrame* frame,
+  bool WillSendRequest(blink::WebLocalFrame* frame,
                        ui::PageTransition transition_type,
                        const blink::WebURL& url,
                        GURL* new_url) override;
@@ -186,6 +187,10 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
       const GURL& url) override;
   bool ShouldEnforceWebRTCRoutingPreferences() override;
   GURL OverrideFlashEmbedWithHTML(const GURL& url) override;
+  void GetTaskSchedulerInitializationParams(
+      std::vector<base::SchedulerWorkerPoolParams>* params_vector,
+      base::TaskScheduler::WorkerPoolIndexForTraitsCallback*
+          index_to_traits_callback) override;
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   // Sets a new |spellcheck|. Used for testing only.
@@ -193,7 +198,7 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   void SetSpellcheck(SpellCheck* spellcheck);
 #endif
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   static blink::WebPlugin* CreatePlugin(
       content::RenderFrame* render_frame,
       blink::WebLocalFrame* frame,
@@ -201,7 +206,7 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
       const ChromeViewHostMsg_GetPluginInfo_Output& output);
 #endif
 
-#if defined(ENABLE_PLUGINS) && BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_PLUGINS) && BUILDFLAG(ENABLE_EXTENSIONS)
   static bool IsExtensionOrSharedModuleWhitelisted(
       const GURL& url, const std::set<std::string>& whitelist);
 #endif
@@ -243,19 +248,26 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   std::unique_ptr<subresource_filter::RulesetDealer>
       subresource_filter_ruleset_dealer_;
   std::unique_ptr<prerender::PrerenderDispatcher> prerender_dispatcher_;
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   scoped_refptr<WebRtcLoggingMessageFilter> webrtc_logging_message_filter_;
 #endif
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   std::unique_ptr<ChromePDFPrintClient> pdf_print_client_;
 #endif
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   std::set<std::string> allowed_camera_device_origins_;
   std::set<std::string> allowed_compositor_origins_;
 #endif
 
 #if defined(OS_CHROMEOS)
   std::unique_ptr<LeakDetectorRemoteClient> leak_detector_remote_client_;
+#endif
+
+#if defined(OS_WIN)
+  // Observes module load and unload events and notifies the ModuleDatabase in
+  // the browser process.
+  std::unique_ptr<ModuleWatcher> module_watcher_;
+  mojom::ModuleEventSinkPtr module_event_sink_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(ChromeContentRendererClient);

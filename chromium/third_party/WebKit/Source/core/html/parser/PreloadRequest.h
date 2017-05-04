@@ -52,16 +52,15 @@ class PreloadRequest {
         protocolIs(resourceURL, "data")) {
       return nullptr;
     }
-    return wrapUnique(new PreloadRequest(
+    return WTF::wrapUnique(new PreloadRequest(
         initiatorName, initiatorPosition, resourceURL, baseURL, resourceType,
         resourceWidth, clientHintsPreferences, requestType, referrerPolicy));
   }
 
   bool isSafeToSendToAnotherThread() const;
 
-  FetchRequest resourceRequest(Document*);
+  Resource* start(Document*);
 
-  const String& charset() const { return m_charset; }
   double discoveryTime() const { return m_discoveryTime; }
   void setDefer(FetchRequest::DeferOption defer) { m_defer = defer; }
   void setCharset(const String& charset) { m_charset = charset.isolatedCopy(); }

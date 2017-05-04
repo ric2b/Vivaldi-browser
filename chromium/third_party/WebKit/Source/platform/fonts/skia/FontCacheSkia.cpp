@@ -1,3 +1,4 @@
+
 /*
  * Copyright (c) 2006, 2007, 2008, 2009 Google Inc. All rights reserved.
  *
@@ -261,7 +262,7 @@ std::unique_ptr<FontPlatformData> FontCache::createFontPlatformData(
   if (!tf)
     return nullptr;
 
-  return wrapUnique(new FontPlatformData(
+  return WTF::wrapUnique(new FontPlatformData(
       tf, name.data(), fontSize, (numericFontWeight(fontDescription.weight()) >
                                   200 + tf->fontStyle().weight()) ||
                                      fontDescription.isSyntheticBold(),

@@ -10,8 +10,9 @@
 #include "ash/screenshot_delegate.h"
 #include "ash/shell.h"
 #include "ash/utility/screenshot_controller.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/note_taking_app_utils.h"
+#include "chrome/browser/chromeos/note_taking_helper.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -21,29 +22,17 @@
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
-#include "ui/events/devices/input_device_manager.h"
 
 namespace chromeos {
-
-// static
-std::unique_ptr<PaletteDelegateChromeOS> PaletteDelegateChromeOS::Create() {
-  if (!ash::IsPaletteFeatureEnabled())
-    return nullptr;
-  return base::WrapUnique(new PaletteDelegateChromeOS());
-}
 
 PaletteDelegateChromeOS::PaletteDelegateChromeOS() : weak_factory_(this) {
   registrar_.Add(this, chrome::NOTIFICATION_SESSION_STARTED,
                  content::NotificationService::AllSources());
   registrar_.Add(this, chrome::NOTIFICATION_PROFILE_DESTROYED,
                  content::NotificationService::AllSources());
-
-  ui::InputDeviceManager::GetInstance()->AddObserver(this);
 }
 
-PaletteDelegateChromeOS::~PaletteDelegateChromeOS() {
-  ui::InputDeviceManager::GetInstance()->RemoveObserver(this);
-}
+PaletteDelegateChromeOS::~PaletteDelegateChromeOS() {}
 
 std::unique_ptr<PaletteDelegateChromeOS::EnableListenerSubscription>
 PaletteDelegateChromeOS::AddPaletteEnableListener(
@@ -57,14 +46,15 @@ void PaletteDelegateChromeOS::CreateNote() {
   if (!profile_)
     return;
 
-  chromeos::LaunchNoteTakingAppForNewNote(profile_, base::FilePath());
+  chromeos::NoteTakingHelper::Get()->LaunchAppForNewNote(profile_,
+                                                         base::FilePath());
 }
 
 bool PaletteDelegateChromeOS::HasNoteApp() {
   if (!profile_)
     return false;
 
-  return chromeos::IsNoteTakingAppAvailable(profile_);
+  return chromeos::NoteTakingHelper::Get()->IsAppAvailable(profile_);
 }
 
 void PaletteDelegateChromeOS::ActiveUserChanged(const AccountId& account_id) {
@@ -136,11 +126,6 @@ void PaletteDelegateChromeOS::SetPartialMagnifierState(bool enabled) {
   controller->SetEnabled(enabled);
 }
 
-void PaletteDelegateChromeOS::SetStylusStateChangedCallback(
-    const OnStylusStateChangedCallback& on_stylus_state_changed) {
-  on_stylus_state_changed_ = on_stylus_state_changed;
-}
-
 bool PaletteDelegateChromeOS::ShouldAutoOpenPalette() {
   if (!profile_)
     return false;
@@ -181,7 +166,4 @@ void PaletteDelegateChromeOS::CancelPartialScreenshot() {
   ash::Shell::GetInstance()->screenshot_controller()->CancelScreenshotSession();
 }
 
-void PaletteDelegateChromeOS::OnStylusStateChanged(ui::StylusState state) {
-  on_stylus_state_changed_.Run(state);
-}
 }  // namespace chromeos

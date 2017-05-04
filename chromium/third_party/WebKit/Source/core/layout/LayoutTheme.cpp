@@ -47,6 +47,7 @@
 #include "core/page/Page.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/FileMetadata.h"
+#include "platform/LayoutTestSupport.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/Theme.h"
 #include "platform/fonts/FontSelector.h"
@@ -165,7 +166,7 @@ void LayoutTheme::adjustStyle(ComputedStyle& style, Element* e) {
 
         // Whitespace
         if (m_platformTheme->controlRequiresPreWhiteSpace(part))
-          style.setWhiteSpace(PRE);
+          style.setWhiteSpace(EWhiteSpace::kPre);
 
         // Width / Height
         // The width and height here are affected by the zoom.
@@ -653,7 +654,9 @@ void LayoutTheme::setCaretBlinkInterval(double interval) {
 }
 
 double LayoutTheme::caretBlinkInterval() const {
-  return m_caretBlinkInterval;
+  // Disable the blinking caret in layout test mode, as it introduces
+  // a race condition for the pixel tests. http://b/1198440
+  return LayoutTestSupport::isRunningLayoutTest() ? 0 : m_caretBlinkInterval;
 }
 
 static FontDescription& getCachedFontDescription(CSSValueID systemFontID) {

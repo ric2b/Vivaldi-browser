@@ -1,0 +1,46 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://bookmarks/list.html">
+<link rel="import" href="chrome://bookmarks/shared_vars.html">
+<link rel="import" href="chrome://bookmarks/sidebar.html">
+<link rel="import" href="chrome://bookmarks/store.html">
+<link rel="import" href="chrome://bookmarks/toolbar.html">
+
+<dom-module id="bookmarks-app">
+  <template>
+    <style>
+      :host {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      #main-container {
+        display: flex;
+        flex-direction: row;
+        flex-grow: 1;
+        overflow: auto;
+      }
+
+      bookmarks-sidebar {
+        flex: 0 0 var(--sidebar-width);
+      }
+
+      bookmarks-list {
+        flex: 1;
+      }
+    </style>
+    <bookmarks-toolbar search-term="[[searchTerm]]"></bookmarks-toolbar>
+    <div id="main-container">
+      <bookmarks-sidebar root-folders="[[rootNode.children]]">
+      </bookmarks-sidebar>
+      <bookmarks-list displayed-list="[[displayedList]]"></bookmarks-list>
+    </div>
+    <bookmarks-store selected-id="{{selectedId}}"
+        root-node="{{rootNode}}"
+        search-term="{{searchTerm}}"
+        displayed-list="{{displayedList}}">
+    </bookmarks-store>
+  </template>
+  <script src="chrome://bookmarks/app.js"></script>
+</dom-module>

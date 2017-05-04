@@ -13,8 +13,10 @@
 #include "ui/views/window/dialog_delegate.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
-#include "components/arc/test/fake_arc_bridge_service.h"
+#include "base/memory/ptr_util.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
+#include "components/arc/arc_session_runner.h"
+#include "components/arc/test/fake_arc_session.h"
 #endif
 
 namespace {
@@ -32,11 +34,11 @@ class AppInfoDialogAshTest : public ash::test::AshTestBase {
   void SetUp() override {
     ash::test::AshTestBase::SetUp();
 #if defined(OS_CHROMEOS)
-    arc::ArcAuthService::DisableUIForTesting();
-    bridge_service_ = base::MakeUnique<arc::FakeArcBridgeService>();
-    auth_service_ =
-        base::MakeUnique<arc::ArcAuthService>(bridge_service_.get());
-    auth_service_->OnPrimaryUserProfilePrepared(
+    arc::ArcSessionManager::DisableUIForTesting();
+    arc_session_manager_ = base::MakeUnique<arc::ArcSessionManager>(
+        base::MakeUnique<arc::ArcSessionRunner>(
+            base::Bind(arc::FakeArcSession::Create)));
+    arc_session_manager_->OnPrimaryUserProfilePrepared(
         extension_environment_.profile());
 #endif
     widget_ = views::DialogDelegate::CreateDialogWidget(
@@ -51,8 +53,8 @@ class AppInfoDialogAshTest : public ash::test::AshTestBase {
   void TearDown() override {
     widget_->CloseNow();
 #if defined(OS_CHROMEOS)
-    if (auth_service_)
-      auth_service_->Shutdown();
+    if (arc_session_manager_)
+      arc_session_manager_->Shutdown();
 #endif
     ash::test::AshTestBase::TearDown();
   }
@@ -62,8 +64,7 @@ class AppInfoDialogAshTest : public ash::test::AshTestBase {
   views::Widget* widget_ = nullptr;
   AppInfoDialog* dialog_ = nullptr;  // Owned by |widget_|'s views hierarchy.
 #if defined(OS_CHROMEOS)
-  std::unique_ptr<arc::FakeArcBridgeService> bridge_service_;
-  std::unique_ptr<arc::ArcAuthService> auth_service_;
+  std::unique_ptr<arc::ArcSessionManager> arc_session_manager_;
 #endif
 
  private:

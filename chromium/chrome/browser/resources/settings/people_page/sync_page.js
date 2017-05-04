@@ -47,7 +47,6 @@ Polymer({
   is: 'settings-sync-page',
 
   behaviors: [
-    I18nBehavior,
     WebUIListenerBehavior,
     settings.RouteObserverBehavior,
   ],
@@ -420,6 +419,18 @@ Polymer({
 
     return !emptyPassphrase && !mismatchedPassphrase;
   },
+
+  /**
+   * @param {!Event} event
+   * @private
+   */
+  onLearnMoreTap_: function(event) {
+    if (event.target.tagName == 'A') {
+      // Stop the propagation of events, so that clicking on links inside
+      // checkboxes or radio buttons won't change the value.
+      event.stopPropagation();
+    }
+  }
 });
 
 })();

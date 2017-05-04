@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_CERT_OCSP_VERIFY_RESULT_H
-#define NET_CERT_OCSP_VERIFY_RESULT_H
+#ifndef NET_CERT_OCSP_VERIFY_RESULT_H_
+#define NET_CERT_OCSP_VERIFY_RESULT_H_
 
 #include <string>
 
@@ -27,6 +27,9 @@ struct NET_EXPORT OCSPVerifyResult {
   bool operator==(const OCSPVerifyResult& other) const;
 
   enum ResponseStatus {
+    // OCSP verification was not checked on this connection.
+    NOT_CHECKED,
+
     // No OCSPResponse was stapled.
     MISSING,
 
@@ -56,7 +59,7 @@ struct NET_EXPORT OCSPVerifyResult {
 
   };
 
-  ResponseStatus response_status = MISSING;
+  ResponseStatus response_status = NOT_CHECKED;
 
   // The strictest CertStatus matching the certificate (REVOKED > UNKNOWN >
   // GOOD). Only valid if |response_status| = PROVIDED.
@@ -65,4 +68,4 @@ struct NET_EXPORT OCSPVerifyResult {
 
 }  // namespace net
 
-#endif  // NET_CERT_OCSP_VERIFY_RESULT_H
+#endif  // NET_CERT_OCSP_VERIFY_RESULT_H_

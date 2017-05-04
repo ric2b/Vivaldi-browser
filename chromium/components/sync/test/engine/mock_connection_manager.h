@@ -25,6 +25,10 @@
 
 namespace syncer {
 
+namespace syncable {
+class Directory;
+}
+
 // Mock ServerConnectionManager class for use in client unit tests.
 class MockConnectionManager : public ServerConnectionManager {
  public:
@@ -267,6 +271,8 @@ class MockConnectionManager : public ServerConnectionManager {
 
   // Adds a new progress marker to the last update.
   sync_pb::DataTypeProgressMarker* AddUpdateProgressMarker();
+
+  void ResetAuthToken() { auth_token_.clear(); }
 
  private:
   sync_pb::SyncEntity* AddUpdateFull(syncable::Id id,

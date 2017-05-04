@@ -7,9 +7,9 @@
 
 #include <stdint.h>
 
+#include <unordered_map>
 #include <vector>
 
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/mac/scoped_nsobject.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service.h"
 
@@ -54,6 +54,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceMac
   // Called by the BluetoothLowEnergyDeviceMac instance when the characteristics
   // has been discovered.
   void DidDiscoverCharacteristics();
+  // Called by the BluetoothLowEnergyDeviceMac instance when the descriptors has
+  // been discovered.
+  void DidDiscoverDescriptors(CBCharacteristic* characteristic);
+  // Sends notification if this service is ready with all characteristics
+  // discovered.
+  void SendNotificationIfComplete();
   // Called by the BluetoothLowEnergyDeviceMac instance when the
   // characteristics value has been read.
   void DidUpdateValue(CBCharacteristic* characteristic, NSError* error);
@@ -65,7 +71,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceMac
   void DidUpdateNotificationState(CBCharacteristic* characteristic,
                                   NSError* error);
   // Returns true if the characteristics has been discovered.
-  bool IsDiscoveryComplete();
+  bool IsDiscoveryComplete() const;
 
   // Returns the mac adapter.
   BluetoothAdapterMac* GetMacAdapter() const;

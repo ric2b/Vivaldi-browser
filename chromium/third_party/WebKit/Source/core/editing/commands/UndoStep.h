@@ -31,22 +31,55 @@
 #ifndef UndoStep_h
 #define UndoStep_h
 
+#include "core/editing/VisibleSelection.h"
 #include "core/events/InputEvent.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
-class LocalFrame;
+class SimpleEditCommand;
 
 class UndoStep : public GarbageCollectedFinalized<UndoStep> {
  public:
-  virtual ~UndoStep() {}
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
+  static UndoStep* create(Document*,
+                          const VisibleSelection&,
+                          const VisibleSelection&,
+                          InputEvent::InputType);
 
-  virtual bool belongsTo(const LocalFrame&) const = 0;
-  virtual void unapply() = 0;
-  virtual void reapply() = 0;
-  virtual InputEvent::InputType inputType() const = 0;
+  void unapply();
+  void reapply();
+  InputEvent::InputType inputType() const;
+  void append(SimpleEditCommand*);
+  void append(UndoStep*);
+
+  const VisibleSelection& startingSelection() const {
+    return m_startingSelection;
+  }
+  const VisibleSelection& endingSelection() const { return m_endingSelection; }
+  void setStartingSelection(const VisibleSelection&);
+  void setEndingSelection(const VisibleSelection&);
+  Element* startingRootEditableElement() const {
+    return m_startingRootEditableElement.get();
+  }
+  Element* endingRootEditableElement() const {
+    return m_endingRootEditableElement.get();
+  }
+
+  DECLARE_TRACE();
+
+ private:
+  UndoStep(Document*,
+           const VisibleSelection& startingSelection,
+           const VisibleSelection& endingSelection,
+           InputEvent::InputType);
+
+  Member<Document> m_document;
+  VisibleSelection m_startingSelection;
+  VisibleSelection m_endingSelection;
+  HeapVector<Member<SimpleEditCommand>> m_commands;
+  Member<Element> m_startingRootEditableElement;
+  Member<Element> m_endingRootEditableElement;
+  InputEvent::InputType m_inputType;
 };
 
 }  // namespace blink

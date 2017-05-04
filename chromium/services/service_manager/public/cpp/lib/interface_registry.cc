@@ -4,58 +4,15 @@
 
 #include "services/service_manager/public/cpp/interface_registry.h"
 
+#include <iterator>
 #include <sstream>
 
+#include "base/memory/ptr_util.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "services/service_manager/public/cpp/connection.h"
 
 namespace service_manager {
 namespace {
-
-// Returns the set of capabilities required from the target.
-CapabilitySet GetRequestedCapabilities(const InterfaceProviderSpec& source_spec,
-                                       const Identity& target) {
-  CapabilitySet capabilities;
-
-  // Start by looking for specs specific to the supplied identity.
-  auto it = source_spec.requires.find(target.name());
-  if (it != source_spec.requires.end()) {
-    std::copy(it->second.begin(), it->second.end(),
-              std::inserter(capabilities, capabilities.begin()));
-  }
-
-  // Apply wild card rules too.
-  it = source_spec.requires.find("*");
-  if (it != source_spec.requires.end()) {
-    std::copy(it->second.begin(), it->second.end(),
-              std::inserter(capabilities, capabilities.begin()));
-  }
-  return capabilities;
-}
-
-// Generates a single set of interfaces that is the union of all interfaces
-// exposed by the target for the capabilities requested by the source.
-InterfaceSet GetInterfacesToExpose(
-    const InterfaceProviderSpec& source_spec,
-    const Identity& target,
-    const InterfaceProviderSpec& target_spec) {
-  InterfaceSet exposed_interfaces;
-  // TODO(beng): remove this once we can assert that an InterfaceRegistry must
-  //             always be constructed with a valid identity.
-  if (!target.IsValid()) {
-    exposed_interfaces.insert("*");
-    return exposed_interfaces;
-  }
-  CapabilitySet capabilities = GetRequestedCapabilities(source_spec, target);
-  for (const auto& capability : capabilities) {
-    auto it = target_spec.provides.find(capability);
-    if (it != target_spec.provides.end()) {
-      for (const auto& interface_name : it->second)
-        exposed_interfaces.insert(interface_name);
-    }
-  }
-  return exposed_interfaces;
-}
 
 void SerializeIdentity(const Identity& identity, std::stringstream* stream) {
   *stream << identity.name() << "@" << identity.instance() << " run as: "
@@ -79,6 +36,48 @@ void SerializeSpec(const InterfaceProviderSpec& spec,
 }
 
 }  // namespace
+
+CapabilitySet GetRequestedCapabilities(const InterfaceProviderSpec& source_spec,
+                                       const Identity& target) {
+  CapabilitySet capabilities;
+
+  // Start by looking for specs specific to the supplied identity.
+  auto it = source_spec.requires.find(target.name());
+  if (it != source_spec.requires.end()) {
+    std::copy(it->second.begin(), it->second.end(),
+              std::inserter(capabilities, capabilities.begin()));
+  }
+
+  // Apply wild card rules too.
+  it = source_spec.requires.find("*");
+  if (it != source_spec.requires.end()) {
+    std::copy(it->second.begin(), it->second.end(),
+              std::inserter(capabilities, capabilities.begin()));
+  }
+  return capabilities;
+}
+
+InterfaceSet GetInterfacesToExpose(
+    const InterfaceProviderSpec& source_spec,
+    const Identity& target,
+    const InterfaceProviderSpec& target_spec) {
+  InterfaceSet exposed_interfaces;
+  // TODO(beng): remove this once we can assert that an InterfaceRegistry must
+  //             always be constructed with a valid identity.
+  if (!target.IsValid()) {
+    exposed_interfaces.insert("*");
+    return exposed_interfaces;
+  }
+  CapabilitySet capabilities = GetRequestedCapabilities(source_spec, target);
+  for (const auto& capability : capabilities) {
+    auto it = target_spec.provides.find(capability);
+    if (it != target_spec.provides.end()) {
+      for (const auto& interface_name : it->second)
+        exposed_interfaces.insert(interface_name);
+    }
+  }
+  return exposed_interfaces;
+}
 
 InterfaceRegistry::InterfaceRegistry(const std::string& name)
     : binding_(this),
@@ -201,22 +200,26 @@ void InterfaceRegistry::GetInterface(const std::string& interface_name,
     } else if (!default_binder_.is_null()) {
       default_binder_.Run(interface_name, std::move(handle));
     } else {
-      std::stringstream ss;
-      ss << "Failed to locate a binder for interface: " << interface_name
-         << " requested by: " << remote_identity_.name() << " exposed by: "
-         << local_identity_.name() << " via InterfaceProviderSpec \"" << name_
-         << "\".";
-      Serialize(&ss);
-      LOG(ERROR) << ss.str();
+      LOG(ERROR) << "Failed to locate a binder for interface: "
+         << interface_name << " requested by: " << remote_identity_.name()
+         << " exposed by: " << local_identity_.name()
+         << " via InterfaceProviderSpec \"" << name_ << "\".";
+
+      std::stringstream details;
+      Serialize(&details);
+      LOG(WARNING) << details.str();
     }
   } else {
-    std::stringstream ss;
-    ss << "InterfaceProviderSpec \"" << name_ << "\" prevented service: "
+    std::stringstream error;
+    error << "InterfaceProviderSpec \"" << name_ << "\" prevented service: "
        << remote_identity_.name() << " from binding interface: "
        << interface_name << " exposed by: " << local_identity_.name();
-    Serialize(&ss);
-    LOG(ERROR) << ss.str();
-    mojo::ReportBadMessage(ss.str());
+    mojo::ReportBadMessage(error.str());
+    LOG(ERROR) << error.str();
+
+    std::stringstream details;
+    Serialize(&details);
+    LOG(WARNING) << details.str();
   }
 }
 

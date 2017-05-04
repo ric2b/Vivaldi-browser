@@ -4,10 +4,11 @@
 
 #include "components/content_settings/core/browser/cookie_settings.h"
 
+#include "base/message_loop/message_loop.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/pref_names.h"
-#include "components/pref_registry/testing_pref_service_syncable.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "extensions/features/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -38,7 +39,11 @@ class CookieSettingsTest : public testing::Test {
   ~CookieSettingsTest() override { settings_map_->ShutdownOnUIThread(); }
 
  protected:
-  user_prefs::TestingPrefServiceSyncable prefs_;
+  // There must be a valid ThreadTaskRunnerHandle in HostContentSettingsMap's
+  // scope.
+  base::MessageLoop message_loop_;
+
+  sync_preferences::TestingPrefServiceSyncable prefs_;
   scoped_refptr<HostContentSettingsMap> settings_map_;
   scoped_refptr<CookieSettings> cookie_settings_;
   const GURL kBlockedSite;

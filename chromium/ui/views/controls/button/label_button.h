@@ -5,6 +5,7 @@
 #ifndef UI_VIEWS_CONTROLS_BUTTON_LABEL_BUTTON_H_
 #define UI_VIEWS_CONTROLS_BUTTON_LABEL_BUTTON_H_
 
+#include <array>
 #include <memory>
 
 #include "base/compiler_specific.h"
@@ -56,10 +57,8 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
   // Sets whether subpixel rendering is used on the label.
   void SetTextSubpixelRenderingEnabled(bool enabled);
 
-  // Gets or sets the font list used by this button.
-  const gfx::FontList& GetFontList() const;
-  // TODO(estade): make this function protected.
-  virtual void SetFontList(const gfx::FontList& font_list);
+  // TODO(estade): remove. See crbug.com/633986
+  void SetFontListDeprecated(const gfx::FontList& font_list);
 
   // Adjusts the font size up or down by the given amount.
   virtual void AdjustFontSize(int font_size_delta);
@@ -120,6 +119,9 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
   // these bounds if they need room to do manual painting.
   virtual gfx::Rect GetChildAreaBounds();
 
+  // Sets the font list used by this button.
+  virtual void SetFontList(const gfx::FontList& font_list);
+
   // View:
   void OnPaint(gfx::Canvas* canvas) override;
   void OnFocus() override;
@@ -148,6 +150,13 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
 
   // NativeThemeDelegate:
   gfx::Rect GetThemePaintRect() const override;
+
+  const std::array<bool, STATE_COUNT>& explicitly_set_colors() const {
+    return explicitly_set_colors_;
+  }
+  void set_explicitly_set_colors(const std::array<bool, STATE_COUNT>& colors) {
+    explicitly_set_colors_ = colors;
+  }
 
  private:
   FRIEND_TEST_ALL_PREFIXES(LabelButtonTest, Init);
@@ -203,7 +212,7 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
   SkColor button_state_colors_[STATE_COUNT];
 
   // Used to track whether SetTextColor() has been invoked.
-  bool explicitly_set_colors_[STATE_COUNT];
+  std::array<bool, STATE_COUNT> explicitly_set_colors_;
 
   // |min_size_| increases monotonically with the preferred size.
   mutable gfx::Size min_size_;

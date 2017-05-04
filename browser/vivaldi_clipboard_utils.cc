@@ -2,6 +2,7 @@
 
 #include "browser/vivaldi_clipboard_utils.h"
 
+#include "third_party/WebKit/public/platform/WebMouseEvent.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 namespace vivaldi {
@@ -12,15 +13,15 @@ bool suppress_selection_write = true;
 
 // Updates 'suppress_selection_write' for each event.
 void OnInputEvent(const blink::WebInputEvent& input_event) {
-  if (input_event.type == blink::WebInputEvent::MouseMove) {
+  if (input_event.type() == blink::WebInputEvent::MouseMove) {
     // Never set to true here to allow mouse multiclicking work the best.
-    if ((input_event.modifiers & blink::WebInputEvent::LeftButtonDown))
+    if ((input_event.modifiers() & blink::WebInputEvent::LeftButtonDown))
       suppress_selection_write = false;
-  } else if (input_event.type == blink::WebInputEvent::MouseDown) {
+  } else if (input_event.type() == blink::WebInputEvent::MouseDown) {
     blink::WebMouseEvent& event = *((blink::WebMouseEvent*)&input_event);
     suppress_selection_write = event.clickCount < 2;
-  } else if (input_event.type == blink::WebInputEvent::RawKeyDown &&
-             (input_event.modifiers & blink::WebInputEvent::ShiftKey)) {
+  } else if (input_event.type() == blink::WebInputEvent::RawKeyDown &&
+             (input_event.modifiers() & blink::WebInputEvent::ShiftKey)) {
     blink::WebKeyboardEvent& event =*((blink::WebKeyboardEvent*)&input_event);
     suppress_selection_write =
         !(event.windowsKeyCode == ui::VKEY_LEFT ||
@@ -31,13 +32,13 @@ void OnInputEvent(const blink::WebInputEvent& input_event) {
           event.windowsKeyCode == ui::VKEY_END ||
           event.windowsKeyCode == ui::VKEY_PRIOR ||
           event.windowsKeyCode == ui::VKEY_NEXT);
-  } else if (input_event.type == blink::WebInputEvent::RawKeyDown &&
-             (input_event.modifiers & blink::WebInputEvent::ControlKey)) {
+  } else if (input_event.type() == blink::WebInputEvent::RawKeyDown &&
+             (input_event.modifiers() & blink::WebInputEvent::ControlKey)) {
     blink::WebKeyboardEvent& event =*((blink::WebKeyboardEvent*)&input_event);
     // NOTE(espen). We probably want to make this configurable
     // Ctrl+A: Select All.
     suppress_selection_write = event.windowsKeyCode != ui::VKEY_A;
-  } else if (input_event.type == blink::WebInputEvent::Char) {
+  } else if (input_event.type() == blink::WebInputEvent::Char) {
     // Do nothing. Wait for KeyUp to set suppress_selection_write to true.
   } else {
     suppress_selection_write = true;

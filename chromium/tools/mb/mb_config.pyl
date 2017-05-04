@@ -2,6 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+# This is a .pyl, or "Python Literal", file. You can treat it just like a
+# .json file, with the following exceptions:
+# * all keys must be quoted (use single quotes, please);
+# * comments are allowed, using '#' syntax; and
+# * trailing commas are allowed.
+
 {
   # This is a map of buildbot master names -> buildbot builder names ->
   # config names (where each config name is a key in the 'configs' dict,
@@ -42,11 +48,26 @@
       'Android Cronet x86 Builder (dbg)': 'android_cronet_debug_static_bot_x86',
       'Android MIPS Builder (dbg)': 'android_debug_static_minimal_symbols_mipsel',
       'Android N5X Swarm Builder': 'android_release_bot_minimal_symbols_arm64',
-      'Android Swarm Builder': 'android_release_bot_minimal_symbols',
       'Android arm Builder (dbg)': 'android_debug_static_bot',
       'Android arm64 Builder (dbg)': 'android_debug_static_bot_arm64',
       'Android x64 Builder (dbg)': 'android_debug_static_bot_x64',
       'Android x86 Builder (dbg)': 'android_debug_static_bot_x86',
+    },
+
+    'chromium.android.fyi': {
+      'NDK Next MIPS Builder':
+        'android_ndk_next_release_bot_minimal_symbols_mipsel',
+      'NDK Next arm Builder':
+        'android_ndk_next_release_bot_minimal_symbols',
+      'NDK Next arm64 Builder':
+        'android_ndk_next_release_bot_minimal_symbols_arm64',
+      'NDK Next x64 Builder':
+        'android_ndk_next_release_bot_minimal_symbols_x64',
+      'NDK Next x86 Builder':
+        'android_ndk_next_release_bot_minimal_symbols_x86',
+      'x64 Device Tester': 'android_shared_release_bot_x64',
+      'x86 Cloud Tester': 'android_debug_static_bot_x86',
+      'x86 Emulator Tester': 'android_debug_static_bot_x86',
     },
 
     'chromium.chrome': {
@@ -75,21 +96,10 @@
 
     'chromium.fyi': {
       'Afl Upload Linux ASan': 'release_afl_asan',
-      'Android Cloud Tests': 'android_debug_static_bot_x86',
-      'Android Tests (x86 emulator)': 'android_debug_static_bot_x86',
       'Android Builder (dbg)': 'android_debug_static_bot_vr_shell',
       'Android Builder Goma Canary (dbg)': 'android_debug_bot',
       'Android deterministic': 'android_without_codecs_release_bot_minimal_symbols',
       'Android deterministic (dbg)': 'android_debug_bot',
-      'Android x64 Tests': 'android_shared_release_bot_x64',
-      'Blimp Android Client':
-        '//build/args/bots/chromium.fyi/blimp_client_rel.gn',
-      'Blimp Linux Engine':
-        '//build/args/bots/chromium.fyi/blimp_engine_rel.gn',
-      'Blimp Client Engine Integration': {
-        'client': '//build/args/bots/chromium.fyi/blimp_client_rel.gn',
-        'engine': '//build/args/bots/chromium.fyi/blimp_engine_rel.gn',
-      },
       'Browser Side Navigation Linux': 'release_bot',
       'CFI Linux CF': 'cfi_full_cfi_diag_release_static',
       'CFI Linux ToT': 'cfi_full_clang_tot_release_static',
@@ -125,12 +135,14 @@
 
       'CrWinClang(dbg)': 'clang_debug_bot_minimal_symbols_x86',
       'CrWinClang64': 'clang_official_release_bot_minimal_symbols',
-      'CrWinClang64(dll)': 'clang_minimal_symbols_shared_release_bot',
+      'CrWinClang64(dll)': 'clang_shared_release_bot',
       'CrWinClangGoma': 'clang_official_optimize_release_bot_minimal_symbols_x86',
       'CrWinGoma': 'release_bot_x86',
       'CrWinGoma(dll)': 'shared_release_bot_x86',
       'ClangToTAndroidASan': 'android_clang_tot_asan',
       'ClangToTAndroid (dbg)': 'android_clang_tot_dbg',
+      'ClangToTAndroid': 'android_clang_tot_release',
+      'ClangToTAndroid64': 'android_clang_tot_release_arm64',
       'ClangToTAndroid x64': 'android_clang_tot_x64',
       'ClangToTLinux': 'clang_tot_linux_full_symbols_shared_release',
       'ClangToTLinux (dbg)': 'clang_tot_shared_debug',
@@ -146,7 +158,7 @@
       'ClangToTWin(dll)': 'clang_tot_minimal_symbols_shared_release_x86',
       'ClangToTWin64': 'clang_tot_official_minimal_symbols_static_release',
       'ClangToTWin64(dbg)': 'clang_tot_minimal_symbols_shared_debug',
-      'ClangToTWin64(dll)': 'clang_tot_minimal_symbols_shared_release',
+      'ClangToTWin64(dll)': 'clang_tot_shared_release',
       'ClangToTiOS': 'ios',
       'Closure Compilation Linux': 'closure_compilation',
       'CrWinAsan': 'asan_clang_fuzzer_static_v8_heap_x86_full_symbols_release',
@@ -160,6 +172,7 @@
       'CrWinClngLLDdbg': 'clang_tot_minimal_symbols_shared_debug_use_lld_x86',
       'EarlGreyiOS': 'ios',
       'GomaCanaryiOS': 'ios',
+      'ios-simulator': 'ios',
       'Headless Linux (dbg)': '//build/args/bots/chromium.fyi/headless_linux_dbg.gn',
       'MD Top Chrome ChromeOS material-hybrid': 'chromeos_with_codecs_debug_bot',
       'MD Top Chrome ChromeOS non-material': 'chromeos_with_codecs_debug_bot',
@@ -186,13 +199,15 @@
       'Site Isolation Android': 'android_release_bot_minimal_symbols_arm64',
       'Site Isolation Linux': 'release_trybot',
       'Site Isolation Win': 'release_trybot_x86',
-      'ThinLTO Linux ToT': 'thin_lto_clang_tot_release_static',
+      'ThinLTO Linux ToT': 'thin_lto_clang_tot_full_symbols_release_static_use_lld',
       'UBSanVptr Linux': 'ubsan_vptr_release_bot',
       'WebKit Linux - TraceWrappables': 'debug_bot',
       'WebKit Linux - WPTServe': 'release_bot',
       'WebKit Mac - WPTServe': 'release_bot',
       'WebKit Win - WPTServe': 'release_bot_x86',
       'WebKit Linux - RandomOrder': 'release_bot',
+      'WebKit Mac - RandomOrder': 'release_bot',
+      'WebKit Win - RandomOrder': 'release_bot_x86',
       'Win 10 Fast Ring': 'release_trybot',
       'Windows deterministic': 'release_bot_x86',
       'Windows Clang deterministic': 'clang_release_bot_minimal_symbols_x86',
@@ -232,6 +247,7 @@
       'GPU Win x64 Builder': 'gpu_tests_deqp_gles_release_trybot',
       'GPU Win x64 Builder (dbg)': 'gpu_tests_deqp_gles_debug_trybot',
       'Linux ChromiumOS Builder': 'gpu_fyi_tests_chromeos_release_trybot',
+      'Linux ChromiumOS Ozone Builder': 'gpu_fyi_tests_chromeos_ozone_release_trybot',
       'Mac GPU ASAN Release': 'gpu_fyi_tests_release_trybot_asan',
     },
 
@@ -242,7 +258,6 @@
       'Android Clang Builder (dbg)': 'android_clang_asan_errorprone_findbugs_debug_bot_minimal_symbols',
       'Android Tests (dbg)': 'android_debug_static_bot',
       'Android Tests': 'android_release_bot_minimal_symbols',
-      'Blimp Linux (dbg)': '//build/args/bots/chromium.linux/blimp_linux_dbg.gn',
       'Cast Android (dbg)': 'android_cast_debug_static_bot',
       'Cast Linux': 'cast_release_bot',
       'Linux Builder (dbg)': 'debug_bot',
@@ -290,14 +305,14 @@
 
     'chromium.memory': {
       'Linux ASan LSan Builder': 'asan_lsan_release_trybot',
-      'Mac ASan 64 Builder': 'asan_full_symbols_disable_nacl_release_bot_dcheck_always_on',
       'Linux Chromium OS ASan LSan Builder': 'asan_lsan_chromeos_release_trybot',
+      'Linux TSan Builder': 'tsan_disable_nacl_release_bot',
+      'Mac ASan 64 Builder': 'asan_full_symbols_disable_nacl_release_bot_dcheck_always_on',
     },
 
     'chromium.memory.fyi': {
       'Chromium Linux ChromeOS MSan Builder': 'chromeos_msan_release_bot',
       'Chromium Linux MSan Builder': 'msan_release_bot',
-      'Chromium Linux TSan Builder': 'tsan_disable_nacl_release_bot',
     },
 
     'chromium.memory.full': {
@@ -308,8 +323,9 @@
 
     'chromium.perf': {
       'Android Builder': 'official_goma_minimal_symbols_android',
-      'Android Compile': 'official_goma_minimal_symbols_android',
       'Android arm64 Builder': 'official_goma_minimal_symbols_android_arm64',
+      'Android Compile': 'official_goma_minimal_symbols_android',
+      'Android arm64 Compile': 'official_goma_minimal_symbols_android_arm64',
       'Linux Builder': 'official_goma',
       'Mac Builder': 'official_goma',
       'Win Builder': 'official_goma_x86',
@@ -339,7 +355,9 @@
       'Chromium Win SyzyASAN': 'syzyasan_no_pch_release_x86',
       'Linux ASAN Builder': 'asan_lsan_release_bot',
       'Linux Debug Builder': 'debug_bot',
+      'Linux Release (NVIDIA)': 'gpu_tests_release_trybot',
       'Linux Snapshot Builder': 'release_bot',
+      'Mac Release (Intel)': 'gpu_tests_release_trybot',
       'V8 Android GN (dbg)': 'android_debug_bot',
       'V8 Linux GN': 'release_bot',
       'V8-Blink Linux 64': 'release_bot',
@@ -347,15 +365,11 @@
       'V8-Blink Linux 64 (dbg)': 'debug_bot',
       'V8-Blink Mac': 'release_bot',
       'V8-Blink Win': 'release_bot_x86',
+      'Win Release (NVIDIA)': 'gpu_tests_release_trybot_x86',
     },
 
     'chromium.webkit': {
       'Android Builder': 'android_release_bot_minimal_symbols',
-      'WebKit Linux Precise ASAN': 'asan_lsan_release_bot',
-      'WebKit Linux Precise (dbg)': 'debug_bot',
-      'WebKit Linux Precise Leak': 'release_bot',
-      'WebKit Linux Precise MSAN': 'msan_release_bot',
-      'WebKit Linux Precise': 'release_bot',
       'WebKit Linux Trusty ASAN': 'asan_lsan_release_bot',
       'WebKit Linux Trusty (dbg)': 'debug_bot',
       'WebKit Linux Trusty Leak': 'release_bot',
@@ -378,6 +392,7 @@
     },
 
     'chromium.webrtc.fyi': {
+      'Android Builder': 'android_release_bot_minimal_symbols',
       'Android Builder (dbg)': 'android_debug_static_bot',
       'Android Builder ARM64 (dbg)': 'android_debug_static_bot_arm64',
       'Linux Builder': 'release_bot_chrome_with_codecs',
@@ -399,10 +414,6 @@
       'Linux Dev': 'debug_bot',
       'Mac Dev': 'debug_bot',
       'Windows Dev': 'debug_bot',
-    },
-
-    'official.android': {
-      'blimp-engine': '//build/args/bots/official.android/blimp-engine.gn',
     },
 
     'official.desktop': {
@@ -445,10 +456,6 @@
       # release trybots must *not* enable dchecks, because that could
       # cause them to produce different baselines than the release
       # waterfall bots, and run-webkit-tests can't handle that (by design).
-      'linux_precise_blink_compile_dbg': 'debug_trybot',
-      'linux_precise_blink_compile_rel': 'release_bot_minimal_symbols',
-      'linux_precise_blink_dbg': 'debug_trybot',
-      'linux_precise_blink_rel': 'release_bot_minimal_symbols',
       'linux_trusty_blink_compile_dbg': 'debug_trybot',
       'linux_trusty_blink_compile_rel': 'release_bot_minimal_symbols',
       'linux_trusty_blink_dbg': 'debug_trybot',
@@ -484,8 +491,11 @@
       # shared library loading is fixed.
       'android_cronet_tester': 'android_cronet_debug_static_bot_arm_no_neon',
 
+      'android_n5x_swarming_dbg': 'android_debug_trybot_arm64',
       'android_n5x_swarming_rel': 'android_release_trybot_arm64',
       'android_optional_gpu_tests_rel': 'gpu_tests_deqp_android_release_trybot_arm64',
+      'android_unswarmed_n5_rel': 'android_release_trybot',
+      'android_unswarmed_n5x_rel': 'android_release_trybot_arm64',
       'cast_shell_android': 'android_cast_debug_static_bot',
       'linux_android_dbg_ng': 'android_debug_trybot',
       'linux_android_rel_ng': 'android_release_trybot',
@@ -505,7 +515,6 @@
     },
 
     'tryserver.chromium.linux': {
-      'blimp_linux_dbg': '//build/args/bots/chromium.linux/blimp_linux_dbg.gn',
       'Chromium Linux Codesearch Builder': 'codesearch',
       'ChromiumOS Codesearch Builder': 'codesearch',
       'cast_shell_linux': 'cast_release_trybot',
@@ -611,7 +620,6 @@
       'android_one_perf_bisect': 'official_goma_minimal_symbols_android',
       'android_perf_bisect_builder': 'official_goma_minimal_symbols_android',
       'android_s5_perf_bisect': 'official_goma_minimal_symbols_android',
-      'android_s5_perf_cq': 'official_goma_minimal_symbols_android',
       'android_webview_arm64_aosp_perf_bisect': 'official_goma_minimal_symbols_android',
       'linux_fyi_perf_bisect': 'official_goma',
       'linux_perf_bisect': 'official_goma',
@@ -698,6 +706,14 @@
 
     'android_clang_tot_dbg': [
       'android_without_codecs', 'clang_tot', 'shared', 'debug',
+    ],
+
+    'android_clang_tot_release': [
+      'android_without_codecs', 'clang_tot', 'release',
+    ],
+
+    'android_clang_tot_release_arm64': [
+      'android_without_codecs', 'clang_tot', 'release', 'arm64',
     ],
 
     'android_clang_tot_x64': [
@@ -831,6 +847,26 @@
 
     'android_debug_trybot_x86': [
       'android', 'debug_trybot', 'x86',
+    ],
+
+    'android_ndk_next_release_bot_minimal_symbols': [
+      'android', 'ndk_next', 'release_bot', 'minimal_symbols',
+    ],
+
+    'android_ndk_next_release_bot_minimal_symbols_arm64': [
+      'android', 'ndk_next', 'release_bot', 'minimal_symbols', 'arm64',
+    ],
+
+    'android_ndk_next_release_bot_minimal_symbols_mipsel': [
+      'android', 'ndk_next', 'release_bot', 'minimal_symbols', 'mipsel',
+    ],
+
+    'android_ndk_next_release_bot_minimal_symbols_x64': [
+      'android', 'ndk_next', 'release_bot', 'minimal_symbols', 'x64',
+    ],
+
+    'android_ndk_next_release_bot_minimal_symbols_x86': [
+      'android', 'ndk_next', 'release_bot', 'minimal_symbols', 'x86',
     ],
 
     'android_release_bot_minimal_symbols': [
@@ -1041,8 +1077,8 @@
       'clang', 'official', 'release_trybot', 'x86',
     ],
 
-    'clang_minimal_symbols_shared_release_bot': [
-      'clang', 'minimal_symbols', 'shared_release_bot',
+    'clang_shared_release_bot': [
+      'clang', 'shared_release_bot',
     ],
 
     'clang_tot_asan_lsan_static_release': [
@@ -1089,6 +1125,10 @@
 
     'clang_tot_minimal_symbols_shared_release': [
       'clang_tot', 'minimal_symbols', 'shared', 'release',
+    ],
+
+    'clang_tot_shared_release': [
+      'clang_tot', 'shared', 'release',
     ],
 
     'clang_tot_minimal_symbols_shared_release_x86': [
@@ -1147,6 +1187,10 @@
 
     'debug_trybot_x86': [
       'debug_trybot', 'x86',
+    ],
+
+    'gpu_fyi_tests_chromeos_ozone_release_trybot': [
+      'gpu_fyi_tests', 'release_trybot', 'chromeos', 'ozone',
     ],
 
     'gpu_fyi_tests_chromeos_release_trybot': [
@@ -1404,8 +1448,8 @@
       'syzyasan', 'no_pch', 'release', 'x86',
     ],
 
-    'thin_lto_clang_tot_release_static': [
-      'thin_lto', 'clang_tot', 'release', 'static',
+    'thin_lto_clang_tot_full_symbols_release_static_use_lld': [
+      'thin_lto', 'clang_tot', 'full_symbols', 'release', 'static', 'use_lld',
     ],
 
     'tsan_disable_nacl_debug_bot': [
@@ -1541,7 +1585,7 @@
     },
 
     'clang_tot': {
-      'gn_args': 'llvm_force_head_revision=true clang_use_chrome_plugins=false',
+      'gn_args': 'llvm_force_head_revision=true clang_use_chrome_plugins=false enable_nocompile_tests=false',
       'mixins': ['clang'],
     },
 
@@ -1552,7 +1596,7 @@
     'cronet': {
       'gn_args': ('disable_file_support=true disable_ftp_support=true '
                   'enable_websockets=false use_platform_icu_alternatives=true '
-                  'disable_brotli_filter=true'),
+                  'disable_brotli_filter=true use_partition_alloc=false'),
     },
 
     'cros_chrome_sdk': {
@@ -1703,8 +1747,14 @@
       'gn_args': 'is_msan=true msan_track_origins=0 use_prebuilt_instrumented_libraries=true',
     },
 
+    'ndk_next': {
+      # GCC is unsupported starting in r13.
+      'mixins': ['clang'],
+      'gn_args': 'android_ndk_version="r13b" android_ndk_major_version=13',
+    },
+
     'no_pch': {
-      'gn_args': 'disable_precompiled_headers=true',
+      'gn_args': 'enable_precompiled_headers=false',
     },
 
     'no_symbols': {

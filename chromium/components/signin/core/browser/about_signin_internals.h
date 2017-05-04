@@ -10,7 +10,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "base/observer_list.h"
 #include "base/values.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -26,7 +25,6 @@ class PrefRegistrySyncable;
 }
 
 class AccountTrackerService;
-class GaiaAuthFetcher;
 class ProfileOAuth2TokenService;
 class SigninClient;
 

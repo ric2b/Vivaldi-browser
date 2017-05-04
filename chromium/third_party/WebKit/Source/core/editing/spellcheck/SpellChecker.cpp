@@ -28,10 +28,12 @@
 
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
+#include "core/clipboard/DataObject.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/NodeTraversal.h"
+#include "core/dom/Range.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/EphemeralRange.h"
@@ -50,6 +52,7 @@
 #include "core/loader/EmptyClients.h"
 #include "core/page/Page.h"
 #include "core/page/SpellCheckerClient.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/text/TextBreakIterator.h"
 #include "platform/text/TextCheckerClient.h"
 
@@ -68,10 +71,6 @@ bool isPositionInTextField(const Position& selectionStart) {
 bool isPositionInTextArea(const Position& position) {
   TextControlElement* textControl = enclosingTextControl(position);
   return isHTMLTextAreaElement(textControl);
-}
-
-bool isSelectionInTextFormControl(const VisibleSelection& selection) {
-  return !!enclosingTextControl(selection.start());
 }
 
 static bool isSpellCheckingEnabledFor(const Position& position) {
@@ -189,6 +188,9 @@ void SpellChecker::toggleSpellCheckingEnabled() {
 }
 
 void SpellChecker::didBeginEditing(Element* element) {
+  if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+    return;
+
   if (!isSpellCheckingEnabled())
     return;
 
@@ -368,6 +370,9 @@ void SpellChecker::clearMisspellingsForMovingParagraphs(
 
 void SpellChecker::markMisspellingsForMovingParagraphs(
     const VisibleSelection& movingSelection) {
+  if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+    return;
+
   // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   // In the long term we should use idle time spell checker to prevent
@@ -400,6 +405,9 @@ void SpellChecker::markMisspellingsInternal(const VisibleSelection& selection) {
 
 void SpellChecker::markMisspellingsAfterApplyingCommand(
     const CompositeEditCommand& cmd) {
+  if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+    return;
+
   if (!isSpellCheckingEnabled())
     return;
   if (!isSpellCheckingEnabledFor(cmd.endingSelection()))
@@ -573,6 +581,10 @@ static void addMarker(Document* document,
   DCHECK_GE(location, 0);
   const EphemeralRange& rangeToMark =
       calculateCharacterSubrange(checkingRange, location, length);
+  if (!isSpellCheckingEnabledFor(rangeToMark.startPosition()))
+    return;
+  if (!isSpellCheckingEnabledFor(rangeToMark.endPosition()))
+    return;
   document->markers().addMarker(rangeToMark.startPosition(),
                                 rangeToMark.endPosition(), type, description,
                                 hash);
@@ -786,7 +798,8 @@ void SpellChecker::didEndEditingOnTextField(Element* e) {
 
   // Remove markers when deactivating a selection in an <input type="text"/>.
   // Prevent new ones from appearing too.
-  m_spellCheckRequester->cancelCheck();
+  if (!RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+    m_spellCheckRequester->cancelCheck();
   TextControlElement* textControlElement = toTextControlElement(e);
   HTMLElement* innerEditor = textControlElement->innerEditorElement();
   DocumentMarker::MarkerTypes markerTypes(DocumentMarker::Spelling);
@@ -812,14 +825,38 @@ void SpellChecker::replaceMisspelledRange(const String& text) {
                               markers[0]->endOffset()));
   if (markerRange.isNull())
     return;
+
   frame().selection().setSelection(
       SelectionInDOMTree::Builder().setBaseAndExtent(markerRange).build());
+
+  Document& currentDocument = *frame().document();
+
+  // Dispatch 'beforeinput'.
+  Element* const target = frame().editor().findEventTargetFromSelection();
+  RangeVector* const ranges =
+      new RangeVector(1, frame().selection().firstRange());
+  DataTransfer* const dataTransfer = DataTransfer::create(
+      DataTransfer::DataTransferType::InsertReplacementText,
+      DataTransferAccessPolicy::DataTransferReadable,
+      DataObject::createFromString(text));
+
+  const bool cancel =
+      dispatchBeforeInputDataTransfer(
+          target, InputEvent::InputType::InsertReplacementText, dataTransfer,
+          ranges) != DispatchEventResult::NotCanceled;
+
+  // 'beforeinput' event handler may destroy target frame.
+  if (currentDocument != frame().document())
+    return;
 
   // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
-  frame().editor().replaceSelectionWithText(text, false, false);
+  if (cancel)
+    return;
+  frame().editor().replaceSelectionWithText(
+      text, false, false, InputEvent::InputType::InsertReplacementText);
 }
 
 static bool shouldCheckOldSelection(const Position& oldSelectionStart) {
@@ -842,6 +879,9 @@ static bool shouldCheckOldSelection(const Position& oldSelectionStart) {
 void SpellChecker::respondToChangedSelection(
     const Position& oldSelectionStart,
     FrameSelection::SetSelectionOptions options) {
+  if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+    return;
+
   TRACE_EVENT0("blink", "SpellChecker::respondToChangedSelection");
   if (!isSpellCheckingEnabledFor(oldSelectionStart))
     return;
@@ -870,16 +910,9 @@ void SpellChecker::respondToChangedSelection(
 
   VisibleSelection newAdjacentWords;
   const VisibleSelection newSelection = frame().selection().selection();
-  if (isSelectionInTextFormControl(newSelection)) {
-    const Position newStart = newSelection.start();
-    newAdjacentWords.setWithoutValidation(
-        TextControlElement::startOfWord(newStart),
-        TextControlElement::endOfWord(newStart));
-  } else {
-    if (newSelection.isContentEditable()) {
-      newAdjacentWords =
-          createVisibleSelection(selectWord(newSelection.visibleStart()));
-    }
+  if (newSelection.isContentEditable()) {
+    newAdjacentWords =
+        createVisibleSelection(selectWord(newSelection.visibleStart()));
   }
 
   // When typing we check spelling elsewhere, so don't redo it here.
@@ -905,6 +938,9 @@ void SpellChecker::removeSpellingMarkersUnderWords(
 }
 
 void SpellChecker::spellCheckAfterBlur() {
+  if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+    return;
+
   if (!frame().selection().selection().isContentEditable())
     return;
 
@@ -1000,16 +1036,11 @@ void SpellChecker::removeMarkers(const VisibleSelection& selection,
   frame().document()->markers().removeMarkers(range, markerTypes);
 }
 
+// TODO(xiaochengh): This function is only used by unit tests. We should move it
+// to IdleSpellCheckCallback and modify unit tests to cope with idle time spell
+// checker.
 void SpellChecker::cancelCheck() {
   m_spellCheckRequester->cancelCheck();
-}
-
-void SpellChecker::requestTextChecking(const Element& element) {
-  if (!element.isSpellCheckingEnabled())
-    return;
-  const EphemeralRange rangeToCheck = EphemeralRange::rangeOfContents(element);
-  m_spellCheckRequester->requestCheckingFor(
-      SpellCheckRequest::create(rangeToCheck));
 }
 
 DEFINE_TRACE(SpellChecker) {
@@ -1018,7 +1049,8 @@ DEFINE_TRACE(SpellChecker) {
 }
 
 void SpellChecker::prepareForLeakDetection() {
-  m_spellCheckRequester->prepareForLeakDetection();
+  if (!RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+    m_spellCheckRequester->prepareForLeakDetection();
 }
 
 Vector<TextCheckingResult> SpellChecker::findMisspellings(const String& text) {
@@ -1049,7 +1081,7 @@ Vector<TextCheckingResult> SpellChecker::findMisspellings(const String& text) {
       misspelling.decoration = TextDecorationTypeSpelling;
       misspelling.location = wordStart + misspellingLocation;
       misspelling.length = misspellingLength;
-      results.append(misspelling);
+      results.push_back(misspelling);
     }
     wordStart = wordEnd;
   }

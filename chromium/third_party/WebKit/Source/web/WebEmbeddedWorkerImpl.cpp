@@ -80,8 +80,8 @@ namespace blink {
 WebEmbeddedWorker* WebEmbeddedWorker::create(
     WebServiceWorkerContextClient* client,
     WebWorkerContentSettingsClientProxy* contentSettingsClient) {
-  return new WebEmbeddedWorkerImpl(wrapUnique(client),
-                                   wrapUnique(contentSettingsClient));
+  return new WebEmbeddedWorkerImpl(WTF::wrapUnique(client),
+                                   WTF::wrapUnique(contentSettingsClient));
 }
 
 static HashSet<WebEmbeddedWorkerImpl*>& runningWorkerInstances() {
@@ -263,15 +263,18 @@ void WebEmbeddedWorkerImpl::postMessageToPageInspector(const String& message) {
 void WebEmbeddedWorkerImpl::postTaskToLoader(
     const WebTraceLocation& location,
     std::unique_ptr<ExecutionContextTask> task) {
-  // TODO(hiroshige,yuryu): Make this not use ExecutionContextTask and
-  // consider using m_mainThreadTaskRunners->get(TaskType::Networking)
-  // instead.
-  m_mainFrame->frame()->document()->postTask(location, std::move(task));
+  m_mainThreadTaskRunners->get(TaskType::Networking)
+      ->postTask(
+          BLINK_FROM_HERE,
+          crossThreadBind(
+              &ExecutionContextTask::performTaskIfContextIsValid,
+              WTF::passed(std::move(task)),
+              wrapCrossThreadWeakPersistent(m_mainFrame->frame()->document())));
 }
 
 void WebEmbeddedWorkerImpl::postTaskToWorkerGlobalScope(
     const WebTraceLocation& location,
-    std::unique_ptr<ExecutionContextTask> task) {
+    std::unique_ptr<WTF::CrossThreadClosure> task) {
   if (m_askedToTerminate || !m_workerThread)
     return;
   m_workerThread->postTask(location, std::move(task));
@@ -339,7 +342,7 @@ void WebEmbeddedWorkerImpl::didFinishDocumentLoad(WebLocalFrame* frame) {
   DCHECK(!m_askedToTerminate);
   m_loadingShadowPage = false;
   m_networkProvider =
-      wrapUnique(m_workerContextClient->createServiceWorkerNetworkProvider(
+      WTF::wrapUnique(m_workerContextClient->createServiceWorkerNetworkProvider(
           frame->dataSource()));
   m_mainScriptLoader = WorkerScriptLoader::create();
   m_mainScriptLoader->setRequestContext(
@@ -422,36 +425,43 @@ void WebEmbeddedWorkerImpl::startWorkerThread() {
   WorkerClients* workerClients = WorkerClients::create();
   provideContentSettingsClientToWorker(workerClients,
                                        std::move(m_contentSettingsClient));
-  provideIndexedDBClientToWorker(workerClients, IndexedDBClientImpl::create());
+  provideIndexedDBClientToWorker(workerClients,
+                                 IndexedDBClientImpl::create(*workerClients));
   provideServiceWorkerGlobalScopeClientToWorker(
       workerClients,
       ServiceWorkerGlobalScopeClientImpl::create(*m_workerContextClient));
   provideServiceWorkerContainerClientToWorker(
       workerClients,
-      wrapUnique(m_workerContextClient->createServiceWorkerProvider()));
+      WTF::wrapUnique(m_workerContextClient->createServiceWorkerProvider()));
 
   // We need to set the CSP to both the shadow page's document and the
   // ServiceWorkerGlobalScope.
   document->initContentSecurityPolicy(
       m_mainScriptLoader->releaseContentSecurityPolicy());
-  if (!m_mainScriptLoader->referrerPolicy().isNull())
-    document->parseAndSetReferrerPolicy(m_mainScriptLoader->referrerPolicy());
+  if (!m_mainScriptLoader->getReferrerPolicy().isNull()) {
+    document->parseAndSetReferrerPolicy(
+        m_mainScriptLoader->getReferrerPolicy());
+  }
 
   KURL scriptURL = m_mainScriptLoader->url();
   WorkerThreadStartMode startMode =
       m_workerInspectorProxy->workerStartMode(document);
   std::unique_ptr<WorkerSettings> workerSettings =
-      wrapUnique(new WorkerSettings(document->settings()));
+      WTF::wrapUnique(new WorkerSettings(document->settings()));
+
+  WorkerV8Settings workerV8Settings = WorkerV8Settings::Default();
+  workerV8Settings.m_v8CacheOptions =
+      static_cast<V8CacheOptions>(m_workerStartData.v8CacheOptions);
 
   std::unique_ptr<WorkerThreadStartupData> startupData =
       WorkerThreadStartupData::create(
           scriptURL, m_workerStartData.userAgent, m_mainScriptLoader->script(),
           m_mainScriptLoader->releaseCachedMetadata(), startMode,
           document->contentSecurityPolicy()->headers().get(),
-          m_mainScriptLoader->referrerPolicy(), starterOrigin, workerClients,
+          m_mainScriptLoader->getReferrerPolicy(), starterOrigin, workerClients,
           m_mainScriptLoader->responseAddressSpace(),
           m_mainScriptLoader->originTrialTokens(), std::move(workerSettings),
-          static_cast<V8CacheOptions>(m_workerStartData.v8CacheOptions));
+          workerV8Settings);
 
   m_mainScriptLoader.clear();
 

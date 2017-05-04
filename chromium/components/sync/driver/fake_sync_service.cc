@@ -30,6 +30,10 @@ bool FakeSyncService::IsSyncActive() const {
   return false;
 }
 
+bool FakeSyncService::IsLocalSyncEnabled() const {
+  return false;
+}
+
 void FakeSyncService::TriggerRefresh(const ModelTypeSet& types) {}
 
 ModelTypeSet FakeSyncService::GetActiveDataTypes() const {
@@ -92,7 +96,7 @@ bool FakeSyncService::HasUnrecoverableError() const {
   return false;
 }
 
-bool FakeSyncService::IsBackendInitialized() const {
+bool FakeSyncService::IsEngineInitialized() const {
   return false;
 }
 
@@ -166,7 +170,7 @@ base::string16 FakeSyncService::GetLastSyncedTimeString() const {
   return base::string16();
 }
 
-std::string FakeSyncService::GetBackendInitializationStateString() const {
+std::string FakeSyncService::GetEngineInitializationStateString() const {
   return std::string();
 }
 
@@ -174,8 +178,8 @@ SyncCycleSnapshot FakeSyncService::GetLastCycleSnapshot() const {
   return SyncCycleSnapshot();
 }
 
-base::Value* FakeSyncService::GetTypeStatusMap() {
-  return new base::ListValue();
+std::unique_ptr<base::Value> FakeSyncService::GetTypeStatusMap() {
+  return base::MakeUnique<base::ListValue>();
 }
 
 const GURL& FakeSyncService::sync_service_url() const {

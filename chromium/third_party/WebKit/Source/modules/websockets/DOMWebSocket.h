@@ -33,7 +33,7 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptWrappable.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/events/EventListener.h"
 #include "core/events/EventTarget.h"
 #include "modules/EventTargetModules.h"
@@ -62,8 +62,8 @@ class ExecutionContext;
 class StringOrStringSequence;
 
 class MODULES_EXPORT DOMWebSocket : public EventTargetWithInlineData,
-                                    public ActiveScriptWrappable,
-                                    public ActiveDOMObject,
+                                    public ActiveScriptWrappable<DOMWebSocket>,
+                                    public SuspendableObject,
                                     public WebSocketChannelClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(DOMWebSocket);
@@ -121,8 +121,8 @@ class MODULES_EXPORT DOMWebSocket : public EventTargetWithInlineData,
   const AtomicString& interfaceName() const override;
   ExecutionContext* getExecutionContext() const override;
 
-  // ActiveDOMObject functions.
-  void contextDestroyed() override;
+  // SuspendableObject functions.
+  void contextDestroyed(ExecutionContext*) override;
   void suspend() override;
   void resume() override;
 

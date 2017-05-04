@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "mojo/public/cpp/bindings/array.h"
 #include "services/ui/common/types.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/gfx/geometry/mojo/geometry.mojom.h"
@@ -80,7 +79,7 @@ struct Change {
   gfx::Rect bounds2;
   int32_t event_action;
   bool matches_pointer_watcher;
-  mojo::String embed_url;
+  std::string embed_url;
   mojom::OrderDirection direction;
   bool bool_value;
   float float_value;
@@ -111,7 +110,7 @@ std::string SingleWindowDescription(const std::vector<TestWindow>& windows);
 std::string ChangeWindowDescription(const std::vector<Change>& changes);
 
 // Converts WindowDatas to TestWindows.
-void WindowDatasToTestWindows(const mojo::Array<mojom::WindowDataPtr>& data,
+void WindowDatasToTestWindows(const std::vector<mojom::WindowDataPtr>& data,
                               std::vector<TestWindow>* test_windows);
 
 // TestChangeTracker is used to record WindowTreeClient functions. It notifies
@@ -151,7 +150,7 @@ class TestChangeTracker {
   void OnWindowHierarchyChanged(Id window_id,
                                 Id old_parent_id,
                                 Id new_parent_id,
-                                mojo::Array<mojom::WindowDataPtr> windows);
+                                std::vector<mojom::WindowDataPtr> windows);
   void OnWindowReordered(Id window_id,
                          Id relative_window_id,
                          mojom::OrderDirection direction);
@@ -164,9 +163,10 @@ class TestChangeTracker {
                           bool matches_pointer_watcher);
   void OnPointerEventObserved(const ui::Event& event,
                               uint32_t window_id);
-  void OnWindowSharedPropertyChanged(Id window_id,
-                                     mojo::String name,
-                                     mojo::Array<uint8_t> data);
+  void OnWindowSharedPropertyChanged(
+      Id window_id,
+      const std::string& name,
+      const base::Optional<std::vector<uint8_t>>& data);
   void OnWindowFocused(Id window_id);
   void OnWindowPredefinedCursorChanged(Id window_id, mojom::Cursor cursor_id);
   void OnChangeCompleted(uint32_t change_id, bool success);
@@ -174,9 +174,7 @@ class TestChangeTracker {
                          mojom::WindowDataPtr window_data,
                          bool drawn);
   void OnWindowSurfaceChanged(Id window_id,
-                              const cc::SurfaceId& surface_id,
-                              const gfx::Size& frame_size,
-                              float device_scale_factor);
+                              const cc::SurfaceInfo& surface_info);
 
  private:
   void AddChange(const Change& change);

@@ -57,7 +57,7 @@ Polymer({
    * @private
    */
   getConnectActionText_: function(connected) {
-    return this.i18n(connected ? 'bluetoothDisconnect' : 'bluetoothConnect');
+    return this.i18n(connected ? 'bluetoothDisconnect' : 'bluetoothPair');
   },
 
   /**
@@ -71,10 +71,68 @@ Polymer({
 
   /**
    * @param {!chrome.bluetooth.Device} device
+   * @return {string} The text to display the connection status of |device|.
+   * @private
+   */
+  getConnectionStatusText_: function(device) {
+    if (!this.hasConnectionStatusText_(device))
+      return '';
+    return this.i18n(
+        device.connected ? 'bluetoothConnected' : 'bluetoothNotConnected');
+  },
+
+  /**
+   * @param {!chrome.bluetooth.Device} device
+   * @return {boolean} True if connection status should be shown as the
+   *     secondary text of the |device| in device list.
+   * @private
+   */
+  hasConnectionStatusText_: function(device) {
+    return !!device.paired && !device.connecting;
+  },
+
+  /**
+   * @param {!chrome.bluetooth.Device} device
    * @return {boolean}
    * @private
    */
   isDisconnected_: function(device) {
     return !device.connected && !device.connecting;
+  },
+
+  /**
+   * Returns device type icon's ID corresponding to the given device.
+   * To be consistent with the Bluetooth device list in system menu, this
+   * mapping needs to be synced with ash::tray::GetBluetoothDeviceIcon().
+   *
+   * @param {!chrome.bluetooth.Device} device
+   * @return {string}
+   * @private
+   */
+  getDeviceIcon_: function(device) {
+    switch (device.type) {
+      case 'computer':
+        return 'settings:computer';
+      case 'phone':
+        return 'settings:smartphone';
+      case 'audio':
+      case 'carAudio':
+        return 'settings:headset';
+      case 'video':
+        return 'settings:videocam';
+      case 'joystick':
+      case 'gamepad':
+        return 'settings:gamepad';
+      case 'keyboard':
+      case 'keyboardMouseCombo':
+        return 'settings:keyboard';
+      case 'tablet':
+        return 'settings:tablet';
+      case 'mouse':
+        return 'settings:mouse';
+      default:
+        return device.connected ?
+            'settings:bluetooth-connected' : 'settings:bluetooth';
+    }
   },
 });

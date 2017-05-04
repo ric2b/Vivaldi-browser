@@ -27,7 +27,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/SuspendableObject.h"
 #include "modules/EventTargetModules.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
@@ -42,16 +42,15 @@ class Blob;
 class DOMArrayBuffer;
 class DOMArrayBufferView;
 class ExceptionState;
-class RTCPeerConnection;
 class WebRTCDataChannelHandler;
 class WebRTCPeerConnectionHandler;
 struct WebRTCDataChannelInit;
 
 class MODULES_EXPORT RTCDataChannel final
     : public EventTargetWithInlineData,
-      WTF_NON_EXPORTED_BASE(public WebRTCDataChannelHandlerClient),
-      public ActiveScriptWrappable,
-      public ActiveDOMObject {
+      NON_EXPORTED_BASE(public WebRTCDataChannelHandlerClient),
+      public ActiveScriptWrappable<RTCDataChannel>,
+      public SuspendableObject {
   USING_GARBAGE_COLLECTED_MIXIN(RTCDataChannel);
   DEFINE_WRAPPERTYPEINFO();
   USING_PRE_FINALIZER(RTCDataChannel, dispose);
@@ -105,10 +104,10 @@ class MODULES_EXPORT RTCDataChannel final
   const AtomicString& interfaceName() const override;
   ExecutionContext* getExecutionContext() const override;
 
-  // ActiveDOMObject
+  // SuspendableObject
   void suspend() override;
   void resume() override;
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   // ScriptWrappable
   bool hasPendingActivity() const override;

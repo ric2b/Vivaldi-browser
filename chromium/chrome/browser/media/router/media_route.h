@@ -12,7 +12,7 @@
 #include "base/values.h"
 #include "chrome/browser/media/router/media_sink.h"
 #include "chrome/browser/media/router/media_source.h"
-#include "content/public/browser/presentation_session.h"
+#include "content/public/common/presentation_session.h"
 
 namespace media_router {
 
@@ -78,6 +78,14 @@ class MediaRoute {
 
   bool is_incognito() const { return is_incognito_; }
 
+  // Set to |true| if the presentation associated with this route is an
+  // offscreen presentation.
+  void set_offscreen_presentation(bool is_offscreen_presentation) {
+    is_offscreen_presentation_ = is_offscreen_presentation;
+  }
+
+  bool is_offscreen_presentation() const { return is_offscreen_presentation_; }
+
   bool Equals(const MediaRoute& other) const;
 
  private:
@@ -89,6 +97,7 @@ class MediaRoute {
   std::string custom_controller_path_;
   bool for_display_;
   bool is_incognito_;
+  bool is_offscreen_presentation_;
 };
 
 }  // namespace media_router

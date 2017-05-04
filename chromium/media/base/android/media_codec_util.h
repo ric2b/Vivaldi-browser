@@ -46,6 +46,13 @@ class MEDIA_EXPORT MediaCodecUtil {
   // to check IsAvailable() explicitly before calling them.
   static bool IsMediaCodecAvailable();
 
+  // Returns true if MediaCodec is available, with |sdk| as the sdk version and
+  // |model| as the model.  This is provided for unit tests; you probably want
+  // IsMediaCodecAvailable() otherwise.
+  // TODO(liberato): merge this with IsMediaCodecAvailable, and provide a way
+  // to mock BuildInfo instead.
+  static bool IsMediaCodecAvailableFor(int sdk, const char* model);
+
   // Returns true if MediaCodec.setParameters() is available on the device.
   static bool SupportsSetParameters();
 
@@ -63,8 +70,7 @@ class MEDIA_EXPORT MediaCodecUtil {
   static bool IsKnownUnaccelerated(const std::string& mime_type,
                                    MediaCodecDirection direction);
 
-  // Test whether a URL contains "m3u8". (Using exactly the same logic as
-  // NuPlayer does to determine if a stream is HLS.)
+  // Test whether a URL contains "m3u8".
   static bool IsHLSURL(const GURL& url);
 
   // Test whether the path of a URL ends with ".m3u8".
@@ -82,6 +88,9 @@ class MEDIA_EXPORT MediaCodecUtil {
 
   // Indicates if SurfaceView and MediaCodec work well together on this device.
   static bool IsSurfaceViewOutputSupported();
+
+  // Indicates if MediaCodec.setOutputSurface() works on this device.
+  static bool IsSetOutputSurfaceSupported();
 
   // Indicates if the decoder is known to fail when flushed. (b/8125974,
   // b/8347958)

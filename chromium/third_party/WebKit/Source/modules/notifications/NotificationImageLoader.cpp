@@ -120,8 +120,11 @@ void NotificationImageLoader::start(
   resourceRequest.setPriority(ResourceLoadPriorityMedium);
   resourceRequest.setRequestorOrigin(executionContext->getSecurityOrigin());
 
+  // TODO(yhirano): Remove this CHECK once https://crbug.com/667254 is fixed.
+  CHECK(!m_threadableLoader);
   m_threadableLoader = ThreadableLoader::create(
-      *executionContext, this, threadableLoaderOptions, resourceLoaderOptions);
+      *executionContext, this, threadableLoaderOptions, resourceLoaderOptions,
+      ThreadableLoader::ClientSpec::kNotificationImageLoader);
   m_threadableLoader->start(resourceRequest);
 }
 
@@ -160,7 +163,7 @@ void NotificationImageLoader::didFinishLoading(unsigned long resourceIdentifier,
 
     std::unique_ptr<ImageDecoder> decoder = ImageDecoder::create(
         m_data, true /* dataComplete */, ImageDecoder::AlphaPremultiplied,
-        ImageDecoder::ColorSpaceApplied);
+        ColorBehavior::transformToGlobalTarget());
     if (decoder) {
       // The |ImageFrame*| is owned by the decoder.
       ImageFrame* imageFrame = decoder->frameBufferAtIndex(0);

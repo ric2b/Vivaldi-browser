@@ -5,22 +5,16 @@
 var mediaRouter;
 
 define('media_router_bindings', [
-    'mojo/public/js/bindings',
-    'mojo/public/js/core',
     'content/public/renderer/frame_interfaces',
     'chrome/browser/media/router/mojo/media_router.mojom',
     'extensions/common/mojo/keep_alive.mojom',
-    'mojo/common/common_custom_types.mojom',
-    'mojo/public/js/connection',
-    'mojo/public/js/router',
-], function(bindings,
-            core,
-            frameInterfaces,
+    'mojo/common/time.mojom',
+    'mojo/public/js/bindings',
+], function(frameInterfaces,
             mediaRouterMojom,
             keepAliveMojom,
-            commonCustomTypesMojom,
-            connector,
-            routerModule) {
+            timeMojom,
+            bindings) {
   'use strict';
 
   /**
@@ -80,7 +74,8 @@ define('media_router_bindings', [
       // Begin newly added properties, followed by the milestone they were
       // added.  The guard should be safe to remove N+2 milestones later.
       'for_display': route.forDisplay, // M47
-      'is_incognito': !!route.offTheRecord  // M50
+      'is_incognito': !!route.offTheRecord,  // M50
+      'is_offscreen_presentation': !!route.isOffscreenPresentation // M56
     });
   }
 
@@ -186,14 +181,14 @@ define('media_router_bindings', [
   /**
    * Creates a new MediaRouter.
    * Converts a route struct to its Mojo form.
-   * @param {!MediaRouterService} service
+   * @param {!mediaRouterMojom.MediaRouterPtr} service
    * @constructor
    */
   function MediaRouter(service) {
     /**
      * The Mojo service proxy. Allows extension code to call methods that reside
      * in the browser.
-     * @type {!MediaRouterService}
+     * @type {!mediaRouterMojom.MediaRouterPtr}
      */
     this.service_ = service;
 
@@ -205,15 +200,6 @@ define('media_router_bindings', [
     this.mrpm_ = new MediaRouteProvider(this);
 
     /**
-     * The message pipe that connects the Media Router to mrpm_ across
-     * browser/renderer IPC boundaries. Object must remain in scope for the
-     * lifetime of the connection to prevent the connection from closing
-     * automatically.
-     * @type {!mojo.MessagePipe}
-     */
-    this.pipe_ = core.createMessagePipe();
-
-    /**
      * Handle to a KeepAlive service object, which prevents the extension from
      * being suspended as long as it remains in scope.
      * @type {boolean}
@@ -221,16 +207,13 @@ define('media_router_bindings', [
     this.keepAlive_ = null;
 
     /**
-     * The stub used to bind the service delegate to the Mojo interface.
+     * The bindings to bind the service delegate to the Mojo interface.
      * Object must remain in scope for the lifetime of the connection to
      * prevent the connection from closing automatically.
-     * @type {!mojom.MediaRouter}
+     * @type {!bindings.Binding}
      */
-    this.mediaRouteProviderStub_ = connector.bindHandleToStub(
-        this.pipe_.handle0, mediaRouterMojom.MediaRouteProvider);
-
-    // Link mediaRouteProviderStub_ to the provider manager delegate.
-    bindings.StubBindings(this.mediaRouteProviderStub_).delegate = this.mrpm_;
+    this.mediaRouteProviderBinding_ = new bindings.Binding(
+        mediaRouterMojom.MediaRouteProvider, this.mrpm_);
   }
 
   /**
@@ -238,10 +221,11 @@ define('media_router_bindings', [
    * @return {!Promise<string>} Instance ID for the Media Router.
    */
   MediaRouter.prototype.start = function() {
-    return this.service_.registerMediaRouteProvider(this.pipe_.handle1).then(
-        function(result) {
-          return result.instance_id;
-        }.bind(this));
+    return this.service_.registerMediaRouteProvider(
+        this.mediaRouteProviderBinding_.createInterfacePtrAndBind()).then(
+            function(result) {
+      return result.instance_id;
+    }.bind(this));
   }
 
   /**
@@ -297,10 +281,10 @@ define('media_router_bindings', [
    */
   MediaRouter.prototype.setKeepAlive = function(keepAlive) {
     if (keepAlive === false && this.keepAlive_) {
-      this.keepAlive_.close();
+      this.keepAlive_.ptr.reset();
       this.keepAlive_ = null;
     } else if (keepAlive === true && !this.keepAlive_) {
-      this.keepAlive_ = new routerModule.Router(
+      this.keepAlive_ = new keepAliveMojom.KeepAlivePtr(
           frameInterfaces.getInterface(keepAliveMojom.KeepAlive.name));
     }
   };
@@ -508,8 +492,6 @@ define('media_router_bindings', [
    * @constructor
    */
   function MediaRouteProvider(mediaRouter) {
-    mediaRouterMojom.MediaRouteProvider.stubClass.call(this);
-
     /**
      * Object containing JS callbacks into Provider Manager code.
      * @type {!MediaRouterHandlers}
@@ -522,8 +504,6 @@ define('media_router_bindings', [
      */
     this.mediaRouter_ = mediaRouter;
   }
-  MediaRouteProvider.prototype = Object.create(
-      mediaRouterMojom.MediaRouteProvider.stubClass.prototype);
 
   /*
    * Sets the callback handler used to invoke methods in the provider manager.
@@ -715,14 +695,14 @@ define('media_router_bindings', [
   /**
    * Sends a binary message to the route designated by |routeId|.
    * @param {!string} routeId
-   * @param {!Uint8Array} data
+   * @param {!Array<number>} data
    * @return {!Promise.<boolean>} Resolved with true if the data was sent,
    *    or false on failure.
    */
   MediaRouteProvider.prototype.sendRouteBinaryMessage = function(
     routeId, data) {
     this.handlers_.onBeforeInvokeHandler();
-    return this.handlers_.sendRouteBinaryMessage(routeId, data)
+    return this.handlers_.sendRouteBinaryMessage(routeId, new Uint8Array(data))
         .then(function() {
           return {'sent': true};
         }, function() {
@@ -823,9 +803,8 @@ define('media_router_bindings', [
     });
   };
 
-  mediaRouter = new MediaRouter(connector.bindHandleToProxy(
-      frameInterfaces.getInterface(mediaRouterMojom.MediaRouter.name),
-      mediaRouterMojom.MediaRouter));
+  mediaRouter = new MediaRouter(new mediaRouterMojom.MediaRouterPtr(
+      frameInterfaces.getInterface(mediaRouterMojom.MediaRouter.name)));
 
   return mediaRouter;
 });

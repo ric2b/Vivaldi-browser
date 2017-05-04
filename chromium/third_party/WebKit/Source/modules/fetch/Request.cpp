@@ -97,7 +97,7 @@ Request* Request::createRequestWithRequestOrString(
   // integrity metadata is |request|'s integrity metadata."
   FetchRequestData* request = createCopyOfFetchRequestDataForFetch(
       scriptState,
-      inputRequest ? inputRequest->request() : FetchRequestData::create());
+      inputRequest ? inputRequest->getRequest() : FetchRequestData::create());
 
   // We don't use fallback values. We set these flags directly in below.
   // - "Let |fallbackMode| be null."
@@ -311,11 +311,11 @@ Request* Request::createRequestWithRequestOrString(
   // "Empty |r|'s request's header list."
   r->m_request->headerList()->clearList();
   // "If |r|'s request's mode is "no-cors", run these substeps:
-  if (r->request()->mode() == WebURLRequest::FetchRequestModeNoCORS) {
+  if (r->getRequest()->mode() == WebURLRequest::FetchRequestModeNoCORS) {
     // "If |r|'s request's method is not a simple method, throw a
     // TypeError."
-    if (!FetchUtils::isSimpleMethod(r->request()->method())) {
-      exceptionState.throwTypeError("'" + r->request()->method() +
+    if (!FetchUtils::isSimpleMethod(r->getRequest()->method())) {
+      exceptionState.throwTypeError("'" + r->getRequest()->method() +
                                     "' is unsupported in no-cors mode.");
       return nullptr;
     }
@@ -469,7 +469,8 @@ Request* Request::create(ScriptState* scriptState, FetchRequestData* request) {
 
 Request* Request::create(ScriptState* scriptState,
                          const WebServiceWorkerRequest& webRequest) {
-  return new Request(scriptState, webRequest);
+  FetchRequestData* request = FetchRequestData::create(scriptState, webRequest);
+  return new Request(scriptState, request);
 }
 
 Request::Request(ScriptState* scriptState,
@@ -485,10 +486,6 @@ Request::Request(ScriptState* scriptState, FetchRequestData* request)
     : Request(scriptState, request, Headers::create(request->headerList())) {
   m_headers->setGuard(Headers::RequestGuard);
 }
-
-Request::Request(ScriptState* scriptState,
-                 const WebServiceWorkerRequest& request)
-    : Request(scriptState, FetchRequestData::create(scriptState, request)) {}
 
 String Request::method() const {
   // "The method attribute's getter must return request's method."
@@ -591,7 +588,7 @@ String Request::referrer() const {
   return m_request->referrerString();
 }
 
-String Request::referrerPolicy() const {
+String Request::getReferrerPolicy() const {
   switch (m_request->getReferrerPolicy()) {
     case ReferrerPolicyAlways:
       return "unsafe-url";
@@ -721,8 +718,8 @@ String Request::mimeType() const {
 }
 
 void Request::refreshBody(ScriptState* scriptState) {
-  v8::Local<v8::Value> bodyBuffer = toV8(this->bodyBuffer(), scriptState);
-  v8::Local<v8::Value> request = toV8(this, scriptState);
+  v8::Local<v8::Value> bodyBuffer = ToV8(this->bodyBuffer(), scriptState);
+  v8::Local<v8::Value> request = ToV8(this, scriptState);
   if (request.IsEmpty()) {
     // |toV8| can return an empty handle when the worker is terminating.
     // We don't want the renderer to crash in such cases.

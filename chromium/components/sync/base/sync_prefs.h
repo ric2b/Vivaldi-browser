@@ -23,7 +23,6 @@
 #include "components/sync/protocol/sync.pb.h"
 
 class PrefService;
-class ProfileIOData;
 
 namespace user_prefs {
 class PrefRegistrySyncable;
@@ -180,6 +179,10 @@ class SyncPrefs : NON_EXPORTED_BASE(public base::NonThreadSafe),
       const sync_pb::NigoriSpecifics& nigori_specifics);
   void GetNigoriSpecificsForPassphraseTransition(
       sync_pb::NigoriSpecifics* nigori_specifics) const;
+
+  // Gets the local sync backend enabled state and its database location.
+  bool IsLocalSyncEnabled() const;
+  base::FilePath GetLocalSyncBackendDir() const;
 
  private:
   void RegisterPrefGroups();

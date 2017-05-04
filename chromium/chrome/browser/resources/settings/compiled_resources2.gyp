@@ -25,6 +25,7 @@
       'target_name': 'global_scroll_target_behavior',
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+        'route',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
@@ -56,7 +57,7 @@
       'dependencies': [
         'a11y_page/compiled_resources2.gyp:*',
         'about_page/compiled_resources2.gyp:*',
-        'advanced_page/compiled_resources2.gyp:*',
+        'android_apps_page/compiled_resources2.gyp:*',
         'animation/compiled_resources2.gyp:*',
         'appearance_page/compiled_resources2.gyp:*',
         'basic_page/compiled_resources2.gyp:*',

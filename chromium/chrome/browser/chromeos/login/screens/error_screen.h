@@ -14,7 +14,6 @@
 #include "chrome/browser/chromeos/login/screens/network_error_model.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_screen.h"
 #include "chromeos/login/auth/login_performer.h"
 
 namespace chromeos {
@@ -33,7 +32,6 @@ class ErrorScreen : public NetworkErrorModel, public LoginPerformer::Delegate {
   ~ErrorScreen() override;
 
   // NetworkErrorModel:
-  void PrepareToShow() override;
   void Show() override;
   void Hide() override;
   void OnShow() override;

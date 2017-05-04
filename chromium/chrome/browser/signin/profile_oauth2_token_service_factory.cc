@@ -10,16 +10,19 @@
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/web_data_service_factory.h"
-#include "chrome/common/features.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
 #include "chrome/browser/signin/oauth2_token_service_delegate_android.h"
 #else
 #include "chrome/browser/signin/mutable_profile_oauth2_token_service_delegate.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
+#include "sync/vivaldi_profile_oauth2_token_service_factory.h"
+
 
 ProfileOAuth2TokenServiceFactory::ProfileOAuth2TokenServiceFactory()
     : BrowserContextKeyedServiceFactory(
@@ -39,6 +42,11 @@ ProfileOAuth2TokenServiceFactory::~ProfileOAuth2TokenServiceFactory() {
 
 ProfileOAuth2TokenService*
 ProfileOAuth2TokenServiceFactory::GetForProfile(Profile* profile) {
+#if defined(VIVALDI_BUILD)
+  if(vivaldi::IsVivaldiRunning())
+    return vivaldi::VivaldiProfileOAuth2TokenServiceFactory::GetForProfile(
+        profile);
+#endif
   return static_cast<ProfileOAuth2TokenService*>(
       GetInstance()->GetServiceForBrowserContext(profile, true));
 }
@@ -46,13 +54,17 @@ ProfileOAuth2TokenServiceFactory::GetForProfile(Profile* profile) {
 // static
 ProfileOAuth2TokenServiceFactory*
     ProfileOAuth2TokenServiceFactory::GetInstance() {
+#if defined(VIVALDI_BUILD)
+  if(vivaldi::IsVivaldiRunning())
+    return vivaldi::VivaldiProfileOAuth2TokenServiceFactory::GetInstance();
+#endif
   return base::Singleton<ProfileOAuth2TokenServiceFactory>::get();
 }
 
 KeyedService* ProfileOAuth2TokenServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = static_cast<Profile*>(context);
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
   OAuth2TokenServiceDelegateAndroid* delegate =
       new OAuth2TokenServiceDelegateAndroid(
           AccountTrackerServiceFactory::GetInstance()->GetForProfile(profile));

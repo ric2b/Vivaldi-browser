@@ -16,7 +16,6 @@
 
 namespace ash {
 class RootWindowTransformer;
-class MouseCursorEventFilter;
 
 class ASH_EXPORT AshWindowTreeHostX11 : public AshWindowTreeHost,
                                         public aura::WindowTreeHostX11,
@@ -37,11 +36,12 @@ class ASH_EXPORT AshWindowTreeHostX11 : public AshWindowTreeHost,
   void PrepareForShutdown() override;
 
   // aura::WindowTreehost:
-  void SetBounds(const gfx::Rect& bounds) override;
+  void SetBoundsInPixels(const gfx::Rect& bounds) override;
   gfx::Transform GetRootTransform() const override;
   void SetRootTransform(const gfx::Transform& transform) override;
   gfx::Transform GetInverseRootTransform() const override;
-  void UpdateRootWindowSize(const gfx::Size& host_size) override;
+  void UpdateRootWindowSizeInPixels(
+      const gfx::Size& host_size_in_pixels) override;
   void OnCursorVisibilityChangedNative(bool show) override;
 
   // aura::WindowTreeHostX11:

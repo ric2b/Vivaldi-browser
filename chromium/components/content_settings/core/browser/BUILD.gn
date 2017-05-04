@@ -3,15 +3,16 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//ppapi/features/features.gni")
 
 static_library("browser") {
   sources = [
-    "content_settings_binary_value_map.cc",
-    "content_settings_binary_value_map.h",
     "content_settings_default_provider.cc",
     "content_settings_default_provider.h",
     "content_settings_details.cc",
     "content_settings_details.h",
+    "content_settings_global_value_map.cc",
+    "content_settings_global_value_map.h",
     "content_settings_info.cc",
     "content_settings_info.h",
     "content_settings_observable_provider.cc",
@@ -82,8 +83,9 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//components/content_settings/core/common",
     "//components/content_settings/core/test:test_support",
-    "//components/pref_registry:test_support",
+    "//components/pref_registry:pref_registry",
     "//components/prefs",
+    "//components/sync_preferences:test_support",
     "//extensions/features",
     "//testing/gtest",
     "//url",

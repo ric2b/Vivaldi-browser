@@ -7,7 +7,7 @@
  * the browser.
  */
 
-<if expr="chromeos">
+// <if expr="chromeos">
 /**
  * @typedef {{
  *   text: string,
@@ -15,6 +15,15 @@
  * }}
  */
 var RegulatoryInfo;
+
+/**
+ * @typedef {{
+ *   currentChannel: string,
+ *   targetChannel: string,
+ *   canChangeChannel: boolean,
+ * }}
+ */
+var ChannelInfo;
 
 /**
  * @typedef {{
@@ -34,7 +43,7 @@ var BrowserChannel = {
   DEV: 'dev-channel',
   STABLE: 'stable-channel',
 };
-</if>
+// </if>
 
 /**
  * Enumeration of all possible update statuses. The string literals must match
@@ -50,6 +59,18 @@ var UpdateStatus = {
   DISABLED: 'disabled',
   DISABLED_BY_ADMIN: 'disabled_by_admin',
 };
+
+// <if expr="_google_chrome and is_macosx">
+/**
+ * @typedef {{
+ *   hidden: boolean,
+ *   disabled: boolean,
+ *   actionable: boolean,
+ *   text: (string|undefined)
+ * }}
+ */
+var PromoteUpdaterStatus;
+// </if>
 
 /**
  * @typedef {{
@@ -111,14 +132,14 @@ cr.define('settings', function() {
     /** Opens the help page. */
     openHelpPage: function() {},
 
-<if expr="_google_chrome">
+// <if expr="_google_chrome">
     /**
      * Opens the feedback dialog.
      */
     openFeedbackDialog: function() {},
-</if>
+// </if>
 
-<if expr="chromeos">
+// <if expr="chromeos">
     /**
      * Checks for available update and applies if it exists.
      */
@@ -130,18 +151,22 @@ cr.define('settings', function() {
      */
     setChannel: function(channel, isPowerwashAllowed) {},
 
-    /** @return {!Promise<!BrowserChannel>} */
-    getCurrentChannel: function() {},
-
-    /** @return {!Promise<!BrowserChannel>} */
-    getTargetChannel: function() {},
+    /** @return {!Promise<!ChannelInfo>} */
+    getChannelInfo: function() {},
 
     /** @return {!Promise<!VersionInfo>} */
     getVersionInfo: function() {},
 
     /** @return {!Promise<?RegulatoryInfo>} */
     getRegulatoryInfo: function() {},
-</if>
+// </if>
+
+// <if expr="_google_chrome and is_macosx">
+    /**
+     * Triggers setting up auto-updates for all users.
+     */
+    promoteUpdater: function() {},
+// </if>
   };
 
   /**
@@ -162,19 +187,26 @@ cr.define('settings', function() {
       chrome.send('refreshUpdateStatus');
     },
 
+// <if expr="_google_chrome and is_macosx">
+    /** @override */
+    promoteUpdater: function() {
+      chrome.send('promoteUpdater');
+    },
+// </if>
+
     /** @override */
     openHelpPage: function() {
       chrome.send('openHelpPage');
     },
 
-<if expr="_google_chrome">
+// <if expr="_google_chrome">
     /** @override */
     openFeedbackDialog: function() {
       chrome.send('openFeedbackDialog');
     },
-</if>
+// </if>
 
-<if expr="chromeos">
+// <if expr="chromeos">
     /** @override */
     requestUpdate: function() {
       chrome.send('requestUpdate');
@@ -186,13 +218,8 @@ cr.define('settings', function() {
     },
 
     /** @override */
-    getCurrentChannel: function() {
-      return cr.sendWithPromise('getCurrentChannel');
-    },
-
-    /** @override */
-    getTargetChannel: function() {
-      return cr.sendWithPromise('getTargetChannel');
+    getChannelInfo: function() {
+      return cr.sendWithPromise('getChannelInfo');
     },
 
     /** @override */
@@ -204,7 +231,7 @@ cr.define('settings', function() {
     getRegulatoryInfo: function() {
       return cr.sendWithPromise('getRegulatoryInfo');
     }
-</if>
+// </if>
   };
 
   return {

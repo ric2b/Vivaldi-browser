@@ -65,14 +65,6 @@ cr.define('site_details', function() {
               source: 'preference',
             },
           ],
-          keygen: [
-            {
-              embeddingOrigin: 'https://foo-allow.com:443',
-              origin: 'https://foo-allow.com:443',
-              setting: 'allow',
-              source: 'preference',
-            },
-          ],
           mic: [
             {
               embeddingOrigin: 'https://foo-allow.com:443',
@@ -136,15 +128,15 @@ cr.define('site_details', function() {
         var category = settings.ContentSettingsTypes.NOTIFICATIONS;
         var site = {
           origin: 'http://www.google.com',
-          originForDisplay: 'http://www.google.com',
+          displayName: 'http://www.google.com',
           embeddingOrigin: '',
         };
         browserProxy.setPrefs(prefsEmpty);
         testElement.category = category;
         testElement.site = site
 
-        assertTrue(testElement.$.usage.hidden);
-        assertTrue(testElement.$.storage.hidden);
+        //expect usage to not be rendered
+        assertFalse(!!testElement.$$('#usage'));
 
         // TODO(finnur): Check for the Permission heading hiding when no
         // permissions are showing.
@@ -163,7 +155,7 @@ cr.define('site_details', function() {
         var category = settings.ContentSettingsTypes.NOTIFICATIONS;
         var site = {
           origin: 'https://foo-allow.com:443',
-          originForDisplay: 'https://foo-allow.com:443',
+          displayName: 'https://foo-allow.com:443',
           embeddingOrigin: '',
         };
 
@@ -201,12 +193,14 @@ cr.define('site_details', function() {
         browserProxy.setPrefs(prefs);
         testElement.site = {
           origin: 'https://foo-allow.com:443',
-          originForDisplay: 'https://foo-allow.com:443',
+          displayName: 'https://foo-allow.com:443',
           embeddingOrigin: '',
         };
 
-        assertFalse(testElement.$.usage.hidden);
-        assertFalse(testElement.$.storage.hidden);
+        Polymer.dom.flush();
+
+        //expect usage to be rendered
+        assertTrue(!!testElement.$$('#usage'));
       });
     });
   }

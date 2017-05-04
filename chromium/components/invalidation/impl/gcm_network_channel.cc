@@ -32,13 +32,15 @@
 #include "google/cacheinvalidation/types.pb.h"
 #endif
 
+#include "sync/vivaldi_sync_urls.h"
+
 namespace syncer {
 
 namespace {
 
 const char kCacheInvalidationEndpointUrl[] =
-    "https://clients4.google.com/invalidation/android/request/";
-const char kCacheInvalidationPackageName[] = "com.google.chrome.invalidations";
+    SYNC_URL("/invalidation/");
+const char kCacheInvalidationPackageName[] = "com.vivaldi.vivaldi.invalidations";
 
 // Register backoff policy.
 const net::BackoffEntry::Policy kRegisterBackoffPolicy = {

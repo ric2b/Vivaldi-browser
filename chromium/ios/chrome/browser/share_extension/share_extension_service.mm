@@ -4,9 +4,13 @@
 
 #include "base/mac/scoped_nsobject.h"
 #include "components/bookmarks/browser/bookmark_model.h"
-#include "ios/chrome/browser/reading_list/reading_list_model.h"
+#include "components/reading_list/ios/reading_list_model.h"
 #include "ios/chrome/browser/share_extension/share_extension_item_receiver.h"
 #include "ios/chrome/browser/share_extension/share_extension_service.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 ShareExtensionService::ShareExtensionService(
     bookmarks::BookmarkModel* bookmark_model,

@@ -289,7 +289,7 @@ blink::Animation* InspectorAnimationAgent::animationClone(
       KeyframeVector oldKeyframes = oldStringKeyframeModel->getFrames();
       StringKeyframeVector newKeyframes;
       for (auto& oldKeyframe : oldKeyframes)
-        newKeyframes.append(toStringKeyframe(oldKeyframe.get()));
+        newKeyframes.push_back(toStringKeyframe(oldKeyframe.get()));
       newModel = StringKeyframeEffectModel::create(newKeyframes);
     } else if (oldModel->isAnimatableValueKeyframeEffectModel()) {
       AnimatableValueKeyframeEffectModel* oldAnimatableValueKeyframeModel =
@@ -298,7 +298,7 @@ blink::Animation* InspectorAnimationAgent::animationClone(
           oldAnimatableValueKeyframeModel->getFrames();
       AnimatableValueKeyframeVector newKeyframes;
       for (auto& oldKeyframe : oldKeyframes)
-        newKeyframes.append(toAnimatableValueKeyframe(oldKeyframe.get()));
+        newKeyframes.push_back(toAnimatableValueKeyframe(oldKeyframe.get()));
       newModel = AnimatableValueKeyframeEffectModel::create(newKeyframes);
     }
 
@@ -378,7 +378,7 @@ Response InspectorAnimationAgent::setTiming(const String& animationId,
     ASSERT(frames.size() == 3);
     KeyframeVector newFrames;
     for (int i = 0; i < 3; i++)
-      newFrames.append(toAnimatableValueKeyframe(frames[i]->clone().get()));
+      newFrames.push_back(toAnimatableValueKeyframe(frames[i]->clone().get()));
     // Update delay, represented by the distance between the first two
     // keyframes.
     newFrames[1]->setOffset(delay / (delay + duration));
@@ -423,7 +423,7 @@ Response InspectorAnimationAgent::resolveAnimation(
       toV8InspectorStringView(kAnimationObjectGroup));
   *result = m_v8Session->wrapObject(
       scriptState->context(),
-      toV8(animation, scriptState->context()->Global(), scriptState->isolate()),
+      ToV8(animation, scriptState->context()->Global(), scriptState->isolate()),
       toV8InspectorStringView(kAnimationObjectGroup));
   if (!*result)
     return Response::Error("Element not associated with a document.");
@@ -457,11 +457,11 @@ String InspectorAnimationAgent::createCSSId(blink::Animation& animation) {
   Vector<CSSPropertyID> cssProperties;
   if (type == AnimationType::CSSAnimation) {
     for (CSSPropertyID property : animationProperties)
-      cssProperties.append(property);
+      cssProperties.push_back(property);
   } else {
     for (CSSPropertyID property : transitionProperties)
-      cssProperties.append(property);
-    cssProperties.append(cssPropertyID(animation.id()));
+      cssProperties.push_back(property);
+    cssProperties.push_back(cssPropertyID(animation.id()));
   }
 
   Element* element = effect->target();
@@ -500,11 +500,16 @@ void InspectorAnimationAgent::animationPlayStateChanged(
     blink::Animation::AnimationPlayState oldPlayState,
     blink::Animation::AnimationPlayState newPlayState) {
   const String& animationId = String::number(animation->sequenceNumber());
-  if (m_idToAnimation.get(animationId) ||
-      m_clearedAnimations.contains(animationId))
+
+  // We no longer care about animations that have been released.
+  if (m_clearedAnimations.contains(animationId))
     return;
-  if (newPlayState == blink::Animation::Running ||
-      newPlayState == blink::Animation::Finished)
+
+  // Record newly starting animations only once, as |buildObjectForAnimation|
+  // constructs and caches our internal representation of the given |animation|.
+  if ((newPlayState == blink::Animation::Running ||
+       newPlayState == blink::Animation::Finished) &&
+      !m_idToAnimation.contains(animationId))
     frontend()->animationStarted(buildObjectForAnimation(*animation));
   else if (newPlayState == blink::Animation::Idle ||
            newPlayState == blink::Animation::Paused)

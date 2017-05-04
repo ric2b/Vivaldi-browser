@@ -397,7 +397,7 @@ void EventRouter::AddFilterToEvent(const std::string& event_name,
     filtered_events = update.Create();
 
   ListValue* filter_list = nullptr;
-  if (!filtered_events->GetList(event_name, &filter_list)) {
+  if (!filtered_events->GetListWithoutPathExpansion(event_name, &filter_list)) {
     filter_list = new ListValue;
     filtered_events->SetWithoutPathExpansion(event_name,
                                              base::WrapUnique(filter_list));
@@ -419,10 +419,10 @@ void EventRouter::RemoveFilterFromEvent(const std::string& event_name,
   }
 
   for (size_t i = 0; i < filter_list->GetSize(); i++) {
-    DictionaryValue* filter = NULL;
-    CHECK(filter_list->GetDictionary(i, &filter));
-    if (filter->Equals(filter)) {
-      filter_list->Remove(i, NULL);
+    DictionaryValue* filter_value = nullptr;
+    CHECK(filter_list->GetDictionary(i, &filter_value));
+    if (filter_value->Equals(filter)) {
+      filter_list->Remove(i, nullptr);
       break;
     }
   }
@@ -588,7 +588,8 @@ void EventRouter::DispatchEventToProcess(
 
   Feature::Availability availability =
       ExtensionAPI::GetSharedInstance()->IsAvailable(
-          event->event_name, extension, target_context, listener_url);
+          event->event_name, extension, target_context, listener_url,
+          CheckAliasStatus::ALLOWED);
   if (!availability.is_available()) {
     // It shouldn't be possible to reach here, because access is checked on
     // registration. However, for paranoia, check on dispatch as well.

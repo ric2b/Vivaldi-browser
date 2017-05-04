@@ -30,8 +30,6 @@ class FontList;
 
 namespace views {
 class BubbleDialogDelegateView;
-class ImageView;
-class Label;
 }
 
 // The ContentSettingImageView displays an icon and optional text label for
@@ -41,8 +39,7 @@ class ContentSettingImageView : public IconLabelBubbleView,
                                 public gfx::AnimationDelegate,
                                 public views::WidgetObserver {
  public:
-  // ContentSettingImageView takes ownership of its |image_model|.
-  ContentSettingImageView(ContentSettingImageModel* image_model,
+  ContentSettingImageView(std::unique_ptr<ContentSettingImageModel> image_model,
                           LocationBarView* parent,
                           const gfx::FontList& font_list);
   ~ContentSettingImageView() override;

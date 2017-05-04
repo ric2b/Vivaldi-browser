@@ -122,6 +122,9 @@
     <dimen name="password_generation_horizontal_margin">10dp</dimen>
     <dimen name="password_generation_text_vertical_margin">12dp</dimen>
 
+    <!-- Search engine preference dimensions -->
+    <dimen name="search_engine_list_margin_top">6dp</dimen>
+
     <!-- Site Settings dimensions -->
     <dimen name="site_setttings_icon_padding">4.6dp</dimen>
 
@@ -287,7 +290,8 @@
          (https://crbug.com/660837). -->
     <dimen name="snippets_peeking_card_peek_amount">32dp</dimen>
     <dimen name="snippets_peeking_card_bounce_distance">10dp</dimen>
-    <dimen name="snippets_card_9_patch_adjustment">2dp</dimen>
+    <dimen name="snippets_card_corner_radius">2dp</dimen>
+    <dimen name="snippets_card_gap">0.5dp</dimen>
     <dimen name="snippets_article_header_height">40dp</dimen>
     <dimen name="snippets_publisher_margin_top_with_article_snippet">16dp</dimen>
     <dimen name="snippets_publisher_margin_top_without_article_snippet">8dp</dimen>
@@ -336,9 +340,12 @@
 
     <!-- Account chooser dialog dimensions -->
     <dimen name="account_chooser_dialog_margin">24dp</dimen>
-    <dimen name="account_chooser_dialog_item_margin">20dp</dimen>
+    <dimen name="account_chooser_dialog_item_margin">24dp</dimen>
     <dimen name="account_chooser_dialog_title_main_text_size">18sp</dimen>
     <dimen name="account_chooser_dialog_title_descriptive_text_size">16sp</dimen>
+
+    <!-- Public Suffix List (PSL) info button and tooltip dimensions -->
+    <dimen name="psl_info_tooltip_margin">8dp</dimen>
 
     <!-- Clear browsing data preferences dimensions -->
     <dimen name="clear_browsing_data_checkbox_height">56dp</dimen>
@@ -384,7 +391,10 @@
 
     <!-- Downloads dimensions. -->
     <dimen name="downloads_item_icon_size">48dp</dimen>
+    <dimen name="downloads_item_margin">16dp</dimen>
 
     <!--  Miscellaneous dimensions -->
     <dimen name="action_bar_shadow_height">10dp</dimen>
+    <dimen name="selectable_list_layout_end_icon">24dp</dimen>
+    <dimen name="selectable_list_layout_start_icon_width">64dp</dimen>
 </resources>

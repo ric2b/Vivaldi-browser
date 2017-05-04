@@ -4,6 +4,7 @@
 
 #include "chrome/browser/page_load_metrics/observers/no_state_prefetch_page_load_metrics_observer.h"
 
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "content/public/browser/navigation_handle.h"
@@ -24,7 +25,7 @@ NoStatePrefetchPageLoadMetricsObserver::CreateIfNeeded(
 
 NoStatePrefetchPageLoadMetricsObserver::NoStatePrefetchPageLoadMetricsObserver(
     prerender::PrerenderManager* manager)
-    : is_no_store_(false), prerender_manager_(manager) {
+    : is_no_store_(false), was_hidden_(false), prerender_manager_(manager) {
   DCHECK(prerender_manager_);
 }
 
@@ -46,6 +47,15 @@ void NoStatePrefetchPageLoadMetricsObserver::OnFirstContentfulPaint(
     const page_load_metrics::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& extra_info) {
   DCHECK(timing.first_contentful_paint.has_value());
-  prerender_manager_->RecordFirstContentfulPaint(
-      extra_info.start_url, is_no_store_, *timing.first_contentful_paint);
+  prerender_manager_->RecordNoStateFirstContentfulPaint(
+      extra_info.start_url, is_no_store_, was_hidden_,
+      *timing.first_contentful_paint);
+}
+
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+NoStatePrefetchPageLoadMetricsObserver::OnHidden(
+    const page_load_metrics::PageLoadTiming& timing,
+    const page_load_metrics::PageLoadExtraInfo& extra_info) {
+  was_hidden_ = true;
+  return CONTINUE_OBSERVING;
 }

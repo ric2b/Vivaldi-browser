@@ -8,12 +8,14 @@
 
 import argparse
 import collections
+import contextlib
 import itertools
 import logging
 import os
 import signal
 import sys
 import threading
+import traceback
 import unittest
 
 import devil_chromium
@@ -29,15 +31,13 @@ from devil.utils import run_tests_helper
 from pylib import constants
 from pylib.base import base_test_result
 from pylib.base import environment_factory
-from pylib.base import test_dispatcher
 from pylib.base import test_instance_factory
 from pylib.base import test_run_factory
 from pylib.constants import host_paths
-from pylib.linker import setup as linker_setup
-from pylib.junit import setup as junit_setup
-from pylib.junit import test_dispatcher as junit_dispatcher
 from pylib.results import json_results
 from pylib.results import report_results
+
+from py_utils import contextlib_ext
 
 
 _DEVIL_STATIC_CONFIG_FILE = os.path.abspath(os.path.join(
@@ -71,10 +71,20 @@ def AddCommonOptions(parser):
                            ' located (must include build type). This will take'
                            ' precedence over --debug, --release and'
                            ' --build-directory'))
-  group.add_argument('--num_retries', '--num-retries', dest='num_retries',
+  group.add_argument('--num_retries', '--num-retries',
+                     '--test_launcher_retry_limit',
+                     '--test-launcher-retry-limit',
+                     dest='num_retries',
                      type=int, default=2,
                      help=('Number of retries for a test before '
                            'giving up (default: %(default)s).'))
+  group.add_argument('--repeat', '--gtest_repeat', '--gtest-repeat',
+                     dest='repeat', type=int, default=0,
+                     help='Number of times to repeat the specified set of '
+                          'tests.')
+  group.add_argument('--break-on-failure', '--break_on_failure',
+                     dest='break_on_failure', action='store_true',
+                     help='Whether to break on failure.')
   group.add_argument('-v',
                      '--verbose',
                      dest='verbose_count',
@@ -100,6 +110,10 @@ def AddCommonOptions(parser):
                      dest='json_results_file', type=os.path.realpath,
                      help='If set, will dump results in JSON form '
                           'to specified file.')
+  group.add_argument('--trace-output', metavar='FILENAME',
+                     type=os.path.realpath,
+                     help='Path to save test_runner trace data to. This option '
+                          'has been implemented for gtest and perf test.')
 
   logcat_output_group = group.add_mutually_exclusive_group()
   logcat_output_group.add_argument(
@@ -196,12 +210,16 @@ def AddGTestOptions(parser):
                      dest='shard_timeout', type=int, default=120,
                      help='Timeout to wait for each test '
                           '(default: %(default)s).')
+  # TODO(jbudorick): Remove this after ensuring nothing else uses it.
   group.add_argument('--isolate_file_path',
                      '--isolate-file-path',
                      dest='isolate_file_path',
                      type=os.path.realpath,
-                     help='.isolate file path to override the default '
-                          'path')
+                     help=argparse.SUPPRESS)
+  group.add_argument('--runtime-deps-path',
+                     dest='runtime_deps_path',
+                     type=os.path.realpath,
+                     help='Runtime data dependency file from GN.')
   group.add_argument('--app-data-file', action='append', dest='app_data_files',
                      help='A file path relative to the app data directory '
                           'that should be saved to the host.')
@@ -211,13 +229,6 @@ def AddGTestOptions(parser):
   group.add_argument('--delete-stale-data', dest='delete_stale_data',
                      action='store_true',
                      help='Delete stale test data on the device.')
-  group.add_argument('--repeat', '--gtest_repeat', '--gtest-repeat',
-                     dest='repeat', type=int, default=0,
-                     help='Number of times to repeat the specified set of '
-                          'tests.')
-  group.add_argument('--break-on-failure', '--break_on_failure',
-                     dest='break_on_failure', action='store_true',
-                     help='Whether to break on failure.')
   group.add_argument('--extract-test-list-from-filter',
                      action='store_true',
                      help='When a test filter is specified, and the list of '
@@ -250,6 +261,8 @@ def AddLinkerTestOptions(parser):
   group = parser.add_argument_group('Linker Test Options')
   group.add_argument('-f', '--gtest-filter', dest='test_filter',
                      help='googletest-style filter string.')
+  group.add_argument('--test-apk', type=os.path.realpath,
+                     help='Path to the linker test APK.')
   AddCommonOptions(parser)
   AddDeviceOptions(parser)
 
@@ -261,13 +274,6 @@ def AddJavaTestOptions(argument_group):
       '-f', '--test-filter', '--gtest_filter', '--gtest-filter',
       dest='test_filter',
       help=('Test filter (if not fully qualified, will run all matches).'))
-  argument_group.add_argument(
-      '--repeat', dest='repeat', type=int, default=0,
-      help='Number of times to repeat the specified set of tests.')
-  argument_group.add_argument(
-      '--break-on-failure', '--break_on_failure',
-      dest='break_on_failure', action='store_true',
-      help='Whether to break on failure.')
   argument_group.add_argument(
       '-A', '--annotation', dest='annotation_str',
       help=('Comma-separated list of annotations. Run only tests with any of '
@@ -289,6 +295,10 @@ def AddJavaTestOptions(argument_group):
   argument_group.add_argument(
       '--disable-dalvik-asserts', dest='set_asserts', action='store_false',
       default=True, help='Removes the dalvik.vm.enableassertions property')
+  argument_group.add_argument(
+      '--gtest_also_run_disabled_tests', '--gtest-also-run-disabled-tests',
+      dest='run_disabled', action='store_true',
+      help='Also run disabled tests if applicable.')
 
 
 
@@ -301,8 +311,8 @@ def ProcessJavaTestOptions(args):
   elif args.test_filter:
     args.annotations = []
   else:
-    args.annotations = ['Smoke', 'SmallTest', 'MediumTest', 'LargeTest',
-                        'EnormousTest', 'IntegrationTest']
+    args.annotations = ['SmallTest', 'MediumTest', 'LargeTest', 'EnormousTest',
+                        'IntegrationTest']
 
   if args.exclude_annotation_str:
     args.exclude_annotations = args.exclude_annotation_str.split(',')
@@ -342,6 +352,8 @@ def AddInstrumentationTestOptions(parser):
                      help='Path or name of the apk containing the tests '
                           '(name is without the .apk extension; '
                           'e.g. "ContentShellTest").')
+  group.add_argument('--test-jar',
+                     help='Path of jar containing test java files.')
   group.add_argument('--test-apk-incremental-install-script',
                      type=os.path.realpath,
                      help='Path to install script for the --test-apk.')
@@ -360,12 +372,16 @@ def AddInstrumentationTestOptions(parser):
   group.add_argument('--device-flags-file', type=os.path.realpath,
                      help='The relative filepath to a file containing '
                           'command-line flags to set on the device')
+  # TODO(jbudorick): Remove this after ensuring nothing else uses it.
   group.add_argument('--isolate_file_path',
                      '--isolate-file-path',
                      dest='isolate_file_path',
                      type=os.path.realpath,
-                     help='.isolate file path to override the default '
-                          'path')
+                     help=argparse.SUPPRESS)
+  group.add_argument('--runtime-deps-path',
+                     dest='runtime_deps_path',
+                     type=os.path.realpath,
+                     help='Runtime data dependency file from GN.')
   group.add_argument('--delete-stale-data', dest='delete_stale_data',
                      action='store_true',
                      help='Delete stale test data on the device.')
@@ -401,15 +417,6 @@ def AddJUnitTestOptions(parser):
   group.add_argument(
       '--package-filter', dest='package_filter',
       help='Filters tests by package.')
-  # TODO(mikecase): Add --repeat and --break-on-failure to common options.
-  # These options are required for platform-mode support.
-  group.add_argument(
-      '--repeat', dest='repeat', type=int, default=0,
-      help='Number of times to repeat the specified set of tests.')
-  group.add_argument(
-      '--break-on-failure', '--break_on_failure',
-      dest='break_on_failure', action='store_true',
-      help='Whether to break on failure.')
   group.add_argument(
       '--runner-filter', dest='runner_filter',
       help='Filters tests by runner class. Must be fully qualified.')
@@ -440,13 +447,6 @@ def AddMonkeyTestOptions(parser):
       '--seed', type=int,
       help='Seed value for pseudo-random generator. Same seed value generates '
            'the same sequence of events. Seed is randomized by default.')
-  group.add_argument(
-      '--repeat', dest='repeat', type=int, default=0,
-      help='Number of times to repeat the specified set of tests.')
-  group.add_argument(
-      '--break-on-failure', '--break_on_failure',
-      dest='break_on_failure', action='store_true',
-      help='Whether to break on failure.')
   AddCommonOptions(parser)
   AddDeviceOptions(parser)
 
@@ -482,15 +482,25 @@ def AddPerfTestOptions(parser):
 
   group.add_argument(
       '--output-json-list', type=os.path.realpath,
-      help='Write a simple list of names from --steps into the given file.')
+      help='Writes a JSON list of information for each --steps into the given '
+           'file. Information includes runtime and device affinity for each '
+           '--steps.')
   group.add_argument(
       '--collect-chartjson-data',
       action='store_true',
-      help='Cache the chartjson output from each step for later use.')
+      help='Cache the telemetry chartjson output from each step for later use.')
   group.add_argument(
       '--output-chartjson-data',
       type=os.path.realpath,
-      help='Write out chartjson into the given file.')
+      help='Writes telemetry chartjson formatted output into the given file.')
+  group.add_argument(
+      '--collect-json-data',
+      action='store_true',
+      help='Cache the telemetry JSON output from each step for later use.')
+  group.add_argument(
+      '--output-json-data',
+      type=os.path.realpath,
+      help='Writes telemetry JSON formatted output into the given file.')
   # TODO(rnephew): Remove this when everything moves to new option in platform
   # mode.
   group.add_argument(
@@ -529,12 +539,6 @@ def AddPerfTestOptions(parser):
       'given level.')
   group.add_argument('--known-devices-file', help='Path to known device list.')
   group.add_argument(
-      '--repeat', dest='repeat', type=int, default=0,
-      help='Number of times to repeat the specified set of tests.')
-  group.add_argument(
-      '--break-on-failure', '--break_on_failure', dest='break_on_failure',
-      action='store_true', help='Whether to break on failure.')
-  group.add_argument(
       '--write-buildbot-json', action='store_true',
       help='Whether to output buildbot json.')
   AddCommonOptions(parser)
@@ -548,41 +552,6 @@ def AddPythonTestOptions(parser):
       choices=constants.PYTHON_UNIT_TEST_SUITES.keys(),
       help='Name of the test suite to run.')
   AddCommonOptions(parser)
-
-
-def _RunLinkerTests(args, devices):
-  """Subcommand of RunTestsCommands which runs linker tests."""
-  runner_factory, tests = linker_setup.Setup(args, devices)
-
-  results, exit_code = test_dispatcher.RunTests(
-      tests, runner_factory, devices, shard=True, test_timeout=60,
-      num_retries=args.num_retries)
-
-  report_results.LogFull(
-      results=results,
-      test_type='Linker test',
-      test_package='ChromiumLinkerTest')
-
-  if args.json_results_file:
-    json_results.GenerateJsonResultsFile([results], args.json_results_file)
-
-  return exit_code
-
-
-def _RunJUnitTests(args):
-  """Subcommand of RunTestsCommand which runs junit tests."""
-  runner_factory, tests = junit_setup.Setup(args)
-  results, exit_code = junit_dispatcher.RunTests(tests, runner_factory)
-
-  report_results.LogFull(
-      results=results,
-      test_type='JUnit',
-      test_package=args.test_suite)
-
-  if args.json_results_file:
-    json_results.GenerateJsonResultsFile([results], args.json_results_file)
-
-  return exit_code
 
 
 def _RunPythonTests(args):
@@ -634,7 +603,8 @@ def _GetAttachedDevices(blacklist_file, test_device, enable_cache, num_retries):
     return sorted(attached_devices)
 
 
-_DEFAULT_PLATFORM_MODE_TESTS = ['gtest', 'instrumentation', 'monkey', 'perf']
+_DEFAULT_PLATFORM_MODE_TESTS = ['gtest', 'instrumentation', 'junit',
+                                'linker', 'monkey', 'perf']
 
 
 def RunTestsCommand(args): # pylint: disable=too-many-return-statements
@@ -666,15 +636,7 @@ def RunTestsCommand(args): # pylint: disable=too-many-return-statements
     os.unlink(ports._TEST_SERVER_PORT_LOCKFILE)
   # pylint: enable=protected-access
 
-  def get_devices():
-    return _GetAttachedDevices(args.blacklist_file, args.test_device,
-                               args.enable_device_cache, args.num_retries)
-
-  if command == 'linker':
-    return _RunLinkerTests(args, get_devices())
-  elif command == 'junit':
-    return _RunJUnitTests(args)
-  elif command == 'python':
+  if command == 'python':
     return _RunPythonTests(args)
   else:
     raise Exception('Unknown test type.')
@@ -685,6 +647,7 @@ _SUPPORTED_IN_PLATFORM_MODE = [
   'gtest',
   'instrumentation',
   'junit',
+  'linker',
   'monkey',
   'perf',
 ]
@@ -699,81 +662,117 @@ def RunTestsInPlatformMode(args):
   if args.command not in _SUPPORTED_IN_PLATFORM_MODE:
     infra_error('%s is not yet supported in platform mode' % args.command)
 
-  with environment_factory.CreateEnvironment(args, infra_error) as env:
-    with test_instance_factory.CreateTestInstance(args, infra_error) as test:
-      with test_run_factory.CreateTestRun(
-          args, env, test, infra_error) as test_run:
+  ### Set up sigterm handler.
 
-        # TODO(jbudorick): Rewrite results handling.
+  def unexpected_sigterm(_signum, _frame):
+    msg = [
+      'Received SIGTERM. Shutting down.',
+    ]
+    for live_thread in threading.enumerate():
+      # pylint: disable=protected-access
+      thread_stack = ''.join(traceback.format_stack(
+          sys._current_frames()[live_thread.ident]))
+      msg.extend([
+        'Thread "%s" (ident: %s) is currently running:' % (
+            live_thread.name, live_thread.ident),
+        thread_stack])
 
-        # all_raw_results is a list of lists of base_test_result.TestRunResults
-        # objects. Each instance of TestRunResults contains all test results
-        # produced by a single try, while each list of TestRunResults contains
-        # all tries in a single iteration.
-        all_raw_results = []
-        # all_iteration_results is a list of base_test_result.TestRunResults
-        # objects. Each instance of TestRunResults contains the last test result
-        # for each test run in that iteration.
-        all_iteration_results = []
+    infra_error('\n'.join(msg))
 
-        repetitions = (xrange(args.repeat + 1) if args.repeat >= 0
-                       else itertools.count())
-        result_counts = collections.defaultdict(
-            lambda: collections.defaultdict(int))
-        iteration_count = 0
-        for _ in repetitions:
-          raw_results = test_run.RunTests()
-          if not raw_results:
-            continue
+  signal.signal(signal.SIGTERM, unexpected_sigterm)
 
-          all_raw_results.append(raw_results)
+  ### Set up results handling.
+  # TODO(jbudorick): Rewrite results handling.
 
-          iteration_results = base_test_result.TestRunResults()
-          for r in reversed(raw_results):
-            iteration_results.AddTestRunResults(r)
-          all_iteration_results.append(iteration_results)
+  # all_raw_results is a list of lists of
+  # base_test_result.TestRunResults objects. Each instance of
+  # TestRunResults contains all test results produced by a single try,
+  # while each list of TestRunResults contains all tries in a single
+  # iteration.
+  all_raw_results = []
 
-          iteration_count += 1
-          for r in iteration_results.GetAll():
-            result_counts[r.GetName()][r.GetType()] += 1
-          report_results.LogFull(
-              results=iteration_results,
-              test_type=test.TestType(),
-              test_package=test_run.TestPackage(),
-              annotation=getattr(args, 'annotations', None),
-              flakiness_server=getattr(args, 'flakiness_dashboard_server',
-                                       None))
-          if args.break_on_failure and not iteration_results.DidRunPass():
-            break
+  # all_iteration_results is a list of base_test_result.TestRunResults
+  # objects. Each instance of TestRunResults contains the last test
+  # result for each test run in that iteration.
+  all_iteration_results = []
 
-        if iteration_count > 1:
-          # display summary results
-          # only display results for a test if at least one test did not pass
-          all_pass = 0
-          tot_tests = 0
-          for test_name in result_counts:
-            tot_tests += 1
-            if any(result_counts[test_name][x] for x in (
-                base_test_result.ResultType.FAIL,
-                base_test_result.ResultType.CRASH,
-                base_test_result.ResultType.TIMEOUT,
-                base_test_result.ResultType.UNKNOWN)):
-              logging.critical(
-                  '%s: %s',
-                  test_name,
-                  ', '.join('%s %s' % (str(result_counts[test_name][i]), i)
-                            for i in base_test_result.ResultType.GetTypes()))
-            else:
-              all_pass += 1
+  @contextlib.contextmanager
+  def write_json_file():
+    try:
+      yield
+    finally:
+      json_results.GenerateJsonResultsFile(
+          all_raw_results, args.json_results_file)
 
-          logging.critical('%s of %s tests passed in all %s runs',
-                           str(all_pass),
-                           str(tot_tests),
-                           str(iteration_count))
+  json_writer = contextlib_ext.Optional(
+      write_json_file(),
+      args.json_results_file)
 
-        if args.json_results_file:
-          json_results.GenerateJsonResultsFile(
-              all_raw_results, args.json_results_file)
+  ### Set up test objects.
+
+  env = environment_factory.CreateEnvironment(args, infra_error)
+  test_instance = test_instance_factory.CreateTestInstance(args, infra_error)
+  test_run = test_run_factory.CreateTestRun(
+      args, env, test_instance, infra_error)
+
+  ### Run.
+
+  with json_writer, env, test_instance, test_run:
+
+    repetitions = (xrange(args.repeat + 1) if args.repeat >= 0
+                   else itertools.count())
+    result_counts = collections.defaultdict(
+        lambda: collections.defaultdict(int))
+    iteration_count = 0
+    for _ in repetitions:
+      raw_results = test_run.RunTests()
+      if not raw_results:
+        continue
+
+      all_raw_results.append(raw_results)
+
+      iteration_results = base_test_result.TestRunResults()
+      for r in reversed(raw_results):
+        iteration_results.AddTestRunResults(r)
+      all_iteration_results.append(iteration_results)
+
+      iteration_count += 1
+      for r in iteration_results.GetAll():
+        result_counts[r.GetName()][r.GetType()] += 1
+      report_results.LogFull(
+          results=iteration_results,
+          test_type=test_instance.TestType(),
+          test_package=test_run.TestPackage(),
+          annotation=getattr(args, 'annotations', None),
+          flakiness_server=getattr(args, 'flakiness_dashboard_server',
+                                   None))
+      if args.break_on_failure and not iteration_results.DidRunPass():
+        break
+
+    if iteration_count > 1:
+      # display summary results
+      # only display results for a test if at least one test did not pass
+      all_pass = 0
+      tot_tests = 0
+      for test_name in result_counts:
+        tot_tests += 1
+        if any(result_counts[test_name][x] for x in (
+            base_test_result.ResultType.FAIL,
+            base_test_result.ResultType.CRASH,
+            base_test_result.ResultType.TIMEOUT,
+            base_test_result.ResultType.UNKNOWN)):
+          logging.critical(
+              '%s: %s',
+              test_name,
+              ', '.join('%s %s' % (str(result_counts[test_name][i]), i)
+                        for i in base_test_result.ResultType.GetTypes()))
+        else:
+          all_pass += 1
+
+      logging.critical('%s of %s tests passed in all %s runs',
+                       str(all_pass),
+                       str(tot_tests),
+                       str(iteration_count))
 
   if args.command == 'perf' and (args.steps or args.single_step):
     return 0

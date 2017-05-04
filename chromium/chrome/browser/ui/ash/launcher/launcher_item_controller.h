@@ -11,42 +11,27 @@
 #include "ash/common/shelf/shelf_item_types.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_types.h"
 #include "ui/events/event.h"
 
+class AppWindowLauncherItemController;
 class ChromeLauncherController;
 class ChromeLauncherAppMenuItem;
-class Profile;
 
-typedef ScopedVector<ChromeLauncherAppMenuItem> ChromeLauncherAppMenuItems;
-
-namespace aura {
-class Window;
-}
-
-namespace content {
-class WebContents;
-}
+using ChromeLauncherAppMenuItems =
+    std::vector<std::unique_ptr<ChromeLauncherAppMenuItem>>;
 
 // LauncherItemController is used by ChromeLauncherController to track one
 // or more windows associated with a shelf item.
+// TODO (khmel): Consider using ash::launcher::AppLauncherId instead of pair
+// |app_id| and |launch_id|.
 class LauncherItemController : public ash::ShelfItemDelegate {
  public:
-  enum Type {
-    TYPE_APP,
-    TYPE_APP_PANEL,
-    TYPE_SHORTCUT,
-    TYPE_WINDOWED_APP
-  };
-
-  LauncherItemController(Type type,
-                         const std::string& app_id,
+  LauncherItemController(const std::string& app_id,
                          const std::string& launch_id,
                          ChromeLauncherController* launcher_controller);
   ~LauncherItemController() override;
 
-  Type type() const { return type_; }
   ash::ShelfID shelf_id() const { return shelf_id_; }
   void set_shelf_id(ash::ShelfID id) { shelf_id_ = id; }
   const std::string& app_id() const { return app_id_; }
@@ -68,9 +53,6 @@ class LauncherItemController : public ash::ShelfItemDelegate {
     image_set_by_controller_ = image_set_by_controller;
   }
 
-  // Returns true if this item is visible (e.g. not minimized).
-  virtual bool IsVisible() const = 0;
-
   // Launches a new instance of the app associated with this item.
   virtual void Launch(ash::LaunchSource source, int event_flags) = 0;
 
@@ -82,19 +64,21 @@ class LauncherItemController : public ash::ShelfItemDelegate {
   // Called to retrieve the list of running applications.
   virtual ChromeLauncherAppMenuItems GetApplicationList(int event_flags) = 0;
 
-  // Helper function to get the ash::ShelfItemType for the item type.
-  ash::ShelfItemType GetShelfItemType() const;
+  // Returns nullptr if class is not AppWindowLauncherItemController.
+  virtual AppWindowLauncherItemController* AsAppWindowLauncherItemController();
 
  private:
-  const Type type_;
-  // App id will be empty if there is no app associated with the window.
+  // The application id; empty if there is no app associated with the item.
   const std::string app_id_;
+
   // An id that can be passed to an app when launched in order to support
   // multiple shelf items per app. This id is used together with the app_id to
   // uniquely identify each shelf item that has the same app_id.
   const std::string launch_id_;
+
   // A unique id assigned by the shelf model for the shelf item.
   ash::ShelfID shelf_id_;
+
   ChromeLauncherController* launcher_controller_;
 
   // The lock counter which tells the launcher if the item can be removed from

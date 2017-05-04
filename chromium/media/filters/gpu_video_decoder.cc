@@ -36,10 +36,6 @@
 #include "media/formats/mp4/box_definitions.h"
 #endif
 
-#if defined(OS_ANDROID)
-#include "base/android/build_info.h"
-#endif
-
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #include "media/base/pipeline_stats.h"
 #endif
@@ -226,18 +222,6 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
       base::Bind(&ReportGpuVideoDecoderInitializeStatusToUMAAndRunCB,
                  BindToCurrentLoop(init_cb), media_log_);
 
-  bool requires_restart_for_external_output_surface = false;
-#if !defined(OS_ANDROID)
-  if (config.is_encrypted()) {
-    DVLOG(1) << "Encrypted stream not supported.";
-    bound_init_cb.Run(false);
-    return;
-  }
-#else
-  requires_restart_for_external_output_surface =
-      base::android::BuildInfo::GetInstance()->sdk_int() < 23;
-#endif
-
   bool previously_initialized = config_.IsValidConfig();
   DVLOG(1) << (previously_initialized ? "Reinitializing" : "Initializing")
            << " GVD with config: " << config.AsHumanReadableString();
@@ -259,9 +243,17 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
 
   VideoDecodeAccelerator::Capabilities capabilities =
       factories_->GetVideoDecodeAcceleratorCapabilities();
+  if (config.is_encrypted() &&
+      !(capabilities.flags &
+        VideoDecodeAccelerator::Capabilities::SUPPORTS_ENCRYPTED_STREAMS)) {
+    DVLOG(1) << "Encrypted stream not supported.";
+    bound_init_cb.Run(false);
+    return;
+  }
+
   if (!IsProfileSupported(capabilities, config.profile(), config.coded_size(),
                           config.is_encrypted())) {
-    DVLOG(1) << "Unsupported profile " << config.profile()
+    DVLOG(1) << "Unsupported profile " << GetProfileName(config.profile())
              << ", unsupported coded size " << config.coded_size().ToString()
              << ", or accelerator should only be used for encrypted content. "
              << " is_encrypted: " << (config.is_encrypted() ? "yes." : "no.");
@@ -322,10 +314,14 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
 
   init_cb_ = bound_init_cb;
 
-  const bool supports_external_output_surface =
-      (capabilities.flags & VideoDecodeAccelerator::Capabilities::
-                                SUPPORTS_EXTERNAL_OUTPUT_SURFACE) != 0;
+  const bool supports_external_output_surface = !!(
+      capabilities.flags &
+      VideoDecodeAccelerator::Capabilities::SUPPORTS_EXTERNAL_OUTPUT_SURFACE);
   if (supports_external_output_surface && !request_surface_cb_.is_null()) {
+    const bool requires_restart_for_external_output_surface =
+        !(capabilities.flags & VideoDecodeAccelerator::Capabilities::
+                                   SUPPORTS_SET_EXTERNAL_OUTPUT_SURFACE);
+
     // If we have a surface request callback we should call it and complete
     // initialization with the returned surface.
     request_surface_cb_.Run(
@@ -374,8 +370,8 @@ void GpuVideoDecoder::CompleteInitialization(int surface_id) {
   VideoDecodeAccelerator::Config vda_config;
   vda_config.profile = config_.profile();
   vda_config.cdm_id = cdm_id_;
-  vda_config.is_encrypted = config_.is_encrypted();
   vda_config.surface_id = surface_id;
+  vda_config.encryption_scheme = config_.encryption_scheme();
   vda_config.is_deferred_initialization_allowed = true;
   vda_config.initial_expected_coded_size = config_.coded_size();
 
@@ -703,6 +699,12 @@ void GpuVideoDecoder::PictureReady(const media::Picture& picture) {
   frame->set_color_space(picture.color_space());
   if (picture.allow_overlay())
     frame->metadata()->SetBoolean(VideoFrameMetadata::ALLOW_OVERLAY, true);
+  if (picture.surface_texture())
+    frame->metadata()->SetBoolean(VideoFrameMetadata::SURFACE_TEXTURE, true);
+  if (picture.wants_promotion_hint()) {
+    frame->metadata()->SetBoolean(VideoFrameMetadata::WANTS_PROMOTION_HINT,
+                                  true);
+  }
 #if defined(OS_WIN)
   frame->metadata()->SetBoolean(VideoFrameMetadata::DECODER_OWNS_FRAME, true);
 #endif

@@ -4,9 +4,38 @@
 
 #include "platform/WebTaskRunner.h"
 
+#include "base/bind_helpers.h"
 #include "base/single_thread_task_runner.h"
 
+namespace base {
+
+using RunnerMethodType =
+    void (blink::TaskHandle::Runner::*)(const blink::TaskHandle&);
+
+template <>
+struct CallbackCancellationTraits<
+    RunnerMethodType,
+    std::tuple<WTF::WeakPtr<blink::TaskHandle::Runner>, blink::TaskHandle>> {
+  static constexpr bool is_cancellable = true;
+
+  static bool IsCancelled(RunnerMethodType,
+                          const WTF::WeakPtr<blink::TaskHandle::Runner>&,
+                          const blink::TaskHandle& handle) {
+    return !handle.isActive();
+  }
+};
+
+}  // namespace base
+
 namespace blink {
+
+namespace {
+
+void runCrossThreadClosure(std::unique_ptr<CrossThreadClosure> task) {
+  (*task)();
+}
+
+}  // namespace
 
 class TaskHandle::Runner : public WTF::ThreadSafeRefCounted<Runner> {
  public:
@@ -15,7 +44,7 @@ class TaskHandle::Runner : public WTF::ThreadSafeRefCounted<Runner> {
 
   WTF::WeakPtr<Runner> asWeakPtr() { return m_weakPtrFactory.createWeakPtr(); }
 
-  bool isActive() { return static_cast<bool>(m_task); }
+  bool isActive() const { return m_task && !m_task->isCancelled(); }
 
   void cancel() {
     std::unique_ptr<WTF::Closure> task = std::move(m_task);
@@ -82,17 +111,21 @@ TaskHandle::TaskHandle(RefPtr<Runner> runner) : m_runner(std::move(runner)) {
   DCHECK(m_runner);
 }
 
+// Use a custom function for base::Bind instead of convertToBaseCallback to
+// avoid copying the closure later in the call chain. Copying the bound state
+// can lead to data races with ref counted objects like StringImpl. See
+// crbug.com/679915 for more details.
 void WebTaskRunner::postTask(const WebTraceLocation& location,
                              std::unique_ptr<CrossThreadClosure> task) {
-  toSingleThreadTaskRunner()->PostTask(location,
-                                       convertToBaseCallback(std::move(task)));
+  toSingleThreadTaskRunner()->PostTask(
+      location, base::Bind(&runCrossThreadClosure, base::Passed(&task)));
 }
 
 void WebTaskRunner::postDelayedTask(const WebTraceLocation& location,
                                     std::unique_ptr<CrossThreadClosure> task,
                                     long long delayMs) {
   toSingleThreadTaskRunner()->PostDelayedTask(
-      location, convertToBaseCallback(std::move(task)),
+      location, base::Bind(&runCrossThreadClosure, base::Passed(&task)),
       base::TimeDelta::FromMilliseconds(delayMs));
 }
 
@@ -133,5 +166,7 @@ TaskHandle WebTaskRunner::postDelayedCancellableTask(
                   delayMs);
   return TaskHandle(runner);
 }
+
+WebTaskRunner::~WebTaskRunner() = default;
 
 }  // namespace blink

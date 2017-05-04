@@ -24,18 +24,7 @@ namespace prerender {
 PrerenderTabHelper::PrerenderTabHelper(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       origin_(ORIGIN_NONE),
-      next_load_is_control_prerender_(false),
-      next_load_origin_(ORIGIN_NONE),
-      weak_factory_(this) {
-  // Determine if this is a prerender.
-  PrerenderManager* prerender_manager = MaybeGetPrerenderManager();
-  if (prerender_manager &&
-      prerender_manager->IsWebContentsPrerendering(web_contents, &origin_)) {
-    navigation_type_ = NAVIGATION_TYPE_PRERENDERED;
-  } else {
-    navigation_type_ = NAVIGATION_TYPE_NORMAL;
-  }
-}
+      weak_factory_(this) {}
 
 PrerenderTabHelper::~PrerenderTabHelper() {
 }
@@ -104,22 +93,22 @@ void PrerenderTabHelper::DidStopLoading() {
 void PrerenderTabHelper::DidStartProvisionalLoadForFrame(
     content::RenderFrameHost* render_frame_host,
     const GURL& validated_url,
-    bool is_error_page,
-    bool is_iframe_srcdoc) {
+    bool is_error_page) {
+  // Determine the navigation type.
+  PrerenderManager* prerender_manager = MaybeGetPrerenderManager();
+  if (prerender_manager &&
+      prerender_manager->IsWebContentsPrerendering(web_contents(), &origin_)) {
+    navigation_type_ = NAVIGATION_TYPE_PRERENDERED;
+  } else {
+    navigation_type_ = NAVIGATION_TYPE_NORMAL;
+  }
+
   if (render_frame_host->GetParent())
     return;
 
   // Record PPLT state for the beginning of a new navigation.
   pplt_load_start_ = GetTimeTicksFromPrerenderManager();
   actual_load_start_ = base::TimeTicks();
-
-  if (next_load_is_control_prerender_) {
-    DCHECK_EQ(NAVIGATION_TYPE_NORMAL, navigation_type_);
-    navigation_type_ = NAVIGATION_TYPE_WOULD_HAVE_BEEN_PRERENDERED;
-    origin_ = next_load_origin_;
-    next_load_is_control_prerender_ = false;
-    next_load_origin_ = ORIGIN_NONE;
-  }
 
   MainFrameUrlDidChange(validated_url);
 }
@@ -156,21 +145,16 @@ void PrerenderTabHelper::PrerenderSwappedIn() {
   // Ensure we are not prerendering any more.
   DCHECK_EQ(NAVIGATION_TYPE_PRERENDERED, navigation_type_);
   DCHECK(!IsPrerendering());
+  swap_ticks_ = GetTimeTicksFromPrerenderManager();
   if (pplt_load_start_.is_null()) {
     // If we have already finished loading, report a 0 PPLT.
     RecordPerceivedPageLoadTime(base::TimeDelta(), 1.0);
-    DCHECK_EQ(NAVIGATION_TYPE_NORMAL, navigation_type_);
   } else {
     // If we have not finished loading yet, record the actual load start, and
     // rebase the start time to now.
     actual_load_start_ = pplt_load_start_;
     pplt_load_start_ = GetTimeTicksFromPrerenderManager();
   }
-}
-
-void PrerenderTabHelper::WouldHavePrerenderedNextLoad(Origin origin) {
-  next_load_is_control_prerender_ = true;
-  next_load_origin_ = origin;
 }
 
 void PrerenderTabHelper::RecordPerceivedPageLoadTime(
@@ -181,17 +165,9 @@ void PrerenderTabHelper::RecordPerceivedPageLoadTime(
   if (!prerender_manager)
     return;
 
-  // Note: it is possible for |next_load_is_control_prerender_| to be true at
-  // this point. This does not affect the classification of the current load,
-  // but only the next load. (This occurs if a WOULD_HAVE_BEEN_PRERENDERED
-  // navigation interrupts and aborts another navigation.)
   prerender_manager->RecordPerceivedPageLoadTime(
       origin_, navigation_type_, perceived_page_load_time,
       fraction_plt_elapsed_at_swap_in, url_);
-
-  // Reset state for the next navigation.
-  navigation_type_ = NAVIGATION_TYPE_NORMAL;
-  origin_ = ORIGIN_NONE;
 }
 
 }  // namespace prerender

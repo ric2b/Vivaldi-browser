@@ -90,6 +90,15 @@ void GLES2DecoderManualInitTest::EnableDisableTest(GLenum cap,
 TEST_P(GLES3DecoderTest, Basic) {
   // Make sure the setup is correct for ES3.
   EXPECT_TRUE(feature_info()->IsWebGL2OrES3Context());
+  EXPECT_FALSE(feature_info()->IsWebGLContext());
+  EXPECT_TRUE(feature_info()->validators()->texture_bind_target.IsValid(
+      GL_TEXTURE_3D));
+}
+
+TEST_P(WebGL2DecoderTest, Basic) {
+  // Make sure the setup is correct for WebGL2.
+  EXPECT_TRUE(feature_info()->IsWebGL2OrES3Context());
+  EXPECT_TRUE(feature_info()->IsWebGLContext());
   EXPECT_TRUE(feature_info()->validators()->texture_bind_target.IsValid(
       GL_TEXTURE_3D));
 }
@@ -1475,6 +1484,17 @@ class GLES2DecoderDoCommandsTest : public GLES2DecoderTest {
   int entries_per_cmd_;
 };
 
+TEST_P(GLES3DecoderTest, BeginInvalidTargetQueryFails) {
+  BeginQueryEXT begin_cmd;
+  begin_cmd.Init(GL_SAMPLES_PASSED,
+                 kNewClientId,
+                 kSharedMemoryId,
+                 kSharedMemoryOffset);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(begin_cmd));
+  EXPECT_EQ(GL_INVALID_ENUM, GetGLError());
+}
+
+
 TEST_P(GLES3DecoderTest, BindTransformFeedbackValidArgs) {
   EXPECT_CALL(*gl_, BindTransformFeedback(GL_TRANSFORM_FEEDBACK,
                                           kServiceTransformFeedbackId));
@@ -1522,6 +1542,56 @@ TEST_P(GLES3DecoderTest, GetInteger64i_vValidArgs) {
   EXPECT_EQ(decoder_->GetGLES2Util()->GLGetNumValuesReturned(
                 GL_UNIFORM_BUFFER_SIZE),
             result->GetNumResults());
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
+
+TEST_P(GLES3DecoderTest, GetSamplerBinding) {
+  const GLuint kClientID = 12;
+  const GLuint kServiceID = 1012;
+  const GLuint kUnit = 0;
+  DoCreateSampler(kClientID, kServiceID);
+  DoBindSampler(kUnit, kClientID, kServiceID);
+
+  EXPECT_CALL(*gl_, GetError())
+      .WillOnce(Return(GL_NO_ERROR))
+      .WillOnce(Return(GL_NO_ERROR))
+      .RetiresOnSaturation();
+
+  typedef cmds::GetIntegerv::Result Result;
+  Result* result = static_cast<Result*>(shared_memory_address_);
+  cmds::GetIntegerv cmd;
+  cmd.Init(GL_SAMPLER_BINDING, shared_memory_id_, shared_memory_offset_);
+  result->size = 0;
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(1, result->GetNumResults());
+  EXPECT_EQ(kClientID, static_cast<GLuint>(result->GetData()[0]));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
+
+TEST_P(GLES3DecoderTest, GetTransformFeedbackBinding) {
+  const GLuint kClientID = 12;
+  const GLuint kServiceID = 1012;
+  const GLenum kTarget = GL_TRANSFORM_FEEDBACK;
+  DoCreateTransformFeedback(kClientID, kServiceID);
+  DoBindTransformFeedback(kTarget, kClientID, kServiceID);
+
+  EXPECT_CALL(*gl_, GetError())
+      .WillOnce(Return(GL_NO_ERROR))
+      .WillOnce(Return(GL_NO_ERROR))
+      .RetiresOnSaturation();
+
+  typedef cmds::GetIntegerv::Result Result;
+  Result* result = static_cast<Result*>(shared_memory_address_);
+  cmds::GetIntegerv cmd;
+  cmd.Init(
+      GL_TRANSFORM_FEEDBACK_BINDING, shared_memory_id_, shared_memory_offset_);
+  result->size = 0;
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(1, result->GetNumResults());
+  EXPECT_EQ(kClientID, static_cast<GLuint>(result->GetData()[0]));
+
+  DoBindTransformFeedback(kTarget, 0, kServiceDefaultTransformFeedbackId);
+  DoDeleteTransformFeedback(kClientID, kServiceID);
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 
@@ -1692,6 +1762,14 @@ void GLES3DecoderTest::SetUp() {
   init.gl_version = "OpenGL ES 3.0";
   init.bind_generates_resource = true;
   init.context_type = CONTEXT_TYPE_OPENGLES3;
+  InitDecoder(init);
+}
+
+void WebGL2DecoderTest::SetUp() {
+  InitState init;
+  init.gl_version = "OpenGL ES 3.0";
+  init.bind_generates_resource = true;
+  init.context_type = CONTEXT_TYPE_WEBGL2;
   InitDecoder(init);
 }
 

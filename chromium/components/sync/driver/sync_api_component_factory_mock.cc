@@ -63,4 +63,11 @@ void SyncApiComponentFactoryMock::SetLocalDeviceInfoProvider(
   local_device_ = std::move(local_device);
 }
 
+SyncApiComponentFactory::SyncComponents
+SyncApiComponentFactoryMock::CreateNotesSyncComponents(
+    SyncService* sync_service,
+    std::unique_ptr<DataTypeErrorHandler> error_handler) {
+  return MakeSyncComponents();
+}
+
 }  // namespace syncer

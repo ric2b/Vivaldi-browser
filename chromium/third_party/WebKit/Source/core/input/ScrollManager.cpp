@@ -22,13 +22,12 @@
 #include "core/page/scrolling/RootScrollerController.h"
 #include "core/page/scrolling/ScrollState.h"
 #include "core/paint/PaintLayer.h"
-#include "platform/PlatformGestureEvent.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
 
 namespace blink {
 
-ScrollManager::ScrollManager(LocalFrame* frame) : m_frame(frame) {
+ScrollManager::ScrollManager(LocalFrame& frame) : m_frame(frame) {
   clear();
 }
 
@@ -43,14 +42,14 @@ void ScrollManager::clear() {
 DEFINE_TRACE(ScrollManager) {
   visitor->trace(m_frame);
   visitor->trace(m_scrollGestureHandlingNode);
-  visitor->trace(m_previousGestureScrolledNode);
+  visitor->trace(m_previousGestureScrolledElement);
   visitor->trace(m_scrollbarHandlingScrollGesture);
   visitor->trace(m_resizeScrollableArea);
 }
 
 void ScrollManager::clearGestureScrollState() {
   m_scrollGestureHandlingNode = nullptr;
-  m_previousGestureScrolledNode = nullptr;
+  m_previousGestureScrolledElement = nullptr;
   m_deltaConsumedForScrollSequence = false;
   m_currentScrollChain.clear();
 
@@ -104,7 +103,7 @@ void ScrollManager::recomputeScrollChain(const Node& startNode,
 
     if (curElement) {
       scrollChain.push_front(DOMNodeIds::idForNode(curElement));
-      if (isEffectiveRootScroller(*curElement) ||
+      if (isViewportScrollingElement(*curElement) ||
           curElement->isSameNode(documentElement))
         break;
     }
@@ -198,7 +197,7 @@ void ScrollManager::customizedScroll(const Node& startNode,
 }
 
 WebInputEventResult ScrollManager::handleGestureScrollBegin(
-    const PlatformGestureEvent& gestureEvent) {
+    const WebGestureEvent& gestureEvent) {
   Document* document = m_frame->document();
 
   if (document->layoutViewItem().isNull())
@@ -224,13 +223,14 @@ WebInputEventResult ScrollManager::handleGestureScrollBegin(
 
   m_currentScrollChain.clear();
   std::unique_ptr<ScrollStateData> scrollStateData =
-      makeUnique<ScrollStateData>();
-  scrollStateData->position_x = gestureEvent.position().x();
-  scrollStateData->position_y = gestureEvent.position().y();
+      WTF::makeUnique<ScrollStateData>();
+  IntPoint position = flooredIntPoint(gestureEvent.positionInRootFrame());
+  scrollStateData->position_x = position.x();
+  scrollStateData->position_y = position.y();
   scrollStateData->is_beginning = true;
   scrollStateData->from_user_input = true;
   scrollStateData->is_direct_manipulation =
-      gestureEvent.source() == PlatformGestureSourceTouchscreen;
+      gestureEvent.sourceDevice == WebGestureDeviceTouchscreen;
   scrollStateData->delta_consumed_for_scroll_sequence =
       m_deltaConsumedForScrollSequence;
   ScrollState* scrollState = ScrollState::create(std::move(scrollStateData));
@@ -239,8 +239,8 @@ WebInputEventResult ScrollManager::handleGestureScrollBegin(
 }
 
 WebInputEventResult ScrollManager::handleGestureScrollUpdate(
-    const PlatformGestureEvent& gestureEvent) {
-  DCHECK_EQ(gestureEvent.type(), PlatformEvent::GestureScrollUpdate);
+    const WebGestureEvent& gestureEvent) {
+  DCHECK_EQ(gestureEvent.type(), WebInputEvent::GestureScrollUpdate);
 
   Node* node = m_scrollGestureHandlingNode.get();
   if (!node || !node->layoutObject())
@@ -250,9 +250,10 @@ WebInputEventResult ScrollManager::handleGestureScrollUpdate(
   // scrolling occurs in the direction opposite the finger's movement
   // direction. e.g. Finger moving up has negative event delta but causes the
   // page to scroll down causing positive scroll delta.
-  FloatSize delta(-gestureEvent.deltaX(), -gestureEvent.deltaY());
+  FloatSize delta(-gestureEvent.deltaXInRootFrame(),
+                  -gestureEvent.deltaYInRootFrame());
   FloatSize velocity(-gestureEvent.velocityX(), -gestureEvent.velocityY());
-  FloatPoint position(gestureEvent.position());
+  FloatPoint position(gestureEvent.positionInRootFrame());
 
   if (delta.isZero())
     return WebInputEventResult::NotHandled;
@@ -270,43 +271,43 @@ WebInputEventResult ScrollManager::handleGestureScrollUpdate(
   }
 
   std::unique_ptr<ScrollStateData> scrollStateData =
-      makeUnique<ScrollStateData>();
+      WTF::makeUnique<ScrollStateData>();
   scrollStateData->delta_x = delta.width();
   scrollStateData->delta_y = delta.height();
-  scrollStateData->delta_granularity =
-      static_cast<double>(gestureEvent.deltaUnits());
+  scrollStateData->delta_granularity = static_cast<double>(
+      toPlatformScrollGranularity(gestureEvent.deltaUnits()));
   scrollStateData->velocity_x = velocity.width();
   scrollStateData->velocity_y = velocity.height();
   scrollStateData->position_x = position.x();
   scrollStateData->position_y = position.y();
   scrollStateData->should_propagate = !gestureEvent.preventPropagation();
   scrollStateData->is_in_inertial_phase =
-      gestureEvent.inertialPhase() == ScrollInertialPhaseMomentum;
+      gestureEvent.inertialPhase() == WebGestureEvent::MomentumPhase;
   scrollStateData->is_direct_manipulation =
-      gestureEvent.source() == PlatformGestureSourceTouchscreen;
+      gestureEvent.sourceDevice == WebGestureDeviceTouchscreen;
   scrollStateData->from_user_input = true;
   scrollStateData->delta_consumed_for_scroll_sequence =
       m_deltaConsumedForScrollSequence;
   ScrollState* scrollState = ScrollState::create(std::move(scrollStateData));
-  if (m_previousGestureScrolledNode) {
+  if (m_previousGestureScrolledElement) {
     // The ScrollState needs to know what the current
     // native scrolling element is, so that for an
     // inertial scroll that shouldn't propagate, only the
     // currently scrolling element responds.
-    DCHECK(m_previousGestureScrolledNode->isElementNode());
     scrollState->setCurrentNativeScrollingElement(
-        toElement(m_previousGestureScrolledNode.get()));
+        m_previousGestureScrolledElement);
   }
   customizedScroll(*node, *scrollState);
-  m_previousGestureScrolledNode = scrollState->currentNativeScrollingElement();
+  m_previousGestureScrolledElement =
+      scrollState->currentNativeScrollingElement();
   m_deltaConsumedForScrollSequence =
       scrollState->deltaConsumedForScrollSequence();
 
   bool didScrollX = scrollState->deltaX() != delta.width();
   bool didScrollY = scrollState->deltaY() != delta.height();
 
-  if ((!m_previousGestureScrolledNode ||
-       !isEffectiveRootScroller(*m_previousGestureScrolledNode)) &&
+  if ((!m_previousGestureScrolledElement ||
+       !isViewportScrollingElement(*m_previousGestureScrolledElement)) &&
       frameHost())
     frameHost()->overscrollController().resetAccumulated(didScrollX,
                                                          didScrollY);
@@ -320,19 +321,19 @@ WebInputEventResult ScrollManager::handleGestureScrollUpdate(
 }
 
 WebInputEventResult ScrollManager::handleGestureScrollEnd(
-    const PlatformGestureEvent& gestureEvent) {
+    const WebGestureEvent& gestureEvent) {
   Node* node = m_scrollGestureHandlingNode;
 
   if (node && node->layoutObject()) {
     passScrollGestureEventToWidget(gestureEvent, node->layoutObject());
     std::unique_ptr<ScrollStateData> scrollStateData =
-        makeUnique<ScrollStateData>();
+        WTF::makeUnique<ScrollStateData>();
     scrollStateData->is_ending = true;
     scrollStateData->is_in_inertial_phase =
-        gestureEvent.inertialPhase() == ScrollInertialPhaseMomentum;
+        gestureEvent.inertialPhase() == WebGestureEvent::MomentumPhase;
     scrollStateData->from_user_input = true;
     scrollStateData->is_direct_manipulation =
-        gestureEvent.source() == PlatformGestureSourceTouchscreen;
+        gestureEvent.sourceDevice == WebGestureDeviceTouchscreen;
     scrollStateData->delta_consumed_for_scroll_sequence =
         m_deltaConsumedForScrollSequence;
     ScrollState* scrollState = ScrollState::create(std::move(scrollStateData));
@@ -351,7 +352,7 @@ FrameHost* ScrollManager::frameHost() const {
 }
 
 WebInputEventResult ScrollManager::passScrollGestureEventToWidget(
-    const PlatformGestureEvent& gestureEvent,
+    const WebGestureEvent& gestureEvent,
     LayoutObject* layoutObject) {
   DCHECK(gestureEvent.isScrollEvent());
 
@@ -368,27 +369,23 @@ WebInputEventResult ScrollManager::passScrollGestureEventToWidget(
       gestureEvent);
 }
 
-bool ScrollManager::isEffectiveRootScroller(const Node& node) const {
+bool ScrollManager::isViewportScrollingElement(const Element& element) const {
   // The root scroller is the one Element on the page designated to perform
   // "viewport actions" like browser controls movement and overscroll glow.
   if (!m_frame->document())
     return false;
 
-  if (!node.isElementNode())
-    return false;
-
-  return node.isSameNode(
-      m_frame->document()->rootScrollerController()->effectiveRootScroller());
+  return m_frame->document()->rootScrollerController().scrollsViewport(element);
 }
 
 WebInputEventResult ScrollManager::handleGestureScrollEvent(
-    const PlatformGestureEvent& gestureEvent) {
+    const WebGestureEvent& gestureEvent) {
   if (!m_frame->view())
     return WebInputEventResult::NotHandled;
 
   Node* eventTarget = nullptr;
   Scrollbar* scrollbar = nullptr;
-  if (gestureEvent.type() != PlatformEvent::GestureScrollBegin) {
+  if (gestureEvent.type() != WebInputEvent::GestureScrollBegin) {
     scrollbar = m_scrollbarHandlingScrollGesture.get();
     eventTarget = m_scrollGestureHandlingNode.get();
   }
@@ -399,7 +396,8 @@ WebInputEventResult ScrollManager::handleGestureScrollEvent(
       return WebInputEventResult::NotHandled;
 
     FrameView* view = m_frame->view();
-    LayoutPoint viewPoint = view->rootFrameToContents(gestureEvent.position());
+    LayoutPoint viewPoint = view->rootFrameToContents(
+        flooredIntPoint(gestureEvent.positionInRootFrame()));
     HitTestRequest request(HitTestRequest::ReadOnly);
     HitTestResult result(request, viewPoint);
     document->layoutViewItem().hitTest(result);
@@ -408,7 +406,7 @@ WebInputEventResult ScrollManager::handleGestureScrollEvent(
 
     m_lastGestureScrollOverWidget = result.isOverWidget();
     m_scrollGestureHandlingNode = eventTarget;
-    m_previousGestureScrolledNode = nullptr;
+    m_previousGestureScrolledElement = nullptr;
     m_deltaConsumedForScrollSequence = false;
 
     if (!scrollbar)
@@ -443,16 +441,16 @@ WebInputEventResult ScrollManager::handleGestureScrollEvent(
   }
 
   switch (gestureEvent.type()) {
-    case PlatformEvent::GestureScrollBegin:
+    case WebInputEvent::GestureScrollBegin:
       return handleGestureScrollBegin(gestureEvent);
-    case PlatformEvent::GestureScrollUpdate:
+    case WebInputEvent::GestureScrollUpdate:
       return handleGestureScrollUpdate(gestureEvent);
-    case PlatformEvent::GestureScrollEnd:
+    case WebInputEvent::GestureScrollEnd:
       return handleGestureScrollEnd(gestureEvent);
-    case PlatformEvent::GestureFlingStart:
-    case PlatformEvent::GesturePinchBegin:
-    case PlatformEvent::GesturePinchEnd:
-    case PlatformEvent::GesturePinchUpdate:
+    case WebInputEvent::GestureFlingStart:
+    case WebInputEvent::GesturePinchBegin:
+    case WebInputEvent::GesturePinchEnd:
+    case WebInputEvent::GesturePinchUpdate:
       return WebInputEventResult::NotHandled;
     default:
       NOTREACHED();
@@ -466,15 +464,16 @@ bool ScrollManager::isScrollbarHandlingGestures() const {
 
 bool ScrollManager::handleScrollGestureOnResizer(
     Node* eventTarget,
-    const PlatformGestureEvent& gestureEvent) {
-  if (gestureEvent.source() != PlatformGestureSourceTouchscreen)
+    const WebGestureEvent& gestureEvent) {
+  if (gestureEvent.sourceDevice != WebGestureDeviceTouchscreen)
     return false;
 
-  if (gestureEvent.type() == PlatformEvent::GestureScrollBegin) {
+  if (gestureEvent.type() == WebInputEvent::GestureScrollBegin) {
     PaintLayer* layer = eventTarget->layoutObject()
                             ? eventTarget->layoutObject()->enclosingLayer()
                             : nullptr;
-    IntPoint p = m_frame->view()->rootFrameToContents(gestureEvent.position());
+    IntPoint p = m_frame->view()->rootFrameToContents(
+        flooredIntPoint(gestureEvent.positionInRootFrame()));
     if (layer && layer->getScrollableArea() &&
         layer->getScrollableArea()->isPointInResizeControl(p,
                                                            ResizerForTouch)) {
@@ -484,12 +483,15 @@ bool ScrollManager::handleScrollGestureOnResizer(
           LayoutSize(m_resizeScrollableArea->offsetFromResizeCorner(p));
       return true;
     }
-  } else if (gestureEvent.type() == PlatformEvent::GestureScrollUpdate) {
+  } else if (gestureEvent.type() == WebInputEvent::GestureScrollUpdate) {
     if (m_resizeScrollableArea && m_resizeScrollableArea->inResizeMode()) {
-      m_resizeScrollableArea->resize(gestureEvent, m_offsetFromResizeCorner);
+      IntPoint pos = roundedIntPoint(gestureEvent.positionInRootFrame());
+      pos.move(gestureEvent.deltaXInRootFrame(),
+               gestureEvent.deltaYInRootFrame());
+      m_resizeScrollableArea->resize(pos, m_offsetFromResizeCorner);
       return true;
     }
-  } else if (gestureEvent.type() == PlatformEvent::GestureScrollEnd) {
+  } else if (gestureEvent.type() == WebInputEvent::GestureScrollEnd) {
     if (m_resizeScrollableArea && m_resizeScrollableArea->inResizeMode()) {
       m_resizeScrollableArea->setInResizeMode(false);
       m_resizeScrollableArea = nullptr;
@@ -504,8 +506,12 @@ bool ScrollManager::inResizeMode() const {
   return m_resizeScrollableArea && m_resizeScrollableArea->inResizeMode();
 }
 
-void ScrollManager::resize(const PlatformEvent& evt) {
-  m_resizeScrollableArea->resize(evt, m_offsetFromResizeCorner);
+void ScrollManager::resize(const PlatformMouseEvent& evt) {
+  if (evt.type() == PlatformEvent::MouseMoved) {
+    if (!m_frame->eventHandler().mousePressed())
+      return;
+    m_resizeScrollableArea->resize(evt.position(), m_offsetFromResizeCorner);
+  }
 }
 
 void ScrollManager::clearResizeScrollableArea(bool shouldNotBeNull) {

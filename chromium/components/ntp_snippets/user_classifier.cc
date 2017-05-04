@@ -91,22 +91,11 @@ static_assert(arraysize(kMetrics) ==
                       static_cast<int>(UserClassifier::Metric::COUNT),
               "Fill in info for all metrics.");
 
-double GetParamValue(const char* param_name, double default_value) {
-  std::string param_value_str = variations::GetVariationParamValueByFeature(
-      kArticleSuggestionsFeature, param_name);
-  double param_value = 0;
-  if (!base::StringToDouble(param_value_str, &param_value)) {
-    LOG_IF(WARNING, !param_value_str.empty())
-        << "Invalid variation parameter for " << param_name;
-    return default_value;
-  }
-  return param_value;
-}
-
 // Computes the discount rate.
 double GetDiscountRatePerHour() {
-  double discount_rate_per_day =
-      GetParamValue(kDiscountRatePerDayParam, kDiscountRatePerDay);
+  double discount_rate_per_day = variations::GetVariationParamByFeatureAsDouble(
+      kArticleSuggestionsFeature, kDiscountRatePerDayParam,
+      kDiscountRatePerDay);
   // Check for illegal values.
   if (discount_rate_per_day <= 0 || discount_rate_per_day >= 1) {
     DLOG(WARNING) << "Illegal value " << discount_rate_per_day
@@ -121,17 +110,20 @@ double GetDiscountRatePerHour() {
 }
 
 double GetInitialHoursBetweenEvents(UserClassifier::Metric metric) {
-  return GetParamValue(
+  return variations::GetVariationParamByFeatureAsDouble(
+      kArticleSuggestionsFeature,
       kInitialHoursBetweenEventsParams[static_cast<int>(metric)],
       kInitialHoursBetweenEvents[static_cast<int>(metric)]);
 }
 
 double GetMinHours() {
-  return GetParamValue(kMinHoursParam, kMinHours);
+  return variations::GetVariationParamByFeatureAsDouble(
+      kArticleSuggestionsFeature, kMinHoursParam, kMinHours);
 }
 
 double GetMaxHours() {
-  return GetParamValue(kMaxHoursParam, kMaxHours);
+  return variations::GetVariationParamByFeatureAsDouble(
+      kArticleSuggestionsFeature, kMaxHoursParam, kMaxHours);
 }
 
 // Returns the new value of the metric using its |old_value|, assuming
@@ -153,8 +145,9 @@ double GetEstimateHoursBetweenEvents(double metric_value,
   // The computation below is well-defined only for |metric_value| > 1 (log of
   // negative value or division by zero). When |metric_value| -> 1, the estimate
   // below -> infinity, so max_hours is a natural result, here.
-  if (metric_value <= 1)
+  if (metric_value <= 1) {
     return max_hours;
+  }
 
   // This is the estimate with the assumption that last event happened right
   // now and the system is in the steady-state. Solve estimate_hours in the
@@ -194,14 +187,19 @@ UserClassifier::UserClassifier(PrefService* pref_service)
       min_hours_(GetMinHours()),
       max_hours_(GetMaxHours()),
       active_consumer_scrolls_at_least_once_per_hours_(
-          GetParamValue(kActiveConsumerScrollsAtLeastOncePerHoursParam,
-                        kActiveConsumerScrollsAtLeastOncePerHours)),
+          variations::GetVariationParamByFeatureAsDouble(
+              kArticleSuggestionsFeature,
+              kActiveConsumerScrollsAtLeastOncePerHoursParam,
+              kActiveConsumerScrollsAtLeastOncePerHours)),
       rare_user_opens_ntp_at_most_once_per_hours_(
-          GetParamValue(kRareUserOpensNTPAtMostOncePerHoursParam,
-                        kRareUserOpensNTPAtMostOncePerHours)) {
+          variations::GetVariationParamByFeatureAsDouble(
+              kArticleSuggestionsFeature,
+              kRareUserOpensNTPAtMostOncePerHoursParam,
+              kRareUserOpensNTPAtMostOncePerHours)) {
   // The pref_service_ can be null in tests.
-  if (!pref_service_)
+  if (!pref_service_) {
     return;
+  }
 
   // TODO(jkrcal): Store the current discount rate per hour into prefs. If it
   // differs from the previous value, rescale the metric values so that the
@@ -209,8 +207,9 @@ UserClassifier::UserClassifier(PrefService* pref_service)
 
   // Initialize the prefs storing the last time: the counter has just started!
   for (const Metric metric : kMetrics) {
-    if (!HasLastTime(metric))
+    if (!HasLastTime(metric)) {
       SetLastTimeToNow(metric);
+    }
   }
 }
 
@@ -268,8 +267,9 @@ double UserClassifier::GetEstimatedAvgTime(Metric metric) const {
 
 UserClassifier::UserClass UserClassifier::GetUserClass() const {
   // The pref_service_ can be null in tests.
-  if (!pref_service_)
+  if (!pref_service_) {
     return UserClass::ACTIVE_NTP_USER;
+  }
 
   if (GetEstimatedAvgTime(Metric::NTP_OPENED) >=
       rare_user_opens_ntp_at_most_once_per_hours_) {
@@ -299,8 +299,9 @@ std::string UserClassifier::GetUserClassDescriptionForDebugging() const {
 
 void UserClassifier::ClearClassificationForDebugging() {
   // The pref_service_ can be null in tests.
-  if (!pref_service_)
+  if (!pref_service_) {
     return;
+  }
 
   for (const Metric& metric : kMetrics) {
     ClearMetricValue(metric);
@@ -310,14 +311,16 @@ void UserClassifier::ClearClassificationForDebugging() {
 
 double UserClassifier::UpdateMetricOnEvent(Metric metric) {
   // The pref_service_ can be null in tests.
-  if (!pref_service_)
+  if (!pref_service_) {
     return 0;
+  }
 
   double hours_since_last_time =
       std::min(max_hours_, GetHoursSinceLastTime(metric));
   // Ignore events within the same "browsing session".
-  if (hours_since_last_time < min_hours_)
+  if (hours_since_last_time < min_hours_) {
     return GetUpToDateMetricValue(metric);
+  }
 
   SetLastTimeToNow(metric);
 
@@ -332,8 +335,9 @@ double UserClassifier::UpdateMetricOnEvent(Metric metric) {
 
 double UserClassifier::GetUpToDateMetricValue(Metric metric) const {
   // The pref_service_ can be null in tests.
-  if (!pref_service_)
+  if (!pref_service_) {
     return 0;
+  }
 
   double hours_since_last_time =
       std::min(max_hours_, GetHoursSinceLastTime(metric));
@@ -344,8 +348,9 @@ double UserClassifier::GetUpToDateMetricValue(Metric metric) const {
 }
 
 double UserClassifier::GetHoursSinceLastTime(Metric metric) const {
-  if (!HasLastTime(metric))
+  if (!HasLastTime(metric)) {
     return 0;
+  }
 
   base::TimeDelta since_last_time =
       base::Time::Now() - base::Time::FromInternalValue(pref_service_->GetInt64(

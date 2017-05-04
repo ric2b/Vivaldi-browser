@@ -27,66 +27,6 @@ const FeaturePolicy::Feature* featureForName(
   return nullptr;
 }
 
-// Converts a list of JSON feature policy items into a mapping of features to
-// whitelists. For future compatibility, unrecognized features are simply
-// ignored, as are unparseable origins. Any errors in the input will cause an
-// error message appended to |messages|.
-HashMap<const FeaturePolicy::Feature*,
-        std::unique_ptr<FeaturePolicy::Whitelist>>
-parseFeaturePolicyFromJson(std::unique_ptr<JSONArray> policyItems,
-                           RefPtr<SecurityOrigin> origin,
-                           FeaturePolicy::FeatureList& features,
-                           Vector<String>& messages) {
-  HashMap<const FeaturePolicy::Feature*,
-          std::unique_ptr<FeaturePolicy::Whitelist>>
-      whitelists;
-
-  for (size_t i = 0; i < policyItems->size(); ++i) {
-    JSONObject* item = JSONObject::cast(policyItems->at(i));
-    if (!item) {
-      messages.append("Policy is not an object");
-      continue;  // Array element is not an object; skip
-    }
-
-    for (size_t j = 0; j < item->size(); ++j) {
-      JSONObject::Entry entry = item->at(j);
-      String featureName = entry.first;
-      JSONArray* targets = JSONArray::cast(entry.second);
-      if (!targets) {
-        messages.append("Whitelist is not an array of strings.");
-        continue;
-      }
-
-      const FeaturePolicy::Feature* feature =
-          featureForName(featureName, features);
-      if (!feature)
-        continue;  // Feature is not recognized; skip
-
-      std::unique_ptr<FeaturePolicy::Whitelist> whitelist(
-          new FeaturePolicy::Whitelist);
-      String targetString;
-      for (size_t j = 0; j < targets->size(); ++j) {
-        if (targets->at(j)->asString(&targetString)) {
-          if (equalIgnoringCase(targetString, "self")) {
-            whitelist->add(origin);
-          } else if (targetString == "*") {
-            whitelist->addAll();
-          } else {
-            KURL originUrl = KURL(KURL(), targetString);
-            if (originUrl.isValid()) {
-              whitelist->add(SecurityOrigin::create(originUrl));
-            }
-          }
-        } else {
-          messages.append("Whitelist is not an array of strings.");
-        }
-      }
-      whitelists.set(feature, std::move(whitelist));
-    }
-  }
-  return whitelists;
-}
-
 }  // namespace
 
 // Definitions of all features controlled by Feature Policy should appear here.
@@ -96,6 +36,8 @@ const FeaturePolicy::Feature kDocumentDomain{
     "domain", FeaturePolicy::FeatureDefault::EnableForAll};
 const FeaturePolicy::Feature kDocumentWrite{
     "docwrite", FeaturePolicy::FeatureDefault::EnableForAll};
+const FeaturePolicy::Feature kFullscreenFeature{
+    "fullscreen", FeaturePolicy::FeatureDefault::EnableForSelf};
 const FeaturePolicy::Feature kGeolocationFeature{
     "geolocation", FeaturePolicy::FeatureDefault::EnableForSelf};
 const FeaturePolicy::Feature kMidiFeature{
@@ -117,6 +59,19 @@ const FeaturePolicy::Feature kVibrateFeature{
 const FeaturePolicy::Feature kWebRTC{
     "webrtc", FeaturePolicy::FeatureDefault::EnableForAll};
 
+// static
+std::unique_ptr<FeaturePolicy::Whitelist> FeaturePolicy::Whitelist::from(
+    const WebFeaturePolicy::ParsedWhitelist& parsedWhitelist) {
+  std::unique_ptr<Whitelist> whitelist(new FeaturePolicy::Whitelist);
+  if (parsedWhitelist.matchesAllOrigins) {
+    whitelist->addAll();
+  } else {
+    for (const WebSecurityOrigin& origin : parsedWhitelist.origins)
+      whitelist->add(static_cast<WTF::PassRefPtr<SecurityOrigin>>(origin));
+  }
+  return whitelist;
+}
+
 FeaturePolicy::Whitelist::Whitelist() : m_matchesAllOrigins(false) {}
 
 void FeaturePolicy::Whitelist::addAll() {
@@ -124,7 +79,7 @@ void FeaturePolicy::Whitelist::addAll() {
 }
 
 void FeaturePolicy::Whitelist::add(RefPtr<SecurityOrigin> origin) {
-  m_origins.append(std::move(origin));
+  m_origins.push_back(std::move(origin));
 }
 
 bool FeaturePolicy::Whitelist::contains(const SecurityOrigin& origin) const {
@@ -159,9 +114,9 @@ const FeaturePolicy::FeatureList& FeaturePolicy::getDefaultFeatureList() {
   DEFINE_STATIC_LOCAL(
       Vector<const FeaturePolicy::Feature*>, defaultFeatureList,
       ({&kDocumentCookie, &kDocumentDomain, &kDocumentWrite,
-        &kGeolocationFeature, &kMidiFeature, &kNotificationsFeature,
-        &kPaymentFeature, &kPushFeature, &kSyncScript, &kSyncXHR, &kUsermedia,
-        &kVibrateFeature, &kWebRTC}));
+        &kGeolocationFeature, &kFullscreenFeature, &kMidiFeature,
+        &kNotificationsFeature, &kPaymentFeature, &kPushFeature, &kSyncScript,
+        &kSyncXHR, &kUsermedia, &kVibrateFeature, &kWebRTC}));
   return defaultFeatureList;
 }
 
@@ -172,7 +127,7 @@ std::unique_ptr<FeaturePolicy> FeaturePolicy::createFromParentPolicy(
     FeaturePolicy::FeatureList& features) {
   DCHECK(currentOrigin);
   std::unique_ptr<FeaturePolicy> newPolicy =
-      wrapUnique(new FeaturePolicy(currentOrigin, features));
+      WTF::wrapUnique(new FeaturePolicy(currentOrigin, features));
   for (const FeaturePolicy::Feature* feature : features) {
     if (!parent ||
         parent->isFeatureEnabledForOrigin(*feature, *currentOrigin)) {
@@ -192,16 +147,79 @@ std::unique_ptr<FeaturePolicy> FeaturePolicy::createFromParentPolicy(
                                 getDefaultFeatureList());
 }
 
-void FeaturePolicy::setHeaderPolicy(const String& policy,
-                                    Vector<String>& messages) {
-  DCHECK(m_headerWhitelists.isEmpty());
-  std::unique_ptr<JSONArray> policyJSON = parseJSONHeader(policy);
-  if (!policyJSON) {
-    messages.append("Unable to parse header");
-    return;
+// static
+WebParsedFeaturePolicy FeaturePolicy::parseFeaturePolicy(
+    const String& policy,
+    RefPtr<SecurityOrigin> origin,
+    Vector<String>* messages) {
+  Vector<WebFeaturePolicy::ParsedWhitelist> whitelists;
+
+  // Use a reasonable parse depth limit; the actual maximum depth is only going
+  // to be 4 for a valid policy, but we'll give the featurePolicyParser a chance
+  // to report more specific errors, unless the string is really invalid.
+  std::unique_ptr<JSONArray> policyItems = parseJSONHeader(policy, 50);
+  if (!policyItems) {
+    if (messages)
+      messages->push_back("Unable to parse header");
+    return whitelists;
   }
-  m_headerWhitelists = parseFeaturePolicyFromJson(
-      std::move(policyJSON), m_origin, m_features, messages);
+
+  for (size_t i = 0; i < policyItems->size(); ++i) {
+    JSONObject* item = JSONObject::cast(policyItems->at(i));
+    if (!item) {
+      if (messages)
+        messages->push_back("Policy is not an object");
+      continue;  // Array element is not an object; skip
+    }
+
+    for (size_t j = 0; j < item->size(); ++j) {
+      JSONObject::Entry entry = item->at(j);
+      String featureName = entry.first;
+      JSONArray* targets = JSONArray::cast(entry.second);
+      if (!targets) {
+        if (messages)
+          messages->push_back("Whitelist is not an array of strings.");
+        continue;
+      }
+
+      WebFeaturePolicy::ParsedWhitelist whitelist;
+      whitelist.featureName = featureName;
+      Vector<WebSecurityOrigin> origins;
+      String targetString;
+      for (size_t j = 0; j < targets->size(); ++j) {
+        if (targets->at(j)->asString(&targetString)) {
+          if (equalIgnoringCase(targetString, "self")) {
+            if (!origin->isUnique())
+              origins.push_back(origin);
+          } else if (targetString == "*") {
+            whitelist.matchesAllOrigins = true;
+          } else {
+            WebSecurityOrigin targetOrigin =
+                WebSecurityOrigin::createFromString(targetString);
+            if (!targetOrigin.isNull() && !targetOrigin.isUnique())
+              origins.push_back(targetOrigin);
+          }
+        } else {
+          if (messages)
+            messages->push_back("Whitelist is not an array of strings.");
+        }
+      }
+      whitelist.origins = origins;
+      whitelists.push_back(whitelist);
+    }
+  }
+  return whitelists;
+}
+
+void FeaturePolicy::setHeaderPolicy(const WebParsedFeaturePolicy& policy) {
+  DCHECK(m_headerWhitelists.isEmpty());
+  for (const WebFeaturePolicy::ParsedWhitelist& parsedWhitelist : policy) {
+    const FeaturePolicy::Feature* feature =
+        featureForName(parsedWhitelist.featureName, m_features);
+    if (!feature)
+      continue;
+    m_headerWhitelists.set(feature, Whitelist::from(parsedWhitelist));
+  }
 }
 
 bool FeaturePolicy::isFeatureEnabledForOrigin(

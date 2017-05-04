@@ -4,8 +4,8 @@
 
 package org.chromium.chrome.browser.feedback;
 
-import android.test.suitebuilder.annotation.MediumTest;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.MediumTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
@@ -31,7 +31,7 @@ public class ConnectivityTaskTest extends ConnectivityCheckerTestBase {
 
     @MediumTest
     @Feature({"Feedback"})
-    public void testNormalCaseShouldWork() throws InterruptedException {
+    public void testNormalCaseShouldWork() {
         final ConnectivityTask task = ThreadUtils.runOnUiThreadBlockingNoException(
                 new Callable<ConnectivityTask>() {
                     @Override
@@ -144,7 +144,7 @@ public class ConnectivityTaskTest extends ConnectivityCheckerTestBase {
 
     @MediumTest
     @Feature({"Feedback"})
-    public void testTwoTimeoutsShouldFillInTheRest() throws InterruptedException {
+    public void testTwoTimeoutsShouldFillInTheRest() {
         final ConnectivityTask task = ThreadUtils.runOnUiThreadBlockingNoException(
                 new Callable<ConnectivityTask>() {
                     @Override

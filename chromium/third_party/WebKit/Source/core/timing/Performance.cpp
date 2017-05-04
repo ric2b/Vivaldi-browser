@@ -34,8 +34,11 @@
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8ObjectBuilder.h"
 #include "core/dom/Document.h"
+#include "core/dom/QualifiedName.h"
+#include "core/frame/DOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
+#include "core/html/HTMLFrameOwnerElement.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/origin_trials/OriginTrials.h"
 #include "core/timing/PerformanceTiming.h"
@@ -43,13 +46,43 @@
 static const double kLongTaskThreshold = 0.05;
 
 static const char kUnknownAttribution[] = "unknown";
-static const char kAmbugiousAttribution[] = "multiple-contexts";
+static const char kAmbiguousAttribution[] = "multiple-contexts";
 static const char kSameOriginAttribution[] = "same-origin";
-static const char kAncestorAttribution[] = "cross-origin-ancestor";
-static const char kDescendantAttribution[] = "cross-origin-descendant";
+static const char kSameOriginSelfAttribution[] = "self";
+static const char kSameOriginAncestorAttribution[] = "same-origin-ancestor";
+static const char kSameOriginDescendantAttribution[] = "same-origin-descendant";
+static const char kCrossOriginAncestorAttribution[] = "cross-origin-ancestor";
+static const char kCrossOriginDescendantAttribution[] =
+    "cross-origin-descendant";
 static const char kCrossOriginAttribution[] = "cross-origin-unreachable";
 
 namespace blink {
+
+namespace {
+
+String getFrameAttribute(HTMLFrameOwnerElement* frameOwner,
+                         const QualifiedName& attrName,
+                         bool truncate) {
+  String attrValue;
+  if (frameOwner->hasAttribute(attrName)) {
+    attrValue = frameOwner->getAttribute(attrName);
+    if (truncate && attrValue.length() > 100)
+      attrValue = attrValue.substring(0, 100);  // Truncate to 100 chars
+  }
+  return attrValue;
+}
+
+const char* sameOriginAttribution(Frame* observerFrame, Frame* culpritFrame) {
+  if (observerFrame == culpritFrame)
+    return kSameOriginSelfAttribution;
+  if (observerFrame->tree().isDescendantOf(culpritFrame))
+    return kSameOriginAncestorAttribution;
+  if (culpritFrame->tree().isDescendantOf(observerFrame))
+    return kSameOriginDescendantAttribution;
+  return kSameOriginAttribution;
+}
+
+}  // namespace
 
 static double toTimeOrigin(LocalFrame* frame) {
   if (!frame)
@@ -67,16 +100,17 @@ static double toTimeOrigin(LocalFrame* frame) {
 }
 
 Performance::Performance(LocalFrame* frame)
-    : PerformanceBase(toTimeOrigin(frame)), DOMWindowProperty(frame) {}
+    : PerformanceBase(toTimeOrigin(frame)),
+      ContextLifecycleObserver(frame ? frame->document() : nullptr) {}
 
 Performance::~Performance() {
-  if (frame())
-    frame()->performanceMonitor()->unsubscribeAll(this);
 }
 
-void Performance::frameDestroyed() {
-  frame()->performanceMonitor()->unsubscribeAll(this);
-  DOMWindowProperty::frameDestroyed();
+void Performance::contextDestroyed(ExecutionContext* destroyedContext) {
+  toDocument(destroyedContext)
+      ->frame()
+      ->performanceMonitor()
+      ->unsubscribeAll(this);
 }
 
 ExecutionContext* Performance::getExecutionContext() const {
@@ -128,7 +162,7 @@ ScriptValue Performance::toJSONForBinding(ScriptState* scriptState) const {
 DEFINE_TRACE(Performance) {
   visitor->trace(m_navigation);
   visitor->trace(m_timing);
-  DOMWindowProperty::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
   PerformanceBase::trace(visitor);
   PerformanceMonitor::Client::trace(visitor);
 }
@@ -147,23 +181,27 @@ static bool canAccessOrigin(Frame* frame1, Frame* frame2) {
  */
 // static
 std::pair<String, DOMWindow*> Performance::sanitizedAttribution(
-    const HeapHashSet<Member<Frame>>& frames,
+    ExecutionContext* taskContext,
+    bool hasMultipleContexts,
     Frame* observerFrame) {
-  if (frames.size() == 0) {
+  if (hasMultipleContexts) {
+    // Unable to attribute, multiple script execution contents were involved.
+    return std::make_pair(kAmbiguousAttribution, nullptr);
+  }
+
+  if (!taskContext || !taskContext->isDocument() ||
+      !toDocument(taskContext)->frame()) {
     // Unable to attribute as no script was involved.
     return std::make_pair(kUnknownAttribution, nullptr);
   }
-  if (frames.size() > 1) {
-    // Unable to attribute, multiple script execution contents were involved.
-    return std::make_pair(kAmbugiousAttribution, nullptr);
-  }
+
   // Exactly one culprit location, attribute based on origin boundary.
-  DCHECK_EQ(1u, frames.size());
-  Frame* culpritFrame = *frames.begin();
+  Frame* culpritFrame = toDocument(taskContext)->frame();
   DCHECK(culpritFrame);
   if (canAccessOrigin(observerFrame, culpritFrame)) {
     // From accessible frames or same origin, return culprit location URL.
-    return std::make_pair(kSameOriginAttribution, culpritFrame->domWindow());
+    return std::make_pair(sameOriginAttribution(observerFrame, culpritFrame),
+                          culpritFrame->domWindow());
   }
   // For cross-origin, if the culprit is the descendant or ancestor of
   // observer then indicate the *closest* cross-origin frame between
@@ -180,22 +218,33 @@ std::pair<String, DOMWindow*> Performance::sanitizedAttribution(
         lastCrossOriginFrame = frame;
       }
     }
-    return std::make_pair(kDescendantAttribution,
+    return std::make_pair(kCrossOriginDescendantAttribution,
                           lastCrossOriginFrame->domWindow());
   }
   if (observerFrame->tree().isDescendantOf(culpritFrame)) {
-    return std::make_pair(kAncestorAttribution, nullptr);
+    return std::make_pair(kCrossOriginAncestorAttribution, nullptr);
   }
   return std::make_pair(kCrossOriginAttribution, nullptr);
 }
 
-void Performance::reportLongTask(
-    double startTime,
-    double endTime,
-    const HeapHashSet<Member<Frame>>& contextFrames) {
-  std::pair<String, DOMWindow*> attribution =
-      Performance::sanitizedAttribution(contextFrames, frame());
-  addLongTaskTiming(startTime, endTime, attribution.first, attribution.second);
+void Performance::reportLongTask(double startTime,
+                                 double endTime,
+                                 ExecutionContext* taskContext,
+                                 bool hasMultipleContexts) {
+  std::pair<String, DOMWindow*> attribution = Performance::sanitizedAttribution(
+      taskContext, hasMultipleContexts, frame());
+  DOMWindow* culpritDomWindow = attribution.second;
+  if (!culpritDomWindow || !culpritDomWindow->document() ||
+      !culpritDomWindow->document()->localOwner()) {
+    addLongTaskTiming(startTime, endTime, attribution.first, "", "", "");
+  } else {
+    HTMLFrameOwnerElement* frameOwner =
+        culpritDomWindow->document()->localOwner();
+    addLongTaskTiming(startTime, endTime, attribution.first,
+                      getFrameAttribute(frameOwner, HTMLNames::srcAttr, false),
+                      getFrameAttribute(frameOwner, HTMLNames::idAttr, false),
+                      getFrameAttribute(frameOwner, HTMLNames::nameAttr, true));
+  }
 }
 
 }  // namespace blink

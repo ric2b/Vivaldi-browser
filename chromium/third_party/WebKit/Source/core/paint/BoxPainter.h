@@ -15,7 +15,9 @@
 namespace blink {
 
 class ComputedStyle;
+class Document;
 class FillLayer;
+class FloatRoundedRect;
 class GraphicsContext;
 class Image;
 class InlineFlowBox;
@@ -90,17 +92,35 @@ class BoxPainter {
                           BackgroundBleedAvoidance = BackgroundBleedNone,
                           bool includeLogicalLeftEdge = true,
                           bool includeLogicalRightEdge = true);
-  static void paintBoxShadow(const PaintInfo&,
-                             const LayoutRect&,
-                             const ComputedStyle&,
-                             ShadowStyle,
-                             bool includeLogicalLeftEdge = true,
-                             bool includeLogicalRightEdge = true);
+  static void paintNormalBoxShadow(const PaintInfo&,
+                                   const LayoutRect&,
+                                   const ComputedStyle&,
+                                   bool includeLogicalLeftEdge = true,
+                                   bool includeLogicalRightEdge = true);
+  // The input rect should be the border rect. The outer bounds of the shadow
+  // will be inset by border widths.
+  static void paintInsetBoxShadow(const PaintInfo&,
+                                  const LayoutRect&,
+                                  const ComputedStyle&,
+                                  bool includeLogicalLeftEdge = true,
+                                  bool includeLogicalRightEdge = true);
+  // This form is used by callers requiring special computation of the outer
+  // bounds of the shadow. For example, TableCellPainter insets the bounds by
+  // half widths of collapsed borders instead of the default whole widths.
+  static void paintInsetBoxShadowInBounds(const PaintInfo&,
+                                          const FloatRoundedRect& bounds,
+                                          const ComputedStyle&,
+                                          bool includeLogicalLeftEdge = true,
+                                          bool includeLogicalRightEdge = true);
   static bool shouldForceWhiteBackgroundForPrintEconomy(const ComputedStyle&,
                                                         const Document&);
 
   LayoutRect boundsForDrawingRecorder(const PaintInfo&,
                                       const LayoutPoint& adjustedPaintOffset);
+
+  static bool isPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
+      const LayoutBoxModelObject*,
+      const PaintInfo&);
 
  private:
   void paintBackground(const PaintInfo&,

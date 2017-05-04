@@ -24,15 +24,16 @@ FakeOfflinePageModel::FakeOfflinePageModel() {
   is_loaded_ = true;
 }
 
-FakeOfflinePageModel::~FakeOfflinePageModel() {}
+FakeOfflinePageModel::~FakeOfflinePageModel() = default;
 
 void FakeOfflinePageModel::GetPagesMatchingQuery(
     std::unique_ptr<offline_pages::OfflinePageModelQuery> query,
     const MultipleOfflinePageItemCallback& callback) {
   MultipleOfflinePageItemResult filtered_result;
   for (auto& item : items_) {
-    if (query->Matches(item))
+    if (query->Matches(item)) {
       filtered_result.emplace_back(item);
+    }
   }
   callback.Run(filtered_result);
 }

@@ -103,10 +103,10 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   int id() const { return id_; }
   void set_id(int id) { id_ = id; }
 
-  const std::string& name() const { return name_; }
+  const std::string& GetName() const;
   void SetName(const std::string& name);
 
-  const base::string16 title() const { return title_; }
+  const base::string16& GetTitle() const;
   void SetTitle(const base::string16& title);
 
   bool transparent() const { return transparent_; }
@@ -134,10 +134,6 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   const WindowTreeHost* GetHost() const;
   void set_host(WindowTreeHost* host) { host_ = host; }
   bool IsRootWindow() const { return !!host_; }
-
-  // The Window does not own this object.
-  void set_user_data(void* user_data) { user_data_ = user_data; }
-  void* user_data() const { return user_data_; }
 
   // Changes the visibility of the window.
   void Show();
@@ -500,17 +496,12 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   bool visible_;
 
   int id_;
-  std::string name_;
-
-  base::string16 title_;
 
   // Whether layer is initialized as non-opaque.
   bool transparent_;
 
   std::unique_ptr<LayoutManager> layout_manager_;
   std::unique_ptr<ui::EventTargeter> targeter_;
-
-  void* user_data_;
 
   // Makes the window pass all events through to any windows behind it.
   bool ignore_events_;

@@ -29,8 +29,8 @@
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "core/dom/ActiveDOMObject.h"
 #include "core/dom/DOMTypedArray.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/events/EventListener.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
@@ -85,9 +85,10 @@ class WaveShaperNode;
 // are created from it.  For thread safety between the audio thread and the main
 // thread, it has a rendering graph locking mechanism.
 
-class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
-                                        public ActiveScriptWrappable,
-                                        public ActiveDOMObject {
+class MODULES_EXPORT BaseAudioContext
+    : public EventTargetWithInlineData,
+      public ActiveScriptWrappable<BaseAudioContext>,
+      public SuspendableObject {
   USING_GARBAGE_COLLECTED_MIXIN(BaseAudioContext);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -113,7 +114,7 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   }
 
   // Document notification
-  void contextDestroyed() final;
+  void contextDestroyed(ExecutionContext*) final;
   bool hasPendingActivity() const final;
 
   // Cannnot be called from the audio thread.
@@ -138,6 +139,11 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
 
   float sampleRate() const {
     return m_destinationNode ? m_destinationNode->handler().sampleRate() : 0;
+  }
+
+  size_t callbackBufferSize() const {
+    return m_destinationNode ? m_destinationNode->handler().callbackBufferSize()
+                             : 0;
   }
 
   String state() const;
@@ -238,7 +244,7 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   void notifySourceNodeFinishedProcessing(AudioHandler*);
 
   // Called at the start of each render quantum.
-  void handlePreRenderTasks();
+  void handlePreRenderTasks(const AudioIOPosition& outputPosition);
 
   // Called at the end of each render quantum.
   void handlePostRenderTasks();
@@ -267,7 +273,7 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   void lock() { deferredTaskHandler().lock(); }
   bool tryLock() { return deferredTaskHandler().tryLock(); }
   void unlock() { deferredTaskHandler().unlock(); }
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   // Returns true if this thread owns the context's lock.
   bool isGraphOwner() { return deferredTaskHandler().isGraphOwner(); }
 #endif
@@ -345,6 +351,8 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
 
   // Returns whether the AudioContext is allowed to start rendering.
   bool isAllowedToStart() const;
+
+  AudioIOPosition outputPosition();
 
  private:
   friend class BaseAudioContextTest;
@@ -449,6 +457,7 @@ class MODULES_EXPORT BaseAudioContext : public EventTargetWithInlineData,
   enum { MaxNumberOfChannels = 32 };
 
   Optional<AutoplayStatus> m_autoplayStatus;
+  AudioIOPosition m_outputPosition;
 };
 
 }  // namespace blink

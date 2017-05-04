@@ -11,6 +11,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/logging.h"
 #include "jni/AndroidNetworkLibrary_jni.h"
+#include "net/dns/dns_protocol.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
@@ -79,6 +80,12 @@ bool StoreKeyPair(const uint8_t* public_key,
   return ret;
 }
 
+bool IsCleartextPermitted(const std::string& host) {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jstring> host_string = ConvertUTF8ToJavaString(env, host);
+  return Java_AndroidNetworkLibrary_isCleartextPermitted(env, host_string);
+}
+
 bool HaveOnlyLoopbackAddresses() {
   JNIEnv* env = AttachCurrentThread();
   return Java_AndroidNetworkLibrary_haveOnlyLoopbackAddresses(env);
@@ -127,11 +134,34 @@ bool GetIsRoaming() {
       base::android::GetApplicationContext());
 }
 
+bool GetIsCaptivePortal() {
+  return Java_AndroidNetworkLibrary_getIsCaptivePortal(
+      base::android::AttachCurrentThread(),
+      base::android::GetApplicationContext());
+}
+
 std::string GetWifiSSID() {
   return base::android::ConvertJavaStringToUTF8(
       Java_AndroidNetworkLibrary_getWifiSSID(
           base::android::AttachCurrentThread(),
           base::android::GetApplicationContext()));
+}
+
+void GetDnsServers(std::vector<IPEndPoint>* dns_servers) {
+  JNIEnv* env = AttachCurrentThread();
+  std::vector<std::string> dns_servers_strings;
+  base::android::JavaArrayOfByteArrayToStringVector(
+      env, Java_AndroidNetworkLibrary_getDnsServers(
+               env, base::android::GetApplicationContext())
+               .obj(),
+      &dns_servers_strings);
+  for (const std::string& dns_address_string : dns_servers_strings) {
+    IPAddress dns_address(
+        reinterpret_cast<const uint8_t*>(dns_address_string.c_str()),
+        dns_address_string.size());
+    IPEndPoint dns_server(dns_address, dns_protocol::kDefaultPort);
+    dns_servers->push_back(dns_server);
+  }
 }
 
 }  // namespace android

@@ -77,7 +77,7 @@ class ListHashSet
           ListHashSet<ValueArg, inlineCapacity, HashArg, AllocatorArg>,
           AllocatorArg::isGarbageCollected> {
   typedef AllocatorArg Allocator;
-  WTF_USE_ALLOCATOR(ListHashSet, Allocator);
+  USE_ALLOCATOR(ListHashSet, Allocator);
 
   typedef ListHashSetNode<ValueArg, Allocator> Node;
   typedef HashTraits<Node*> NodeTraits;
@@ -266,23 +266,14 @@ class ListHashSetNodeBase {
 
  protected:
   template <typename U>
-  explicit ListHashSetNodeBase(U&& value)
-      : m_value(std::forward<U>(value)),
-        m_prev(nullptr),
-        m_next(nullptr)
-#if ENABLE(ASSERT)
-        ,
-        m_isAllocated(true)
-#endif
-  {
-  }
+  explicit ListHashSetNodeBase(U&& value) : m_value(std::forward<U>(value)) {}
 
  public:
   ValueArg m_value;
-  ListHashSetNodeBase* m_prev;
-  ListHashSetNodeBase* m_next;
-#if ENABLE(ASSERT)
-  bool m_isAllocated;
+  ListHashSetNodeBase* m_prev = nullptr;
+  ListHashSetNodeBase* m_next = nullptr;
+#if DCHECK_IS_ON()
+  bool m_isAllocated = true;
 #endif
 };
 
@@ -313,12 +304,12 @@ struct ListHashSetAllocator : public PartitionAllocator {
     }
 
     void deallocate(Node* node) const {
-      ASSERT(m_allocator);
+      DCHECK(m_allocator);
       m_allocator->deallocate(node);
     }
 
     ListHashSetAllocator* get() const {
-      ASSERT(m_allocator);
+      DCHECK(m_allocator);
       return m_allocator;
     }
 
@@ -340,18 +331,24 @@ struct ListHashSetAllocator : public PartitionAllocator {
       return static_cast<Node*>(WTF::Partitions::fastMalloc(
           sizeof(NodeBase), WTF_HEAP_PROFILER_TYPE_NAME(Node)));
 
-    ASSERT(!result->m_isAllocated);
+#if DCHECK_IS_ON()
+    DCHECK(!result->m_isAllocated);
+#endif
 
     Node* next = result->next();
-    ASSERT(!next || !next->m_isAllocated);
+#if DCHECK_IS_ON()
+    DCHECK(!next || !next->m_isAllocated);
+#endif
     if (!next && !m_isDoneWithInitialFreeList) {
       next = result + 1;
       if (next == pastPool()) {
         m_isDoneWithInitialFreeList = true;
         next = nullptr;
       } else {
-        ASSERT(inPool(next));
-        ASSERT(!next->m_isAllocated);
+        DCHECK(inPool(next));
+#if DCHECK_IS_ON()
+        DCHECK(!next->m_isAllocated);
+#endif
       }
     }
     m_freeList = next;
@@ -361,7 +358,7 @@ struct ListHashSetAllocator : public PartitionAllocator {
 
   void deallocate(Node* node) {
     if (inPool(node)) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
       node->m_isAllocated = false;
 #endif
       node->m_next = m_freeList;
@@ -418,13 +415,13 @@ class ListHashSetNode : public ListHashSetNodeBase<ValueArg> {
   }
 
   bool wasAlreadyDestructed() const {
-    ASSERT(NodeAllocator::isGarbageCollected);
+    DCHECK(NodeAllocator::isGarbageCollected);
     return this->m_prev == unlinkedNodePointer();
   }
 
   static void finalize(void* pointer) {
     // No need to waste time calling finalize if it's not needed.
-    ASSERT(!IsTriviallyDestructible<ValueArg>::value);
+    DCHECK(!IsTriviallyDestructible<ValueArg>::value);
     ListHashSetNode* self = reinterpret_cast_ptr<ListHashSetNode*>(pointer);
 
     // Check whether this node was already destructed before being unlinked
@@ -538,6 +535,11 @@ class ListHashSetIterator {
 
   operator const_iterator() const { return m_iterator; }
 
+  template <typename VisitorDispatcher>
+  void trace(VisitorDispatcher visitor) {
+    m_iterator.trace(visitor);
+  }
+
  private:
   Node* getNode() { return m_iterator.getNode(); }
 
@@ -571,13 +573,13 @@ class ListHashSetConstIterator {
   PointerType operator->() const { return get(); }
 
   ListHashSetConstIterator& operator++() {
-    ASSERT(m_position != 0);
+    DCHECK(m_position);
     m_position = m_position->next();
     return *this;
   }
 
   ListHashSetConstIterator& operator--() {
-    ASSERT(m_position != m_set->m_head);
+    DCHECK_NE(m_position, m_set->m_head);
     if (!m_position)
       m_position = m_set->m_tail;
     else
@@ -593,6 +595,12 @@ class ListHashSetConstIterator {
   }
   bool operator!=(const ListHashSetConstIterator& other) const {
     return m_position != other.m_position;
+  }
+
+  template <typename VisitorDispatcher>
+  void trace(VisitorDispatcher visitor) {
+    visitor->trace(*m_set);
+    visitor->trace(m_position);
   }
 
  private:
@@ -649,6 +657,11 @@ class ListHashSetReverseIterator {
 
   operator const_reverse_iterator() const { return m_iterator; }
 
+  template <typename VisitorDispatcher>
+  void trace(VisitorDispatcher visitor) {
+    m_iterator.trace(visitor);
+  }
+
  private:
   Node* getNode() { return m_iterator.node(); }
 
@@ -682,13 +695,13 @@ class ListHashSetConstReverseIterator {
   PointerType operator->() const { return get(); }
 
   ListHashSetConstReverseIterator& operator++() {
-    ASSERT(m_position != 0);
+    DCHECK(m_position);
     m_position = m_position->prev();
     return *this;
   }
 
   ListHashSetConstReverseIterator& operator--() {
-    ASSERT(m_position != m_set->m_tail);
+    DCHECK_NE(m_position, m_set->m_tail);
     if (!m_position)
       m_position = m_set->m_head;
     else
@@ -704,6 +717,12 @@ class ListHashSetConstReverseIterator {
   }
   bool operator!=(const ListHashSetConstReverseIterator& other) const {
     return m_position != other.m_position;
+  }
+
+  template <typename VisitorDispatcher>
+  void trace(VisitorDispatcher visitor) {
+    visitor->trace(*m_set);
+    visitor->trace(m_position);
   }
 
  private:
@@ -733,9 +752,15 @@ struct ListHashSetTranslator {
   }
 };
 
-template <typename T, size_t inlineCapacity, typename U, typename V>
-inline ListHashSet<T, inlineCapacity, U, V>::ListHashSet()
-    : m_head(nullptr), m_tail(nullptr) {}
+template <typename T, size_t inlineCapacity, typename U, typename Allocator>
+inline ListHashSet<T, inlineCapacity, U, Allocator>::ListHashSet()
+    : m_head(nullptr), m_tail(nullptr) {
+  static_assert(
+      Allocator::isGarbageCollected ||
+          !IsPointerToGarbageCollectedType<T>::value,
+      "Cannot put raw pointers to garbage-collected classes into "
+      "an off-heap ListHashSet. Use HeapListHashSet<Member<T>> instead.");
+}
 
 template <typename T, size_t inlineCapacity, typename U, typename V>
 inline ListHashSet<T, inlineCapacity, U, V>::ListHashSet(
@@ -785,38 +810,38 @@ inline void ListHashSet<T, inlineCapacity, U, V>::finalize() {
 
 template <typename T, size_t inlineCapacity, typename U, typename V>
 inline T& ListHashSet<T, inlineCapacity, U, V>::first() {
-  ASSERT(!isEmpty());
+  DCHECK(!isEmpty());
   return m_head->m_value;
 }
 
 template <typename T, size_t inlineCapacity, typename U, typename V>
 inline void ListHashSet<T, inlineCapacity, U, V>::removeFirst() {
-  ASSERT(!isEmpty());
+  DCHECK(!isEmpty());
   m_impl.remove(m_head);
   unlinkAndDelete(m_head);
 }
 
 template <typename T, size_t inlineCapacity, typename U, typename V>
 inline const T& ListHashSet<T, inlineCapacity, U, V>::first() const {
-  ASSERT(!isEmpty());
+  DCHECK(!isEmpty());
   return m_head->m_value;
 }
 
 template <typename T, size_t inlineCapacity, typename U, typename V>
 inline T& ListHashSet<T, inlineCapacity, U, V>::last() {
-  ASSERT(!isEmpty());
+  DCHECK(!isEmpty());
   return m_tail->m_value;
 }
 
 template <typename T, size_t inlineCapacity, typename U, typename V>
 inline const T& ListHashSet<T, inlineCapacity, U, V>::last() const {
-  ASSERT(!isEmpty());
+  DCHECK(!isEmpty());
   return m_tail->m_value;
 }
 
 template <typename T, size_t inlineCapacity, typename U, typename V>
 inline void ListHashSet<T, inlineCapacity, U, V>::removeLast() {
-  ASSERT(!isEmpty());
+  DCHECK(!isEmpty());
   m_impl.remove(m_tail);
   unlinkAndDelete(m_tail);
 }
@@ -1003,7 +1028,7 @@ auto ListHashSet<T, inlineCapacity, U, V>::take(ValuePeekInType value)
 
 template <typename T, size_t inlineCapacity, typename U, typename V>
 auto ListHashSet<T, inlineCapacity, U, V>::takeFirst() -> ValueType {
-  ASSERT(!isEmpty());
+  DCHECK(!isEmpty());
   m_impl.remove(m_head);
   ValueType result = std::move(m_head->m_value);
   unlinkAndDelete(m_head);
@@ -1014,18 +1039,18 @@ auto ListHashSet<T, inlineCapacity, U, V>::takeFirst() -> ValueType {
 template <typename T, size_t inlineCapacity, typename U, typename Allocator>
 void ListHashSet<T, inlineCapacity, U, Allocator>::unlink(Node* node) {
   if (!node->m_prev) {
-    ASSERT(node == m_head);
+    DCHECK_EQ(node, m_head);
     m_head = node->next();
   } else {
-    ASSERT(node != m_head);
+    DCHECK_NE(node, m_head);
     node->m_prev->m_next = node->m_next;
   }
 
   if (!node->m_next) {
-    ASSERT(node == m_tail);
+    DCHECK_EQ(node, m_tail);
     m_tail = node->prev();
   } else {
-    ASSERT(node != m_tail);
+    DCHECK_NE(node, m_tail);
     node->m_next->m_prev = node->m_prev;
   }
 }
@@ -1042,10 +1067,10 @@ void ListHashSet<T, inlineCapacity, U, V>::appendNode(Node* node) {
   node->m_next = nullptr;
 
   if (m_tail) {
-    ASSERT(m_head);
+    DCHECK(m_head);
     m_tail->m_next = node;
   } else {
-    ASSERT(!m_head);
+    DCHECK(!m_head);
     m_head = node;
   }
 

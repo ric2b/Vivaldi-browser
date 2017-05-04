@@ -79,8 +79,21 @@ class MultiColumnFragmentainerGroup {
                                            LayoutBox::PageBoundaryRule,
                                            CoordinateSpaceConversion) const;
   LayoutUnit columnLogicalTopForOffset(LayoutUnit offsetInFlowThread) const;
+
+  // If SnapToColumnPolicy is SnapToColumn, visualPointToFlowThreadPoint() won't
+  // return points that lie outside the bounds of the columns: Before converting
+  // to a flow thread position, if the block direction coordinate is outside the
+  // column, snap to the bounds of the column, and reset the inline direction
+  // coordinate to the start position in the column. The effect of this is that
+  // if the block position is before the column rectangle, we'll get to the
+  // beginning of this column, while if the block position is after the column
+  // rectangle, we'll get to the beginning of the next column. This is behavior
+  // that positionForPoint() depends on.
+  enum SnapToColumnPolicy { DontSnapToColumn, SnapToColumn };
   LayoutPoint visualPointToFlowThreadPoint(
-      const LayoutPoint& visualPoint) const;
+      const LayoutPoint& visualPoint,
+      SnapToColumnPolicy = DontSnapToColumn) const;
+
   LayoutRect fragmentsBoundingBox(
       const LayoutRect& boundingBoxInFlowThread) const;
 
@@ -157,12 +170,12 @@ class CORE_EXPORT MultiColumnFragmentainerGroupList {
   // Remove all fragmentainer groups but the first one.
   void deleteExtraGroups();
 
-  MultiColumnFragmentainerGroup& first() { return m_groups.first(); }
+  MultiColumnFragmentainerGroup& first() { return m_groups.front(); }
   const MultiColumnFragmentainerGroup& first() const {
-    return m_groups.first();
+    return m_groups.front();
   }
-  MultiColumnFragmentainerGroup& last() { return m_groups.last(); }
-  const MultiColumnFragmentainerGroup& last() const { return m_groups.last(); }
+  MultiColumnFragmentainerGroup& last() { return m_groups.back(); }
+  const MultiColumnFragmentainerGroup& last() const { return m_groups.back(); }
 
   typedef Vector<MultiColumnFragmentainerGroup, 1>::iterator iterator;
   typedef Vector<MultiColumnFragmentainerGroup, 1>::const_iterator
@@ -180,7 +193,7 @@ class CORE_EXPORT MultiColumnFragmentainerGroupList {
   }
 
   void append(const MultiColumnFragmentainerGroup& group) {
-    m_groups.append(group);
+    m_groups.push_back(group);
   }
   void shrink(size_t size) { m_groups.shrink(size); }
 

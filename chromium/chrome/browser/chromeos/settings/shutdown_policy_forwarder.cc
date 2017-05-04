@@ -21,18 +21,11 @@ ShutdownPolicyForwarder::ShutdownPolicyForwarder()
 ShutdownPolicyForwarder::~ShutdownPolicyForwarder() {}
 
 void ShutdownPolicyForwarder::OnShutdownPolicyChanged(bool reboot_on_shutdown) {
-  service_manager::Connector* connector =
-      content::ServiceManagerConnection::GetForProcess()->GetConnector();
-
   // Shutdown policy changes rarely so don't bother caching the connection.
   ash::mojom::ShutdownControllerPtr shutdown_controller;
-
-  // Under mash the ShutdownController interface is in the ash process. In
-  // classic ash the browser provides it to itself.
-  if (chrome::IsRunningInMash())
-    connector->ConnectToInterface("ash", &shutdown_controller);
-  else
-    connector->ConnectToInterface("content_browser", &shutdown_controller);
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->BindInterface(ash_util::GetAshServiceName(), &shutdown_controller);
 
   // Forward the setting to ash.
   shutdown_controller->SetRebootOnShutdown(reboot_on_shutdown);

@@ -13,6 +13,10 @@
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 const char kTestCertFileName[] = "ok_cert.pem";
 const char kTestHostName[] = "https://chromium.test/";
@@ -51,7 +55,7 @@ TEST_F(IOSSSLErrorHandlerTest, NonOverridable) {
   __block bool do_not_proceed_callback_called = false;
   IOSSSLErrorHandler::HandleSSLError(
       web_state(), net::ERR_CERT_AUTHORITY_INVALID, ssl_info, url, false,
-      base::BindBlock(^(bool proceed) {
+      base::BindBlockArc(^(bool proceed) {
         EXPECT_FALSE(proceed);
         do_not_proceed_callback_called = true;
       }));
@@ -75,7 +79,7 @@ TEST_F(IOSSSLErrorHandlerTest, DISABLED_OverridableProceed) {
   __block bool proceed_callback_called = false;
   IOSSSLErrorHandler::HandleSSLError(
       web_state(), net::ERR_CERT_AUTHORITY_INVALID, ssl_info, url, true,
-      base::BindBlock(^(bool proceed) {
+      base::BindBlockArc(^(bool proceed) {
         EXPECT_TRUE(proceed);
         proceed_callback_called = true;
       }));
@@ -98,7 +102,7 @@ TEST_F(IOSSSLErrorHandlerTest, OverridableDontProceed) {
   __block bool do_not_proceed_callback_called = false;
   IOSSSLErrorHandler::HandleSSLError(
       web_state(), net::ERR_CERT_AUTHORITY_INVALID, ssl_info, url, true,
-      base::BindBlock(^(bool proceed) {
+      base::BindBlockArc(^(bool proceed) {
         EXPECT_FALSE(proceed);
         do_not_proceed_callback_called = true;
       }));

@@ -5,12 +5,11 @@
 #include "ash/mus/test/ash_test_impl_mus.h"
 
 #include "ash/common/test/ash_test.h"
-#include "ash/mus/bridge/wm_window_mus.h"
+#include "ash/common/wm_window.h"
 #include "base/memory/ptr_util.h"
 #include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/cpp/window.h"
-#include "services/ui/public/cpp/window_property.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "ui/wm/core/window_util.h"
 
 namespace ash {
 namespace mus {
@@ -59,8 +58,8 @@ std::unique_ptr<WindowOwner> AshTestImplMus::CreateTestWindow(
     const gfx::Rect& bounds_in_screen,
     ui::wm::WindowType type,
     int shell_window_id) {
-  WmWindowMus* window =
-      WmWindowMus::Get(wm_test_base_->CreateTestWindow(bounds_in_screen, type));
+  WmWindow* window =
+      WmWindow::Get(wm_test_base_->CreateTestWindow(bounds_in_screen, type));
   window->SetShellWindowId(shell_window_id);
   return base::MakeUnique<WindowOwner>(window);
 }
@@ -88,15 +87,17 @@ bool AshTestImplMus::SetSecondaryDisplayPlacement(
 void AshTestImplMus::ConfigureWidgetInitParamsForDisplay(
     WmWindow* window,
     views::Widget::InitParams* init_params) {
+  init_params->context = WmWindow::GetAuraWindow(window);
   init_params
-      ->mus_properties[ui::mojom::WindowManager::kInitialDisplayId_Property] =
+      ->mus_properties[ui::mojom::WindowManager::kDisplayId_InitProperty] =
       mojo::ConvertTo<std::vector<uint8_t>>(
-          WmWindowMus::GetMusWindow(window)->display_id());
+          window->GetDisplayNearestWindow().id());
 }
 
 void AshTestImplMus::AddTransientChild(WmWindow* parent, WmWindow* window) {
-  WmWindowMus::GetMusWindow(parent)->AddTransientWindow(
-      WmWindowMus::GetMusWindow(window));
+  // TODO(sky): remove this as both classes can share same implementation now.
+  ::wm::AddTransientChild(WmWindow::GetAuraWindow(parent),
+                          WmWindow::GetAuraWindow(window));
 }
 
 }  // namespace mus

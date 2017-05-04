@@ -7,6 +7,7 @@ package org.chromium.net;
 import android.content.Context;
 import android.os.ConditionVariable;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
@@ -18,7 +19,7 @@ import org.chromium.base.test.util.UrlUtils;
 @JNINamespace("cronet")
 public final class QuicTestServer {
     private static final ConditionVariable sBlock = new ConditionVariable();
-    private static final String TAG = "cr.QuicTestServer";
+    private static final String TAG = QuicTestServer.class.getSimpleName();
 
     private static final String CERT_USED = "quic_test.example.com.crt";
     private static final String KEY_USED = "quic_test.example.com.key";
@@ -73,6 +74,7 @@ public final class QuicTestServer {
     }
 
     public static long createMockCertVerifier() {
+        TestFilesInstaller.installIfNeeded(ContextUtils.getApplicationContext());
         return MockCertVerifier.createMockCertVerifier(CERTS_USED, true);
     }
 

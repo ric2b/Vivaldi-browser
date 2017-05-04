@@ -52,35 +52,35 @@ TEST_F(HTMLFormControlElementTest, customValidationMessageTextDirection) {
 
   String message = input->validationMessage().stripWhiteSpace();
   String subMessage = input->validationSubMessage().stripWhiteSpace();
-  TextDirection messageDir = RTL;
-  TextDirection subMessageDir = LTR;
+  TextDirection messageDir = TextDirection::kRtl;
+  TextDirection subMessageDir = TextDirection::kLtr;
 
   input->findCustomValidationMessageTextDirection(message, messageDir,
                                                   subMessage, subMessageDir);
-  EXPECT_EQ(RTL, messageDir);
-  EXPECT_EQ(LTR, subMessageDir);
+  EXPECT_EQ(TextDirection::kRtl, messageDir);
+  EXPECT_EQ(TextDirection::kLtr, subMessageDir);
 
-  input->layoutObject()->mutableStyleRef().setDirection(RTL);
+  input->layoutObject()->mutableStyleRef().setDirection(TextDirection::kRtl);
   input->findCustomValidationMessageTextDirection(message, messageDir,
                                                   subMessage, subMessageDir);
-  EXPECT_EQ(RTL, messageDir);
-  EXPECT_EQ(LTR, subMessageDir);
+  EXPECT_EQ(TextDirection::kRtl, messageDir);
+  EXPECT_EQ(TextDirection::kLtr, subMessageDir);
 
   input->setCustomValidity(String::fromUTF8("Main message."));
   message = input->validationMessage().stripWhiteSpace();
   subMessage = input->validationSubMessage().stripWhiteSpace();
   input->findCustomValidationMessageTextDirection(message, messageDir,
                                                   subMessage, subMessageDir);
-  EXPECT_EQ(LTR, messageDir);
-  EXPECT_EQ(LTR, subMessageDir);
+  EXPECT_EQ(TextDirection::kLtr, messageDir);
+  EXPECT_EQ(TextDirection::kLtr, subMessageDir);
 
   input->setCustomValidity(String());
   message = input->validationMessage().stripWhiteSpace();
   subMessage = input->validationSubMessage().stripWhiteSpace();
   input->findCustomValidationMessageTextDirection(message, messageDir,
                                                   subMessage, subMessageDir);
-  EXPECT_EQ(LTR, messageDir);
-  EXPECT_EQ(RTL, subMessageDir);
+  EXPECT_EQ(TextDirection::kLtr, messageDir);
+  EXPECT_EQ(TextDirection::kRtl, subMessageDir);
 }
 
 }  // namespace blink

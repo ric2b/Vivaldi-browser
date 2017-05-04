@@ -11,6 +11,7 @@
 #include "base/event_types.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "cc/surfaces/frame_sink_id.h"
 #include "ui/aura/aura_export.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/ime/input_method_delegate.h"
@@ -52,15 +53,13 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   ~WindowTreeHost() override;
 
   // Creates a new WindowTreeHost. The caller owns the returned value.
-  static WindowTreeHost* Create(const gfx::Rect& bounds);
+  static WindowTreeHost* Create(const gfx::Rect& bounds_in_pixels);
 
   // Returns the WindowTreeHost for the specified accelerated widget, or NULL
   // if there is none associated.
   static WindowTreeHost* GetForAcceleratedWidget(gfx::AcceleratedWidget widget);
 
   void InitHost();
-
-  void InitCompositor();
 
   void AddObserver(WindowTreeHostObserver* observer);
   void RemoveObserver(WindowTreeHostObserver* observer);
@@ -85,33 +84,34 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
 
   // Sets padding applied to the output surface. The output surface is sized to
   // to the size of the host plus output surface padding. |window()| is offset
-  // by |padding|, that is, |window|'s origin is set to padding.left(),
-  // padding.top().
+  // by |padding_in_pixels|, that is, |window|'s origin is set to
+  // padding_in_pixels.left(), padding_in_pixels.top().
   // This does not impact the bounds as returned from GetBounds(), only the
   // output surface size and location of window(). Additionally window() is
   // sized to the size set by bounds (more specifically the size passed to
-  // OnHostResized()), but the location of window() is set to that of
-  // |padding|.
-  void SetOutputSurfacePadding(const gfx::Insets& padding);
+  // OnHostResizedInPixels()), but the location of window() is set to that of
+  // |padding_in_pixels|.
+  void SetOutputSurfacePaddingInPixels(const gfx::Insets& padding_in_pixels);
 
-  // Updates the root window's size using |host_size|, current
+  // Updates the root window's size using |host_size_in_pixels|, current
   // transform and outsets.
-  virtual void UpdateRootWindowSize(const gfx::Size& host_size);
+  virtual void UpdateRootWindowSizeInPixels(
+      const gfx::Size& host_size_in_pixels);
 
   // Converts |point| from the root window's coordinate system to native
   // screen's.
-  void ConvertPointToNativeScreen(gfx::Point* point) const;
+  void ConvertDIPToScreenInPixels(gfx::Point* point) const;
 
   // Converts |point| from native screen coordinate system to the root window's.
-  void ConvertPointFromNativeScreen(gfx::Point* point) const;
+  void ConvertScreenInPixelsToDIP(gfx::Point* point) const;
 
   // Converts |point| from the root window's coordinate system to the
   // host window's.
-  void ConvertPointToHost(gfx::Point* point) const;
+  void ConvertDIPToPixels(gfx::Point* point) const;
 
   // Converts |point| from the host window's coordinate system to the
   // root window's.
-  void ConvertPointFromHost(gfx::Point* point) const;
+  void ConvertPixelsToDIP(gfx::Point* point) const;
 
   // Cursor.
   // Sets the currently-displayed cursor. If the cursor was previously hidden
@@ -124,10 +124,10 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   void OnCursorVisibilityChanged(bool visible);
 
   // Moves the cursor to the specified location relative to the root window.
-  void MoveCursorTo(const gfx::Point& location);
+  void MoveCursorToLocationInDIP(const gfx::Point& location_in_dip);
 
-  // Moves the cursor to the |host_location| given in host coordinates.
-  void MoveCursorToHostLocation(const gfx::Point& host_location);
+  // Moves the cursor to the |location_in_pixels| given in host coordinates.
+  void MoveCursorToLocationInPixels(const gfx::Point& location_in_pixels);
 
   gfx::NativeCursor last_cursor() const { return last_cursor_; }
 
@@ -173,8 +173,8 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   void Hide();
 
   // Gets/Sets the size of the WindowTreeHost (in pixels).
-  virtual gfx::Rect GetBounds() const = 0;
-  virtual void SetBounds(const gfx::Rect& bounds_in_pixels) = 0;
+  virtual gfx::Rect GetBoundsInPixels() const = 0;
+  virtual void SetBoundsInPixels(const gfx::Rect& bounds_in_pixels) = 0;
 
   // Sets the OS capture to the root window.
   virtual void SetCapture() = 0;
@@ -191,14 +191,19 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   void DestroyCompositor();
   void DestroyDispatcher();
 
-  void CreateCompositor();
+  // If frame_sink_id is not passed in, one will be grabbed from
+  // ContextFactoryPrivate.
+  void CreateCompositor(
+      const cc::FrameSinkId& frame_sink_id = cc::FrameSinkId());
+
+  void InitCompositor();
   void OnAcceleratedWidgetAvailable();
 
   // Returns the location of the RootWindow on native screen.
-  virtual gfx::Point GetLocationOnNativeScreen() const = 0;
+  virtual gfx::Point GetLocationOnScreenInPixels() const = 0;
 
-  void OnHostMoved(const gfx::Point& new_location);
-  void OnHostResized(const gfx::Size& new_size);
+  void OnHostMovedInPixels(const gfx::Point& new_location_in_pixels);
+  void OnHostResizedInPixels(const gfx::Size& new_size_in_pixels);
   void OnHostWorkspaceChanged();
   void OnHostCloseRequested();
   void OnHostActivated();
@@ -208,7 +213,8 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   virtual void SetCursorNative(gfx::NativeCursor cursor) = 0;
 
   // Moves the cursor to the specified location relative to the root window.
-  virtual void MoveCursorToNative(const gfx::Point& location) = 0;
+  virtual void MoveCursorToScreenLocationInPixels(
+      const gfx::Point& location_in_pixels) = 0;
 
   // kCalled when the cursor visibility has changed.
   virtual void OnCursorVisibilityChangedNative(bool show) = 0;
@@ -228,7 +234,7 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   friend class test::WindowTreeHostTestApi;
 
   // Moves the cursor to the specified location. This method is internally used
-  // by MoveCursorTo() and MoveCursorToHostLocation().
+  // by MoveCursorToLocationInDIP() and MoveCursorToLocationInPixels().
   void MoveCursorToInternal(const gfx::Point& root_location,
                             const gfx::Point& host_location);
 
@@ -258,7 +264,7 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   // Whether the InputMethod instance is owned by this WindowTreeHost.
   bool owned_input_method_;
 
-  gfx::Insets output_surface_padding_;
+  gfx::Insets output_surface_padding_in_pixels_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowTreeHost);
 };

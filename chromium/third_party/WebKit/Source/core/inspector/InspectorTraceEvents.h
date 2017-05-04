@@ -8,8 +8,8 @@
 #include "core/CoreExport.h"
 #include "core/css/CSSSelector.h"
 #include "platform/heap/Handle.h"
-#include "platform/tracing/TraceEvent.h"
-#include "platform/tracing/TracedValue.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TracedValue.h"
 #include "wtf/Forward.h"
 #include "wtf/Functional.h"
 #include <memory>
@@ -37,7 +37,7 @@ class GraphicsLayer;
 class HitTestLocation;
 class HitTestRequest;
 class HitTestResult;
-class ImageResource;
+class ImageResourceContent;
 class InvalidationSet;
 class PaintLayer;
 class LayoutRect;
@@ -214,7 +214,8 @@ std::unique_ptr<TracedValue> data(unsigned long identifier,
 namespace InspectorResourceFinishEvent {
 std::unique_ptr<TracedValue> data(unsigned long identifier,
                                   double finishTime,
-                                  bool didFail);
+                                  bool didFail,
+                                  int64_t encodedDataLength);
 }
 
 namespace InspectorTimerInstallEvent {
@@ -293,7 +294,8 @@ std::unique_ptr<TracedValue> data(LayoutObject*,
 namespace InspectorPaintImageEvent {
 std::unique_ptr<TracedValue> data(const LayoutImage&);
 std::unique_ptr<TracedValue> data(const LayoutObject&, const StyleImage&);
-std::unique_ptr<TracedValue> data(const LayoutObject*, const ImageResource&);
+std::unique_ptr<TracedValue> data(const LayoutObject*,
+                                  const ImageResourceContent&);
 }
 
 namespace InspectorCommitLoadEvent {

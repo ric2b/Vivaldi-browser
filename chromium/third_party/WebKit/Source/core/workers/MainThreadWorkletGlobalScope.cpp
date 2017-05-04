@@ -6,6 +6,7 @@
 
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/MainThreadDebugger.h"
@@ -19,9 +20,25 @@ MainThreadWorkletGlobalScope::MainThreadWorkletGlobalScope(
     PassRefPtr<SecurityOrigin> securityOrigin,
     v8::Isolate* isolate)
     : WorkletGlobalScope(url, userAgent, std::move(securityOrigin), isolate),
-      DOMWindowProperty(frame) {}
+      ContextClient(frame) {}
 
 MainThreadWorkletGlobalScope::~MainThreadWorkletGlobalScope() {}
+
+void MainThreadWorkletGlobalScope::countFeature(UseCounter::Feature feature) {
+  DCHECK(isMainThread());
+  // A parent document is on the same thread, so just record API use in the
+  // document's UseCounter.
+  UseCounter::count(frame(), feature);
+}
+
+void MainThreadWorkletGlobalScope::countDeprecation(
+    UseCounter::Feature feature) {
+  DCHECK(isMainThread());
+  // A parent document is on the same thread, so just record API use in the
+  // document's UseCounter.
+  addDeprecationMessage(feature);
+  Deprecation::countDeprecation(frame(), feature);
+}
 
 WorkerThread* MainThreadWorkletGlobalScope::thread() const {
   NOTREACHED();

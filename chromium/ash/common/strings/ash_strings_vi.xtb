@@ -41,6 +41,7 @@ Nhấn Shift + Alt để chuyển đổi.</translation>
 <translation id="1938872420421548906">Shift+Alt</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
+<translation id="2122028596993374965">Dừng truyền <ph name="TAB_NAME" /> sang <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Bộ sạc công suất thấp</translation>
 <translation id="2204305834655267233">Thông tin mạng</translation>
 <translation id="2208323208084708176">Chế độ màn hình đồng nhất</translation>
@@ -54,10 +55,8 @@ Nhấn Shift + Alt để chuyển đổi.</translation>
 <translation id="2429753432712299108">Thiết bị Bluetooth "<ph name="DEVICE_NAME" />" muốn được phép ghép nối. Trước khi chấp nhận, vui lòng xác nhận rằng mã xác nhận này đã hiển thị trên thiết bị đó: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">Đã xảy ra lôi</translation>
 <translation id="2509468283778169019">Đang bật CAPS LOCK</translation>
-<translation id="252373100621549798">Màn hình không xác định</translation>
 <translation id="2532589005999780174">Chế độ tương phản cao</translation>
 <translation id="2562916301614567480">Mạng riêng</translation>
-<translation id="2661637000095600270">Không thể phản chiếu màn hình do không tìm thấy độ phân giải được hỗ trợ. Thay vào đó, đã chuyển sang chế độ màn hình mở rộng. Nhấp để gửi báo cáo phản hồi.</translation>
 <translation id="2692809339924654275"><ph name="BLUETOOTH" />: Đang kết nối...</translation>
 <translation id="2700058918926273959">Phiên sẽ kết thúc sau <ph name="SESSION_TIME_REMAINING" />. Bạn sẽ bị đăng xuất.</translation>
 <translation id="2727977024730340865">Được cắm vào bộ sạc công suất thấp. Việc sạc pin có thể không được đảm bảo.</translation>
@@ -114,7 +113,6 @@ Nhấn Search hoặc Shift để hủy.</translation>
 <translation id="3846575436967432996">Không có thông tin mạng</translation>
 <translation id="3866182280516392520">Địa chỉ IPv6</translation>
 <translation id="3891340733213178823">Nhấn Ctrl+Shift+Q hai lần để đăng xuất.</translation>
-<translation id="3892641579809465218">Màn hình nội bộ</translation>
 <translation id="3893630138897523026">ChromeVox (phản hồi bằng giọng nói)</translation>
 <translation id="3899995891769452915">Nhập bằng giọng nói</translation>
 <translation id="3901991538546252627">Đang kết nối với <ph name="NAME" /></translation>
@@ -153,6 +151,7 @@ Nhấn Search hoặc Shift để hủy.</translation>
 <translation id="5238774010593222950">Không thể đăng nhập vào tài khoản khác.</translation>
 <translation id="532063867737390965">Cài đặt mạng này bị quản trị viên tắt.</translation>
 <translation id="5331975486040154427">Thiết bị USB-C (cổng phía sau, bên trái)</translation>
+<translation id="5431825016875453137">OpenVPN / L2TP</translation>
 <translation id="544691375626129091">Tất cả người dùng hiện có mặt đã được thêm vào phiên này.</translation>
 <translation id="5507786745520522457">Thiết lập dữ liệu di động</translation>
 <translation id="5543001071567407895">SMS</translation>
@@ -177,6 +176,7 @@ Nhấn Shift + Alt để chuyển đổi.</translation>
 <translation id="5978382165065462689">Chia sẻ quyền kiểm soát màn hình của bạn qua Trợ giúp từ xa.</translation>
 <translation id="5980301590375426705">Thoát khỏi phiên khách</translation>
 <translation id="6041154455840261787">Đã bật Chế độ tương phản cao. Nhấn lại Search+Shift+H để tắt.</translation>
+<translation id="6043212731627905357">Màn hình này không tương thích với <ph name="DEVICE_TYPE" /> của bạn (màn hình không được hỗ trợ).</translation>
 <translation id="6043994281159824495">Đăng xuất bây giờ</translation>
 <translation id="6047696787498798094">Chia sẻ màn hình sẽ dừng khi bạn chuyển sang người dùng khác. Bạn có muốn tiếp tục không?</translation>
 <translation id="6062360702481658777">Bạn sẽ tự động được đăng xuất sau <ph name="LOGOUT_TIME_LEFT" />.</translation>
@@ -185,7 +185,6 @@ Nhấn Shift + Alt để chuyển đổi.</translation>
 <translation id="6144938890088808325">Giúp chúng tôi cải thiện Chromebook</translation>
 <translation id="615957422585914272">Hiển thị bàn phím ảo</translation>
 <translation id="6165508094623778733">Tìm hiểu thêm</translation>
-<translation id="6203030746557259519">Màn hình ảo</translation>
 <translation id="6248847161401822652">Nhấn Control Shift Q hai lần để thoát.</translation>
 <translation id="6267036997247669271"><ph name="NAME" />: Đang kích hoạt...</translation>
 <translation id="6297287540776456956">Sử dụng bút cảm ứng để chọn một vùng</translation>
@@ -208,6 +207,7 @@ Nhấn Shift + Alt để chuyển đổi.</translation>
 <translation id="6700713906295497288">Nút menu IME</translation>
 <translation id="6713285437468012787">Thiết bị Bluetooth "<ph name="DEVICE_NAME" />"đã được ghép nối và hiện khả dụng với tất cả người dùng. Bạn có thể xóa ghép nối này bằng Cài đặt.</translation>
 <translation id="6785414152754474415">Pin đầy <ph name="PERCENTAGE" />% và đang sạc.</translation>
+<translation id="6803622936009808957">Không thể phản chiếu màn hình do không tìm thấy độ phân giải được hỗ trợ. Thay vào đó, đã chuyển sang chế độ màn hình mở rộng.</translation>
 <translation id="683971173229319003">Search+L</translation>
 <translation id="6857811139397017780">Kích hoạt <ph name="NETWORKSERVICE" /></translation>
 <translation id="6911468394164995108">Tham gia mạng khác...</translation>
@@ -253,13 +253,14 @@ Nhấn Alt+Search hoặc Shift để hủy.</translation>
 <translation id="8000066093800657092">Không có mạng nào</translation>
 <translation id="8054466585765276473">Đang tính toán thời lượng pin.</translation>
 <translation id="8077816382010018681">Tiêu đề thông báo tính năng QU tại đây</translation>
+<translation id="8098591350844501178">Dừng truyền màn hình tới <ph name="RECEIVER_NAME" /></translation>
 <translation id="8103386449138765447">Tin nhắn SMS: <ph name="MESSAGE_COUNT" /></translation>
 <translation id="8132793192354020517">Đã kết nối với <ph name="NAME" /></translation>
+<translation id="8180896103888046100">Dừng truyền tới người nhận không xác định</translation>
 <translation id="8185286464235484130">Hãy cho chúng tôi biết tình hình hoạt động của chúng tôi bằng cách trả lời một vài câu hỏi.</translation>
 <translation id="8190698733819146287">Tùy chỉnh ngôn ngữ và dữ liệu nhập...</translation>
 <translation id="8206859287963243715">Di động</translation>
 <translation id="8308637677604853869">Menu trước</translation>
-<translation id="8356164830168736643">Đóng <ph name="WINDOW_TITLE" /></translation>
 <translation id="8428213095426709021">Cài đặt</translation>
 <translation id="8454013096329229812">Wi-Fi đang bật.</translation>
 <translation id="8484916590211895857"><ph name="NAME" />: Đang kết nối lại...</translation>
@@ -275,7 +276,6 @@ Nhấn Alt+Search hoặc Shift để hủy.</translation>
 <translation id="8878886163241303700">Mở rộng màn hình</translation>
 <translation id="8938800817013097409">Thiết bị USB-C (cổng bên phải ở phía sau)</translation>
 <translation id="8940956008527784070">Pin yếu (<ph name="PERCENTAGE" />%)</translation>
-<translation id="9008540565042607572">Rất tiếc, hệ thống không hoạt động giữa hai màn hình. (Màn hình đó không được hỗ trợ. Nhấp để gửi báo cáo phản hồi.)</translation>
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9080206825613744995">Micrô đang được sử dụng.</translation>
 <translation id="9089416786594320554">Phương thức nhập</translation>
@@ -285,5 +285,6 @@ Nhấn Alt+Search hoặc Shift để hủy.</translation>
 <translation id="923686485342484400">Nhấn Control Shift Q hai lần để đăng xuất.</translation>
 <translation id="938582441709398163">Lớp phủ bàn phím</translation>
 <translation id="939252827960237676">Không lưu được ảnh chụp màn hình</translation>
+<translation id="945522503751344254">Gửi phản hồi</translation>
 <translation id="952992212772159698">Chưa được kích hoạt</translation>
 </translationbundle>

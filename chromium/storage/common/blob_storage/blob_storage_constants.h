@@ -13,29 +13,49 @@
 
 namespace storage {
 
+constexpr size_t kDefaultIPCMemorySize = 250u * 1024;
+constexpr size_t kDefaultSharedMemorySize = 10u * 1024 * 1024;
+constexpr size_t kDefaultMaxBlobInMemorySpace = 500u * 1024 * 1024;
+constexpr uint64_t kDefaultMaxBlobDiskSpace = 0ull;
+constexpr uint64_t kDefaultMinPageFileSize = 5ull * 1024 * 1024;
+constexpr uint64_t kDefaultMaxPageFileSize = 100ull * 1024 * 1024;
+
 // All sizes are in bytes.
-struct BlobStorageLimits {
+struct STORAGE_COMMON_EXPORT BlobStorageLimits {
+  // Returns if the current configuration is valid.
+  bool IsValid() const;
+
   size_t memory_limit_before_paging() const {
     return max_blob_in_memory_space - min_page_file_size;
   }
 
+  // If disk space goes less than this we stop allocating more disk quota.
+  uint64_t min_available_external_disk_space() const {
+    return 2ull * memory_limit_before_paging();
+  }
+
+  bool IsDiskSpaceConstrained() const {
+    return desired_max_disk_space != effective_max_disk_space;
+  }
+
   // This is the maximum amount of memory we can send in an IPC.
-  size_t max_ipc_memory_size = 250 * 1024;
+  size_t max_ipc_memory_size = kDefaultIPCMemorySize;
   // This is the maximum size of a shared memory handle.
-  size_t max_shared_memory_size = 10 * 1024 * 1024;
+  size_t max_shared_memory_size = kDefaultSharedMemorySize;
 
   // This is the maximum amount of memory we can use to store blobs.
-  size_t max_blob_in_memory_space = 500 * 1024 * 1024;
+  size_t max_blob_in_memory_space = kDefaultMaxBlobInMemorySpace;
 
   // This is the maximum amount of disk space we can use.
-  // TODO(dmurph): Consider storage size of the device.
-  uint64_t max_blob_disk_space = 5ull * 1024 * 1024 * 1024;
+  uint64_t desired_max_disk_space = kDefaultMaxBlobDiskSpace;
+  // This value will change based on the amount of free space on the device.
+  uint64_t effective_max_disk_space = kDefaultMaxBlobDiskSpace;
 
   // This is the minimum file size we can use when paging blob items to disk.
   // We combine items until we reach at least this size.
-  uint64_t min_page_file_size = 5 * 1024 * 1024;
+  uint64_t min_page_file_size = kDefaultMinPageFileSize;
   // This is the maximum file size we can create.
-  uint64_t max_file_size = 100 * 1024 * 1024;
+  uint64_t max_file_size = kDefaultMaxPageFileSize;
 };
 
 enum class IPCBlobItemRequestStrategy {
@@ -73,12 +93,13 @@ enum class BlobStatus {
   // Blob state section:
   // The blob has finished.
   DONE = 200,
-  // The system is pending on quota being granted, the transport layer
-  // populating pending data, and/or copying data from dependent blobs. See
-  // BlobEntry::BuildingState determine which of these are happening, as they
-  // all can happen concurrently.
+  // Waiting for memory or file quota for the to-be transported data.
   PENDING_QUOTA = 201,
+  // Waiting for data to be transported (quota has been granted).
   PENDING_TRANSPORT = 202,
+  // Waiting for any operations involving dependent blobs after transport data
+  // has been populated. See BlobEntry::BuildingState for more info.
+  // TODO(dmurph): Change to PENDING_REFERENCED_BLOBS (crbug.com/670398).
   PENDING_INTERNALS = 203,
   LAST = PENDING_INTERNALS
 };

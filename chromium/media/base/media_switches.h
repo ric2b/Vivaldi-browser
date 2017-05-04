@@ -10,6 +10,7 @@
 #include "base/feature_list.h"
 #include "build/build_config.h"
 #include "media/base/media_export.h"
+#include "ppapi/features/features.h"
 
 namespace switches {
 
@@ -43,13 +44,13 @@ MEDIA_EXPORT extern const char kWaveOutBuffers[];
 MEDIA_EXPORT extern const char kUseCras[];
 #endif
 
-#if !defined(OS_ANDROID) || defined(ENABLE_PLUGINS)
+#if !defined(OS_ANDROID) || BUILDFLAG(ENABLE_PLUGINS)
 MEDIA_EXPORT extern const char kEnableDefaultMediaSession[];
-#endif  // !defined(OS_ANDROID) || defined(ENABLE_PLUGINS)
+#endif  // !defined(OS_ANDROID) || BUILDFLAG(ENABLE_PLUGINS)
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 MEDIA_EXPORT extern const char kEnableDefaultMediaSessionDuckFlash[];
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 MEDIA_EXPORT extern const char kUseFakeDeviceForMediaStream[];
 MEDIA_EXPORT extern const char kUseFileForFakeVideoCapture[];
@@ -78,6 +79,7 @@ namespace media {
 // alongside the definition of their values in the .cc file.
 
 #if defined(OS_WIN)
+MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoding;
 MEDIA_EXPORT extern const base::Feature kMediaFoundationH264Encoding;
 #endif  // defined(OS_WIN)
 
@@ -86,10 +88,13 @@ MEDIA_EXPORT extern const base::Feature kOverlayFullscreenVideo;
 MEDIA_EXPORT extern const base::Feature kResumeBackgroundVideo;
 MEDIA_EXPORT extern const base::Feature kUseNewMediaCache;
 MEDIA_EXPORT extern const base::Feature kVideoColorManagement;
+MEDIA_EXPORT extern const base::Feature kVideoBlitColorAccuracy;
 MEDIA_EXPORT extern const base::Feature kExternalClearKeyForTesting;
+MEDIA_EXPORT extern const base::Feature kBackgroundVideoTrackOptimization;
 
 #if defined(OS_ANDROID)
 MEDIA_EXPORT extern const base::Feature kAndroidMediaPlayerRenderer;
+MEDIA_EXPORT extern const base::Feature kVideoFullscreenOrientationLock;
 #endif  // defined(OS_ANDROID)
 }  // namespace media
 

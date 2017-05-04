@@ -36,7 +36,8 @@
 #include "cc/scheduler/commit_earlyout_reason.h"
 #include "cc/scheduler/draw_result.h"
 #include "cc/scheduler/video_frame_controller.h"
-#include "cc/tiles/image_decode_controller.h"
+#include "cc/tiles/decoded_image_tracker.h"
+#include "cc/tiles/image_decode_cache.h"
 #include "cc/tiles/tile_manager.h"
 #include "cc/trees/layer_tree_mutator.h"
 #include "cc/trees/layer_tree_settings.h"
@@ -144,7 +145,8 @@ class CC_EXPORT LayerTreeHostImpl
       RenderingStatsInstrumentation* rendering_stats_instrumentation,
       TaskGraphRunner* task_graph_runner,
       std::unique_ptr<MutatorHost> mutator_host,
-      int id);
+      int id,
+      scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner);
   ~LayerTreeHostImpl() override;
 
   // InputHandler implementation
@@ -188,7 +190,8 @@ class CC_EXPORT LayerTreeHostImpl
       InputHandler::ScrollInputType type) const override;
   EventListenerProperties GetEventListenerProperties(
       EventListenerClass event_class) const override;
-  bool DoTouchEventsBlockScrollAt(const gfx::Point& viewport_port) override;
+  InputHandler::TouchStartEventListenerType EventListenerTypeForTouchStartAt(
+      const gfx::Point& viewport_port) override;
   std::unique_ptr<SwapPromiseMonitor> CreateLatencyInfoSwapPromiseMonitor(
       ui::LatencyInfo* latency) override;
   ScrollElasticityHelper* CreateScrollElasticityHelper() override;
@@ -403,9 +406,7 @@ class CC_EXPORT LayerTreeHostImpl
     return settings_.create_low_res_tiling && !use_gpu_rasterization_;
   }
   ResourcePool* resource_pool() { return resource_pool_.get(); }
-  ImageDecodeController* image_decode_controller() {
-    return image_decode_controller_.get();
-  }
+  ImageDecodeCache* image_decode_cache() { return image_decode_cache_.get(); }
 
   virtual void WillBeginImplFrame(const BeginFrameArgs& args);
   virtual void DidFinishImplFrame();
@@ -595,7 +596,8 @@ class CC_EXPORT LayerTreeHostImpl
       RenderingStatsInstrumentation* rendering_stats_instrumentation,
       TaskGraphRunner* task_graph_runner,
       std::unique_ptr<MutatorHost> mutator_host,
-      int id);
+      int id,
+      scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner);
 
   // Virtual for testing.
   virtual bool AnimateLayers(base::TimeTicks monotonic_time);
@@ -710,7 +712,7 @@ class CC_EXPORT LayerTreeHostImpl
   GpuRasterizationStatus gpu_rasterization_status_;
   std::unique_ptr<RasterBufferProvider> raster_buffer_provider_;
   std::unique_ptr<ResourcePool> resource_pool_;
-  std::unique_ptr<ImageDecodeController> image_decode_controller_;
+  std::unique_ptr<ImageDecodeCache> image_decode_cache_;
 
   GlobalStateThatImpactsTilePriority global_tile_state_;
 
@@ -747,6 +749,7 @@ class CC_EXPORT LayerTreeHostImpl
 
   const bool is_synchronous_single_threaded_;
   TileManager tile_manager_;
+  DecodedImageTracker decoded_image_tracker_;
 
   gfx::Vector2dF accumulated_root_overscroll_;
 

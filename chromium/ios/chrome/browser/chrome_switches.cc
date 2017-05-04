@@ -43,20 +43,21 @@ const char kDisableOfflineAutoReload[] = "disable-offline-auto-reload";
 // Disable the Payment Request API.
 const char kDisablePaymentRequest[] = "disable-payment-request";
 
-// Disables the QR Code scanner.
-const char kDisableQRScanner[] = "disable-qr-scanner";
-
-// Disables the reading list.
-const char kDisableReadingList[] = "disable-reading-list";
-
 // Disables the Spotlight actions.
 const char kDisableSpotlightActions[] = "disable-spotlight-actions";
+
+// Disables the tab strip auto scroll new tabs.
+const char kDisableTabStripAutoScrollNewTabs[] =
+    "disable-tab-strip-autoscroll-new-tabs";
 
 // Disables the tab switcher.
 const char kDisableTabSwitcher[] = "disable-tab-switcher";
 
 // Disables Physical Web scanning for nearby URLs.
 const char kDisableIOSPhysicalWeb[] = "disable-ios-physical-web";
+
+// Enables the string change from "Save Image" to "Download Image".
+const char kDisableDownloadImageRenaming[] = "disable-download-image-renaming";
 
 // Enables all bookmarks view in bookmark manager.
 const char kEnableAllBookmarksView[] = "enable-all-bookmarks-view";
@@ -92,23 +93,20 @@ const char kEnableOfflineAutoReload[] = "enable-offline-auto-reload";
 // Enable the Payment Request API.
 const char kEnablePaymentRequest[] = "enable-payment-request";
 
-// Enables the QR Code scanner.
-const char kEnableQRScanner[] = "enable-qr-scanner";
-
 // Enables context-sensitive reader mode button in the toolbar.
 const char kEnableReaderModeToolbarIcon[] = "enable-reader-mode-toolbar-icon";
 
 // Enables the Spotlight actions.
 const char kEnableSpotlightActions[] = "enable-spotlight-actions";
 
-// Enables the reading list.
-const char kEnableReadingList[] = "enable-reading-list";
-
 // Enables the tab switcher.
 const char kEnableTabSwitcher[] = "enable-tab-switcher";
 
 // Enables Physical Web scanning for nearby URLs.
 const char kEnableIOSPhysicalWeb[] = "enable-ios-physical-web";
+
+// Enables the string change from "Save Image" to "Download Image".
+const char kEnableDownloadImageRenaming[] = "enable-download-image-renaming";
 
 // Forces additional Chrome Variation Ids that will be sent in X-Client-Data
 // header, specified as a 64-bit encoded list of numeric experiment ids. Ids

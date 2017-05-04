@@ -23,6 +23,7 @@
 #include "platform/Histogram.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCache.h"
 #include <memory>
+#include <utility>
 
 namespace blink {
 
@@ -38,7 +39,7 @@ class CacheMatchCallbacks : public WebServiceWorkerCache::CacheMatchCallbacks {
 
   void onSuccess(const WebServiceWorkerResponse& webResponse) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     ScriptState::Scope scope(m_resolver->getScriptState());
     m_resolver->resolve(
@@ -48,7 +49,7 @@ class CacheMatchCallbacks : public WebServiceWorkerCache::CacheMatchCallbacks {
 
   void onError(WebServiceWorkerCacheError reason) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     if (reason == WebServiceWorkerCacheErrorNotFound)
       m_resolver->resolve();
@@ -73,12 +74,12 @@ class CacheWithResponsesCallbacks
   void onSuccess(
       const WebVector<WebServiceWorkerResponse>& webResponses) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     ScriptState::Scope scope(m_resolver->getScriptState());
     HeapVector<Member<Response>> responses;
     for (size_t i = 0; i < webResponses.size(); ++i)
-      responses.append(
+      responses.push_back(
           Response::create(m_resolver->getScriptState(), webResponses[i]));
     m_resolver->resolve(responses);
     m_resolver.clear();
@@ -86,7 +87,7 @@ class CacheWithResponsesCallbacks
 
   void onError(WebServiceWorkerCacheError reason) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     m_resolver->reject(CacheStorageError::createException(reason));
     m_resolver.clear();
@@ -106,7 +107,7 @@ class CacheDeleteCallback : public WebServiceWorkerCache::CacheBatchCallbacks {
 
   void onSuccess() override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     m_resolver->resolve(true);
     m_resolver.clear();
@@ -114,7 +115,7 @@ class CacheDeleteCallback : public WebServiceWorkerCache::CacheBatchCallbacks {
 
   void onError(WebServiceWorkerCacheError reason) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     if (reason == WebServiceWorkerCacheErrorNotFound)
       m_resolver->resolve(false);
@@ -139,12 +140,12 @@ class CacheWithRequestsCallbacks
   void onSuccess(
       const WebVector<WebServiceWorkerRequest>& webRequests) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     ScriptState::Scope scope(m_resolver->getScriptState());
     HeapVector<Member<Request>> requests;
     for (size_t i = 0; i < webRequests.size(); ++i)
-      requests.append(
+      requests.push_back(
           Request::create(m_resolver->getScriptState(), webRequests[i]));
     m_resolver->resolve(requests);
     m_resolver.clear();
@@ -152,7 +153,7 @@ class CacheWithRequestsCallbacks
 
   void onError(WebServiceWorkerCacheError reason) override {
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     m_resolver->reject(CacheStorageError::createException(reason));
     m_resolver.clear();
@@ -299,13 +300,14 @@ class Cache::BarrierCallbackForPut final
     if (m_completed)
       return;
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     m_batchOperations[index] = batchOperation;
     if (--m_numberOfRemainingOperations != 0)
       return;
     m_cache->webCache()->dispatchBatch(
-        new CallbackPromiseAdapter<void, CacheStorageError>(m_resolver),
+        WTF::makeUnique<CallbackPromiseAdapter<void, CacheStorageError>>(
+            m_resolver),
         m_batchOperations);
   }
 
@@ -314,7 +316,7 @@ class Cache::BarrierCallbackForPut final
       return;
     m_completed = true;
     if (!m_resolver->getExecutionContext() ||
-        m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
+        m_resolver->getExecutionContext()->isContextDestroyed())
       return;
     ScriptState* state = m_resolver->getScriptState();
     ScriptState::Scope scope(state);
@@ -422,9 +424,9 @@ ScriptPromise Cache::add(ScriptState* scriptState,
   ASSERT(!request.isNull());
   HeapVector<Member<Request>> requests;
   if (request.isRequest()) {
-    requests.append(request.getAsRequest());
+    requests.push_back(request.getAsRequest());
   } else {
-    requests.append(
+    requests.push_back(
         Request::create(scriptState, request.getAsUSVString(), exceptionState));
     if (exceptionState.hadException())
       return ScriptPromise();
@@ -439,10 +441,10 @@ ScriptPromise Cache::addAll(ScriptState* scriptState,
   HeapVector<Member<Request>> requests;
   for (RequestInfo request : rawRequests) {
     if (request.isRequest()) {
-      requests.append(request.getAsRequest());
+      requests.push_back(request.getAsRequest());
     } else {
-      requests.append(Request::create(scriptState, request.getAsUSVString(),
-                                      exceptionState));
+      requests.push_back(Request::create(scriptState, request.getAsUSVString(),
+                                         exceptionState));
       if (exceptionState.hadException())
         return ScriptPromise();
     }
@@ -531,17 +533,17 @@ ScriptPromise Cache::matchImpl(ScriptState* scriptState,
     resolver->resolve();
     return promise;
   }
-  m_webCache->dispatchMatch(new CacheMatchCallbacks(resolver), webRequest,
-                            toWebQueryParams(options));
+  m_webCache->dispatchMatch(WTF::makeUnique<CacheMatchCallbacks>(resolver),
+                            webRequest, toWebQueryParams(options));
   return promise;
 }
 
 ScriptPromise Cache::matchAllImpl(ScriptState* scriptState) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   const ScriptPromise promise = resolver->promise();
-  m_webCache->dispatchMatchAll(new CacheWithResponsesCallbacks(resolver),
-                               WebServiceWorkerRequest(),
-                               WebServiceWorkerCache::QueryParams());
+  m_webCache->dispatchMatchAll(
+      WTF::makeUnique<CacheWithResponsesCallbacks>(resolver),
+      WebServiceWorkerRequest(), WebServiceWorkerCache::QueryParams());
   return promise;
 }
 
@@ -557,8 +559,9 @@ ScriptPromise Cache::matchAllImpl(ScriptState* scriptState,
     resolver->resolve(HeapVector<Member<Response>>());
     return promise;
   }
-  m_webCache->dispatchMatchAll(new CacheWithResponsesCallbacks(resolver),
-                               webRequest, toWebQueryParams(options));
+  m_webCache->dispatchMatchAll(
+      WTF::makeUnique<CacheWithResponsesCallbacks>(resolver), webRequest,
+      toWebQueryParams(options));
   return promise;
 }
 
@@ -608,7 +611,8 @@ ScriptPromise Cache::deleteImpl(ScriptState* scriptState,
     resolver->resolve(false);
     return promise;
   }
-  m_webCache->dispatchBatch(new CacheDeleteCallback(resolver), batchOperations);
+  m_webCache->dispatchBatch(WTF::makeUnique<CacheDeleteCallback>(resolver),
+                            batchOperations);
   return promise;
 }
 
@@ -673,9 +677,9 @@ ScriptPromise Cache::putImpl(ScriptState* scriptState,
 ScriptPromise Cache::keysImpl(ScriptState* scriptState) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
   const ScriptPromise promise = resolver->promise();
-  m_webCache->dispatchKeys(new CacheWithRequestsCallbacks(resolver),
-                           WebServiceWorkerRequest(),
-                           WebServiceWorkerCache::QueryParams());
+  m_webCache->dispatchKeys(
+      WTF::makeUnique<CacheWithRequestsCallbacks>(resolver),
+      WebServiceWorkerRequest(), WebServiceWorkerCache::QueryParams());
   return promise;
 }
 
@@ -691,8 +695,9 @@ ScriptPromise Cache::keysImpl(ScriptState* scriptState,
     resolver->resolve(HeapVector<Member<Request>>());
     return promise;
   }
-  m_webCache->dispatchKeys(new CacheWithRequestsCallbacks(resolver), webRequest,
-                           toWebQueryParams(options));
+  m_webCache->dispatchKeys(
+      WTF::makeUnique<CacheWithRequestsCallbacks>(resolver), webRequest,
+      toWebQueryParams(options));
   return promise;
 }
 

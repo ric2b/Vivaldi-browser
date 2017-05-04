@@ -19,7 +19,10 @@ message WebApkResponse {
   // URL to download WebAPK.
   optional string signed_download_url = 3;
 
-  reserved 4;
+  // Unique id identifying session with WebAPK server.
+  optional string token = 6;
+
+  reserved 4, 5;
 }
 
 // Sent as part of request to create or update a WebAPK.
@@ -44,6 +47,10 @@ message WebApk {
 
   // The cpu abi of the browser making the request.
   optional string android_abi = 8;
+
+  // If set true, this flag indicates that the Web App Manifest of the site is
+  // no longer available.
+  optional bool stale_manifest = 9;
 
   reserved 4;
 }

@@ -30,7 +30,7 @@
 
 #include "core/html/forms/ColorInputType.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "core/CSSPropertyNames.h"
 #include "core/InputTypeNames.h"
@@ -252,7 +252,7 @@ Vector<ColorSuggestion> ColorInputType::suggestions() const {
         continue;
       ColorSuggestion suggestion(
           color, option->label().left(maxSuggestionLabelLength));
-      suggestions.append(suggestion);
+      suggestions.push_back(suggestion);
       if (suggestions.size() >= maxSuggestions)
         break;
     }

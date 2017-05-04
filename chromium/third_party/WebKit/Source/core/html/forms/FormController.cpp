@@ -59,9 +59,9 @@ static inline HTMLFormElement* ownerFormForState(
 
 void FormControlState::serializeTo(Vector<String>& stateVector) const {
   DCHECK(!isFailure());
-  stateVector.append(String::number(m_values.size()));
-  for (size_t i = 0; i < m_values.size(); ++i)
-    stateVector.append(m_values[i].isNull() ? emptyString() : m_values[i]);
+  stateVector.push_back(String::number(m_values.size()));
+  for (const auto& value : m_values)
+    stateVector.push_back(value.isNull() ? emptyString() : value);
 }
 
 FormControlState FormControlState::deserialize(
@@ -206,7 +206,7 @@ class SavedFormState {
 };
 
 std::unique_ptr<SavedFormState> SavedFormState::create() {
-  return wrapUnique(new SavedFormState);
+  return WTF::wrapUnique(new SavedFormState);
 }
 
 static bool isNotFormControlTypeCharacter(UChar ch) {
@@ -223,7 +223,7 @@ std::unique_ptr<SavedFormState> SavedFormState::deserialize(
   if (!itemCount)
     return nullptr;
   std::unique_ptr<SavedFormState> savedFormState =
-      wrapUnique(new SavedFormState);
+      WTF::wrapUnique(new SavedFormState);
   while (itemCount--) {
     if (index + 1 >= stateVector.size())
       return nullptr;
@@ -241,13 +241,13 @@ std::unique_ptr<SavedFormState> SavedFormState::deserialize(
 }
 
 void SavedFormState::serializeTo(Vector<String>& stateVector) const {
-  stateVector.append(String::number(m_controlStateCount));
+  stateVector.push_back(String::number(m_controlStateCount));
   for (const auto& formControl : m_stateForNewFormElements) {
     const FormElementKey& key = formControl.key;
     const Deque<FormControlState>& queue = formControl.value;
     for (const FormControlState& formControlState : queue) {
-      stateVector.append(key.name());
-      stateVector.append(key.type());
+      stateVector.push_back(key.name());
+      stateVector.push_back(key.type());
       formControlState.serializeTo(stateVector);
     }
   }
@@ -295,8 +295,8 @@ Vector<String> SavedFormState::getReferencedFilePaths() const {
       const Vector<FileChooserFileInfo>& selectedFiles =
           HTMLInputElement::filesFromFileInputFormControlState(
               formControlState);
-      for (size_t i = 0; i < selectedFiles.size(); ++i)
-        toReturn.append(selectedFiles[i].path);
+      for (const auto& file : selectedFiles)
+        toReturn.push_back(file.path);
     }
   }
   return toReturn;
@@ -327,7 +327,7 @@ static inline void recordFormStructure(const HTMLFormElement& form,
                                        StringBuilder& builder) {
   // 2 is enough to distinguish forms in webkit.org/b/91209#c0
   const size_t namedControlsToBeRecorded = 2;
-  const FormAssociatedElement::List& controls = form.associatedElements();
+  const ListedElement::List& controls = form.listedElements();
   builder.append(" [");
   for (size_t i = 0, namedControls = 0;
        i < controls.size() && namedControls < namedControlsToBeRecorded; ++i) {
@@ -425,7 +425,7 @@ static String formStateSignature() {
 Vector<String> DocumentState::toStateVector() {
   FormKeyGenerator* keyGenerator = FormKeyGenerator::create();
   std::unique_ptr<SavedFormStateMap> stateMap =
-      wrapUnique(new SavedFormStateMap);
+      WTF::wrapUnique(new SavedFormStateMap);
   for (const auto& formControl : m_formControls) {
     HTMLFormControlElementWithState* control = formControl.get();
     DCHECK(control->isConnected());
@@ -441,9 +441,9 @@ Vector<String> DocumentState::toStateVector() {
 
   Vector<String> stateVector;
   stateVector.reserveInitialCapacity(m_formControls.size() * 4);
-  stateVector.append(formStateSignature());
+  stateVector.push_back(formStateSignature());
   for (const auto& savedFormState : *stateMap) {
-    stateVector.append(savedFormState.key);
+    stateVector.push_back(savedFormState.key);
     savedFormState.value->serializeTo(stateVector);
   }
   bool hasOnlySignature = stateVector.size() == 1;
@@ -538,7 +538,7 @@ void FormController::restoreControlStateFor(
 
 void FormController::restoreControlStateIn(HTMLFormElement& form) {
   EventQueueScope scope;
-  const FormAssociatedElement::List& elements = form.associatedElements();
+  const ListedElement::List& elements = form.listedElements();
   for (const auto& element : elements) {
     if (!element->isFormControlElementWithState())
       continue;

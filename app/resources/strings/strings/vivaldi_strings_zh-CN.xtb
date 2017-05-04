@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="zh-CN">
+<translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. 版权所有。</translation>
+<translation id="6119720677647982841"><ph name="BEGIN_BOLD" />警告<ph name="END_BOLD" />：Vivaldi 浏览器无法阻止扩展程序记录您的浏览记录。要在隐身模式下停用此扩展程序，请取消选中此选项。</translation>
+<translation id="79820372720105859">您正在查看的是安全的 Vivaldi 浏览器网页。</translation>
+</translationbundle>

@@ -8,7 +8,7 @@
 #include <stddef.h>
 
 #include "base/macros.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_sent_packet_manager.h"
 
 namespace net {
@@ -32,9 +32,6 @@ class QuicSentPacketManagerPeer {
 
   static bool GetUndoRetransmits(QuicSentPacketManager* sent_packet_manager);
 
-  static QuicByteCount GetReceiveWindow(
-      QuicSentPacketManager* sent_packet_manager);
-
   static void SetPerspective(QuicSentPacketManager* sent_packet_manager,
                              Perspective perspective);
 
@@ -56,14 +53,11 @@ class QuicSentPacketManagerPeer {
   static QuicTime GetSentTime(const QuicSentPacketManager* sent_packet_manager,
                               QuicPacketNumber packet_number);
 
-  // Returns true if |packet_number| of |path_id| is a retransmission of a
-  // packet.
+  // Returns true if |packet_number| is a retransmission of a packet.
   static bool IsRetransmission(QuicSentPacketManager* sent_packet_manager,
-                               QuicPathId path_id,
                                QuicPacketNumber packet_number);
 
   static void MarkForRetransmission(QuicSentPacketManager* sent_packet_manager,
-                                    QuicPathId path_id,
                                     QuicPacketNumber packet_number,
                                     TransmissionType transmission_type);
 
@@ -79,8 +73,8 @@ class QuicSentPacketManagerPeer {
   static QuicByteCount GetBytesInFlight(
       const QuicSentPacketManager* sent_packet_manager);
 
-  static QuicSentPacketManagerInterface::NetworkChangeVisitor*
-  GetNetworkChangeVisitor(const QuicSentPacketManager* sent_packet_manager);
+  static QuicSentPacketManager::NetworkChangeVisitor* GetNetworkChangeVisitor(
+      const QuicSentPacketManager* sent_packet_manager);
 
   static void SetConsecutiveRtoCount(QuicSentPacketManager* sent_packet_manager,
                                      size_t count);

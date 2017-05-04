@@ -9,17 +9,15 @@
 
 #include "apps/ui/views/app_window_frame_view.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/extensions/extension_keybinding_registry_views.h"
-#include "chrome/common/extensions/extension_constants.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/zoom_controller.h"
-#include "ui/aura/client/aura_constants.h"
-#include "ui/aura/window.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 
@@ -31,6 +29,10 @@
 #include "content/public/browser/browser_thread.h"
 #include "ui/views/vivaldi_pin_shortcut.h"
 #include "ui/wm/core/easy_resize_window_targeter.h"
+
+#if !defined(OS_MACOSX)
+#include "ui/aura/window.h"
+#endif
 
 using extensions::AppWindow;
 
@@ -240,6 +242,7 @@ void ChromeNativeAppWindowViews::InitializePanelWindow(
 
   // When a panel is not docked it will be placed at a default origin in the
   // currently active target root window.
+  // TODO(afakhry): Remove Docked Windows in M58.
   bool use_default_bounds = create_params.state != ui::SHOW_STATE_DOCKED;
   // Sanitize initial origin reseting it in case it was not specified.
   using BoundsSpecification = AppWindow::BoundsSpecification;
@@ -252,14 +255,6 @@ void ChromeNativeAppWindowViews::InitializePanelWindow(
   OnBeforePanelWidgetInit(use_default_bounds, &params, widget());
   widget()->Init(params);
   widget()->set_focus_on_creation(create_params.focused);
-#if defined(OS_CHROMEOS)
-  if (extension_misc::IsImeMenuExtensionId(app_window()->extension_id())) {
-    if (widget()->GetNativeView()) {
-      widget()->GetNativeView()->SetProperty(aura::client::kExcludeFromMruKey,
-                                             true);
-    }
-  }
-#endif
 }
 
 views::NonClientFrameView*

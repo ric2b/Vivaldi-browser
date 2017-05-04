@@ -43,7 +43,6 @@ class LayoutPoint;
 class LayoutUnit;
 class LineLayoutBoxModel;
 class LineLayoutItem;
-struct PaintInfo;
 
 class LineBoxList {
   DISALLOW_NEW();
@@ -51,7 +50,7 @@ class LineBoxList {
  public:
   LineBoxList() : m_firstLineBox(nullptr), m_lastLineBox(nullptr) {}
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   ~LineBoxList();
 #endif
 
@@ -101,7 +100,7 @@ class LineBoxList {
   InlineFlowBox* m_lastLineBox;
 };
 
-#if !ENABLE(ASSERT)
+#if !DCHECK_IS_ON()
 inline void LineBoxList::checkConsistency() const {}
 #endif
 

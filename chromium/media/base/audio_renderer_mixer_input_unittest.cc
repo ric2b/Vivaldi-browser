@@ -43,7 +43,7 @@ class AudioRendererMixerInputTest : public testing::Test,
         kBitsPerChannel, kBufferSize);
 
     CreateMixerInput(kDefaultDeviceId);
-    fake_callback_.reset(new FakeAudioRenderCallback(0));
+    fake_callback_.reset(new FakeAudioRenderCallback(0, kSampleRate));
     audio_bus_ = AudioBus::Create(audio_parameters_);
   }
 
@@ -124,6 +124,7 @@ class AudioRendererMixerInputTest : public testing::Test,
  protected:
   virtual ~AudioRendererMixerInputTest() {}
 
+  base::MessageLoop message_loop_;
   AudioParameters audio_parameters_;
   scoped_refptr<MockAudioRendererSink> sinks_[2];
   std::unique_ptr<AudioRendererMixer> mixers_[2];

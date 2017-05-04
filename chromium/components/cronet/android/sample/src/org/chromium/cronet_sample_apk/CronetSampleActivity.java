@@ -8,16 +8,16 @@ import android.app.Activity;
 import android.content.DialogInterface;
 import android.os.Bundle;
 import android.support.v7.app.AlertDialog;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.TextView;
 
-import org.chromium.base.Log;
 import org.chromium.net.CronetEngine;
+import org.chromium.net.CronetException;
 import org.chromium.net.UploadDataProviders;
 import org.chromium.net.UrlRequest;
-import org.chromium.net.UrlRequestException;
 import org.chromium.net.UrlResponseInfo;
 
 import java.io.ByteArrayOutputStream;
@@ -32,7 +32,7 @@ import java.util.concurrent.Executors;
  * Activity for managing the Cronet Sample.
  */
 public class CronetSampleActivity extends Activity {
-    private static final String TAG = "CronetSample";
+    private static final String TAG = CronetSampleActivity.class.getSimpleName();
 
     private CronetEngine mCronetEngine;
 
@@ -54,7 +54,7 @@ public class CronetSampleActivity extends Activity {
         @Override
         public void onResponseStarted(UrlRequest request, UrlResponseInfo info) {
             Log.i(TAG, "****** Response Started ******");
-            Log.i(TAG, "*** Headers Are *** %s", info.getAllHeaders());
+            Log.i(TAG, "*** Headers Are *** " + info.getAllHeaders());
 
             request.read(ByteBuffer.allocateDirect(32 * 1024));
         }
@@ -63,7 +63,7 @@ public class CronetSampleActivity extends Activity {
         public void onReadCompleted(
                 UrlRequest request, UrlResponseInfo info, ByteBuffer byteBuffer) {
             byteBuffer.flip();
-            Log.i(TAG, "****** onReadCompleted ******%s", byteBuffer);
+            Log.i(TAG, "****** onReadCompleted ******" + byteBuffer);
 
             try {
                 mReceiveChannel.write(byteBuffer);
@@ -76,8 +76,8 @@ public class CronetSampleActivity extends Activity {
 
         @Override
         public void onSucceeded(UrlRequest request, UrlResponseInfo info) {
-            Log.i(TAG, "****** Request Completed, status code is %d, total received bytes is %d",
-                    info.getHttpStatusCode(), info.getReceivedBytesCount());
+            Log.i(TAG, "****** Request Completed, status code is " + info.getHttpStatusCode()
+                            + ", total received bytes is " + info.getReceivedByteCount());
 
             final String receivedData = mBytesReceived.toString();
             final String url = info.getUrl();
@@ -92,8 +92,8 @@ public class CronetSampleActivity extends Activity {
         }
 
         @Override
-        public void onFailed(UrlRequest request, UrlResponseInfo info, UrlRequestException error) {
-            Log.i(TAG, "****** onFailed, error is: %s", error.getMessage());
+        public void onFailed(UrlRequest request, UrlResponseInfo info, CronetException error) {
+            Log.i(TAG, "****** onFailed, error is: " + error.getMessage());
 
             final String url = mUrl;
             final String text = "Failed " + mUrl + " (" + error.getMessage() + ")";
@@ -164,7 +164,7 @@ public class CronetSampleActivity extends Activity {
     }
 
     private void startWithURL(String url, String postData) {
-        Log.i(TAG, "Cronet started: %s", url);
+        Log.i(TAG, "Cronet started: " + url);
         mUrl = url;
 
         Executor executor = Executors.newSingleThreadExecutor();

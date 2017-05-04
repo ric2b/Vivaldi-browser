@@ -144,9 +144,6 @@ const char kDisableDeviceDisabling[] = "disable-device-disabling";
 // Disables notification when device is in end of life status.
 const char kDisableEolNotification[] = "disable-eol-notification";
 
-// Disables quick view in Files app.
-const char kDisableFilesQuickView[] = "disable-files-quick-view";
-
 // Disables GAIA services such as enrollment and OAuth session restore. Used by
 // 'fake' telemetry login.
 const char kDisableGaiaServices[] = "disable-gaia-services";
@@ -211,6 +208,9 @@ const char kEafeUrl[] = "eafe-url";
 // Enables AD functionality.
 const char kEnableAd[] = "enable-ad";
 
+// Enables the Android Wallpapers App as the default app on Chrome OS.
+const char kEnableAndroidWallpapersApp[] = "enable-android-wallpapers-app";
+
 // Enables starting the ARC instance upon session start.
 const char kEnableArc[] = "enable-arc";
 
@@ -231,12 +231,6 @@ const char kEnableExperimentalAccessibilityFeatures[] =
 // Enables sharing assets for installed default apps.
 const char kEnableExtensionAssetsSharing[] = "enable-extension-assets-sharing";
 
-// Enables details panel in Files app.
-const char kEnableFilesDetailsPanel[] = "enable-files-details-panel";
-
-// Enables quick view in Files app.
-const char kEnableFilesQuickView[] = "enable-files-quick-view";
-
 // Enables animated transitions during first-run tutorial.
 const char kEnableFirstRunUITransitions[] = "enable-first-run-ui-transitions";
 
@@ -244,15 +238,15 @@ const char kEnableFirstRunUITransitions[] = "enable-first-run-ui-transitions";
 // rather than the kiosk app mode.
 const char kEnableKioskMode[] = "enable-kiosk-mode";
 
-// Enables material design OOBE UI.
-const char kEnableMdOobe[] = "enable-md-oobe";
+// Enables tethering to nearby LTE devices.
+const char kEnableTether[] = "enable-tether";
+
+// Disables material design OOBE UI.
+const char kDisableMdOobe[] = "disable-md-oobe";
 
 // Enables notifications about captive portals in session.
 const char kEnableNetworkPortalNotification[] =
     "enable-network-portal-notification";
-
-// Enables storage manager in MD Settings.
-const char kEnableMdStorageManager[] = "enable-md-storage-manager";
 
 // Enables suggestions while typing on a physical keyboard.
 const char kEnablePhysicalKeyboardAutocorrect[] =
@@ -264,6 +258,11 @@ const char kEnableRequestTabletSite[] = "enable-request-tablet-site";
 // Enables using screenshots in tests and seets mode.
 const char kEnableScreenshotTestingWithMode[] =
     "enable-screenshot-testing-with-mode";
+
+// Enables the touch calibration option in MD settings UI for valid touch
+// displays.
+const char kEnableTouchCalibrationSetting[] =
+    "enable-touch-calibration-setting";
 
 // Enables touchpad three-finger-click as middle button.
 const char kEnableTouchpadThreeFingerClick[] =
@@ -423,6 +422,9 @@ const char kAttestationServer[] = "attestation-server";
 // Enables wake on wifi packet feature, which wakes the device on the receipt
 // of network packets from whitelisted sources.
 const char kWakeOnWifiPacket[] = "wake-on-wifi-packet";
+
+// Force system compositor mode when set.
+const char kForceSystemCompositorMode[] = "force-system-compositor-mode";
 
 bool WakeOnWifiEnabled() {
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(kDisableWakeOnWifi);

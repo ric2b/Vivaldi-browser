@@ -4,9 +4,14 @@ include_rules = [
   "+grit",  # For generated headers
   "+jni",
   "+net",
+  "+third_party/skia",
   "+third_party/zlib/google",
   "+ui",
+
   # Autofill is a layered component; subdirectories must explicitly introduce
   # the ability to use the content layer as appropriate.
   "-components/autofill/content",
+
+  # This directory contains build flags and does not pull all of PPAPI in.
+  "+ppapi/features",
 ]

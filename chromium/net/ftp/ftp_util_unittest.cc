@@ -34,6 +34,11 @@ TEST(FtpUtilTest, UnixFilePathToVMS) {
     { "a/b",        "[.a]b"       },
     { "a/b/c",      "[.a.b]c"     },
     { "a/b/c/d",    "[.a.b.c]d"   },
+    // Extra slashes shouldn't matter.
+    { "/////",      "[]"          },
+    { "/////a",     "a"           },
+    { "//a//b///c", "a:[b]c"      },
+    { "a//b///c",   "[.a.b]c"     },
   };
   for (size_t i = 0; i < arraysize(kTestCases); i++) {
     EXPECT_EQ(kTestCases[i].expected_output,
@@ -47,26 +52,30 @@ TEST(FtpUtilTest, UnixDirectoryPathToVMS) {
     const char* input;
     const char* expected_output;
   } kTestCases[] = {
-    { "",            ""            },
-    { "/",           ""            },
-    { "/a",          "a:[000000]"  },
-    { "/a/",         "a:[000000]"  },
-    { "/a/b",        "a:[b]"       },
-    { "/a/b/",       "a:[b]"       },
-    { "/a/b/c",      "a:[b.c]"     },
-    { "/a/b/c/",     "a:[b.c]"     },
-    { "/a/b/c/d",    "a:[b.c.d]"   },
-    { "/a/b/c/d/",   "a:[b.c.d]"   },
-    { "/a/b/c/d/e",  "a:[b.c.d.e]" },
-    { "/a/b/c/d/e/", "a:[b.c.d.e]" },
-    { "a",           "[.a]"        },
-    { "a/",          "[.a]"        },
-    { "a/b",         "[.a.b]"      },
-    { "a/b/",        "[.a.b]"      },
-    { "a/b/c",       "[.a.b.c]"    },
-    { "a/b/c/",      "[.a.b.c]"    },
-    { "a/b/c/d",     "[.a.b.c.d]"  },
-    { "a/b/c/d/",    "[.a.b.c.d]"  },
+    { "",             ""            },
+    { "/",            ""            },
+    { "/a",           "a:[000000]"  },
+    { "/a/",          "a:[000000]"  },
+    { "/a/b",         "a:[b]"       },
+    { "/a/b/",        "a:[b]"       },
+    { "/a/b/c",       "a:[b.c]"     },
+    { "/a/b/c/",      "a:[b.c]"     },
+    { "/a/b/c/d",     "a:[b.c.d]"   },
+    { "/a/b/c/d/",    "a:[b.c.d]"   },
+    { "/a/b/c/d/e",   "a:[b.c.d.e]" },
+    { "/a/b/c/d/e/",  "a:[b.c.d.e]" },
+    { "a",            "[.a]"        },
+    { "a/",           "[.a]"        },
+    { "a/b",          "[.a.b]"      },
+    { "a/b/",         "[.a.b]"      },
+    { "a/b/c",        "[.a.b.c]"    },
+    { "a/b/c/",       "[.a.b.c]"    },
+    { "a/b/c/d",      "[.a.b.c.d]"  },
+    { "a/b/c/d/",     "[.a.b.c.d]"  },
+    // Extra slashes shouldn't matter.
+    { "/////",        ""            },
+    { "//a//b///c//", "a:[b.c]"     },
+    { "a//b///c//",   "[.a.b.c]"    },
   };
   for (size_t i = 0; i < arraysize(kTestCases); i++) {
     EXPECT_EQ(kTestCases[i].expected_output,
@@ -175,7 +184,7 @@ TEST(FtpUtilTest, LsDateListingToTime) {
         UTF8ToUTF16(kTestCases[i].rest), mock_current_time, &time));
 
     base::Time::Exploded time_exploded;
-    time.LocalExplode(&time_exploded);
+    time.UTCExplode(&time_exploded);
     EXPECT_EQ(kTestCases[i].expected_year, time_exploded.year);
     EXPECT_EQ(kTestCases[i].expected_month, time_exploded.month);
     EXPECT_EQ(kTestCases[i].expected_day_of_month, time_exploded.day_of_month);
@@ -215,7 +224,7 @@ TEST(FtpUtilTest, WindowsDateListingToTime) {
         &time));
 
     base::Time::Exploded time_exploded;
-    time.LocalExplode(&time_exploded);
+    time.UTCExplode(&time_exploded);
     EXPECT_EQ(kTestCases[i].expected_year, time_exploded.year);
     EXPECT_EQ(kTestCases[i].expected_month, time_exploded.month);
     EXPECT_EQ(kTestCases[i].expected_day_of_month, time_exploded.day_of_month);

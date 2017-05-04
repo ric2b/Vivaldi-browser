@@ -75,6 +75,7 @@ class PannerHandler final : public AudioHandler {
   void processSampleAccurateValues(AudioBus* destination,
                                    const AudioBus* source,
                                    size_t framesToProcess);
+  void processOnlyAudioParams(size_t framesToProcess) override;
   void initialize() override;
   void uninitialize() override;
 
@@ -233,9 +234,9 @@ class PannerNode final : public AudioNode {
   String distanceModel() const;
   void setDistanceModel(const String&);
   double refDistance() const;
-  void setRefDistance(double);
+  void setRefDistance(double, ExceptionState&);
   double maxDistance() const;
-  void setMaxDistance(double);
+  void setMaxDistance(double, ExceptionState&);
   double rolloffFactor() const;
   void setRolloffFactor(double);
   double coneInnerAngle() const;

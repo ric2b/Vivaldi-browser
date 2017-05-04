@@ -45,7 +45,6 @@
 
 namespace blink {
 
-struct WebCrossOriginServiceWorkerClient;
 struct WebServiceWorkerClientQueryOptions;
 class ExecutionContext;
 class WebServiceWorkerResponse;
@@ -64,10 +63,12 @@ class MODULES_EXPORT ServiceWorkerGlobalScopeClient
 
   // Called from ServiceWorkerClients.
   virtual void getClient(const WebString&,
-                         WebServiceWorkerClientCallbacks*) = 0;
-  virtual void getClients(const WebServiceWorkerClientQueryOptions&,
-                          WebServiceWorkerClientsCallbacks*) = 0;
-  virtual void openWindow(const WebURL&, WebServiceWorkerClientCallbacks*) = 0;
+                         std::unique_ptr<WebServiceWorkerClientCallbacks>) = 0;
+  virtual void getClients(
+      const WebServiceWorkerClientQueryOptions&,
+      std::unique_ptr<WebServiceWorkerClientsCallbacks>) = 0;
+  virtual void openWindow(const WebURL&,
+                          std::unique_ptr<WebServiceWorkerClientCallbacks>) = 0;
   virtual void setCachedMetadata(const WebURL&, const char*, size_t) = 0;
   virtual void clearCachedMetadata(const WebURL&) = 0;
 
@@ -104,21 +105,22 @@ class MODULES_EXPORT ServiceWorkerGlobalScopeClient
   virtual void didHandleSyncEvent(int syncEventID,
                                   WebServiceWorkerEventResult,
                                   double eventDispatchTime) = 0;
+  virtual void didHandlePaymentRequestEvent(int paymentRequestEventID,
+                                            WebServiceWorkerEventResult,
+                                            double eventDispatchTime) = 0;
   virtual void postMessageToClient(
       const WebString& clientUUID,
       const WebString& message,
       std::unique_ptr<WebMessagePortChannelArray>) = 0;
-  virtual void postMessageToCrossOriginClient(
-      const WebCrossOriginServiceWorkerClient&,
-      const WebString& message,
-      std::unique_ptr<WebMessagePortChannelArray>) = 0;
-  virtual void skipWaiting(WebServiceWorkerSkipWaitingCallbacks*) = 0;
-  virtual void claim(WebServiceWorkerClientsClaimCallbacks*) = 0;
+  virtual void skipWaiting(
+      std::unique_ptr<WebServiceWorkerSkipWaitingCallbacks>) = 0;
+  virtual void claim(
+      std::unique_ptr<WebServiceWorkerClientsClaimCallbacks>) = 0;
   virtual void focus(const WebString& clientUUID,
-                     WebServiceWorkerClientCallbacks*) = 0;
+                     std::unique_ptr<WebServiceWorkerClientCallbacks>) = 0;
   virtual void navigate(const WebString& clientUUID,
                         const WebURL&,
-                        WebServiceWorkerClientCallbacks*) = 0;
+                        std::unique_ptr<WebServiceWorkerClientCallbacks>) = 0;
   virtual void registerForeignFetchScopes(
       const WebVector<WebURL>& subScopes,
       const WebVector<WebSecurityOrigin>&) = 0;

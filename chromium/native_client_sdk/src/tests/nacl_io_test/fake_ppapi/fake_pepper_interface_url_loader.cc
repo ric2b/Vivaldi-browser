@@ -11,6 +11,8 @@
 
 #include "gtest/gtest.h"
 
+#include <ppapi/c/pp_bool.h>
+
 #include "fake_ppapi/fake_util.h"
 #include "nacl_io/osinttypes.h"
 
@@ -470,6 +472,13 @@ PP_Bool FakeURLRequestInfoInterface::SetProperty(PP_Resource request,
       // Throw the value away for now. TODO(binji): add tests for this.
       return PP_TRUE;
     }
+    case PP_URLREQUESTPROPERTY_STREAMTOFILE: {
+      if (value.type != PP_VARTYPE_BOOL)
+        return PP_FALSE;
+
+      request_resource->stream_to_file = PP_ToBool(value.value.as_bool);
+      return PP_TRUE;
+    }
     default:
       EXPECT_TRUE(false) << "Unimplemented property " << property
                          << " in "
@@ -481,8 +490,20 @@ PP_Bool FakeURLRequestInfoInterface::SetProperty(PP_Resource request,
 PP_Bool FakeURLRequestInfoInterface::AppendDataToBody(PP_Resource request,
                                                       const void* data,
                                                       uint32_t len) {
-  // AppendDataToBody to be supported.
-  return PP_FALSE;
+  FakeURLRequestInfoResource* request_resource =
+      core_interface_->resource_manager()->Get<FakeURLRequestInfoResource>(
+          request);
+  if (request_resource == NULL)
+    return PP_FALSE;
+
+  request_resource->body.append(static_cast<const char*>(data), len);
+
+  char len_string[64] = {0};
+  snprintf(len_string, sizeof(len_string), "%u", len);
+
+  SetHeader("Content-Length", len_string, &request_resource->headers);
+
+  return PP_TRUE;
 }
 
 FakeURLResponseInfoInterface::FakeURLResponseInfoInterface(

@@ -93,9 +93,6 @@ AXObjectCache* AXObjectCacheImpl::create(Document& document) {
 AXObjectCacheImpl::AXObjectCacheImpl(Document& document)
     : m_document(document),
       m_modificationCount(0),
-#if ENABLE(ASSERT)
-      m_hasBeenDisposed(false),
-#endif
       m_notificationPostTimer(this,
                               &AXObjectCacheImpl::notificationPostTimerFired) {
 }
@@ -113,7 +110,7 @@ void AXObjectCacheImpl::dispose() {
     removeAXID(obj);
   }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   m_hasBeenDisposed = true;
 #endif
 }
@@ -640,7 +637,7 @@ void AXObjectCacheImpl::notificationPostTimerFired(TimerBase*) {
     if (obj->isDetached())
       continue;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     // Make sure none of the layout views are in the process of being layed out.
     // Notifications should only be sent after the layoutObject has finished
     if (obj->isAXLayoutObject()) {
@@ -686,7 +683,7 @@ void AXObjectCacheImpl::postNotification(AXObject* object,
   if (!object)
     return;
 
-  m_notificationsToPost.append(std::make_pair(object, notification));
+  m_notificationsToPost.push_back(std::make_pair(object, notification));
   if (!m_notificationPostTimer.isActive())
     m_notificationPostTimer.startOneShot(0, BLINK_FROM_HERE);
 }
@@ -719,7 +716,7 @@ void AXObjectCacheImpl::updateAriaOwns(
       HashSet<AXID>* owners = m_idToAriaOwnersMapping.get(id);
       if (!owners) {
         owners = new HashSet<AXID>();
-        m_idToAriaOwnersMapping.set(id, wrapUnique(owners));
+        m_idToAriaOwnersMapping.set(id, WTF::wrapUnique(owners));
       }
       owners->add(owner->axObjectID());
     }
@@ -778,8 +775,8 @@ void AXObjectCacheImpl::updateAriaOwns(
     if (foundCycle)
       continue;
 
-    newChildAXIDs.append(child->axObjectID());
-    ownedChildren.append(child);
+    newChildAXIDs.push_back(child->axObjectID());
+    ownedChildren.push_back(child);
   }
 
   // Compare this to the current list of owned children, and exit early if there
@@ -1046,14 +1043,14 @@ bool AXObjectCacheImpl::accessibilityEnabled() {
   Settings* settings = this->settings();
   if (!settings)
     return false;
-  return settings->accessibilityEnabled();
+  return settings->getAccessibilityEnabled();
 }
 
 bool AXObjectCacheImpl::inlineTextBoxAccessibilityEnabled() {
   Settings* settings = this->settings();
   if (!settings)
     return false;
-  return settings->inlineTextBoxAccessibilityEnabled();
+  return settings->getInlineTextBoxAccessibilityEnabled();
 }
 
 const Element* AXObjectCacheImpl::rootAXEditableElement(const Node* node) {

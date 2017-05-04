@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #import "chrome/browser/ui/cocoa/content_settings/content_setting_bubble_cocoa.h"
 #include "chrome/browser/ui/cocoa/last_active_browser_cocoa.h"
+#import "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
@@ -172,16 +173,14 @@ enum AnimationState {
 
 @end
 
-
 ContentSettingDecoration::ContentSettingDecoration(
-    ContentSettingImageModel* model,
+    std::unique_ptr<ContentSettingImageModel> model,
     LocationBarViewMac* owner,
     Profile* profile)
-    : content_setting_image_model_(model),
+    : content_setting_image_model_(std::move(model)),
       owner_(owner),
       profile_(profile),
-      text_width_(0.0) {
-}
+      text_width_(0.0) {}
 
 ContentSettingDecoration::~ContentSettingDecoration() {
   // Just in case the timer is still holding onto the animation object, force
@@ -266,10 +265,11 @@ NSPoint ContentSettingDecoration::GetBubblePointInFrame(NSRect frame) {
   // Compute the frame as if there is no animation pill in the Omnibox. Place
   // the bubble where the icon would be without animation, so when the animation
   // ends, the bubble is pointing in the right place.
-  NSSize image_size = [GetImage() size];
-  frame.origin.x += frame.size.width - image_size.width;
+  CGFloat final_width = ImageDecoration::GetWidthForSpace(NSWidth(frame));
+  NSSize image_size = NSMakeSize(final_width, NSHeight(frame));
+  if (!cocoa_l10n_util::ShouldDoExperimentalRTLLayout())
+    frame.origin.x += frame.size.width - image_size.width;
   frame.size = image_size;
-
   const NSRect draw_frame = GetDrawRectInFrame(frame);
   return NSMakePoint(NSMidX(draw_frame),
                      NSMaxY(draw_frame) + kPageBubblePointYOffset);
@@ -303,7 +303,7 @@ bool ContentSettingDecoration::OnMousePressed(NSRect frame, NSPoint location) {
           web_contents,
           profile_);
 
-  if (chrome::ToolkitViewsDialogsEnabled()) {
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
     gfx::Point origin = gfx::ScreenPointFromNSPoint(anchor);
     chrome::ContentSettingBubbleViewsBridge::Show(
         [web_contents->GetTopLevelNativeWindow() contentView],
@@ -368,6 +368,7 @@ CGFloat ContentSettingDecoration::GetWidthForSpace(CGFloat width) {
 }
 
 void ContentSettingDecoration::DrawInFrame(NSRect frame, NSView* control_view) {
+  const BOOL is_rtl = cocoa_l10n_util::ShouldDoExperimentalRTLLayout();
   if ([animation_ animationState] != kNoAnimation) {
     NSRect background_rect = NSInsetRect(frame, 0.0, kBorderPadding);
     // This code is almost identical to code that appears in BubbleDecoration.
@@ -383,25 +384,53 @@ void ContentSettingDecoration::DrawInFrame(NSRect frame, NSView* control_view) {
     NSImage* icon = GetImage();
     NSRect icon_rect = background_rect;
     if (icon) {
-      icon_rect.origin.x += kIconMarginPadding;
+      if (is_rtl) {
+        icon_rect.origin.x =
+            NSMaxX(background_rect) - kIconMarginPadding - [icon size].width;
+      } else {
+        icon_rect.origin.x += kIconMarginPadding;
+      }
       icon_rect.size.width = [icon size].width;
       ImageDecoration::DrawInFrame(icon_rect, control_view);
     }
 
     NSRect remainder = frame;
-    remainder.origin.x = NSMaxX(icon_rect) + kTextMarginPadding;
-    remainder.size.width =
-        NSMaxX(background_rect) - NSMinX(remainder) - kTextDividerPadding;
-    DrawAttributedString(animated_text_, remainder);
+    if (is_rtl) {
+      // drawInRect doesn't take line sweep into account when drawing with
+      // NSLineBreakByClipping
+      // This causes the animation to anchor to the left and look like it's
+      // growing the bounds, as opposed to revealing the text.
+      // rdar://29576934
+      // To compensate, draw the whole string with a negative offset and clip to
+      // the drawing area.
+      remainder.size.width = MeasureTextWidth();
+      remainder.origin.x =
+          NSMinX(icon_rect) - kTextMarginPadding - NSWidth(remainder);
+      NSRect clip_rect = background_rect;
+      clip_rect.origin.x += kTextDividerPadding;
+      NSBezierPath* clip_path = [NSBezierPath bezierPathWithRect:clip_rect];
+      [control_view lockFocus];
+      [clip_path addClip];
+      DrawAttributedString(animated_text_, remainder);
+      [control_view unlockFocus];
+    } else {
+      remainder.origin.x = NSMaxX(icon_rect) + kTextMarginPadding;
+      remainder.size.width =
+          NSMaxX(background_rect) - NSMinX(remainder) - kTextDividerPadding;
+      DrawAttributedString(animated_text_, remainder);
+    }
 
     // Draw the divider if available.
     if (state() == DecorationMouseState::NONE && !active()) {
+      const CGFloat divider_x_position =
+          is_rtl ? NSMinX(background_rect) + kDividerPadding
+                 : NSMaxX(background_rect) - kDividerPadding;
       NSBezierPath* line = [NSBezierPath bezierPath];
       [line setLineWidth:1];
-      [line moveToPoint:NSMakePoint(NSMaxX(background_rect) - kDividerPadding,
-                                    NSMinY(background_rect))];
-      [line lineToPoint:NSMakePoint(NSMaxX(background_rect) - kDividerPadding,
-                                    NSMaxY(background_rect))];
+      [line
+          moveToPoint:NSMakePoint(divider_x_position, NSMinY(background_rect))];
+      [line
+          lineToPoint:NSMakePoint(divider_x_position, NSMaxY(background_rect))];
       [GetDividerColor(owner_->IsLocationBarDark()) set];
       [line stroke];
     }

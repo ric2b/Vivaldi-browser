@@ -23,7 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// http://www.khronos.org/registry/webgl/specs/latest/1.0/#WebGLRenderingContextBase
+// https://www.khronos.org/registry/webgl/specs/latest/1.0/#WebGLRenderingContextBase
 
 typedef unsigned long  GLenum;
 typedef boolean        GLboolean;
@@ -706,5 +706,5 @@ typedef unrestricted float GLclampf;
 
     void viewport(GLint x, GLint y, GLsizei width, GLsizei height);
 
-    [RuntimeEnabled=ExperimentalCanvasFeatures, CallWith=ScriptState, RaisesException] void commit();
+    [RuntimeEnabled=ExperimentalCanvasFeatures, CallWith=ScriptState, RaisesException] Promise commit();
 };

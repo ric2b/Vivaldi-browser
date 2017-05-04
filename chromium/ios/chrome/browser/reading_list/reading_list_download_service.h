@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "ios/chrome/browser/reading_list/reading_list_model_observer.h"
+#include "components/reading_list/ios/reading_list_model_observer.h"
 #include "ios/chrome/browser/reading_list/url_downloader.h"
 #include "net/base/network_change_notifier.h"
 
@@ -20,6 +20,10 @@ class FilePath;
 
 namespace dom_distiller {
 class DomDistillerService;
+}
+
+namespace reading_list {
+class ReadingListDistillerPageFactory;
 }
 
 // Observes the reading list and downloads offline versions of its articles.
@@ -35,50 +39,50 @@ class ReadingListDownloadService
       ReadingListModel* reading_list_model,
       dom_distiller::DomDistillerService* distiller_service,
       PrefService* prefs,
-      base::FilePath chrome_profile_path);
+      base::FilePath chrome_profile_path,
+      net::URLRequestContextGetter* url_request_context_getter,
+      std::unique_ptr<reading_list::ReadingListDistillerPageFactory>
+          distiller_page_factory);
   ~ReadingListDownloadService() override;
 
   // Initializes the reading list download service.
   void Initialize();
+
+  // The root folder containing all the offline files.
+  virtual base::FilePath OfflineRoot() const;
 
   // KeyedService implementation.
   void Shutdown() override;
 
   // ReadingListModelObserver implementation
   void ReadingListModelLoaded(const ReadingListModel* model) override;
-  void ReadingListWillRemoveReadEntry(const ReadingListModel* model,
-                                      size_t index) override;
-  void ReadingListWillRemoveUnreadEntry(const ReadingListModel* model,
-                                        size_t index) override;
-  void ReadingListWillAddUnreadEntry(const ReadingListModel* model,
-                                     const ReadingListEntry& entry) override;
-  void ReadingListWillAddReadEntry(const ReadingListModel* model,
-                                   const ReadingListEntry& entry) override;
+  void ReadingListWillRemoveEntry(const ReadingListModel* model,
+                                  const GURL& url) override;
+  void ReadingListDidAddEntry(const ReadingListModel* model,
+                              const GURL& url,
+                              reading_list::EntrySource entry_source) override;
+  void ReadingListDidMoveEntry(const ReadingListModel* model,
+                               const GURL& url) override;
 
  private:
   // Tries to save offline versions of all entries in the reading list that are
   // not yet saved. Must only be called after reading list model is loaded.
   void DownloadAllEntries();
+  // Processes a new entry and schedule a download if needed.
+  void ProcessNewEntry(const GURL& url);
   // Schedule a download of an offline version of the reading list entry,
   // according to the delay of the entry. Must only be called after reading list
   // model is loaded.
-  void ScheduleDownloadEntry(const ReadingListEntry& entry);
-  // Tries to save an offline version of the reading list entry corresponding to
-  // the |url| if it is not yet saved. Must only be called after reading list
-  // model is loaded.
-  void DownloadEntryFromURL(const GURL& url);
-  // Schedule a download of an offline version of the reading list entry
-  // associated to this |url|, according to the delay of the entry. Must only be
-  // called after reading list model is loaded.
-  void ScheduleDownloadEntryFromURL(const GURL& url);
+  void ScheduleDownloadEntry(const GURL& url);
   // Tries to save an offline version of the reading list entry if it is not yet
   // saved. Must only be called after reading list model is loaded.
-  void DownloadEntry(const ReadingListEntry& entry);
+  void DownloadEntry(const GURL& url);
   // Removes the offline version of the reading list entry if it exists. Must
   // only be called after reading list model is loaded.
-  void RemoveDownloadedEntry(const ReadingListEntry& entry);
+  void RemoveDownloadedEntry(const GURL& url);
   // Callback for entry download.
   void OnDownloadEnd(const GURL& url,
+                     const GURL& distilled_url,
                      URLDownloader::SuccessState success,
                      const base::FilePath& distilled_path,
                      const std::string& title);
@@ -91,10 +95,13 @@ class ReadingListDownloadService
       net::NetworkChangeNotifier::ConnectionType type) override;
 
   ReadingListModel* reading_list_model_;
+  base::FilePath chrome_profile_path_;
   std::unique_ptr<URLDownloader> url_downloader_;
   std::vector<GURL> url_to_download_cellular_;
   std::vector<GURL> url_to_download_wifi_;
   bool had_connection_;
+  std::unique_ptr<reading_list::ReadingListDistillerPageFactory>
+      distiller_page_factory_;
 
   base::WeakPtrFactory<ReadingListDownloadService> weak_ptr_factory_;
 

@@ -6,9 +6,12 @@
 
 #include <jni.h>
 
+#include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/bind.h"
-#include "chrome/browser/android/webapk/webapk_installer.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/android/shortcut_info.h"
+#include "chrome/browser/android/webapk/webapk_install_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "content/public/browser/browser_thread.h"
@@ -43,23 +46,26 @@ void WebApkUpdateManager::OnBuiltWebApk(const std::string& id,
 }
 
 // static JNI method.
-static void UpdateAsync(JNIEnv* env,
-                        const JavaParamRef<jclass>& clazz,
-                        const JavaParamRef<jstring>& java_id,
-                        const JavaParamRef<jstring>& java_start_url,
-                        const JavaParamRef<jstring>& java_scope,
-                        const JavaParamRef<jstring>& java_name,
-                        const JavaParamRef<jstring>& java_short_name,
-                        const JavaParamRef<jstring>& java_icon_url,
-                        const JavaParamRef<jstring>& java_icon_murmur2_hash,
-                        const JavaParamRef<jobject>& java_icon_bitmap,
-                        jint java_display_mode,
-                        jint java_orientation,
-                        jlong java_theme_color,
-                        jlong java_background_color,
-                        const JavaParamRef<jstring>& java_web_manifest_url,
-                        const JavaParamRef<jstring>& java_webapk_package,
-                        jint java_webapk_version) {
+static void UpdateAsync(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& java_id,
+    const JavaParamRef<jstring>& java_start_url,
+    const JavaParamRef<jstring>& java_scope,
+    const JavaParamRef<jstring>& java_name,
+    const JavaParamRef<jstring>& java_short_name,
+    const JavaParamRef<jstring>& java_best_icon_url,
+    const JavaParamRef<jobject>& java_best_icon_bitmap,
+    const JavaParamRef<jobjectArray>& java_icon_urls,
+    const JavaParamRef<jobjectArray>& java_icon_hashes,
+    jint java_display_mode,
+    jint java_orientation,
+    jlong java_theme_color,
+    jlong java_background_color,
+    const JavaParamRef<jstring>& java_web_manifest_url,
+    const JavaParamRef<jstring>& java_webapk_package,
+    jint java_webapk_version,
+    jboolean java_is_manifest_stale) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   Profile* profile = ProfileManager::GetLastUsedProfile();
@@ -72,32 +78,48 @@ static void UpdateAsync(JNIEnv* env,
   GURL start_url(ConvertJavaStringToUTF8(env, java_start_url));
   GURL scope(ConvertJavaStringToUTF8(env, java_scope));
   GURL web_manifest_url(ConvertJavaStringToUTF8(env, java_web_manifest_url));
-  GURL icon_url(ConvertJavaStringToUTF8(env, java_icon_url));
+  GURL best_icon_url(ConvertJavaStringToUTF8(env, java_best_icon_url));
   ShortcutInfo info(start_url);
   info.scope = scope;
   info.name = ConvertJavaStringToUTF16(env, java_name);
   info.short_name = ConvertJavaStringToUTF16(env, java_short_name);
+  info.user_title = info.short_name;
   info.display = static_cast<blink::WebDisplayMode>(java_display_mode);
   info.orientation =
       static_cast<blink::WebScreenOrientationLockType>(java_orientation);
   info.theme_color = (long)java_theme_color;
   info.background_color = (long)java_background_color;
-  info.icon_url = icon_url;
+  info.best_icon_url = best_icon_url;
   info.manifest_url = web_manifest_url;
 
-  gfx::JavaBitmap java_bitmap_lock(java_icon_bitmap);
-  SkBitmap icon_bitmap = gfx::CreateSkBitmapFromJavaBitmap(java_bitmap_lock);
-  icon_bitmap.setImmutable();
+  base::android::AppendJavaStringArrayToStringVector(
+      env, java_icon_urls.obj(), &info.icon_urls);
 
-  std::string icon_murmur2_hash;
-  ConvertJavaStringToUTF8(env, java_icon_murmur2_hash, &icon_murmur2_hash);
+  std::vector<std::string> icon_hashes;
+  base::android::AppendJavaStringArrayToStringVector(
+      env, java_icon_hashes.obj(), &icon_hashes);
+
+  std::map<std::string, std::string> icon_url_to_murmur2_hash;
+  for (size_t i = 0; i < info.icon_urls.size(); ++i)
+    icon_url_to_murmur2_hash[info.icon_urls[i]] = icon_hashes[i];
+
+  gfx::JavaBitmap java_bitmap_lock(java_best_icon_bitmap);
+  SkBitmap best_icon_bitmap =
+      gfx::CreateSkBitmapFromJavaBitmap(java_bitmap_lock);
+  best_icon_bitmap.setImmutable();
 
   std::string webapk_package;
   ConvertJavaStringToUTF8(env, java_webapk_package, &webapk_package);
 
-  WebApkInstaller* installer = new WebApkInstaller(info, icon_bitmap);
-  installer->UpdateAsync(
-      profile,
-      base::Bind(&WebApkUpdateManager::OnBuiltWebApk, id),
-      icon_murmur2_hash, webapk_package, java_webapk_version);
+  WebApkInstallService* install_service = WebApkInstallService::Get(profile);
+  if (install_service->IsInstallInProgress(info.manifest_url)) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::Bind(&WebApkUpdateManager::OnBuiltWebApk, id, false, ""));
+    return;
+  }
+  install_service->UpdateAsync(
+      info, best_icon_bitmap, webapk_package, java_webapk_version,
+      icon_url_to_murmur2_hash, java_is_manifest_stale,
+      base::Bind(&WebApkUpdateManager::OnBuiltWebApk, id));
 }

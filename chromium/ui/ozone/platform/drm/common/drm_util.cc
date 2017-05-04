@@ -16,26 +16,6 @@
 #include "base/containers/small_map.h"
 #include "ui/display/util/edid_parser.h"
 
-#if !defined(DRM_MODE_CONNECTOR_DSI)
-#define DRM_MODE_CONNECTOR_DSI 16
-#endif
-
-#if !defined(DRM_CAP_CURSOR_WIDTH)
-#define DRM_CAP_CURSOR_WIDTH 0x8
-#endif
-
-#if !defined(DRM_CAP_CURSOR_HEIGHT)
-#define DRM_CAP_CURSOR_HEIGHT 0x9
-#endif
-
-#if !defined(DRM_FORMAT_R8)
-// TODO(dshwang): after most linux and libdrm has this definition, remove it.
-#define DRM_FORMAT_R8 fourcc_code('R', '8', ' ', ' ')
-#endif
-#if !defined(DRM_FORMAT_GR88)
-// TODO(dshwang): after most linux and libdrm has this definition, remove it.
-#define DRM_FORMAT_GR88 fourcc_code('G', 'R', '8', '8')
-#endif
 #if !defined(DRM_FORMAT_YV12)
 // TODO(dcastagna): after libdrm has this definition, remove it.
 #define DRM_FORMAT_YV12 fourcc_code('Y', 'V', '1', '2')
@@ -123,25 +103,25 @@ float GetRefreshRate(const drmModeModeInfo& mode) {
   return (clock * 1000.0f) / (htotal * vtotal);
 }
 
-DisplayConnectionType GetDisplayType(drmModeConnector* connector) {
+display::DisplayConnectionType GetDisplayType(drmModeConnector* connector) {
   switch (connector->connector_type) {
     case DRM_MODE_CONNECTOR_VGA:
-      return DISPLAY_CONNECTION_TYPE_VGA;
+      return display::DISPLAY_CONNECTION_TYPE_VGA;
     case DRM_MODE_CONNECTOR_DVII:
     case DRM_MODE_CONNECTOR_DVID:
     case DRM_MODE_CONNECTOR_DVIA:
-      return DISPLAY_CONNECTION_TYPE_DVI;
+      return display::DISPLAY_CONNECTION_TYPE_DVI;
     case DRM_MODE_CONNECTOR_LVDS:
     case DRM_MODE_CONNECTOR_eDP:
     case DRM_MODE_CONNECTOR_DSI:
-      return DISPLAY_CONNECTION_TYPE_INTERNAL;
+      return display::DISPLAY_CONNECTION_TYPE_INTERNAL;
     case DRM_MODE_CONNECTOR_DisplayPort:
-      return DISPLAY_CONNECTION_TYPE_DISPLAYPORT;
+      return display::DISPLAY_CONNECTION_TYPE_DISPLAYPORT;
     case DRM_MODE_CONNECTOR_HDMIA:
     case DRM_MODE_CONNECTOR_HDMIB:
-      return DISPLAY_CONNECTION_TYPE_HDMI;
+      return display::DISPLAY_CONNECTION_TYPE_HDMI;
     default:
-      return DISPLAY_CONNECTION_TYPE_UNKNOWN;
+      return display::DISPLAY_CONNECTION_TYPE_UNKNOWN;
   }
 }
 

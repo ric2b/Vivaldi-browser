@@ -50,7 +50,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/user_agent.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "v8/include/v8.h"
+#include "v8/include/v8-version-string.h"
 
 #if defined(OS_CHROMEOS)
 #include "base/files/file_util_proxy.h"
@@ -263,8 +263,18 @@ AboutHandler* AboutHandler::Create(content::WebUIDataSource* html_source,
                                    Profile* profile) {
   html_source->AddString(
       "aboutBrowserVersion",
-      l10n_util::GetStringFUTF16(IDS_ABOUT_PRODUCT_VERSION,
-                                 BuildBrowserVersionString()));
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_ABOUT_PAGE_BROWSER_VERSION,
+          base::UTF8ToUTF16(version_info::GetVersionNumber()),
+          l10n_util::GetStringUTF16(version_info::IsOfficialBuild()
+                                        ? IDS_VERSION_UI_OFFICIAL
+                                        : IDS_VERSION_UI_UNOFFICIAL),
+          base::UTF8ToUTF16(chrome::GetChannelString()),
+#if defined(ARCH_CPU_64_BITS)
+          l10n_util::GetStringUTF16(IDS_VERSION_UI_64BIT)));
+#else
+          l10n_util::GetStringUTF16(IDS_VERSION_UI_32BIT)));
+#endif
 
   html_source->AddString(
       "aboutProductCopyright",
@@ -273,7 +283,7 @@ AboutHandler* AboutHandler::Create(content::WebUIDataSource* html_source,
           base::Time::Now()));
 
   base::string16 license = l10n_util::GetStringFUTF16(
-      IDS_VERSION_UI_LICENSE, base::ASCIIToUTF16(chrome::kChromiumProjectURL),
+      IDS_VIVALDI_VERSION_UI_LICENSE, base::ASCIIToUTF16(chrome::kChromiumProjectURL),
       base::ASCIIToUTF16(chrome::kChromeUICreditsURL));
   html_source->AddString("aboutProductLicense", license);
 
@@ -298,8 +308,6 @@ AboutHandler* AboutHandler::Create(content::WebUIDataSource* html_source,
       IDS_ABOUT_CROS_VERSION_LICENSE,
       base::ASCIIToUTF16(chrome::kChromeUIOSCreditsURL));
   html_source->AddString("aboutProductOsLicense", os_license);
-
-  html_source->AddBoolean("aboutCanChangeChannel", CanChangeChannel(profile));
   html_source->AddBoolean("aboutEnterpriseManaged", IsEnterpriseManaged());
 
   base::Time build_time = base::SysInfo::GetLsbReleaseTime();
@@ -311,7 +319,7 @@ AboutHandler* AboutHandler::Create(content::WebUIDataSource* html_source,
   html_source->AddString("aboutCommandLine", command_line);
 
   html_source->AddString("aboutUserAgent", GetUserAgent());
-  html_source->AddString("aboutJsEngineVersion", v8::V8::GetVersion());
+  html_source->AddString("aboutJsEngineVersion", V8_VERSION_STRING);
   html_source->AddString("aboutBlinkVersion", content::GetWebKitVersion());
 #endif
 
@@ -347,11 +355,8 @@ void AboutHandler::RegisterMessages() {
       "getRegulatoryInfo", base::Bind(&AboutHandler::HandleGetRegulatoryInfo,
                                       base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "getCurrentChannel", base::Bind(&AboutHandler::HandleGetCurrentChannel,
-                                      base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
-      "getTargetChannel", base::Bind(&AboutHandler::HandleGetTargetChannel,
-                                     base::Unretained(this)));
+      "getChannelInfo", base::Bind(&AboutHandler::HandleGetChannelInfo,
+                                   base::Unretained(this)));
 #endif
 #if defined(OS_MACOSX)
   web_ui()->RegisterMessageCallback(
@@ -394,21 +399,6 @@ void AboutHandler::Observe(int type,
   // A version update is installed and ready to go. Refresh the UI so the
   // correct state will be shown.
   RequestUpdate();
-}
-
-// static
-base::string16 AboutHandler::BuildBrowserVersionString() {
-  std::string version = version_info::GetVersionNumber();
-
-  std::string modifier = chrome::GetChannelString();
-  if (!modifier.empty())
-    version += " " + modifier;
-
-#if defined(ARCH_CPU_64_BITS)
-  version += " (64-bit)";
-#endif
-
-  return base::UTF8ToUTF16(version);
 }
 
 void AboutHandler::OnDeviceAutoUpdatePolicyChanged(
@@ -525,31 +515,35 @@ void AboutHandler::HandleGetRegulatoryInfo(const base::ListValue* args) {
                  weak_factory_.GetWeakPtr(), callback_id));
 }
 
-void AboutHandler::HandleGetCurrentChannel(const base::ListValue* args) {
-  CHECK_EQ(1U, args->GetSize());
-  std::string callback_id;
-  CHECK(args->GetString(0, &callback_id));
-  // First argument to GetChannel() is a flag that indicates whether
-  // current channel should be returned (if true) or target channel
-  // (otherwise).
-  version_updater_->GetChannel(
-      true, base::Bind(&AboutHandler::OnGetChannelReady,
-                       weak_factory_.GetWeakPtr(), callback_id));
-}
-
-void AboutHandler::HandleGetTargetChannel(const base::ListValue* args) {
+void AboutHandler::HandleGetChannelInfo(const base::ListValue* args) {
   CHECK_EQ(1U, args->GetSize());
   std::string callback_id;
   CHECK(args->GetString(0, &callback_id));
   version_updater_->GetChannel(
-      false, base::Bind(&AboutHandler::OnGetChannelReady,
-                        weak_factory_.GetWeakPtr(), callback_id));
+      true /* get current channel */,
+      base::Bind(&AboutHandler::OnGetCurrentChannel, weak_factory_.GetWeakPtr(),
+                 callback_id));
 }
 
-void AboutHandler::OnGetChannelReady(std::string callback_id,
-                                     const std::string& channel) {
-  ResolveJavascriptCallback(base::StringValue(callback_id),
-                            base::StringValue(channel));
+void AboutHandler::OnGetCurrentChannel(std::string callback_id,
+                                       const std::string& current_channel) {
+  version_updater_->GetChannel(
+      false /* get target channel */,
+      base::Bind(&AboutHandler::OnGetTargetChannel, weak_factory_.GetWeakPtr(),
+                 callback_id, current_channel));
+}
+
+void AboutHandler::OnGetTargetChannel(std::string callback_id,
+                                      const std::string& current_channel,
+                                      const std::string& target_channel) {
+  std::unique_ptr<base::DictionaryValue> channel_info(
+      new base::DictionaryValue);
+  channel_info->SetString("currentChannel", current_channel);
+  channel_info->SetString("targetChannel", target_channel);
+  channel_info->SetBoolean("canChangeChannel",
+                           CanChangeChannel(Profile::FromWebUI(web_ui())));
+
+  ResolveJavascriptCallback(base::StringValue(callback_id), *channel_info);
 }
 
 void AboutHandler::HandleRequestUpdate(const base::ListValue* args) {
@@ -598,22 +592,31 @@ void AboutHandler::SetUpdateStatus(VersionUpdater::Status status,
 
 #if defined(OS_MACOSX)
 void AboutHandler::SetPromotionState(VersionUpdater::PromotionState state) {
-  std::string state_str;
-  switch (state) {
-    case VersionUpdater::PROMOTE_HIDDEN:
-      state_str = "hidden";
-      break;
-    case VersionUpdater::PROMOTE_ENABLED:
-      state_str = "enabled";
-      break;
-    case VersionUpdater::PROMOTE_DISABLED:
-      state_str = "disabled";
-      break;
-  }
+  // Worth noting: PROMOTE_DISABLED indicates that promotion is possible,
+  // there's just something else going on right now (e.g. checking for update).
+  bool hidden = state == VersionUpdater::PROMOTE_HIDDEN;
+  bool disabled = state == VersionUpdater::PROMOTE_HIDDEN ||
+                  state == VersionUpdater::PROMOTE_DISABLED ||
+                  state == VersionUpdater::PROMOTED;
+  bool actionable = state == VersionUpdater::PROMOTE_DISABLED ||
+                    state == VersionUpdater::PROMOTE_ENABLED;
+
+  base::string16 text = base::string16();
+  if (actionable)
+    text = l10n_util::GetStringUTF16(IDS_ABOUT_CHROME_AUTOUPDATE_ALL);
+  else if (state == VersionUpdater::PROMOTED)
+    text = l10n_util::GetStringUTF16(IDS_ABOUT_CHROME_AUTOUPDATE_ALL_IS_ON);
+
+  base::DictionaryValue promo_state;
+  promo_state.SetBoolean("hidden", hidden);
+  promo_state.SetBoolean("disabled", disabled);
+  promo_state.SetBoolean("actionable", actionable);
+  if (!text.empty())
+    promo_state.SetString("text", text);
 
   CallJavascriptFunction("cr.webUIListenerCallback",
                          base::StringValue("promotion-state-changed"),
-                         base::StringValue(state_str));
+                         promo_state);
 }
 #endif  // defined(OS_MACOSX)
 
@@ -651,7 +654,6 @@ void AboutHandler::OnRegulatoryLabelTextRead(
 
   ResolveJavascriptCallback(base::StringValue(callback_id), *regulatory_info);
 }
-
 #endif  // defined(OS_CHROMEOS)
 
 }  // namespace settings

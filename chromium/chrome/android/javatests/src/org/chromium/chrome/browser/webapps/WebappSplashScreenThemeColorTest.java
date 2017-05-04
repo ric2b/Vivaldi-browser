@@ -8,7 +8,7 @@ import android.annotation.TargetApi;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Build;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
@@ -56,7 +56,7 @@ public class WebappSplashScreenThemeColorTest extends WebappActivityTestBase {
     @Feature({"Webapps"})
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     @RetryOnFailure
-    public void testThemeColorNotUsedIfPagesHasOne() throws InterruptedException {
+    public void testThemeColorNotUsedIfPagesHasOne() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
 
         ThreadUtils.runOnUiThread(new Runnable() {

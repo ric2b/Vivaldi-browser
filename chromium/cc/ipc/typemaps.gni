@@ -11,11 +11,12 @@ typemaps = [
   "//cc/ipc/frame_sink_id.typemap",
   "//cc/ipc/local_frame_id.typemap",
   "//cc/ipc/render_pass.typemap",
-  "//cc/ipc/render_pass_id.typemap",
   "//cc/ipc/returned_resource.typemap",
   "//cc/ipc/selection.typemap",
   "//cc/ipc/shared_quad_state.typemap",
   "//cc/ipc/surface_id.typemap",
+  "//cc/ipc/surface_info.typemap",
+  "//cc/ipc/surface_reference.typemap",
   "//cc/ipc/surface_sequence.typemap",
   "//cc/ipc/transferable_resource.typemap",
 ]

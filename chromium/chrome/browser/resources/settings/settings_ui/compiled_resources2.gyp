@@ -6,9 +6,11 @@
     {
       'target_name': 'settings_ui',
       'dependencies': [
-        '<(DEPTH)/third_party/polymer/v1_0/components-chromium/app-layout/app-drawer/compiled_resources2.gyp:app-drawer-extracted',
+        '<(DEPTH)/ui/webui/resources/cr_elements/cr_drawer/compiled_resources2.gyp:cr_drawer',
         '<(DEPTH)/ui/webui/resources/cr_elements/cr_toolbar/compiled_resources2.gyp:cr_toolbar',
         '<(DEPTH)/ui/webui/resources/cr_elements/cr_toolbar/compiled_resources2.gyp:cr_toolbar_search_field',
+        '<(DEPTH)/ui/webui/resources/cr_elements/network/compiled_resources2.gyp:cr_onc_types',
+        '<(DEPTH)/ui/webui/resources/cr_elements/policy/compiled_resources2.gyp:cr_policy_indicator_behavior',
         '../compiled_resources2.gyp:direction_delegate',
         '../compiled_resources2.gyp:global_scroll_target_behavior',
         '../prefs/compiled_resources2.gyp:prefs',

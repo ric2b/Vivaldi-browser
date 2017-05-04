@@ -188,7 +188,8 @@ class LoadWashingtonPostMobileStory(_LoadingStory):
     # to phone" button. So on tablets we run with the popup window open. The
     # popup is transparent, so this is mostly an aesthetical issue.
     has_button = action_runner.EvaluateJavaScript(
-        '!!document.querySelector("%s")' % self._CLOSE_BUTTON_SELECTOR)
+        '!!document.querySelector({{ selector }})',
+        selector=self._CLOSE_BUTTON_SELECTOR)
     if has_button:
       action_runner.ClickElement(selector=self._CLOSE_BUTTON_SELECTOR)
 
@@ -307,6 +308,8 @@ class LoadGmailDesktopStory(_LoadGmailBaseStory):
     action_runner.WaitForJavaScriptCondition(
         'document.getElementById("loading").style.display === "none"')
 
+
+@decorators.Disabled('android')  # crbug.com/657433
 class LoadGmailMobileStory(_LoadGmailBaseStory):
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
 

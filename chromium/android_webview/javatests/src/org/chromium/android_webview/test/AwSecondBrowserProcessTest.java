@@ -58,7 +58,7 @@ public class AwSecondBrowserProcessTest extends AwTestBase {
      * @LargeTest
      * @Feature({"AndroidWebView"})
      */
-    @DisabledTest
+    @DisabledTest(message = "crbug.com/582146")
     public void testLockCleanupOnProcessShutdown() throws Throwable {
         startSecondBrowserProcess();
         assertFalse(tryStartingBrowserProcess());

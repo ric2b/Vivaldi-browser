@@ -36,15 +36,15 @@ namespace blink {
 
 void V0CustomElementAsyncImportMicrotaskQueue::enqueue(
     V0CustomElementMicrotaskStep* step) {
-  m_queue.append(step);
+  m_queue.push_back(step);
 }
 
 void V0CustomElementAsyncImportMicrotaskQueue::doDispatch() {
   HeapVector<Member<V0CustomElementMicrotaskStep>> remaining;
 
-  for (unsigned i = 0; i < m_queue.size(); ++i) {
-    if (V0CustomElementMicrotaskStep::Processing == m_queue[i]->process())
-      remaining.append(m_queue[i].release());
+  for (auto& step : m_queue) {
+    if (V0CustomElementMicrotaskStep::Processing == step->process())
+      remaining.push_back(step.release());
   }
 
   m_queue.swap(remaining);

@@ -27,8 +27,9 @@ source_set("android") {
   ]
   deps = [
     ":capture_jni_headers",
-    "//media/mojo/interfaces:image_capture",
+    "//media/capture/mojo:image_capture",
     "//third_party/libyuv",
+    "//ui/gfx:color_space",
   ]
 }
 
@@ -60,11 +61,9 @@ android_library("capture_java") {
   java_files = [
     "java/src/org/chromium/media/PhotoCapabilities.java",
     "java/src/org/chromium/media/VideoCapture.java",
-    "java/src/org/chromium/media/VideoCaptureAndroid.java",
     "java/src/org/chromium/media/VideoCaptureCamera.java",
     "java/src/org/chromium/media/VideoCaptureCamera2.java",
     "java/src/org/chromium/media/VideoCaptureFactory.java",
     "java/src/org/chromium/media/VideoCaptureFormat.java",
-    "java/src/org/chromium/media/VideoCaptureTango.java",
   ]
 }

@@ -18,8 +18,8 @@
 #include "base/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "components/bookmarks/browser/bookmark_codec.h"
-#include "components/bookmarks/browser/bookmark_index.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/browser/titled_url_index.h"
 #include "components/bookmarks/common/bookmark_constants.h"
 
 using base::TimeTicks;
@@ -96,7 +96,7 @@ void LoadCallback(const base::FilePath& path,
   for (size_t i = 0; i < extra_nodes.size(); ++i) {
     if (!extra_nodes[i]->empty()) {
       load_index = true;
-      break;  
+      break;
     }
   }
 
@@ -128,7 +128,7 @@ BookmarkLoadDetails::BookmarkLoadDetails(
     BookmarkPermanentNode* mobile_folder_node,
     BookmarkPermanentNode* trash_folder_node,
     const LoadExtraCallback& load_extra_callback,
-    BookmarkIndex* index,
+    TitledUrlIndex* index,
     int64_t max_id)
     : bb_node_(bb_node),
       other_folder_node_(other_folder_node),

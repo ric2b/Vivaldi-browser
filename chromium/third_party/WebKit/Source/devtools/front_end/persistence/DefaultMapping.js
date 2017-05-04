@@ -70,14 +70,14 @@ Persistence.DefaultMapping = class {
    */
   _createBinding(uiSourceCode) {
     if (uiSourceCode.project().type() === Workspace.projectTypes.FileSystem) {
-      var fileSystemPath = Bindings.FileSystemWorkspaceBinding.fileSystemPath(uiSourceCode.project().id());
+      var fileSystemPath = Persistence.FileSystemWorkspaceBinding.fileSystemPath(uiSourceCode.project().id());
       var networkURL = this._fileSystemMapping.networkURLForFileSystemURL(fileSystemPath, uiSourceCode.url());
       var networkSourceCode = networkURL ? this._workspace.uiSourceCodeForURL(networkURL) : null;
       return networkSourceCode ? new Persistence.PersistenceBinding(networkSourceCode, uiSourceCode, false) : null;
     }
     if (uiSourceCode.project().type() === Workspace.projectTypes.Network) {
       var file = this._fileSystemMapping.fileForURL(uiSourceCode.url());
-      var projectId = file ? Bindings.FileSystemWorkspaceBinding.projectId(file.fileSystemPath) : null;
+      var projectId = file ? Persistence.FileSystemWorkspaceBinding.projectId(file.fileSystemPath) : null;
       var fileSourceCode = file && projectId ? this._workspace.uiSourceCode(projectId, file.fileURL) : null;
       return fileSourceCode ? new Persistence.PersistenceBinding(uiSourceCode, fileSourceCode, false) : null;
     }
@@ -92,6 +92,10 @@ Persistence.DefaultMapping = class {
     var binding = this._createBinding(uiSourceCode);
     if (!binding)
       return;
+    // TODO(lushnikov): remove this check once there's a single uiSourceCode per url. @see crbug.com/670180
+    if (binding.network[Persistence.DefaultMapping._binding] || binding.fileSystem[Persistence.DefaultMapping._binding])
+      return;
+
     this._bindings.add(binding);
     binding.network[Persistence.DefaultMapping._binding] = binding;
     binding.fileSystem[Persistence.DefaultMapping._binding] = binding;
@@ -123,7 +127,7 @@ Persistence.DefaultMapping = class {
    * @param {!Common.Event} event
    */
   _onFileSystemUISourceCodeRenamed(event) {
-    var uiSourceCode = /** @type {!Workspace.UISourceCode} */ (event.target);
+    var uiSourceCode = /** @type {!Workspace.UISourceCode} */ (event.data);
     var binding = uiSourceCode[Persistence.DefaultMapping._binding];
     this._unbind(binding.network);
     this._bind(binding.network);

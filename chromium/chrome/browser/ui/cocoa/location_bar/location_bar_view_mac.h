@@ -12,7 +12,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
@@ -177,6 +176,14 @@ class LocationBarViewMac : public LocationBar,
 
   bool ShouldShowEVBubble() const;
 
+  // Returns true if the URL is an extension URL and the extension bubble should
+  // be shown.
+  bool ShouldShowExtensionBubble() const;
+
+  // Returns true if the the URL is a chrome:// URL and the Chrome bubble should
+  // be shown.
+  bool ShouldShowChromeBubble() const;
+
   // Returns true if the security state decoration should be displayed. The
   // security state should only be shown for valid and invalid HTTPS states.
   bool ShouldShowSecurityState() const;
@@ -299,10 +306,11 @@ class LocationBarViewMac : public LocationBar,
   std::unique_ptr<ZoomDecoration> zoom_decoration_;
 
   // Decorations for the installed Page Actions.
-  ScopedVector<PageActionDecoration> page_action_decorations_;
+  std::vector<std::unique_ptr<PageActionDecoration>> page_action_decorations_;
 
   // The content blocked decorations.
-  ScopedVector<ContentSettingDecoration> content_setting_decorations_;
+  std::vector<std::unique_ptr<ContentSettingDecoration>>
+      content_setting_decorations_;
 
   // Keyword hint decoration displayed on the right-hand side.
   std::unique_ptr<KeywordHintDecoration> keyword_hint_decoration_;
@@ -317,22 +325,6 @@ class LocationBarViewMac : public LocationBar,
 
   // Indicates whether or not the location bar is currently visible.
   bool location_bar_visible_;
-
-  // True if the HTTPS state should be displayed on the security state
-  // decoration. This does not apply to the EV cert.
-  bool should_show_secure_verbose_;
-
-  // True if the non-secure state should be displayed on the security state
-  // decoration.
-  bool should_show_nonsecure_verbose_;
-
-  // True if the security state decoration should be animated for a secure
-  // security level.
-  bool should_animate_secure_verbose_;
-
-  // True if the security state decoration should be animated for a non-secure
-  // security level.
-  bool should_animate_nonsecure_verbose_;
 
   // True if there's enough room for the omnibox to show the security verbose.
   // If the verbose is displaying the EV cert, then this should always be true.

@@ -129,7 +129,7 @@ static float curveLength(PathTraversalState& traversalState, CurveType curve) {
     return 0;
 
   Vector<CurveType> curveStack;
-  curveStack.append(curve);
+  curveStack.push_back(curve);
 
   float totalLength = 0;
   do {
@@ -143,7 +143,7 @@ static float curveLength(PathTraversalState& traversalState, CurveType curve) {
       CurveType rightCurve;
       curve.split(leftCurve, rightCurve);
       curve = leftCurve;
-      curveStack.append(rightCurve);
+      curveStack.push_back(rightCurve);
     } else {
       totalLength += length;
       if (traversalState.m_action ==
@@ -156,7 +156,7 @@ static float curveLength(PathTraversalState& traversalState, CurveType curve) {
             traversalState.m_desiredLength)
           return totalLength;
       }
-      curve = curveStack.last();
+      curve = curveStack.back();
       curveStack.pop_back();
     }
   } while (!curveStack.isEmpty());

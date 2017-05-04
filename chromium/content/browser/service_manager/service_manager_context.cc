@@ -30,14 +30,13 @@
 #include "services/catalog/manifest_provider.h"
 #include "services/catalog/public/interfaces/constants.mojom.h"
 #include "services/catalog/store.h"
-#include "services/file/public/interfaces/constants.mojom.h"
+#include "services/device/device_service.h"
+#include "services/device/public/interfaces/constants.mojom.h"
 #include "services/service_manager/connect_params.h"
-#include "services/service_manager/native_runner.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/interfaces/service.mojom.h"
 #include "services/service_manager/runner/common/client_util.h"
-#include "services/service_manager/runner/host/in_process_native_runner.h"
 #include "services/service_manager/service_manager.h"
 
 namespace content {
@@ -68,10 +67,11 @@ void StartServiceInUtilityProcess(
     bool use_sandbox,
     service_manager::mojom::ServiceRequest request) {
   service_manager::mojom::ServiceFactoryPtr service_factory;
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(&StartUtilityProcessOnIOThread,
-                                     base::Passed(GetProxy(&service_factory)),
-                                     process_name, use_sandbox));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&StartUtilityProcessOnIOThread,
+                 base::Passed(MakeRequest(&service_factory)), process_name,
+                 use_sandbox));
   service_factory->CreateService(std::move(request), service_name);
 }
 
@@ -102,7 +102,7 @@ void StartServiceInGpuProcess(const std::string& service_name,
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&RequestGpuServiceFactory,
-                 base::Passed(GetProxy(&service_factory))));
+                 base::Passed(MakeRequest(&service_factory))));
   service_factory->CreateService(std::move(request), service_name);
 }
 
@@ -115,10 +115,31 @@ class BuiltinManifestProvider : public catalog::ManifestProvider {
   BuiltinManifestProvider() {}
   ~BuiltinManifestProvider() override {}
 
-  void AddManifestValue(const std::string& name,
-                        std::unique_ptr<base::Value> manifest_contents) {
+  void AddServiceManifest(base::StringPiece name, int resource_id) {
+    std::string contents =
+        GetContentClient()
+            ->GetDataResource(resource_id, ui::ScaleFactor::SCALE_FACTOR_NONE)
+            .as_string();
+    DCHECK(!contents.empty());
+
+    std::unique_ptr<base::Value> manifest_value =
+        base::JSONReader::Read(contents);
+    DCHECK(manifest_value);
+
+    std::unique_ptr<base::Value> overlay_value =
+        GetContentClient()->browser()->GetServiceManifestOverlay(name);
+    if (overlay_value) {
+      base::DictionaryValue* manifest_dictionary = nullptr;
+      bool result = manifest_value->GetAsDictionary(&manifest_dictionary);
+      DCHECK(result);
+      base::DictionaryValue* overlay_dictionary = nullptr;
+      result = overlay_value->GetAsDictionary(&overlay_dictionary);
+      DCHECK(result);
+      MergeDictionary(manifest_dictionary, overlay_dictionary);
+    }
+
     auto result = manifests_.insert(
-        std::make_pair(name, std::move(manifest_contents)));
+        std::make_pair(name.as_string(), std::move(manifest_value)));
     DCHECK(result.second) << "Duplicate manifest entry: " << name;
   }
 
@@ -134,6 +155,23 @@ class BuiltinManifestProvider : public catalog::ManifestProvider {
   DISALLOW_COPY_AND_ASSIGN(BuiltinManifestProvider);
 };
 
+class NullServiceProcessLauncherFactory
+    : public service_manager::ServiceProcessLauncherFactory {
+ public:
+  NullServiceProcessLauncherFactory() {}
+  ~NullServiceProcessLauncherFactory() override {}
+
+ private:
+  std::unique_ptr<service_manager::ServiceProcessLauncher> Create(
+      const base::FilePath& service_path) override {
+    LOG(ERROR) << "Attempting to run unsupported native service: "
+               << service_path.value();
+    return nullptr;
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(NullServiceProcessLauncherFactory);
+};
+
 }  // namespace
 
 // State which lives on the IO thread and drives the ServiceManager.
@@ -145,8 +183,8 @@ class ServiceManagerContext::InProcessServiceManagerContext
   service_manager::mojom::ServiceRequest Start(
       std::unique_ptr<BuiltinManifestProvider> manifest_provider) {
     service_manager::mojom::ServicePtr embedder_service_proxy;
-    service_manager::mojom::ServiceRequest embedder_service_request =
-        mojo::GetProxy(&embedder_service_proxy);
+    service_manager::mojom::ServiceRequest embedder_service_request(
+        &embedder_service_proxy);
     service_manager::mojom::ServicePtrInfo embedder_service_proxy_info =
         embedder_service_proxy.PassInterface();
     BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)->PostTask(
@@ -174,12 +212,11 @@ class ServiceManagerContext::InProcessServiceManagerContext
     manifest_provider_ = std::move(manifest_provider);
 
     base::SequencedWorkerPool* blocking_pool = BrowserThread::GetBlockingPool();
-    std::unique_ptr<service_manager::NativeRunnerFactory> native_runner_factory(
-        new service_manager::InProcessNativeRunnerFactory(blocking_pool));
     catalog_.reset(
-        new catalog::Catalog(blocking_pool, nullptr, manifest_provider_.get()));
-    service_manager_.reset(new service_manager::ServiceManager(
-        std::move(native_runner_factory), catalog_->TakeService()));
+        new catalog::Catalog(blocking_pool, manifest_provider_.get()));
+    service_manager_ = base::MakeUnique<service_manager::ServiceManager>(
+        base::MakeUnique<NullServiceProcessLauncherFactory>(),
+        catalog_->TakeService());
 
     service_manager::mojom::ServiceRequest request =
         service_manager_->StartEmbedderService(mojom::kBrowserServiceName);
@@ -219,34 +256,16 @@ ServiceManagerContext::ServiceManagerContext() {
       { mojom::kRendererServiceName, IDR_MOJO_CONTENT_RENDERER_MANIFEST },
       { mojom::kUtilityServiceName, IDR_MOJO_CONTENT_UTILITY_MANIFEST },
       { catalog::mojom::kServiceName, IDR_MOJO_CATALOG_MANIFEST },
-      { file::mojom::kServiceName, IDR_MOJO_FILE_MANIFEST }
     };
 
     for (size_t i = 0; i < arraysize(kManifests); ++i) {
-      std::string contents = GetContentClient()->GetDataResource(
-          kManifests[i].resource_id,
-          ui::ScaleFactor::SCALE_FACTOR_NONE).as_string();
-      base::debug::Alias(&i);
-      CHECK(!contents.empty());
-
-      std::unique_ptr<base::Value> manifest_value =
-          base::JSONReader::Read(contents);
-      base::debug::Alias(&contents);
-      CHECK(manifest_value);
-
-      std::unique_ptr<base::Value> overlay_value =
-          GetContentClient()->browser()->GetServiceManifestOverlay(
-              kManifests[i].name);
-      if (overlay_value) {
-        base::DictionaryValue* manifest_dictionary = nullptr;
-        CHECK(manifest_value->GetAsDictionary(&manifest_dictionary));
-        base::DictionaryValue* overlay_dictionary = nullptr;
-        CHECK(overlay_value->GetAsDictionary(&overlay_dictionary));
-        MergeDictionary(manifest_dictionary, overlay_dictionary);
-      }
-
-      manifest_provider->AddManifestValue(kManifests[i].name,
-                                          std::move(manifest_value));
+      manifest_provider->AddServiceManifest(kManifests[i].name,
+                                            kManifests[i].resource_id);
+    }
+    for (const auto& manifest :
+         GetContentClient()->browser()->GetExtraServiceManifests()) {
+      manifest_provider->AddServiceManifest(manifest.name,
+                                            manifest.resource_id);
     }
     in_process_context_ = new InProcessServiceManagerContext;
     request = in_process_context_->Start(std::move(manifest_provider));
@@ -254,6 +273,13 @@ ServiceManagerContext::ServiceManagerContext() {
   ServiceManagerConnection::SetForProcess(ServiceManagerConnection::Create(
       std::move(request),
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
+
+  ServiceInfo device_info;
+  device_info.factory =
+      base::Bind(&device::CreateDeviceService,
+                 BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE));
+  ServiceManagerConnection::GetForProcess()->AddEmbeddedService(
+      device::mojom::kServiceName, device_info);
 
   ContentBrowserClient::StaticServiceMap services;
   GetContentClient()->browser()->RegisterInProcessServices(&services);
@@ -296,6 +322,15 @@ ServiceManagerContext::ServiceManagerContext() {
   ServiceManagerConnection::GetForProcess()->AddServiceRequestHandler(
       "media", base::Bind(&StartServiceInGpuProcess, "media"));
 #endif
+
+  // Initiates the first connection to device service to create the singleton
+  // instance, later the same instance will serve all the clients wanting to
+  // connect to device service.
+  // TODO(rockot): http://crbug.com/679407 Eliminate this connection once
+  // content_browser is itself a singleton service.
+  std::unique_ptr<service_manager::Connection> device_connection =
+      ServiceManagerConnection::GetForProcess()->GetConnector()->Connect(
+          device::mojom::kServiceName);
 }
 
 ServiceManagerContext::~ServiceManagerContext() {

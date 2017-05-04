@@ -4,23 +4,21 @@
 
 #include "base/task_scheduler/scheduler_worker_pool_params.h"
 
-#include "base/time/time.h"
-
 namespace base {
 
 SchedulerWorkerPoolParams::SchedulerWorkerPoolParams(
     const std::string& name,
     ThreadPriority priority_hint,
-    IORestriction io_restriction,
     StandbyThreadPolicy standby_thread_policy,
     int max_threads,
-    const TimeDelta& suggested_reclaim_time)
+    TimeDelta suggested_reclaim_time,
+    SchedulerBackwardCompatibility backward_compatibility)
     : name_(name),
       priority_hint_(priority_hint),
-      io_restriction_(io_restriction),
       standby_thread_policy_(standby_thread_policy),
       max_threads_(max_threads),
-      suggested_reclaim_time_(suggested_reclaim_time) {}
+      suggested_reclaim_time_(suggested_reclaim_time),
+      backward_compatibility_(backward_compatibility) {}
 
 SchedulerWorkerPoolParams::SchedulerWorkerPoolParams(
     SchedulerWorkerPoolParams&& other) = default;

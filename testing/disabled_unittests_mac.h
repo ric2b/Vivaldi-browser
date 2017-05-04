@@ -8,28 +8,20 @@
 
   DISABLE(DumpAccessibilityTreeTest, AccessibilityInputTime)
 
-  DISABLE(SearchProviderTest, TestIsSearchProviderInstalled)
+  //DISABLE(SearchProviderTest, TestIsSearchProviderInstalled)
 
   DISABLE(ExtensionApiTest, Bookmarks)
 
-  DISABLE(ExtensionLoadingTest, RuntimeValidWhileDevToolsOpen)
+  //DISABLE(ExtensionLoadingTest, RuntimeValidWhileDevToolsOpen)
 
-  DISABLE(FullscreenControllerTest, PermissionContentSettings)
+  //DISABLE(FullscreenControllerTest, PermissionContentSettings)
 
-  DISABLE_MULTI(NativeAppWindowCocoaBrowserTest, Minimize)
-  DISABLE_MULTI(NativeAppWindowCocoaBrowserTest, MinimizeMaximize)
+  //DISABLE_MULTI(NativeAppWindowCocoaBrowserTest, Minimize)
+  //DISABLE_MULTI(NativeAppWindowCocoaBrowserTest, MinimizeMaximize)
 
-  DISABLE(PlatformAppBrowserTest, WindowsApiProperties)
+  //DISABLE(PlatformAppBrowserTest, WindowsApiProperties)
 
-  DISABLE(PipelineIntegrationTest, BasicPlayback_MediaSource_VideoOnly_MP4_AVC3)
-  DISABLE(PipelineIntegrationTest, EncryptedPlayback_MP4_CENC_KeyRotation_Video)
-  DISABLE(PipelineIntegrationTest, EncryptedPlayback_MP4_CENC_SENC_Video)
-  DISABLE(PipelineIntegrationTest, EncryptedPlayback_MP4_CENC_VideoOnly)
-  DISABLE(PipelineIntegrationTest,
-          EncryptedPlayback_NoEncryptedFrames_MP4_CENC_VideoOnly)
-  DISABLE(MediaColorTest, Yuv420pRec709H264)
-
-  DISABLE(SpeechViewTest, ClickMicButton)
+  //DISABLE(SpeechViewTest, ClickMicButton)
 
   // Broke in v52
   DISABLE(BrowserWindowControllerTest, FullscreenResizeFlags)
@@ -40,7 +32,7 @@
   DISABLE(BrowserWindowControllerTest,
           FullscreenToolbarExposedForTabstripChanges)
 
-  DISABLE(ExtensionWindowCreateTest,AcceptState)
+  //DISABLE(ExtensionWindowCreateTest,AcceptState)
   DISABLE_MULTI(SavePageOriginalVsSavedComparisonTest, ObjectElementsViaFile)
 
   // Broke in v55
@@ -51,5 +43,19 @@
   DISABLE(WebstoreInlineInstallerTest,
           BlockInlineInstallFromFullscreenForBrowser)
   DISABLE(WebstoreInlineInstallerTest, BlockInlineInstallFromFullscreenForTab)
-  DISABLE(PipelineIntegrationTest,
-          EncryptedPlayback_MP4_CENC_SENC_NO_SAIZ_SAIO_Video)
+
+  // Broke due to features::kNativeNotifications being enabled by us
+  DISABLE_ALL(NotificationsTest)
+  DISABLE(PlatformNotificationServiceTest, DisplayPageNotificationMatches)
+  DISABLE(PlatformNotificationServiceTest, DisplayPersistentNotificationMatches)
+  DISABLE(PlatformNotificationServiceTest, PersistentNotificationDisplay)
+
+  // Flaky in v56?
+  //DISABLE(AppShimMenuControllerUITest, WindowCycling)
+
+  // Broke in v57
+  DISABLE(BrowserWindowControllerTest,
+          FullscreenToolbarIsVisibleAccordingToPrefs)
+  DISABLE(SessionRestoreTest, TabWithDownloadDoesNotGetRestored)
+  DISABLE(SBNavigationObserverBrowserTest,
+          DownloadViaHTML5FileApiWithUserGesture)

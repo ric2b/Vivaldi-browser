@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
@@ -64,6 +65,7 @@ const char* const kKnownSettings[] = {
     kDeviceDisabledMessage,
     kDeviceOwner,
     kDeviceQuirksDownloadEnabled,
+    kDeviceWallpaperImage,
     kDisplayRotationDefault,
     kExtensionCacheSize,
     kHeartbeatEnabled,
@@ -93,6 +95,7 @@ const char* const kKnownSettings[] = {
     kSystemLogUploadEnabled,
     kSystemTimezonePolicy,
     kSystemUse24HourClock,
+    kTargetVersionPrefix,
     kUpdateDisabled,
     kVariationsRestrictParameter,
 };
@@ -330,6 +333,12 @@ void DecodeAutoUpdatePolicies(
       new_values_cache->SetBoolean(kUpdateDisabled,
                                    au_settings_proto.update_disabled());
     }
+
+    if (au_settings_proto.has_target_version_prefix()) {
+      new_values_cache->SetString(kTargetVersionPrefix,
+                                  au_settings_proto.target_version_prefix());
+    }
+
     const RepeatedField<int>& allowed_connection_types =
         au_settings_proto.allowed_connection_types();
     std::unique_ptr<base::ListValue> list(new base::ListValue());
@@ -515,6 +524,14 @@ void DecodeGenericPolicies(
     new_values_cache->SetBoolean(
         kDeviceQuirksDownloadEnabled,
         policy.quirks_download_enabled().quirks_download_enabled());
+  }
+
+  if (policy.has_device_wallpaper_image() &&
+      policy.device_wallpaper_image().has_device_wallpaper_image()) {
+    std::unique_ptr<base::DictionaryValue> dict_val =
+        base::DictionaryValue::From(base::JSONReader::Read(
+            policy.device_wallpaper_image().device_wallpaper_image()));
+    new_values_cache->SetValue(kDeviceWallpaperImage, std::move(dict_val));
   }
 }
 
@@ -718,11 +735,11 @@ void DeviceSettingsProvider::UpdateValuesCache(
   // cache so that if somebody actually reads the cache will be already valid.
   std::vector<std::string> notifications;
   // Go through the new values and verify in the old ones.
-  PrefValueMap::iterator iter = new_values_cache.begin();
+  auto iter = new_values_cache.begin();
   for (; iter != new_values_cache.end(); ++iter) {
     const base::Value* old_value;
     if (!values_cache_.GetValue(iter->first, &old_value) ||
-        !old_value->Equals(iter->second)) {
+        !old_value->Equals(iter->second.get())) {
       notifications.push_back(iter->first);
     }
   }

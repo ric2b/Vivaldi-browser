@@ -10,15 +10,16 @@
 #include "ash/ash_export.h"
 #include "ash/common/shell_observer.h"
 #include "ash/common/wm_display_observer.h"
+#include "ash/public/interfaces/touch_view.mojom.h"
+#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/time/time.h"
-#include "ui/gfx/geometry/vector3d_f.h"
-
-#if defined(OS_CHROMEOS)
 #include "chromeos/accelerometer/accelerometer_reader.h"
 #include "chromeos/accelerometer/accelerometer_types.h"
 #include "chromeos/dbus/power_manager_client.h"
-#endif  // OS_CHROMEOS
+#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/interface_ptr_set.h"
+#include "ui/gfx/geometry/vector3d_f.h"
 
 namespace base {
 class TickClock;
@@ -26,10 +27,6 @@ class TickClock;
 
 namespace gfx {
 class Vector3dF;
-}
-
-namespace ui {
-class EventHandler;
 }
 
 namespace ash {
@@ -48,10 +45,9 @@ class VirtualKeyboardControllerTest;
 // enters and exits maximize mode when the lid is opened beyond the triggering
 // angle and rotates the display to match the device when in maximize mode.
 class ASH_EXPORT MaximizeModeController :
-#if defined(OS_CHROMEOS)
     public chromeos::AccelerometerReader::Observer,
     public chromeos::PowerManagerClient::Observer,
-#endif  // OS_CHROMEOS
+    NON_EXPORTED_BASE(public mojom::TouchViewManager),
     public ShellObserver,
     public WmDisplayObserver {
  public:
@@ -79,6 +75,9 @@ class ASH_EXPORT MaximizeModeController :
   // If the maximize mode is not enabled no action will be performed.
   void AddWindow(WmWindow* window);
 
+  // Binds the mojom::TouchViewManager interface request to this object.
+  void BindRequest(mojom::TouchViewManagerRequest request);
+
   // ShellObserver:
   void OnAppTerminating() override;
   void OnMaximizeModeStarted() override;
@@ -87,7 +86,6 @@ class ASH_EXPORT MaximizeModeController :
   // WmDisplayObserver:
   void OnDisplayConfigurationChanged() override;
 
-#if defined(OS_CHROMEOS)
   // chromeos::AccelerometerReader::Observer:
   void OnAccelerometerUpdated(
       scoped_refptr<const chromeos::AccelerometerUpdate> update) override;
@@ -97,7 +95,6 @@ class ASH_EXPORT MaximizeModeController :
   void TabletModeEventReceived(bool on, const base::TimeTicks& time) override;
   void SuspendImminent() override;
   void SuspendDone(const base::TimeDelta& sleep_duration) override;
-#endif  // OS_CHROMEOS
 
  private:
   friend class MaximizeModeControllerTest;
@@ -116,12 +113,10 @@ class ASH_EXPORT MaximizeModeController :
   // artificially and deterministically control the current time.
   void SetTickClockForTest(std::unique_ptr<base::TickClock> tick_clock);
 
-#if defined(OS_CHROMEOS)
   // Detect hinge rotation from base and lid accelerometers and automatically
   // start / stop maximize mode.
   void HandleHingeRotation(
       scoped_refptr<const chromeos::AccelerometerUpdate> update);
-#endif
 
   // Returns true if the lid was recently opened.
   bool WasLidOpenedRecently() const;
@@ -144,6 +139,9 @@ class ASH_EXPORT MaximizeModeController :
   // Returns TOUCH_VIEW_INTERVAL_ACTIVE if TouchView is currently active,
   // otherwise returns TOUCH_VIEW_INTERNAL_INACTIVE.
   TouchViewIntervalType CurrentTouchViewIntervalType();
+
+  // mojom::TouchViewManager:
+  void AddObserver(mojom::TouchViewObserverPtr observer) override;
 
   // The maximized window manager (if enabled).
   std::unique_ptr<MaximizeModeWindowManager> maximize_mode_window_manager_;
@@ -168,10 +166,8 @@ class ASH_EXPORT MaximizeModeController :
   // Source for the current time in base::TimeTicks.
   std::unique_ptr<base::TickClock> tick_clock_;
 
-#if defined(OS_CHROMEOS)
   // Set when tablet mode switch is on. This is used to force maximize mode.
   bool tablet_mode_switch_is_on_;
-#endif
 
   // Tracks when the lid is closed. Used to prevent entering maximize mode.
   bool lid_is_closed_;
@@ -181,6 +177,12 @@ class ASH_EXPORT MaximizeModeController :
   // incorrect calculations of hinge angles.
   gfx::Vector3dF base_smoothed_;
   gfx::Vector3dF lid_smoothed_;
+
+  // Bindings for the TouchViewManager interface.
+  mojo::BindingSet<mojom::TouchViewManager> bindings_;
+
+  // The set of touchview observers to be notified about mode changes.
+  mojo::InterfacePtrSet<mojom::TouchViewObserver> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(MaximizeModeController);
 };

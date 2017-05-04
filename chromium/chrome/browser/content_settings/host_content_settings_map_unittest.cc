@@ -28,6 +28,7 @@
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread.h"
 #include "net/base/static_cookie_policy.h"
+#include "ppapi/features/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -140,7 +141,7 @@ TEST_F(HostContentSettingsMapTest, DefaultValues) {
           GURL(chrome::kChromeUINewTabURL), GURL(chrome::kChromeUINewTabURL),
           CONTENT_SETTINGS_TYPE_JAVASCRIPT, std::string()));
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   host_content_settings_map->SetDefaultContentSetting(
       CONTENT_SETTINGS_TYPE_PLUGINS, CONTENT_SETTING_ALLOW);
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
@@ -163,9 +164,6 @@ TEST_F(HostContentSettingsMapTest, DefaultValues) {
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetDefaultContentSetting(
                 CONTENT_SETTINGS_TYPE_POPUPS, NULL));
-  EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            host_content_settings_map->GetDefaultContentSetting(
-                CONTENT_SETTINGS_TYPE_KEYGEN, NULL));
 }
 
 TEST_F(HostContentSettingsMapTest, IndividualSettings) {
@@ -190,7 +188,7 @@ TEST_F(HostContentSettingsMapTest, IndividualSettings) {
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   EXPECT_EQ(CONTENT_SETTING_DETECT_IMPORTANT_CONTENT,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_PLUGINS, std::string()));
@@ -203,7 +201,7 @@ TEST_F(HostContentSettingsMapTest, IndividualSettings) {
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             host_content_settings_map->GetContentSetting(
                 host, host, CONTENT_SETTINGS_TYPE_JAVASCRIPT, std::string()));
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   host_content_settings_map->SetContentSettingDefaultScope(
       host, GURL(), CONTENT_SETTINGS_TYPE_PLUGINS, std::string(),
       CONTENT_SETTING_ALLOW);
@@ -223,13 +221,6 @@ TEST_F(HostContentSettingsMapTest, IndividualSettings) {
           host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
 
   host_content_settings_map->SetContentSettingDefaultScope(
-      host, GURL(), CONTENT_SETTINGS_TYPE_KEYGEN, std::string(),
-      CONTENT_SETTING_ALLOW);
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            host_content_settings_map->GetContentSetting(
-                host, host, CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
-
-  host_content_settings_map->SetContentSettingDefaultScope(
       host, GURL(), CONTENT_SETTINGS_TYPE_AUTOPLAY, std::string(),
       CONTENT_SETTING_BLOCK);
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
@@ -241,7 +232,7 @@ TEST_F(HostContentSettingsMapTest, IndividualSettings) {
   host_content_settings_map->SetContentSettingDefaultScope(
       host2, GURL(), CONTENT_SETTINGS_TYPE_JAVASCRIPT, std::string(),
       CONTENT_SETTING_BLOCK);
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   host_content_settings_map->SetContentSettingDefaultScope(
       host2, GURL(), CONTENT_SETTINGS_TYPE_PLUGINS, std::string(),
       CONTENT_SETTING_BLOCK);
@@ -251,7 +242,7 @@ TEST_F(HostContentSettingsMapTest, IndividualSettings) {
       CONTENT_SETTINGS_TYPE_JAVASCRIPT, std::string(), &host_settings);
   // |host_settings| contains the default setting and 2 exception.
   EXPECT_EQ(3U, host_settings.size());
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   host_content_settings_map->GetSettingsForOneType(
       CONTENT_SETTINGS_TYPE_PLUGINS, std::string(), &host_settings);
   // |host_settings| contains the default setting and 2 exceptions.
@@ -277,7 +268,7 @@ TEST_F(HostContentSettingsMapTest, Clear) {
   host_content_settings_map->SetContentSettingDefaultScope(
       host, GURL(), CONTENT_SETTINGS_TYPE_COOKIES, std::string(),
       CONTENT_SETTING_BLOCK);
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   host_content_settings_map->SetContentSettingDefaultScope(
       host, GURL(), CONTENT_SETTINGS_TYPE_PLUGINS, std::string(),
       CONTENT_SETTING_BLOCK);
@@ -292,7 +283,7 @@ TEST_F(HostContentSettingsMapTest, Clear) {
       CONTENT_SETTINGS_TYPE_COOKIES, std::string(), &host_settings);
   // |host_settings| contains only the default setting.
   EXPECT_EQ(1U, host_settings.size());
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   host_content_settings_map->GetSettingsForOneType(
       CONTENT_SETTINGS_TYPE_PLUGINS, std::string(), &host_settings);
   // |host_settings| contains the default setting and an exception.
@@ -523,7 +514,7 @@ TEST_F(HostContentSettingsMapTest, HostTrimEndingDotCheck) {
                 CONTENT_SETTINGS_TYPE_JAVASCRIPT,
                 std::string()));
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   EXPECT_EQ(CONTENT_SETTING_DETECT_IMPORTANT_CONTENT,
             host_content_settings_map->GetContentSetting(
                 host_ending_with_dot,
@@ -574,25 +565,6 @@ TEST_F(HostContentSettingsMapTest, HostTrimEndingDotCheck) {
                                                    host_ending_with_dot,
                                                    CONTENT_SETTINGS_TYPE_POPUPS,
                                                    std::string()));
-
-  EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            host_content_settings_map->GetContentSetting(
-                host_ending_with_dot, host_ending_with_dot,
-                CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
-  host_content_settings_map->SetContentSettingDefaultScope(
-      host_ending_with_dot, GURL(), CONTENT_SETTINGS_TYPE_KEYGEN, std::string(),
-      CONTENT_SETTING_ALLOW);
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            host_content_settings_map->GetContentSetting(
-                host_ending_with_dot, host_ending_with_dot,
-                CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
-  host_content_settings_map->SetContentSettingDefaultScope(
-      host_ending_with_dot, GURL(), CONTENT_SETTINGS_TYPE_KEYGEN, std::string(),
-      CONTENT_SETTING_DEFAULT);
-  EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            host_content_settings_map->GetContentSetting(
-                host_ending_with_dot, host_ending_with_dot,
-                CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetContentSetting(
@@ -710,7 +682,9 @@ TEST_F(HostContentSettingsMapTest, TypeIsolatedSettings) {
                 host, host, CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string()));
 }
 
-TEST_F(HostContentSettingsMapTest, OffTheRecord) {
+TEST_F(HostContentSettingsMapTest, IncognitoInheritInitialAllow) {
+  // The cookie setting has an initial value of ALLOW, so all changes should be
+  // inherited from regular to incognito mode.
   TestingProfile profile;
   Profile* otr_profile = profile.GetOffTheRecordProfile();
   HostContentSettingsMap* host_content_settings_map =
@@ -729,6 +703,16 @@ TEST_F(HostContentSettingsMapTest, OffTheRecord) {
 
   // Changing content settings on the main map should also affect the
   // incognito map.
+  host_content_settings_map->SetContentSettingDefaultScope(
+      host, GURL(), CONTENT_SETTINGS_TYPE_COOKIES, std::string(),
+      CONTENT_SETTING_SESSION_ONLY);
+  EXPECT_EQ(CONTENT_SETTING_SESSION_ONLY,
+            host_content_settings_map->GetContentSetting(
+                host, host, CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+  EXPECT_EQ(CONTENT_SETTING_SESSION_ONLY,
+            otr_map->GetContentSetting(
+                host, host, CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+
   host_content_settings_map->SetContentSettingDefaultScope(
       host, GURL(), CONTENT_SETTINGS_TYPE_COOKIES, std::string(),
       CONTENT_SETTING_BLOCK);
@@ -752,10 +736,57 @@ TEST_F(HostContentSettingsMapTest, OffTheRecord) {
                 host, host, CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
 }
 
-TEST_F(HostContentSettingsMapTest, OffTheRecordPartialInheritPref) {
-  // Permissions marked INHERIT_IN_INCOGNITO_EXCEPT_ALLOW in
-  // ContentSettingsRegistry (e.g. push & notifications) only inherit BLOCK
-  // settings from regular to incognito.
+TEST_F(HostContentSettingsMapTest, IncognitoInheritPopups) {
+  // The popup setting has an initial value of BLOCK, so  popup doesn't inherit
+  // settings to incognito
+  TestingProfile profile;
+  Profile* otr_profile = profile.GetOffTheRecordProfile();
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+  HostContentSettingsMap* otr_map =
+      HostContentSettingsMapFactory::GetForProfile(otr_profile);
+
+  GURL host("http://example.com/");
+
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetContentSetting(
+                host, host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            otr_map->GetContentSetting(
+                host, host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+
+  // Changing content settings on the main map should not affect the
+  // incognito map.
+  host_content_settings_map->SetContentSettingDefaultScope(
+      host, GURL(), CONTENT_SETTINGS_TYPE_POPUPS, std::string(),
+      CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                host, host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            otr_map->GetContentSetting(
+                host, host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+
+  // Changing content settings on the incognito map should NOT affect the
+  // main map.
+  host_content_settings_map->SetContentSettingDefaultScope(host, GURL(),
+                                         CONTENT_SETTINGS_TYPE_POPUPS,
+                                         std::string(), CONTENT_SETTING_BLOCK);
+  otr_map->SetContentSettingDefaultScope(host, GURL(),
+                                         CONTENT_SETTINGS_TYPE_POPUPS,
+                                         std::string(), CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetContentSetting(
+                host, host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            otr_map->GetContentSetting(
+                host, host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+}
+
+TEST_F(HostContentSettingsMapTest, IncognitoPartialInheritPref) {
+  // Permissions marked INHERIT_IF_LESS_PERMISSIVE in
+  // ContentSettingsRegistry only inherit BLOCK and ASK settings from regular
+  // to incognito if the initial value is ASK.
   TestingProfile profile;
   Profile* otr_profile = profile.GetOffTheRecordProfile();
   HostContentSettingsMap* host_content_settings_map =
@@ -802,10 +833,10 @@ TEST_F(HostContentSettingsMapTest, OffTheRecordPartialInheritPref) {
           host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
 }
 
-TEST_F(HostContentSettingsMapTest, OffTheRecordPartialInheritDefault) {
-  // Permissions marked INHERIT_IN_INCOGNITO_EXCEPT_ALLOW in
-  // ContentSettingsRegistry (e.g. push & notifications) only inherit BLOCK
-  // default settings from regular to incognito.
+TEST_F(HostContentSettingsMapTest, IncognitoPartialInheritDefault) {
+  // Permissions marked INHERIT_IF_LESS_PERMISSIVE in
+  // ContentSettingsRegistry only inherit BLOCK and ASK settings from regular
+  // to incognito if the initial value is ASK.
   TestingProfile profile;
   Profile* otr_profile = profile.GetOffTheRecordProfile();
   HostContentSettingsMap* host_content_settings_map =
@@ -817,58 +848,58 @@ TEST_F(HostContentSettingsMapTest, OffTheRecordPartialInheritDefault) {
 
   EXPECT_EQ(CONTENT_SETTING_ASK,
             host_content_settings_map->GetDefaultContentSetting(
-                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, NULL));
+                CONTENT_SETTINGS_TYPE_GEOLOCATION, NULL));
   EXPECT_EQ(
       CONTENT_SETTING_ASK,
       host_content_settings_map->GetContentSetting(
-          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+          host, host, CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string()));
   EXPECT_EQ(CONTENT_SETTING_ASK,
             otr_map->GetDefaultContentSetting(
-                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, NULL));
+                CONTENT_SETTINGS_TYPE_GEOLOCATION, NULL));
   EXPECT_EQ(
       CONTENT_SETTING_ASK,
       otr_map->GetContentSetting(
-          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+          host, host, CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string()));
 
   // BLOCK should be inherited from the main map to the incognito map.
   host_content_settings_map->SetDefaultContentSetting(
-      CONTENT_SETTINGS_TYPE_NOTIFICATIONS, CONTENT_SETTING_BLOCK);
+      CONTENT_SETTINGS_TYPE_GEOLOCATION, CONTENT_SETTING_BLOCK);
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             host_content_settings_map->GetDefaultContentSetting(
-                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, NULL));
+                CONTENT_SETTINGS_TYPE_GEOLOCATION, NULL));
   EXPECT_EQ(
       CONTENT_SETTING_BLOCK,
       host_content_settings_map->GetContentSetting(
-          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+          host, host, CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string()));
   EXPECT_EQ(CONTENT_SETTING_BLOCK,
             otr_map->GetDefaultContentSetting(
-                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, NULL));
+                CONTENT_SETTINGS_TYPE_GEOLOCATION, NULL));
   EXPECT_EQ(
       CONTENT_SETTING_BLOCK,
       otr_map->GetContentSetting(
-          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+          host, host, CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string()));
 
   // ALLOW should not be inherited from the main map to the incognito map (but
   // it still overwrites the BLOCK, hence incognito reverts to ASK).
   host_content_settings_map->SetDefaultContentSetting(
-      CONTENT_SETTINGS_TYPE_NOTIFICATIONS, CONTENT_SETTING_ALLOW);
+      CONTENT_SETTINGS_TYPE_GEOLOCATION, CONTENT_SETTING_ALLOW);
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetDefaultContentSetting(
-                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, NULL));
+                CONTENT_SETTINGS_TYPE_GEOLOCATION, NULL));
   EXPECT_EQ(
       CONTENT_SETTING_ALLOW,
       host_content_settings_map->GetContentSetting(
-          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+          host, host, CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string()));
   EXPECT_EQ(CONTENT_SETTING_ASK,
             otr_map->GetDefaultContentSetting(
-                CONTENT_SETTINGS_TYPE_NOTIFICATIONS, NULL));
+                CONTENT_SETTINGS_TYPE_GEOLOCATION, NULL));
   EXPECT_EQ(
       CONTENT_SETTING_ASK,
       otr_map->GetContentSetting(
-          host, host, CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string()));
+          host, host, CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string()));
 }
 
-TEST_F(HostContentSettingsMapTest, OffTheRecordDontInheritSetting) {
+TEST_F(HostContentSettingsMapTest, IncognitoDontInheritSetting) {
   // Website settings marked DONT_INHERIT_IN_INCOGNITO in
   // WebsiteSettingsRegistry (e.g. usb chooser data) don't inherit any values
   // from from regular to incognito.
@@ -1024,7 +1055,7 @@ TEST_F(HostContentSettingsMapTest, ManagedDefaultContentSetting) {
             host_content_settings_map->GetDefaultContentSetting(
                 CONTENT_SETTINGS_TYPE_JAVASCRIPT, NULL));
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   // Set preference to manage the default-content-setting for Plugins.
   prefs->SetManagedPref(prefs::kManagedDefaultPluginsSetting,
                         new base::FundamentalValue(CONTENT_SETTING_BLOCK));
@@ -1038,23 +1069,6 @@ TEST_F(HostContentSettingsMapTest, ManagedDefaultContentSetting) {
             host_content_settings_map->GetDefaultContentSetting(
                 CONTENT_SETTINGS_TYPE_PLUGINS, NULL));
 #endif
-
-  EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            host_content_settings_map->GetDefaultContentSetting(
-                CONTENT_SETTINGS_TYPE_KEYGEN, NULL));
-
-  // Set managed-default content setting through the coresponding preferences.
-  prefs->SetManagedPref(prefs::kManagedDefaultKeygenSetting,
-                        new base::FundamentalValue(CONTENT_SETTING_ALLOW));
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            host_content_settings_map->GetDefaultContentSetting(
-                CONTENT_SETTINGS_TYPE_KEYGEN, NULL));
-
-  // Remove managed-default content settings preferences.
-  prefs->RemoveManagedPref(prefs::kManagedDefaultKeygenSetting);
-  EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            host_content_settings_map->GetDefaultContentSetting(
-                CONTENT_SETTINGS_TYPE_KEYGEN, NULL));
 }
 
 TEST_F(HostContentSettingsMapTest,
@@ -1236,6 +1250,8 @@ TEST_F(HostContentSettingsMapTest, AddContentSettingsObserver) {
       CONTENT_SETTING_DEFAULT);
 }
 
+// Guest profiles do not exist on Android, so don't run these tests there.
+#if !defined(OS_ANDROID)
 TEST_F(HostContentSettingsMapTest, GuestProfile) {
   TestingProfile profile;
   profile.SetGuestSession(true);
@@ -1307,56 +1323,7 @@ TEST_F(HostContentSettingsMapTest, GuestProfileMigration) {
           GetPrefName(CONTENT_SETTINGS_TYPE_COOKIES));
   EXPECT_TRUE(all_settings_dictionary->empty());
 }
-
-TEST_F(HostContentSettingsMapTest, MigrateKeygenSettings) {
-  TestingProfile profile;
-  HostContentSettingsMap* host_content_settings_map =
-      HostContentSettingsMapFactory::GetForProfile(&profile);
-
-  // Set old formatted settings.
-  GURL host("http://example.com/");
-  ContentSettingsPattern pattern =
-      ContentSettingsPattern::FromURLNoWildcard(host);
-
-  // Default setting is BLOCK.
-  EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            host_content_settings_map->GetContentSetting(
-                host, host, CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
-
-  host_content_settings_map->SetContentSettingCustomScope(
-      pattern, pattern, CONTENT_SETTINGS_TYPE_KEYGEN, std::string(),
-      CONTENT_SETTING_ALLOW);
-  // Because of the old formatted setting entry which has two same patterns,
-  // SetContentSetting() to (host, GURL()) will be ignored.
-  host_content_settings_map->SetContentSettingDefaultScope(
-      host, GURL(), CONTENT_SETTINGS_TYPE_KEYGEN, std::string(),
-      CONTENT_SETTING_BLOCK);
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            host_content_settings_map->GetContentSetting(
-                host, host, CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
-
-  host_content_settings_map->MigrateKeygenSettings();
-
-  ContentSettingsForOneType settings;
-  host_content_settings_map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_KEYGEN,
-                                                   std::string(), &settings);
-  for (const ContentSettingPatternSource& setting_entry : settings) {
-    EXPECT_EQ(setting_entry.secondary_pattern,
-              ContentSettingsPattern::Wildcard());
-  }
-
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            host_content_settings_map->GetContentSetting(
-                host, host, CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
-
-  // After migrating old settings, changes to the setting works.
-  host_content_settings_map->SetContentSettingDefaultScope(
-      host, GURL(), CONTENT_SETTINGS_TYPE_KEYGEN, std::string(),
-      CONTENT_SETTING_BLOCK);
-  EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            host_content_settings_map->GetContentSetting(
-                host, host, CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
-}
+#endif  // !defined(OS_ANDROID)
 
 TEST_F(HostContentSettingsMapTest, MigrateDomainScopedSettings) {
   TestingProfile profile;
@@ -1533,6 +1500,13 @@ TEST_F(HostContentSettingsMapTest, MigrateDomainScopedSettings) {
 // once after syncing (even when these events occur multiple times).
 TEST_F(HostContentSettingsMapTest, DomainToOriginMigrationStatus) {
   TestingProfile profile;
+
+  // Construct the map now to make the various platforms equivalent. On Android
+  // the map is created with the profile (due to dependencies), while on other
+  // platforms it is created lazily. Note, migration should be run here.
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+
   PrefService* prefs = profile.GetPrefs();
 
   GURL http_host("http://example.com/");
@@ -1558,13 +1532,38 @@ TEST_F(HostContentSettingsMapTest, DomainToOriginMigrationStatus) {
   EXPECT_TRUE(all_settings_dictionary->GetDictionaryWithoutPathExpansion(
       "[*.]example.com,*", &result));
 
-  // Migration is done on construction of HostContentSettingsMap.
-  HostContentSettingsMap* host_content_settings_map =
-      HostContentSettingsMapFactory::GetForProfile(&profile);
+  // Migration is done on construction of HostContentSettingsMap. Try to run it
+  // again. This should not do anything as it has already ran.
+  host_content_settings_map->MigrateDomainScopedSettings(
+      false /* after_sync */);
 
   // Change default setting to BLOCK.
   host_content_settings_map->SetDefaultContentSetting(
       CONTENT_SETTINGS_TYPE_POPUPS, CONTENT_SETTING_BLOCK);
+
+  EXPECT_EQ(
+      CONTENT_SETTING_ALLOW,
+      host_content_settings_map->GetContentSetting(
+          http_host, http_host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+
+  // The setting should still be allow as it hasn't been migrated.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                http_host_narrower, http_host_narrower,
+                CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+
+  // Set the pref to its initial state so that migration can be triggered again,
+  // just for the sake of testing.
+  int default_value;
+  prefs->GetDefaultPrefValue(prefs::kDomainToOriginMigrationStatus)
+      ->GetAsInteger(&default_value);
+  prefs->SetInteger(prefs::kDomainToOriginMigrationStatus, default_value);
+
+  // Now, do the migration. This should work as we've cleared the pref back to
+  // its default value.
+  host_content_settings_map->MigrateDomainScopedSettings(false);
+
+  // Now the settings should be migrated.
   EXPECT_EQ(
       CONTENT_SETTING_ALLOW,
       host_content_settings_map->GetContentSetting(
@@ -1582,6 +1581,7 @@ TEST_F(HostContentSettingsMapTest, DomainToOriginMigrationStatus) {
       ContentSettingsPattern::FromURL(https_host),
       ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_POPUPS,
       std::string(), CONTENT_SETTING_ALLOW);
+
   EXPECT_EQ(
       CONTENT_SETTING_ALLOW,
       host_content_settings_map->GetContentSetting(
@@ -1741,3 +1741,19 @@ TEST_F(HostContentSettingsMapTest, ClearSettingsForOneTypeWithPredicate) {
   EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(url1),
             host_settings[0].primary_pattern);
 }
+
+TEST_F(HostContentSettingsMapTest, CanSetNarrowestSetting) {
+  TestingProfile profile;
+  const auto* map = HostContentSettingsMapFactory::GetForProfile(&profile);
+
+  GURL valid_url("http://google.com");
+  EXPECT_TRUE(map->CanSetNarrowestContentSetting(
+      valid_url, valid_url,
+      CONTENT_SETTINGS_TYPE_POPUPS));
+
+  GURL invalid_url("about:blank");
+  EXPECT_FALSE(map->CanSetNarrowestContentSetting(
+      invalid_url, invalid_url,
+      CONTENT_SETTINGS_TYPE_POPUPS));
+}
+

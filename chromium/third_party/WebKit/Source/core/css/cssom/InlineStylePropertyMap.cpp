@@ -30,7 +30,7 @@ const CSSValue* styleValueToCSSValue(CSSPropertyID propertyID,
 
 const CSSValue* singleStyleValueAsCSSValue(CSSPropertyID propertyID,
                                            const CSSStyleValue& styleValue) {
-  if (!CSSPropertyMetadata::propertySupportsMultiple(propertyID))
+  if (!CSSPropertyMetadata::propertyIsRepeated(propertyID))
     return styleValueToCSSValue(propertyID, styleValue);
 
   const CSSValue* cssValue = styleValueToCSSValue(propertyID, styleValue);
@@ -94,14 +94,14 @@ Vector<String> InlineStylePropertyMap::getProperties() {
           inlineStyleSet.propertyAt(i);
       const CSSCustomPropertyDeclaration& customDeclaration =
           toCSSCustomPropertyDeclaration(propertyReference.value());
-      result.append(customDeclaration.name());
+      result.push_back(customDeclaration.name());
     } else if (propertyID == CSSPropertyApplyAtRule) {
       if (!containsAtApply) {
-        result.append(kAtApply);
+        result.push_back(kAtApply);
         containsAtApply = true;
       }
     } else {
-      result.append(getPropertyNameString(propertyID));
+      result.push_back(getPropertyNameString(propertyID));
     }
   }
   return result;
@@ -116,7 +116,7 @@ void InlineStylePropertyMap::set(
     cssValue =
         singleStyleValueAsCSSValue(propertyID, *item.getAsCSSStyleValue());
   } else if (item.isCSSStyleValueSequence()) {
-    if (!CSSPropertyMetadata::propertySupportsMultiple(propertyID)) {
+    if (!CSSPropertyMetadata::propertyIsRepeated(propertyID)) {
       exceptionState.throwTypeError(
           "Property does not support multiple values");
       return;
@@ -140,7 +140,7 @@ void InlineStylePropertyMap::append(
     CSSPropertyID propertyID,
     CSSStyleValueOrCSSStyleValueSequenceOrString& item,
     ExceptionState& exceptionState) {
-  if (!CSSPropertyMetadata::propertySupportsMultiple(propertyID)) {
+  if (!CSSPropertyMetadata::propertyIsRepeated(propertyID)) {
     exceptionState.throwTypeError("Property does not support multiple values");
     return;
   }
@@ -227,7 +227,7 @@ InlineStylePropertyMap::getIterationEntries() {
       else
         value.setCSSStyleValueSequence(styleValueVector);
     }
-    result.append(std::make_pair(name, value));
+    result.push_back(std::make_pair(name, value));
   }
   return result;
 }

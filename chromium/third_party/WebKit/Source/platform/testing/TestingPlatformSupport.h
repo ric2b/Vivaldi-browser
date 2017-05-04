@@ -37,8 +37,12 @@
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
+#include "wtf/Allocator.h"
+#include "wtf/Assertions.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/Vector.h"
 #include <memory>
+#include <utility>
 
 namespace base {
 class SimpleTestTickClock;
@@ -58,7 +62,6 @@ namespace scheduler {
 class RendererScheduler;
 class RendererSchedulerImpl;
 }
-class TestingPlatformMockWebTaskRunner;
 class WebCompositorSupport;
 class WebThread;
 
@@ -81,41 +84,9 @@ class TestingCompositorSupport : public WebCompositorSupport {
       bool isLeftSideVerticalScrollbar) override;
 };
 
-class TestingPlatformMockScheduler : public WebScheduler {
-  WTF_MAKE_NONCOPYABLE(TestingPlatformMockScheduler);
-
- public:
-  TestingPlatformMockScheduler();
-  ~TestingPlatformMockScheduler() override;
-
-  void runSingleTask();
-  void runAllTasks();
-
-  // WebScheduler implementation:
-  WebTaskRunner* loadingTaskRunner() override;
-  WebTaskRunner* timerTaskRunner() override;
-  void shutdown() override {}
-  bool shouldYieldForHighPriorityWork() override { return false; }
-  bool canExceedIdleDeadlineIfRequired() override { return false; }
-  void postIdleTask(const WebTraceLocation&, WebThread::IdleTask*) override {}
-  void postNonNestableIdleTask(const WebTraceLocation&,
-                               WebThread::IdleTask*) override {}
-  std::unique_ptr<WebViewScheduler> createWebViewScheduler(
-      InterventionReporter*,
-      WebViewScheduler::WebViewSchedulerSettings*) override {
-    return nullptr;
-  }
-  void suspendTimerQueue() override {}
-  void resumeTimerQueue() override {}
-  void addPendingNavigation(WebScheduler::NavigatingFrameType) override {}
-  void removePendingNavigation(WebScheduler::NavigatingFrameType) override {}
-  void onNavigationStarted() override {}
-
- private:
-  WTF::Deque<std::unique_ptr<WebTaskRunner::Task>> m_tasks;
-  std::unique_ptr<TestingPlatformMockWebTaskRunner> m_mockWebTaskRunner;
-};
-
+// A base class to override Platform methods for testing.  You can override the
+// behavior by subclassing TestingPlatformSupport or using
+// ScopedTestingPlatformSupport (see below).
 class TestingPlatformSupport : public Platform {
   WTF_MAKE_NONCOPYABLE(TestingPlatformSupport);
 
@@ -151,6 +122,8 @@ class TestingPlatformSupport : public Platform {
   std::unique_ptr<TestingInterfaceProvider> m_interfaceProvider;
 };
 
+// This class adds mocked scheduler support to TestingPlatformSupport.  See also
+// ScopedTestingPlatformSupport to use this class correctly.
 class TestingPlatformSupportWithMockScheduler : public TestingPlatformSupport {
   WTF_MAKE_NONCOPYABLE(TestingPlatformSupportWithMockScheduler);
 
@@ -197,7 +170,54 @@ class TestingPlatformSupportWithMockScheduler : public TestingPlatformSupport {
   std::unique_ptr<WebThread> m_thread;
 };
 
-class ScopedUnittestsEnvironmentSetup {
+// ScopedTestingPlatformSupport<MyTestingPlatformSupport> can be used to
+// override Platform::current() with MyTestingPlatformSupport, like this:
+//
+// #include "platform/testing/TestingPlatformSupport.h"
+//
+// TEST_F(SampleTest, sampleTest) {
+//   ScopedTestingPlatformSupport<MyTestingPlatformSupport> platform;
+//   ...
+//   // You can call methods of MyTestingPlatformSupport.
+//   EXPECT_TRUE(platform->myMethodIsCalled());
+//
+//   // Another instance can be nested.
+//   {
+//     // Constructor's arguments can be passed like this.
+//     Arg arg;
+//     ScopedTestingPlatformSupport<MyAnotherTestingPlatformSupport, const Arg&>
+//         another_platform(args);
+//     ...
+//   }
+//
+//   // Here the original MyTestingPlatformSupport should be restored.
+// }
+template <class T, typename... Args>
+class ScopedTestingPlatformSupport final {
+  WTF_MAKE_NONCOPYABLE(ScopedTestingPlatformSupport);
+
+ public:
+  explicit ScopedTestingPlatformSupport(Args&&... args) {
+    m_testingPlatformSupport = WTF::makeUnique<T>(std::forward<Args>(args)...);
+    m_originalPlatform = Platform::current();
+    DCHECK(m_originalPlatform);
+    Platform::setCurrentPlatformForTesting(m_testingPlatformSupport.get());
+  }
+  ~ScopedTestingPlatformSupport() {
+    DCHECK_EQ(m_testingPlatformSupport.get(), Platform::current());
+    m_testingPlatformSupport.reset();
+    Platform::setCurrentPlatformForTesting(m_originalPlatform);
+  }
+
+  const T* operator->() const { return m_testingPlatformSupport.get(); }
+  T* operator->() { return m_testingPlatformSupport.get(); }
+
+ private:
+  std::unique_ptr<T> m_testingPlatformSupport;
+  Platform* m_originalPlatform;
+};
+
+class ScopedUnittestsEnvironmentSetup final {
   WTF_MAKE_NONCOPYABLE(ScopedUnittestsEnvironmentSetup);
 
  public:
@@ -208,7 +228,7 @@ class ScopedUnittestsEnvironmentSetup {
   class DummyPlatform;
   std::unique_ptr<base::TestDiscardableMemoryAllocator>
       m_discardableMemoryAllocator;
-  std::unique_ptr<DummyPlatform> m_platform;
+  std::unique_ptr<DummyPlatform> m_dummyPlatform;
   std::unique_ptr<cc_blink::WebCompositorSupportImpl> m_compositorSupport;
   TestingPlatformSupport::Config m_testingPlatformConfig;
   std::unique_ptr<TestingPlatformSupport> m_testingPlatformSupport;

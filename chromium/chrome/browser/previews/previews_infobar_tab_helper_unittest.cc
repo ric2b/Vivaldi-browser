@@ -7,27 +7,28 @@
 #include <memory>
 #include <string>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "chrome/browser/previews/previews_infobar_tab_helper.h"
-#include "chrome/common/features.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
-#include "components/offline_pages/offline_page_item.h"
-#include "components/offline_pages/request_header/offline_page_header.h"
+#include "components/offline_pages/core/offline_page_item.h"
+#include "components/offline_pages/core/request_header/offline_page_header.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/test/web_contents_tester.h"
 #include "net/http/http_util.h"
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
 #include "chrome/browser/android/offline_pages/offline_page_tab_helper.h"
-#endif  // BUILDFLAG(ANDROID_JAVA_UI)
+#endif  // defined(OS_ANDROID)
 
 namespace {
 const char kTestUrl[] = "http://www.test.com/";
@@ -39,9 +40,9 @@ class PreviewsInfoBarTabHelperUnitTest
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
 // Insert an OfflinePageTabHelper before PreviewsInfoBarTabHelper.
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
     offline_pages::OfflinePageTabHelper::CreateForWebContents(web_contents());
-#endif  // BUILDFLAG(ANDROID_JAVA_UI)
+#endif  // defined(OS_ANDROID)
     InfoBarService::CreateForWebContents(web_contents());
     PreviewsInfoBarTabHelper::CreateForWebContents(web_contents());
     test_handle_ = content::NavigationHandle::CreateNavigationHandleForTesting(
@@ -121,7 +122,7 @@ TEST_F(PreviewsInfoBarTabHelperUnitTest, CreateLitePageInfoBar) {
   EXPECT_FALSE(infobar_tab_helper->displayed_preview_infobar());
 }
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
 TEST_F(PreviewsInfoBarTabHelperUnitTest, CreateOfflineInfoBar) {
   PreviewsInfoBarTabHelper* infobar_tab_helper =
       PreviewsInfoBarTabHelper::FromWebContents(web_contents());
@@ -146,4 +147,4 @@ TEST_F(PreviewsInfoBarTabHelperUnitTest, CreateOfflineInfoBar) {
 
   EXPECT_FALSE(infobar_tab_helper->displayed_preview_infobar());
 }
-#endif  // BUILDFLAG(ANDROID_JAVA_UI)
+#endif  // defined(OS_ANDROID)

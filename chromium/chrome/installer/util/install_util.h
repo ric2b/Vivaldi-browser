@@ -43,12 +43,11 @@ class InstallUtil {
   // Launches given exe as admin on Vista.
   static bool ExecuteExeAsAdmin(const base::CommandLine& cmd, DWORD* exit_code);
 
-  // Reads the uninstall command for Chromium from registry and returns it.
-  // If system_install is true the command is read from HKLM, otherwise
-  // from HKCU.
-  static base::CommandLine GetChromeUninstallCmd(
-      bool system_install,
-      BrowserDistribution::Type distribution_type);
+  // Reads the uninstall command for Chromium from the Windows registry and
+  // returns it. If |system_install| is true the command is read from HKLM,
+  // otherwise from HKCU. Returns an empty CommandLine if Chrome is not
+  // installed.
+  static base::CommandLine GetChromeUninstallCmd(bool system_install);
 
   // Find the version of Chrome installed on the system by checking the
   // Google Update registry key. Fills |version| with the version or a
@@ -92,10 +91,6 @@ class InstallUtil {
   // Resets internal state for IsPerUserInstall so that the next call recomputes
   // with fresh data.
   static void ResetIsPerUserInstallForTest();
-
-  // Returns true if the installation represented by the pair of |dist| and
-  // |system_level| is a multi install.
-  static bool IsMultiInstall(BrowserDistribution* dist, bool system_install);
 
   // Returns true if this is running setup process for Chrome SxS (as
   // indicated by the presence of --chrome-sxs on the command line) or if this

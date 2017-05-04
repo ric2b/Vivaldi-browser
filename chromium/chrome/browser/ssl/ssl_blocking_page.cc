@@ -23,6 +23,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "components/security_interstitials/core/metrics_helper.h"
 #include "components/security_interstitials/core/ssl_error_ui.h"
@@ -56,11 +57,6 @@ enum SSLExpirationAndDecision {
   NOT_EXPIRED_AND_DO_NOT_PROCEED,
   END_OF_SSL_EXPIRATION_AND_DECISION,
 };
-
-// Rappor prefix, which is used for both overridable and non-overridable
-// interstitials so we don't leak the "overridable" bit.
-const char kDeprecatedSSLRapporPrefix[] = "ssl2";
-const char kSSLRapporPrefix[] = "ssl3";
 
 std::string GetSamplingEventName(const bool overridable, const int cert_error) {
   std::string event_name(kEventNameBase);
@@ -107,10 +103,6 @@ std::unique_ptr<ChromeMetricsHelper> CreateMetricsHelper(
   security_interstitials::MetricsHelper::ReportDetails reporting_info;
   reporting_info.metric_prefix =
       overridable ? "ssl_overridable" : "ssl_nonoverridable";
-  reporting_info.rappor_prefix = kSSLRapporPrefix;
-  reporting_info.deprecated_rappor_prefix = kDeprecatedSSLRapporPrefix;
-  reporting_info.rappor_report_type = rappor::LOW_FREQUENCY_UMA_RAPPOR_TYPE;
-  reporting_info.deprecated_rappor_report_type = rappor::UMA_RAPPOR_TYPE;
   return base::MakeUnique<ChromeMetricsHelper>(
       web_contents, request_url, reporting_info,
       GetSamplingEventName(overridable, cert_error));
@@ -195,9 +187,11 @@ SSLBlockingPage::SSLBlockingPage(
     bool overridable,
     std::unique_ptr<ChromeMetricsHelper> metrics_helper,
     const base::Callback<void(content::CertificateRequestResultType)>& callback)
-    : SecurityInterstitialPage(web_contents,
-                               request_url,
-                               std::move(metrics_helper)),
+    : SecurityInterstitialPage(
+          web_contents,
+          request_url,
+          base::MakeUnique<ChromeControllerClient>(
+              web_contents, std::move(metrics_helper))),
       callback_(callback),
       ssl_info_(ssl_info),
       overridable_(overridable),
@@ -245,6 +239,23 @@ void SSLBlockingPage::CommandReceived(const std::string& command) {
   DCHECK(retval);
   ssl_error_ui_->HandleCommand(
       static_cast<security_interstitials::SecurityInterstitialCommands>(cmd));
+
+  // Special handling for the reporting preference being changed.
+  switch (cmd) {
+    case security_interstitials::CMD_DO_REPORT:
+      safe_browsing::SetExtendedReportingPrefAndMetric(
+          controller()->GetPrefService(), true,
+          safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL);
+      break;
+    case security_interstitials::CMD_DONT_REPORT:
+      safe_browsing::SetExtendedReportingPrefAndMetric(
+          controller()->GetPrefService(), false,
+          safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL);
+      break;
+    default:
+      // Other commands can be ignored.
+      break;
+  }
 }
 
 void SSLBlockingPage::OverrideRendererPrefs(
@@ -256,6 +267,8 @@ void SSLBlockingPage::OverrideRendererPrefs(
 }
 
 void SSLBlockingPage::OnProceed() {
+  UpdateMetricsAfterSecurityInterstitial();
+
   // Finish collecting metrics, if the user opted into it.
   cert_report_helper_->FinishCertCollection(
       certificate_reporting::ErrorReport::USER_PROCEEDED);
@@ -269,6 +282,8 @@ void SSLBlockingPage::OnProceed() {
 }
 
 void SSLBlockingPage::OnDontProceed() {
+  UpdateMetricsAfterSecurityInterstitial();
+
   // Finish collecting metrics, if the user opted into it.
   cert_report_helper_->FinishCertCollection(
       certificate_reporting::ErrorReport::USER_DID_NOT_PROCEED);

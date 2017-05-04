@@ -5,6 +5,7 @@
 #include "ui/views/controls/button/md_text_button.h"
 
 #include "base/i18n/case_conversion.h"
+#include "base/memory/ptr_util.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
@@ -250,8 +251,11 @@ void MdTextButton::UpdateColors() {
                     : ui::NativeTheme::kColorId_ButtonEnabledColor;
 
   ui::NativeTheme* theme = GetNativeTheme();
-  if (!explicitly_set_normal_color())
+  if (!explicitly_set_normal_color()) {
+    const auto colors = explicitly_set_colors();
     LabelButton::SetEnabledTextColors(theme->GetSystemColor(fg_color_id));
+    set_explicitly_set_colors(colors);
+  }
 
   // Prominent buttons keep their enabled text color; disabled state is conveyed
   // by shading the background instead.
@@ -295,8 +299,8 @@ void MdTextButton::UpdateColors() {
 
   DCHECK_EQ(SK_AlphaOPAQUE, static_cast<int>(SkColorGetA(bg_color)));
   set_background(Background::CreateBackgroundPainter(
-      true, Painter::CreateRoundRectWith1PxBorderPainter(
-                bg_color, stroke_color, kInkDropSmallCornerRadius)));
+      Painter::CreateRoundRectWith1PxBorderPainter(bg_color, stroke_color,
+                                                   kInkDropSmallCornerRadius)));
 }
 
 }  // namespace views

@@ -10,6 +10,7 @@
 #include "base/strings/string_util.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_pref_names.h"
+#include "components/metrics/persisted_logs_metrics_impl.h"
 
 namespace metrics {
 
@@ -40,15 +41,17 @@ const size_t kStorageByteLimitPerLogType = 300000;
 MetricsLogManager::MetricsLogManager(PrefService* local_state,
                                      size_t max_ongoing_log_size)
     : unsent_logs_loaded_(false),
-      initial_log_queue_(local_state,
+      initial_log_queue_(std::unique_ptr<PersistedLogsMetricsImpl>(
+                             new PersistedLogsMetricsImpl()),
+                         local_state,
                          prefs::kMetricsInitialLogs,
-                         prefs::kDeprecatedMetricsInitialLogs,
                          kInitialLogsPersistLimit,
                          kStorageByteLimitPerLogType,
                          0),
-      ongoing_log_queue_(local_state,
+      ongoing_log_queue_(std::unique_ptr<PersistedLogsMetricsImpl>(
+                             new PersistedLogsMetricsImpl()),
+                         local_state,
                          prefs::kMetricsOngoingLogs,
-                         prefs::kDeprecatedMetricsOngoingLogs,
                          kOngoingLogsPersistLimit,
                          kStorageByteLimitPerLogType,
                          max_ongoing_log_size) {}
@@ -94,12 +97,12 @@ void MetricsLogManager::DiscardCurrentLog() {
 
 void MetricsLogManager::PauseCurrentLog() {
   DCHECK(!paused_log_.get());
-  paused_log_.reset(current_log_.release());
+  paused_log_ = std::move(current_log_);
 }
 
 void MetricsLogManager::ResumePausedLog() {
   DCHECK(!current_log_.get());
-  current_log_.reset(paused_log_.release());
+  current_log_ = std::move(paused_log_);
 }
 
 void MetricsLogManager::StoreLog(const std::string& log_data,

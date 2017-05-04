@@ -72,6 +72,8 @@ LayoutFlexibleBox::LayoutFlexibleBox(Element* element)
       m_hasDefiniteHeight(SizeDefiniteness::Unknown),
       m_inLayout(false) {
   DCHECK(!childrenInline());
+  if (!isAnonymous())
+    UseCounter::count(document(), UseCounter::CSSFlexibleBox);
 }
 
 LayoutFlexibleBox::~LayoutFlexibleBox() {}
@@ -267,30 +269,30 @@ IntSize LayoutFlexibleBox::originAdjustmentForScrollbars() const {
   WritingMode writingMode = style()->getWritingMode();
 
   if (flexDirection == FlowRow) {
-    if (textDirection == RTL) {
-      if (writingMode == TopToBottomWritingMode)
+    if (textDirection == TextDirection::kRtl) {
+      if (blink::isHorizontalWritingMode(writingMode))
         size.expand(adjustmentWidth, 0);
       else
         size.expand(0, adjustmentHeight);
     }
-    if (writingMode == RightToLeftWritingMode)
+    if (isFlippedBlocksWritingMode(writingMode))
       size.expand(adjustmentWidth, 0);
   } else if (flexDirection == FlowRowReverse) {
-    if (textDirection == LTR) {
-      if (writingMode == TopToBottomWritingMode)
+    if (textDirection == TextDirection::kLtr) {
+      if (blink::isHorizontalWritingMode(writingMode))
         size.expand(adjustmentWidth, 0);
       else
         size.expand(0, adjustmentHeight);
     }
-    if (writingMode == RightToLeftWritingMode)
+    if (isFlippedBlocksWritingMode(writingMode))
       size.expand(adjustmentWidth, 0);
   } else if (flexDirection == FlowColumn) {
-    if (writingMode == RightToLeftWritingMode)
+    if (isFlippedBlocksWritingMode(writingMode))
       size.expand(adjustmentWidth, 0);
   } else {
-    if (writingMode == TopToBottomWritingMode)
+    if (blink::isHorizontalWritingMode(writingMode))
       size.expand(0, adjustmentHeight);
-    else if (writingMode == LeftToRightWritingMode)
+    else if (isFlippedLinesWritingMode(writingMode))
       size.expand(adjustmentWidth, 0);
   }
   return size;
@@ -457,9 +459,10 @@ bool LayoutFlexibleBox::isHorizontalFlow() const {
 }
 
 bool LayoutFlexibleBox::isLeftToRightFlow() const {
-  if (isColumnFlow())
-    return style()->getWritingMode() == TopToBottomWritingMode ||
-           style()->getWritingMode() == LeftToRightWritingMode;
+  if (isColumnFlow()) {
+    return blink::isHorizontalWritingMode(style()->getWritingMode()) ||
+           isFlippedLinesWritingMode(style()->getWritingMode());
+  }
   return style()->isLeftToRightDirection() ^
          (style()->flexDirection() == FlowRowReverse);
 }
@@ -608,23 +611,23 @@ LayoutFlexibleBox::getTransformedWritingMode() const {
   WritingMode mode = style()->getWritingMode();
   if (!isColumnFlow()) {
     static_assert(
-        static_cast<TransformedWritingMode>(TopToBottomWritingMode) ==
+        static_cast<TransformedWritingMode>(WritingMode::kHorizontalTb) ==
                 TransformedWritingMode::TopToBottomWritingMode &&
-            static_cast<TransformedWritingMode>(LeftToRightWritingMode) ==
+            static_cast<TransformedWritingMode>(WritingMode::kVerticalLr) ==
                 TransformedWritingMode::LeftToRightWritingMode &&
-            static_cast<TransformedWritingMode>(RightToLeftWritingMode) ==
+            static_cast<TransformedWritingMode>(WritingMode::kVerticalRl) ==
                 TransformedWritingMode::RightToLeftWritingMode,
         "WritingMode and TransformedWritingMode must match values.");
     return static_cast<TransformedWritingMode>(mode);
   }
 
   switch (mode) {
-    case TopToBottomWritingMode:
+    case WritingMode::kHorizontalTb:
       return style()->isLeftToRightDirection()
                  ? TransformedWritingMode::LeftToRightWritingMode
                  : TransformedWritingMode::RightToLeftWritingMode;
-    case LeftToRightWritingMode:
-    case RightToLeftWritingMode:
+    case WritingMode::kVerticalLr:
+    case WritingMode::kVerticalRl:
       return style()->isLeftToRightDirection()
                  ? TransformedWritingMode::TopToBottomWritingMode
                  : TransformedWritingMode::BottomToTopWritingMode;
@@ -960,7 +963,7 @@ void LayoutFlexibleBox::layoutFlexItems(bool relayoutChildren,
       continue;
     }
 
-    allItems.append(constructFlexItem(*child, layoutType));
+    allItems.push_back(constructFlexItem(*child, layoutType));
   }
 
   const LayoutUnit lineBreakLength = mainAxisContentExtent(LayoutUnit::max());
@@ -1223,7 +1226,7 @@ LayoutUnit LayoutFlexibleBox::adjustChildSizeForMinAndMax(
     // percentage min size, but we have an indefinite size in that axis.
     minExtent = std::max(LayoutUnit(), minExtent);
   } else if (min.isAuto() && !child.styleRef().containsSize() &&
-             mainAxisOverflowForChild(child) == OverflowVisible &&
+             mainAxisOverflowForChild(child) == EOverflow::Visible &&
              !(isColumnFlow() && child.isFlexibleBox())) {
     // TODO(cbiesinger): For now, we do not handle min-height: auto for nested
     // column flexboxes. We need to implement
@@ -1417,7 +1420,7 @@ void LayoutFlexibleBox::freezeInflexibleItems(FlexSign flexSign,
         (flexSign == NegativeFlexibility &&
          flexItem.flexBaseContentSize < flexItem.hypotheticalMainContentSize)) {
       flexItem.flexedContentSize = flexItem.hypotheticalMainContentSize;
-      newInflexibleItems.append(&flexItem);
+      newInflexibleItems.push_back(&flexItem);
     }
   }
   freezeViolations(newInflexibleItems, remainingFreeSpace, totalFlexGrow,
@@ -1478,9 +1481,9 @@ bool LayoutFlexibleBox::resolveFlexibleLengths(
 
     LayoutUnit violation = adjustedChildSize - childSize;
     if (violation > 0)
-      minViolations.append(&flexItem);
+      minViolations.push_back(&flexItem);
     else if (violation < 0)
-      maxViolations.append(&flexItem);
+      maxViolations.push_back(&flexItem);
     totalViolation += violation;
   }
 
@@ -1867,8 +1870,11 @@ void LayoutFlexibleBox::layoutAndPlaceChildren(
     setFlowAwareLocationForChild(*child, childLocation);
     mainAxisOffset += childMainExtent + flowAwareMarginEndForChild(*child);
 
-    mainAxisOffset += justifyContentSpaceBetweenChildren(
-        availableFreeSpace, distribution, children.size());
+    if (i != children.size() - 1) {
+      // The last item does not get extra space added.
+      mainAxisOffset += justifyContentSpaceBetweenChildren(
+          availableFreeSpace, distribution, children.size());
+    }
 
     if (isPaginated)
       updateFragmentationInfoForChild(*child);
@@ -1889,8 +1895,8 @@ void LayoutFlexibleBox::layoutAndPlaceChildren(
 
   if (m_numberOfInFlowChildrenOnFirstLine == -1)
     m_numberOfInFlowChildrenOnFirstLine = children.size();
-  lineContexts.append(LineContext(crossAxisOffset, maxChildCrossAxisExtent,
-                                  maxAscent, std::move(children)));
+  lineContexts.push_back(LineContext(crossAxisOffset, maxChildCrossAxisExtent,
+                                     maxAscent, std::move(children)));
   crossAxisOffset += maxChildCrossAxisExtent;
 }
 
@@ -2060,7 +2066,7 @@ void LayoutFlexibleBox::alignChildren(const Vector<LineContext>& lineContexts) {
                                         offset);
       }
     }
-    minMarginAfterBaselines.append(minMarginAfterBaseline);
+    minMarginAfterBaselines.push_back(minMarginAfterBaseline);
   }
 
   if (style()->flexWrap() != FlexWrapReverse)

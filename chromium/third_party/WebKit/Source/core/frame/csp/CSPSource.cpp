@@ -57,7 +57,7 @@ bool CSPSource::hostMatches(const String& host) const {
 
   bool equalHosts = m_host == host;
   if (m_hostWildcard == HasWildcard) {
-    match = host.endsWith(String("." + m_host), TextCaseInsensitive);
+    match = host.endsWith(String("." + m_host), TextCaseUnicodeInsensitive);
 
     // Chrome used to, incorrectly, match *.x.y to x.y. This was fixed, but
     // the following count measures when a match fails that would have
@@ -74,7 +74,7 @@ bool CSPSource::hostMatches(const String& host) const {
 }
 
 bool CSPSource::pathMatches(const String& urlPath) const {
-  if (m_path.isEmpty())
+  if (m_path.isEmpty() || (m_path == "/" && urlPath.isEmpty()))
     return true;
 
   String path = decodeURLEscapeSequences(urlPath);
@@ -105,7 +105,7 @@ bool CSPSource::portMatches(int port, const String& protocol) const {
   return false;
 }
 
-bool CSPSource::subsumes(CSPSource* other) {
+bool CSPSource::subsumes(CSPSource* other) const {
   if (!schemeMatches(other->m_scheme))
     return false;
 
@@ -124,7 +124,7 @@ bool CSPSource::subsumes(CSPSource* other) {
   return hostSubsumes && portSubsumes && pathSubsumes;
 }
 
-bool CSPSource::isSimilar(CSPSource* other) {
+bool CSPSource::isSimilar(CSPSource* other) const {
   bool schemesMatch =
       schemeMatches(other->m_scheme) || other->schemeMatches(m_scheme);
   if (!schemesMatch || isSchemeOnly() || other->isSchemeOnly())
@@ -132,7 +132,8 @@ bool CSPSource::isSimilar(CSPSource* other) {
   bool hostsMatch = (m_host == other->m_host) || hostMatches(other->m_host) ||
                     other->hostMatches(m_host);
   bool portsMatch = (other->m_portWildcard == HasWildcard) ||
-                    portMatches(other->m_port, other->m_scheme);
+                    portMatches(other->m_port, other->m_scheme) ||
+                    other->portMatches(m_port, m_scheme);
   bool pathsMatch = pathMatches(other->m_path) || other->pathMatches(m_path);
   if (hostsMatch && portsMatch && pathsMatch)
     return true;
@@ -140,14 +141,27 @@ bool CSPSource::isSimilar(CSPSource* other) {
   return false;
 }
 
-CSPSource* CSPSource::intersect(CSPSource* other) {
+CSPSource* CSPSource::intersect(CSPSource* other) const {
   if (!isSimilar(other))
     return nullptr;
 
   String scheme = other->schemeMatches(m_scheme) ? m_scheme : other->m_scheme;
+  if (isSchemeOnly() || other->isSchemeOnly()) {
+    const CSPSource* stricter = isSchemeOnly() ? other : this;
+    return new CSPSource(m_policy, scheme, stricter->m_host, stricter->m_port,
+                         stricter->m_path, stricter->m_hostWildcard,
+                         stricter->m_portWildcard);
+  }
+
   String host = m_hostWildcard == NoWildcard ? m_host : other->m_host;
-  String path = other->pathMatches(m_path) ? m_path : other->m_path;
-  int port = (other->m_portWildcard == HasWildcard || !other->m_port)
+  // Since sources are similar and paths match, pick the longer one.
+  String path =
+      m_path.length() > other->m_path.length() ? m_path : other->m_path;
+  // Choose this port if the other port is empty, has wildcard or is a port for
+  // a less secure scheme such as "http" whereas scheme of this is "https", in
+  // which case the lengths would differ.
+  int port = (other->m_portWildcard == HasWildcard || !other->m_port ||
+              m_scheme.length() > other->m_scheme.length())
                  ? m_port
                  : other->m_port;
   WildcardDisposition hostWildcard =
@@ -162,8 +176,9 @@ bool CSPSource::isSchemeOnly() const {
   return m_host.isEmpty();
 }
 
-bool CSPSource::firstSubsumesSecond(HeapVector<Member<CSPSource>> listA,
-                                    HeapVector<Member<CSPSource>> listB) {
+bool CSPSource::firstSubsumesSecond(
+    const HeapVector<Member<CSPSource>>& listA,
+    const HeapVector<Member<CSPSource>>& listB) {
   // Empty vector of CSPSources has an effect of 'none'.
   if (!listA.size() || !listB.size())
     return !listB.size();

@@ -317,10 +317,38 @@ need to be translated for each locale.-->
         Upload
       </message>
 
-      <!--Accessible name/action strings-->
-      <message name="IDS_APP_ACCACTION_PRESS" desc="The accessible default action for a button.">
-        Press
+      <!--Accessible action strings-->
+      <message name="IDS_AX_ACTIVATE_ACTION_VERB" desc="Verb stating the action that will occur when an element such as a text field is selected, as used by accessibility.">
+        activate
       </message>
+      <message name="IDS_AX_CHECK_ACTION_VERB" desc="Verb stating the action that will occur when an unchecked checkbox is clicked, as used by accessibility.">
+        check
+      </message>
+      <message name="IDS_AX_CLICK_ACTION_VERB" desc="Verb stating the action that will occur when clicking on a generic clickable object, when we don't know what that action is, as used by accessibility.">
+        click
+      </message>
+      <message name="IDS_AX_JUMP_ACTION_VERB" desc="Verb stating the action that will occur when an element such as an in-page link is activated, as used by accessibility.">
+        jump
+      </message>
+      <message name="IDS_AX_OPEN_ACTION_VERB" desc="Verb stating the action that will occur when an element such as a pop-up button is pressed, as used by accessibility.">
+        open
+      </message>
+<message name="IDS_AX_PRESS_ACTION_VERB" desc="Verb stating the action that will occur when an element such as a button is pressed, as used by accessibility.">
+        press
+      </message>
+      <message name="IDS_AX_SELECT_ACTION_VERB" desc="Verb stating the action that will occur when an element such as a radio button is selected, as used by accessibility.">
+        select
+      </message>
+      <message name="IDS_AX_UNCHECK_ACTION_VERB" desc="Verb stating the action that will occur when a checked checkbox is clicked, as used by accessibility.">
+        uncheck
+      </message>
+
+      <!--Accessible name strings-->
+      <if expr="is_macosx">
+        <message name="IDS_ACCNAME_TAB_ROLE_DESCRIPTION" desc="A generic description of a tab button's role." meaning="UI element">
+          Tab
+        </message>
+      </if>
       <message name="IDS_APP_ACCNAME_CLOSE" desc="The accessible name for the Close button.">
         Close
       </message>
@@ -591,8 +619,8 @@ need to be translated for each locale.-->
         <message name="IDS_MESSAGE_CENTER_NOTIFICATION_BUTTON_COPY_SCREENSHOT_TO_CLIPBOARD" desc="The button label for the screenshot notification which copies the screenshot image to clipboard on click.">
           Copy to clipboard
         </message>
-        <message name="IDS_MESSAGE_CENTER_NOTIFICATION_BUTTON_ANNOTATE_SCREENSHOT" desc="The label for the screenshot notification button that opens Google Keep to annotate the screenhsot.">
-          Annotate in Google Keep
+        <message name="IDS_MESSAGE_CENTER_NOTIFICATION_BUTTON_ANNOTATE_SCREENSHOT" desc="The label for the screenshot notification button that opens the note-taking app to annotate the screenhsot.">
+          Annotate image
         </message>
         <message name="IDS_MESSAGE_CENTER_NOTIFIER_HATS_NAME" desc="The name of hats notifier that is a system component">
           Hats
@@ -632,6 +660,34 @@ need to be translated for each locale.-->
       </message>
       <message name="IDS_APP_LIST_SPEECH_NETWORK_ERROR_HINT_TEXT" desc="The text label in the speech recognition UI to show the speech recognition can't start because of network error.">
         No internet connection
+      </message>
+
+      <!-- Strings describing the touch calibration UX -->
+      <message name="IDS_DISPLAY_TOUCH_CALIBRATION_EXIT_LABEL" desc="A message to notify the user about using the escape key to exit the calibration mode.">
+        To exit calibration press Esc.
+      </message>
+      <message name="IDS_DISPLAY_TOUCH_CALIBRATION_HINT_LABEL_TEXT" desc="Title of the hint message to inform the user what the next step is in touch calibration is">
+        Define your touchscreen
+      </message>
+      <message name="IDS_DISPLAY_TOUCH_CALIBRATION_HINT_SUBLABEL_TEXT" desc="Message to inform the user what the next step is in touch calibration is">
+        Tap the touch targets on your screen.
+      </message>
+      <message name="IDS_DISPLAY_TOUCH_CALIBRATION_TAP_HERE_LABEL" desc="A message to notify the user about the significance of a circle on the screen during the touchscreen calibration.">
+        Tap here
+      </message>
+      <message name="IDS_DISPLAY_TOUCH_CALIBRATION_FINISH_LABEL" desc="Message to inform the user that the calibration is now complete">
+        Calibration is completed
+      </message>
+
+      <!-- Display names -->
+      <message name="IDS_DISPLAY_NAME_UNKNOWN" desc="The name used for a display whose name is unknown, which is shown in the display settings and ash tray.">
+        Unknown Display
+      </message>
+      <message name="IDS_DISPLAY_NAME_INTERNAL" desc="The name used for internal displays, which is shown in the display settings.">
+        Internal Display
+      </message>
+      <message name="IDS_DISPLAY_NAME_VIRTUAL" desc="The name used for virtual displays, which is shown in the display settings. Virtual displays are not associated with a physical monitor.">
+        Virtual Display
       </message>
     </messages>
   </release>

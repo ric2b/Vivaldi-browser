@@ -5,8 +5,10 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -16,8 +18,10 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_service_manager.h"
+#include "components/arc/arc_session_runner.h"
 #include "components/arc/test/fake_app_instance.h"
-#include "components/arc/test/fake_arc_bridge_service.h"
+#include "components/arc/test/fake_arc_session.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -75,12 +79,13 @@ void ArcAppTest::SetUp(Profile* profile) {
     ArcAppListPrefsFactory::GetInstance()->RecreateServiceInstanceForTesting(
         profile_);
   }
-  bridge_service_.reset(new arc::FakeArcBridgeService());
-
-  auth_service_.reset(new arc::ArcAuthService(bridge_service_.get()));
-  DCHECK(arc::ArcAuthService::Get());
-  arc::ArcAuthService::DisableUIForTesting();
-  arc_auth_service()->OnPrimaryUserProfilePrepared(profile_);
+  arc_service_manager_ = base::MakeUnique<arc::ArcServiceManager>(nullptr);
+  arc_session_manager_ = base::MakeUnique<arc::ArcSessionManager>(
+      base::MakeUnique<arc::ArcSessionRunner>(
+          base::Bind(arc::FakeArcSession::Create)));
+  DCHECK(arc::ArcSessionManager::Get());
+  arc::ArcSessionManager::DisableUIForTesting();
+  arc_session_manager_->OnPrimaryUserProfilePrepared(profile_);
 
   arc_app_list_pref_ = ArcAppListPrefs::Get(profile_);
   DCHECK(arc_app_list_pref_);
@@ -88,13 +93,13 @@ void ArcAppTest::SetUp(Profile* profile) {
   arc_app_list_pref_->SetDefaltAppsReadyCallback(run_loop.QuitClosure());
   run_loop.Run();
 
-  auth_service_->EnableArc();
-  app_instance_.reset(new arc::FakeAppInstance(arc_app_list_pref_));
-  bridge_service_->app()->SetInstance(app_instance_.get());
-
+  arc_session_manager_->EnableArc();
   // Check initial conditions.
-  EXPECT_EQ(bridge_service_.get(), arc::ArcBridgeService::Get());
-  EXPECT_FALSE(arc::ArcBridgeService::Get()->ready());
+  EXPECT_FALSE(arc_session_manager_->IsSessionRunning());
+
+  app_instance_.reset(new arc::FakeAppInstance(arc_app_list_pref_));
+  arc_service_manager_->arc_bridge_service()->app()->SetInstance(
+      app_instance_.get());
 }
 
 void ArcAppTest::CreateFakeAppsAndPackages() {
@@ -159,8 +164,8 @@ void ArcAppTest::CreateFakeAppsAndPackages() {
 
 void ArcAppTest::TearDown() {
   app_instance_.reset();
-  auth_service_.reset();
-  bridge_service_.reset();
+  arc_session_manager_.reset();
+  arc_service_manager_.reset();
   if (dbus_thread_manager_initialized_) {
     // DBusThreadManager may be initialized from other testing utility,
     // such as ash::test::AshTestHelper::SetUp(), so Shutdown() only when
@@ -172,13 +177,14 @@ void ArcAppTest::TearDown() {
 }
 
 void ArcAppTest::StopArcInstance() {
-  bridge_service_->app()->SetInstance(nullptr);
+  arc_service_manager_->arc_bridge_service()->app()->SetInstance(nullptr);
 }
 
 void ArcAppTest::RestartArcInstance() {
-  bridge_service_->app()->SetInstance(nullptr);
-  app_instance_.reset(new arc::FakeAppInstance(arc_app_list_pref_));
-  bridge_service_->app()->SetInstance(app_instance_.get());
+  auto* bridge_service = arc_service_manager_->arc_bridge_service();
+  bridge_service->app()->SetInstance(nullptr);
+  app_instance_ = base::MakeUnique<arc::FakeAppInstance>(arc_app_list_pref_);
+  bridge_service->app()->SetInstance(app_instance_.get());
 }
 
 const user_manager::User* ArcAppTest::CreateUserAndLogin() {

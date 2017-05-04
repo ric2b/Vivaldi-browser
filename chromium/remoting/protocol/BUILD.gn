@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//media/media_options.gni")
 
 static_library("protocol") {
   sources = [
@@ -137,12 +138,15 @@ static_library("protocol") {
     "pseudotcp_channel_factory.h",
     "rejecting_authenticator.cc",
     "rejecting_authenticator.h",
+    "sdp_message.cc",
+    "sdp_message.h",
     "secure_channel_factory.cc",
     "secure_channel_factory.h",
     "session.h",
     "session_config.cc",
     "session_config.h",
     "session_manager.h",
+    "session_plugin.h",
     "socket_util.cc",
     "socket_util.h",
     "spake2_authenticator.cc",
@@ -196,6 +200,13 @@ static_library("protocol") {
   ]
 
   if (!is_nacl) {
+    if (!is_android) {
+      sources += [
+        "ice_connection_to_client.cc",
+        "ice_connection_to_client.h",
+      ]
+    }
+
     sources += [
       "capture_scheduler.cc",
       "capture_scheduler.h",
@@ -203,8 +214,6 @@ static_library("protocol") {
       "chromium_port_allocator_factory.h",
       "chromium_socket_factory.cc",
       "chromium_socket_factory.h",
-      "ice_connection_to_client.cc",
-      "ice_connection_to_client.h",
       "video_frame_pump.cc",
       "video_frame_pump.h",
       "webrtc_audio_module.cc",
@@ -238,9 +247,8 @@ static_library("protocol") {
 
     if (enable_webrtc) {
       deps += [
-        "//third_party/libjingle:libjingle_webrtc",
-        "//third_party/webrtc/libjingle/xmllite",
-        "//third_party/webrtc/libjingle/xmpp",
+        "//third_party/libjingle/webrtc:libjingle_webrtc",
+        "//third_party/libjingle_xmpp",
       ]
     } else {
       sources -= [
@@ -301,7 +309,6 @@ source_set("unit_tests") {
     "clipboard_filter_unittest.cc",
     "connection_tester.cc",
     "connection_tester.h",
-    "connection_unittest.cc",
     "content_description_unittest.cc",
     "http_ice_config_request_unittest.cc",
     "ice_transport_unittest.cc",
@@ -318,6 +325,7 @@ source_set("unit_tests") {
     "port_range_unittest.cc",
     "ppapi_module_stub.cc",
     "pseudotcp_adapter_unittest.cc",
+    "sdp_message_unittest.cc",
     "session_config_unittest.cc",
     "spake2_authenticator_unittest.cc",
     "ssl_hmac_channel_authenticator_unittest.cc",
@@ -329,6 +337,10 @@ source_set("unit_tests") {
     "webrtc_frame_scheduler_unittest.cc",
     "webrtc_transport_unittest.cc",
   ]
+
+  if (!is_android) {
+    sources += [ "connection_unittest.cc" ]
+  }
 
   deps = [
     ":test_support",

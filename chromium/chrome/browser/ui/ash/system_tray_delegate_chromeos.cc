@@ -7,14 +7,13 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "ash/common/login_status.h"
-#include "ash/common/session/session_state_delegate.h"
-#include "ash/common/session/session_state_observer.h"
 #include "ash/common/shell_delegate.h"
 #include "ash/common/system/chromeos/bluetooth/bluetooth_observer.h"
 #include "ash/common/system/chromeos/power/power_status.h"
@@ -23,7 +22,6 @@
 #include "ash/common/system/ime/ime_observer.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/tray_accessibility.h"
-#include "ash/common/system/update/update_observer.h"
 #include "ash/common/system/user/user_observer.h"
 #include "ash/common/wm_shell.h"
 #include "ash/system/chromeos/rotation/tray_rotation_lock.h"
@@ -33,7 +31,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/user_metrics.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
 #include "base/time/time.h"
@@ -55,20 +52,14 @@
 #include "chrome/browser/chromeos/profiles/multiprofiles_intro_dialog.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/supervised_user/supervised_user_service.h"
-#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
-#include "chrome/browser/ui/ash/cast_config_delegate_media_router.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/networking_config_delegate_chromeos.h"
 #include "chrome/browser/ui/ash/system_tray_client.h"
-#include "chrome/browser/ui/ash/system_tray_delegate_utils.h"
-#include "chrome/browser/ui/ash/vpn_delegate_chromeos.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/singleton_tabs.h"
-#include "chrome/browser/upgrade_detector.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
@@ -82,6 +73,7 @@
 #include "components/google/core/browser/google_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/prefs/pref_service.h"
+#include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
@@ -138,27 +130,17 @@ void OnAcceptMultiprofilesIntro(bool no_show_again) {
 }
 
 bool IsSessionInSecondaryLoginScreen() {
-  return ash::WmShell::Get()
-      ->GetSessionStateDelegate()
-      ->IsInSecondaryLoginScreen();
+  return session_manager::SessionManager::Get()->IsInSecondaryLoginScreen();
 }
 
 }  // namespace
 
 SystemTrayDelegateChromeOS::SystemTrayDelegateChromeOS()
-    : cast_config_delegate_(base::MakeUnique<CastConfigDelegateMediaRouter>()),
-      networking_config_delegate_(new NetworkingConfigDelegateChromeos()),
-      vpn_delegate_(new VPNDelegateChromeOS),
+    : networking_config_delegate_(new NetworkingConfigDelegateChromeos()),
       weak_ptr_factory_(this) {
   // Register notifications on construction so that events such as
   // PROFILE_CREATED do not get missed if they happen before Initialize().
   registrar_.reset(new content::NotificationRegistrar);
-  registrar_->Add(this,
-                  chrome::NOTIFICATION_UPGRADE_RECOMMENDED,
-                  content::NotificationService::AllSources());
-  registrar_->Add(this,
-                  chrome::NOTIFICATION_LOGIN_USER_IMAGE_CHANGED,
-                  content::NotificationService::AllSources());
   if (GetUserLoginStatus() == ash::LoginStatus::NOT_LOGGED_IN) {
     registrar_->Add(this,
                     chrome::NOTIFICATION_SESSION_STARTED,
@@ -177,6 +159,7 @@ SystemTrayDelegateChromeOS::SystemTrayDelegateChromeOS()
       base::Bind(&SystemTrayDelegateChromeOS::OnAccessibilityStatusChanged,
                  base::Unretained(this)));
 
+  user_manager::UserManager::Get()->AddObserver(this);
   user_manager::UserManager::Get()->AddSessionStateObserver(this);
 }
 
@@ -190,8 +173,6 @@ void SystemTrayDelegateChromeOS::Initialize() {
   device::BluetoothAdapterFactory::GetAdapter(
       base::Bind(&SystemTrayDelegateChromeOS::InitializeOnAdapterReady,
                  weak_ptr_factory_.GetWeakPtr()));
-
-  ash::WmShell::Get()->GetSessionStateDelegate()->AddSessionStateObserver(this);
 
   BrowserList::AddObserver(this);
 }
@@ -242,8 +223,6 @@ SystemTrayDelegateChromeOS::~SystemTrayDelegateChromeOS() {
   ui::ime::InputMethodMenuManager::GetInstance()->RemoveObserver(this);
   if (bluetooth_adapter_)
     bluetooth_adapter_->RemoveObserver(this);
-  ash::WmShell::Get()->GetSessionStateDelegate()->RemoveSessionStateObserver(
-      this);
 
   BrowserList::RemoveObserver(this);
   StopObservingAppWindowRegistry();
@@ -256,6 +235,7 @@ SystemTrayDelegateChromeOS::~SystemTrayDelegateChromeOS() {
   if (policy_manager)
     policy_manager->core()->store()->RemoveObserver(this);
 
+  user_manager::UserManager::Get()->RemoveObserver(this);
   user_manager::UserManager::Get()->RemoveSessionStateObserver(this);
 }
 
@@ -267,16 +247,9 @@ std::string SystemTrayDelegateChromeOS::GetEnterpriseDomain() const {
   return enterprise_domain_;
 }
 
-std::string SystemTrayDelegateChromeOS::GetEnterpriseRealm() const {
-  return enterprise_realm_;
-}
-
 base::string16 SystemTrayDelegateChromeOS::GetEnterpriseMessage() const {
-  if (!GetEnterpriseRealm().empty()) {
-    // TODO(rsorokin): Maybe change a message for the Active Directory devices.
-    return l10n_util::GetStringFUTF16(IDS_DEVICE_OWNED_BY_NOTICE,
-                                      base::UTF8ToUTF16(GetEnterpriseRealm()));
-  }
+  if (is_active_directory_managed_)
+    return l10n_util::GetStringUTF16(IDS_DEVICE_ENTERPRISE_MANAGED_NOTICE);
   if (!GetEnterpriseDomain().empty()) {
     return l10n_util::GetStringFUTF16(IDS_DEVICE_OWNED_BY_NOTICE,
                                       base::UTF8ToUTF16(GetEnterpriseDomain()));
@@ -315,11 +288,6 @@ bool SystemTrayDelegateChromeOS::IsUserSupervised() const {
 
 bool SystemTrayDelegateChromeOS::IsUserChild() const {
   return user_manager::UserManager::Get()->IsLoggedInAsChildUser();
-}
-
-void SystemTrayDelegateChromeOS::GetSystemUpdateInfo(
-    ash::UpdateInfo* info) const {
-  GetUpdateInfo(UpgradeDetector::GetInstance(), info);
 }
 
 bool SystemTrayDelegateChromeOS::ShouldShowSettings() const {
@@ -365,9 +333,9 @@ void SystemTrayDelegateChromeOS::ShowUserLogin() {
     return;
   }
 
-  if (static_cast<int>(
-          user_manager::UserManager::Get()->GetLoggedInUsers().size()) >=
-      wm_shell->GetSessionStateDelegate()->GetMaximumNumberOfLoggedInUsers()) {
+  if (user_manager::UserManager::Get()->GetLoggedInUsers().size() >=
+      session_manager::SessionManager::Get()
+          ->GetMaximumNumberOfUserSessions()) {
     return;
   }
 
@@ -548,10 +516,6 @@ bool SystemTrayDelegateChromeOS::GetBluetoothDiscovering() {
          bluetooth_discovery_session_->IsActive();
 }
 
-ash::CastConfigDelegate* SystemTrayDelegateChromeOS::GetCastConfigDelegate() {
-  return cast_config_delegate_.get();
-}
-
 ash::NetworkingConfigDelegate*
 SystemTrayDelegateChromeOS::GetNetworkingConfigDelegate() const {
   return networking_config_delegate_.get();
@@ -593,10 +557,6 @@ void SystemTrayDelegateChromeOS::RemoveCustodianInfoTrayObserver(
   custodian_info_changed_observers_.RemoveObserver(observer);
 }
 
-ash::VPNDelegate* SystemTrayDelegateChromeOS::GetVPNDelegate() const {
-  return vpn_delegate_.get();
-}
-
 std::unique_ptr<ash::SystemTrayItem>
 SystemTrayDelegateChromeOS::CreateRotationLockTrayItem(ash::SystemTray* tray) {
   return base::MakeUnique<ash::TrayRotationLock>(tray);
@@ -604,6 +564,7 @@ SystemTrayDelegateChromeOS::CreateRotationLockTrayItem(ash::SystemTray* tray) {
 
 void SystemTrayDelegateChromeOS::UserAddedToSession(
     const user_manager::User* active_user) {
+  GetSystemTrayNotifier()->NotifyUserAddedToSession();
 }
 
 void SystemTrayDelegateChromeOS::ActiveUserChanged(
@@ -787,20 +748,6 @@ void SystemTrayDelegateChromeOS::Observe(
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
   switch (type) {
-    case chrome::NOTIFICATION_UPGRADE_RECOMMENDED: {
-      ash::UpdateInfo info;
-      GetUpdateInfo(content::Source<UpgradeDetector>(source).ptr(), &info);
-      GetSystemTrayNotifier()->NotifyUpdateRecommended(info);
-      break;
-    }
-    case chrome::NOTIFICATION_LOGIN_USER_IMAGE_CHANGED: {
-      // This notification is also sent on login screen when user avatar
-      // is loaded from file.
-      if (GetUserLoginStatus() != ash::LoginStatus::NOT_LOGGED_IN) {
-        GetSystemTrayNotifier()->NotifyUserUpdate();
-      }
-      break;
-    }
     case chrome::NOTIFICATION_PROFILE_CREATED: {
       SetProfile(content::Source<Profile>(source).ptr());
       registrar_->Remove(this,
@@ -910,12 +857,13 @@ void SystemTrayDelegateChromeOS::OnStartBluetoothDiscoverySession(
 void SystemTrayDelegateChromeOS::UpdateEnterpriseDomain() {
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  std::string enterprise_domain = connector->GetEnterpriseDomain();
-  std::string enterprise_realm = connector->GetRealm();
-  if (enterprise_domain_ != enterprise_domain ||
-      enterprise_realm_ != enterprise_realm) {
-    enterprise_domain_ = enterprise_domain;
-    enterprise_realm_ = enterprise_realm;
+  std::string old_enterprise_domain(std::move(enterprise_domain_));
+  enterprise_domain_ = connector->GetEnterpriseDomain();
+  bool old_is_active_directory_managed = is_active_directory_managed_;
+  is_active_directory_managed_ = connector->IsActiveDirectoryManaged();
+  if ((!is_active_directory_managed_ &&
+       enterprise_domain_ != old_enterprise_domain) ||
+      (is_active_directory_managed_ != old_is_active_directory_managed)) {
     GetSystemTrayNotifier()->NotifyEnterpriseDomainChanged();
   }
 }
@@ -930,14 +878,12 @@ void SystemTrayDelegateChromeOS::OnStoreError(policy::CloudPolicyStore* store) {
   UpdateEnterpriseDomain();
 }
 
-// Overridden from ash::SessionStateObserver
-void SystemTrayDelegateChromeOS::UserAddedToSession(
-    const AccountId& /*account_id*/) {
-  GetSystemTrayNotifier()->NotifyUserAddedToSession();
+void SystemTrayDelegateChromeOS::OnUserImageChanged(
+    const user_manager::User& user) {
+  // This is also invoked on login screen when user avatar is loaded from file.
+  if (GetUserLoginStatus() != ash::LoginStatus::NOT_LOGGED_IN)
+    GetSystemTrayNotifier()->NotifyUserUpdate();
 }
-
-void SystemTrayDelegateChromeOS::ActiveUserChanged(
-    const AccountId& /* user_id */) {}
 
 // Overridden from chrome::BrowserListObserver.
 void SystemTrayDelegateChromeOS::OnBrowserRemoved(Browser* browser) {

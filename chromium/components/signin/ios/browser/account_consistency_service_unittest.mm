@@ -9,16 +9,16 @@
 #include <memory>
 
 #import "base/mac/scoped_nsobject.h"
-#include "components/pref_registry/testing_pref_service_syncable.h"
 #include "components/signin/core/browser/account_reconcilor.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/fake_signin_manager.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/test_signin_client.h"
 #include "components/signin/core/common/signin_pref_names.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "google_apis/gaia/gaia_constants.h"
-#include "ios/web/public/test/test_browser_state.h"
-#include "ios/web/public/test/test_web_state.h"
+#include "ios/web/public/test/fakes/test_browser_state.h"
+#import "ios/web/public/test/fakes/test_web_state.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #include "ios/web/public/web_state/web_state_policy_decider.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -58,17 +58,17 @@ class FakeAccountConsistencyService : public AccountConsistencyService {
                                   cookie_settings,
                                   gaia_cookie_manager_service,
                                   signin_client,
-                                  signin_manager),
-        mock_web_view_(nil) {}
+                                  signin_manager) {}
 
  private:
-  WKWebView* CreateWKWebView() override {
+  WKWebView* BuildWKWebView() override {
     if (!mock_web_view_) {
-      mock_web_view_ = [OCMockObject niceMockForClass:[WKWebView class]];
+      mock_web_view_.reset(
+          [[OCMockObject niceMockForClass:[WKWebView class]] retain]);
     }
-    return [mock_web_view_ retain];
+    return mock_web_view_;
   }
-  id mock_web_view_;
+  base::scoped_nsobject<id> mock_web_view_;
 };
 
 // Mock AccountReconcilor to catch call to OnReceivedManageAccountsResponse.
@@ -202,7 +202,7 @@ class AccountConsistencyServiceTest : public PlatformTest {
   MockAccountReconcilor account_reconcilor_;
   AccountTrackerService account_tracker_service_;
   web::TestBrowserState browser_state_;
-  user_prefs::TestingPrefServiceSyncable prefs_;
+  sync_preferences::TestingPrefServiceSyncable prefs_;
   TestWebState web_state_;
   // AccountConsistencyService being tested. Actually a
   // FakeAccountConsistencyService to be able to use a mock web view.

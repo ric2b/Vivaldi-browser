@@ -7,8 +7,9 @@
 #include <algorithm>
 
 #include "ash/wm/window_util.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
+#include "chrome/browser/ui/ash/launcher/launcher_application_menu_item_model.h"
 #include "chrome/browser/ui/ash/launcher/launcher_controller_helper.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -16,13 +17,10 @@
 #include "ui/wm/core/window_animations.h"
 
 AppWindowLauncherItemController::AppWindowLauncherItemController(
-    Type type,
     const std::string& app_id,
     const std::string& launch_id,
     ChromeLauncherController* controller)
-    : LauncherItemController(type, app_id, launch_id, controller),
-      app_id_(app_id),
-      launch_id_(launch_id),
+    : LauncherItemController(app_id, launch_id, controller),
       observed_windows_(this) {}
 
 AppWindowLauncherItemController::~AppWindowLauncherItemController() {}
@@ -72,15 +70,6 @@ void AppWindowLauncherItemController::SetActiveWindow(aura::Window* window) {
     last_active_window_ = app_window;
 }
 
-bool AppWindowLauncherItemController::IsVisible() const {
-  // Return true if any windows are visible.
-  for (const auto* window : windows_) {
-    if (window->GetNativeWindow()->IsVisible())
-      return true;
-  }
-  return false;
-}
-
 void AppWindowLauncherItemController::Launch(ash::LaunchSource source,
                                              int event_flags) {
   launcher_controller()->LaunchApp(app_id(), source, ui::EF_NONE);
@@ -93,6 +82,11 @@ AppWindowLauncherItemController::Activate(ash::LaunchSource source) {
       last_active_window_ ? last_active_window_ : windows_.back();
   window_to_activate->Activate();
   return kExistingWindowActivated;
+}
+
+ash::ShelfMenuModel* AppWindowLauncherItemController::CreateApplicationMenu(
+    int event_flags) {
+  return new LauncherApplicationMenuItemModel(GetApplicationList(event_flags));
 }
 
 void AppWindowLauncherItemController::Close() {
@@ -113,8 +107,17 @@ void AppWindowLauncherItemController::ActivateIndexedApp(size_t index) {
 ChromeLauncherAppMenuItems AppWindowLauncherItemController::GetApplicationList(
     int event_flags) {
   ChromeLauncherAppMenuItems items;
-  items.push_back(new ChromeLauncherAppMenuItem(GetTitle(), NULL, false));
+  // Add the application name to the menu.
+  base::string16 app_title = LauncherControllerHelper::GetAppTitle(
+      launcher_controller()->profile(), app_id());
+  items.push_back(
+      base::MakeUnique<ChromeLauncherAppMenuItem>(app_title, nullptr, false));
   return items;
+}
+
+AppWindowLauncherItemController*
+AppWindowLauncherItemController::AsAppWindowLauncherItemController() {
+  return this;
 }
 
 ash::ShelfItemDelegate::PerformedAction
@@ -122,7 +125,6 @@ AppWindowLauncherItemController::ItemSelected(const ui::Event& event) {
   if (windows_.empty())
     return kNoAction;
 
-  DCHECK_EQ(TYPE_APP, type());
   ui::BaseWindow* window_to_show =
       last_active_window_ ? last_active_window_ : windows_.front();
   // If the event was triggered by a keystroke, we try to advance to the next
@@ -133,26 +135,6 @@ AppWindowLauncherItemController::ItemSelected(const ui::Event& event) {
   } else {
     return ShowAndActivateOrMinimize(window_to_show);
   }
-}
-
-base::string16 AppWindowLauncherItemController::GetTitle() {
-  return LauncherControllerHelper::GetAppTitle(launcher_controller()->profile(),
-                                               app_id());
-}
-
-bool AppWindowLauncherItemController::IsDraggable() {
-  DCHECK_EQ(TYPE_APP, type());
-  return true;
-}
-
-bool AppWindowLauncherItemController::CanPin() const {
-  return GetPinnableForAppID(app_id(), launcher_controller()->profile()) ==
-         AppListControllerDelegate::PIN_EDITABLE;
-}
-
-bool AppWindowLauncherItemController::ShouldShowTooltip() {
-  DCHECK_EQ(TYPE_APP, type());
-  return true;
 }
 
 void AppWindowLauncherItemController::OnWindowPropertyChanged(

@@ -4,13 +4,13 @@
 
 #include "chrome/browser/ui/ash/app_list/app_list_presenter_delegate_mus.h"
 
-#include "ui/app_list/presenter/app_list_presenter.h"
+#include "ui/app_list/presenter/app_list_presenter_impl.h"
 #include "ui/app_list/presenter/app_list_view_delegate_factory.h"
 #include "ui/app_list/views/app_list_view.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/views/mus/mus_client.h"
 #include "ui/views/mus/pointer_watcher_event_router.h"
-#include "ui/views/mus/window_manager_connection.h"
 
 namespace {
 
@@ -39,7 +39,7 @@ gfx::Point GetCenterOfDisplay(int64_t display_id, int minimum_height) {
 }  // namespace
 
 AppListPresenterDelegateMus::AppListPresenterDelegateMus(
-    app_list::AppListPresenter* presenter,
+    app_list::AppListPresenterImpl* presenter,
     app_list::AppListViewDelegateFactory* view_delegate_factory)
     : presenter_(presenter), view_delegate_factory_(view_delegate_factory) {}
 
@@ -60,16 +60,11 @@ void AppListPresenterDelegateMus::Init(app_list::AppListView* view,
 
   // Note: This would place the app list into the USER_WINDOWS container, unlike
   // in classic ash, where it has it's own container.
-  // Note: We can't center the app list until we have its dimensions, so we
-  // init at (0, 0) and then reset its anchor point.
   // TODO(mfomitchev): We are currently passing NULL for |parent|. It seems like
   // the only thing this is used for is choosing the right scale factor in
   // AppListMainView::PreloadIcons(), so we take care of that - perhaps by
   // passing the display_id or the scale factor directly
-  view->InitAsBubbleAtFixedLocation(nullptr /* parent */, current_apps_page,
-                                    gfx::Point(), views::BubbleBorder::FLOAT,
-                                    true /* border_accepts_events */);
-
+  view->InitAsBubble(nullptr /* parent */, current_apps_page);
   view->SetAnchorPoint(
       GetCenterOfDisplay(display_id, GetMinimumBoundsHeightForAppList(view)));
 
@@ -80,16 +75,14 @@ void AppListPresenterDelegateMus::Init(app_list::AppListView* view,
 }
 
 void AppListPresenterDelegateMus::OnShown(int64_t display_id) {
-  views::WindowManagerConnection::Get()
-      ->pointer_watcher_event_router()
-      ->AddPointerWatcher(this, false);
+  views::MusClient::Get()->pointer_watcher_event_router()->AddPointerWatcher(
+      this, false);
   DCHECK(presenter_->GetTargetVisibility());
 }
 
 void AppListPresenterDelegateMus::OnDismissed() {
-  views::WindowManagerConnection::Get()
-      ->pointer_watcher_event_router()
-      ->RemovePointerWatcher(this);
+  views::MusClient::Get()->pointer_watcher_event_router()->RemovePointerWatcher(
+      this);
   DCHECK(!presenter_->GetTargetVisibility());
 }
 

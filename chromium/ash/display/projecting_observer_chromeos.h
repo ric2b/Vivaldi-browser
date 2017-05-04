@@ -8,7 +8,7 @@
 #include "ash/ash_export.h"
 #include "ash/common/shell_observer.h"
 #include "base/macros.h"
-#include "ui/display/chromeos/display_configurator.h"
+#include "ui/display/manager/chromeos/display_configurator.h"
 
 namespace chromeos {
 class PowerManagerClient;
@@ -16,8 +16,9 @@ class PowerManagerClient;
 
 namespace ash {
 
-class ASH_EXPORT ProjectingObserver : public ui::DisplayConfigurator::Observer,
-                                      public ShellObserver {
+class ASH_EXPORT ProjectingObserver
+    : public display::DisplayConfigurator::Observer,
+      public ShellObserver {
  public:
   // |power_manager_client| must outlive this object.
   explicit ProjectingObserver(
@@ -26,7 +27,7 @@ class ASH_EXPORT ProjectingObserver : public ui::DisplayConfigurator::Observer,
 
   // DisplayConfigurator::Observer implementation:
   void OnDisplayModeChanged(
-      const ui::DisplayConfigurator::DisplayStateList& outputs) override;
+      const display::DisplayConfigurator::DisplayStateList& outputs) override;
 
   // ash::ShellObserver implementation:
   void OnCastingSessionStartedOrStopped(bool started) override;

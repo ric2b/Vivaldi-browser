@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
@@ -497,11 +498,11 @@ class WebContentsViewAura::WindowObserver
   }
 
   // Overridden WindowTreeHostObserver:
-  void OnHostMoved(const aura::WindowTreeHost* host,
-                   const gfx::Point& new_origin) override {
+  void OnHostMovedInPixels(const aura::WindowTreeHost* host,
+                           const gfx::Point& new_origin_in_pixels) override {
     TRACE_EVENT1("ui",
-                 "WebContentsViewAura::WindowObserver::OnHostMoved",
-                 "new_origin", new_origin.ToString());
+                 "WebContentsViewAura::WindowObserver::OnHostMovedInPixels",
+                 "new_origin_in_pixels", new_origin_in_pixels.ToString());
 
     // This is for the desktop case (i.e. Aura desktop).
     SendScreenRects();
@@ -696,6 +697,11 @@ void GetScreenInfoForWindow(ScreenInfo* results,
   results->depth_per_component = 8;
   results->is_monochrome = false;
   results->device_scale_factor = display.device_scale_factor();
+  results->icc_profile = gfx::ICCProfile::FromBestMonitor();
+  if (results->icc_profile == gfx::ICCProfile()) {
+    results->icc_profile =
+        gfx::ICCProfile::FromColorSpace(gfx::ColorSpace::CreateSRGB());
+  }
 
   // The Display rotation and the ScreenInfo orientation are not the same
   // angle. The former is the physical display rotation while the later is the
@@ -790,12 +796,13 @@ void WebContentsViewAura::CreateView(
   // value is set shortly after this, so its safe to ignore.
 
   DCHECK(aura::Env::GetInstanceDontCreate());
-  window_.reset(new aura::Window(this));
+  window_ = base::MakeUnique<aura::Window>(this);
   window_->set_owned_by_parent(false);
   window_->SetType(ui::wm::WINDOW_TYPE_CONTROL);
+  window_->SetName("WebContentsViewAura");
   window_->Init(ui::LAYER_NOT_DRAWN);
   window_->AddObserver(this);
-  aura::Window* root_window = context ? context->GetRootWindow() : NULL;
+  aura::Window* root_window = context ? context->GetRootWindow() : nullptr;
   if (root_window) {
     // There are places where there is no context currently because object
     // hierarchies are built before they're attached to a Widget. (See
@@ -809,7 +816,6 @@ void WebContentsViewAura::CreateView(
                                           root_window->GetBoundsInScreen());
   }
   window_->layer()->SetMasksToBounds(true);
-  window_->SetName("WebContentsViewAura");
 
   // WindowObserver is not interesting and is problematic for Browser Plugin
   // guests.

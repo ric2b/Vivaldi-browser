@@ -49,7 +49,7 @@
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/test_rappor_service.h"
-#include "components/security_state/core/switches.h"
+#include "components/security_state/core/security_state.h"
 #include "components/variations/variations_associated_data.h"
 #include "grit/components_strings.h"
 #include "net/url_request/url_request_test_util.h"
@@ -71,6 +71,13 @@ namespace autofill {
 namespace {
 
 const int kDefaultPageID = 137;
+
+const std::string kUTF8MidlineEllipsis =
+    "  "
+    "\xE2\x80\xA2\xE2\x80\x86"
+    "\xE2\x80\xA2\xE2\x80\x86"
+    "\xE2\x80\xA2\xE2\x80\x86"
+    "\xE2\x80\xA2\xE2\x80\x86";
 
 class MockAutofillClient : public TestAutofillClient {
  public:
@@ -688,7 +695,7 @@ class TestAutofillExternalDelegate : public AutofillExternalDelegate {
     EXPECT_TRUE(on_suggestions_returned_seen_);
 
     EXPECT_EQ(expected_page_id, query_id_);
-    ASSERT_EQ(expected_num_suggestions, suggestions_.size());
+    ASSERT_LE(expected_num_suggestions, suggestions_.size());
     for (size_t i = 0; i < expected_num_suggestions; ++i) {
       SCOPED_TRACE(base::StringPrintf("i: %" PRIuS, i));
       EXPECT_EQ(expected_suggestions[i].value, suggestions_[i].value);
@@ -697,6 +704,7 @@ class TestAutofillExternalDelegate : public AutofillExternalDelegate {
       EXPECT_EQ(expected_suggestions[i].frontend_id,
                 suggestions_[i].frontend_id);
     }
+    ASSERT_EQ(expected_num_suggestions, suggestions_.size());
   }
 
   // Wrappers around the above GetSuggestions call that take a hardcoded number
@@ -1012,10 +1020,8 @@ class AutofillManagerTest : public testing::Test {
   }
 
   void SetHttpWarningEnabled() {
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        security_state::switches::kMarkHttpAs,
-        security_state::switches::
-            kMarkHttpWithPasswordsOrCcWithChipAndFormWarning);
+    scoped_feature_list_.InitAndEnableFeature(
+        security_state::kHttpFormWarningFeature);
   }
 
  protected:
@@ -1265,6 +1271,24 @@ TEST_F(AutofillManagerTest, GetProfileSuggestions_EmptyValue) {
       Suggestion("Elvis", "3734 Elvis Presley Blvd.", "", 2));
 }
 
+// Test that the HttpWarning does not appear on non-payment forms.
+TEST_F(AutofillManagerTest, GetProfileSuggestions_EmptyValueNotSecure) {
+  SetHttpWarningEnabled();
+  // Set up our form data.
+  FormData form;
+  test::CreateTestAddressFormData(&form);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  const FormFieldData& field = form.fields[0];
+  GetAutofillSuggestions(form, field);
+
+  // Test that we sent the right values to the external delegate.
+  external_delegate_->CheckSuggestions(
+      kDefaultPageID, Suggestion("Charles", "123 Apple St.", "", 1),
+      Suggestion("Elvis", "3734 Elvis Presley Blvd.", "", 2));
+}
+
 // Test that we return only matching address profile suggestions when the
 // selected form field has been partially filled out.
 TEST_F(AutofillManagerTest, GetProfileSuggestions_MatchCharacter) {
@@ -1439,14 +1463,11 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_EmptyValue) {
 
   // Test that we sent the right values to the external delegate.
   external_delegate_->CheckSuggestions(
-      kDefaultPageID, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
-                                 "3456",
+      kDefaultPageID, Suggestion("Visa" + kUTF8MidlineEllipsis + "3456",
                                  "04/99", kVisaCard,
                                  autofill_manager_->GetPackedCreditCardID(4)),
-      Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
-                 "8765",
-                 "10/98", kMasterCard,
-                 autofill_manager_->GetPackedCreditCardID(5)));
+      Suggestion("MasterCard" + kUTF8MidlineEllipsis + "8765", "10/98",
+                 kMasterCard, autofill_manager_->GetPackedCreditCardID(5)));
 }
 
 // Test that we return all credit card profile suggestions when the triggering
@@ -1464,14 +1485,11 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_Whitespace) {
 
   // Test that we sent the right values to the external delegate.
   external_delegate_->CheckSuggestions(
-      kDefaultPageID, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
-                                 "3456",
+      kDefaultPageID, Suggestion("Visa" + kUTF8MidlineEllipsis + "3456",
                                  "04/99", kVisaCard,
                                  autofill_manager_->GetPackedCreditCardID(4)),
-      Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
-                 "8765",
-                 "10/98", kMasterCard,
-                 autofill_manager_->GetPackedCreditCardID(5)));
+      Suggestion("MasterCard" + kUTF8MidlineEllipsis + "8765", "10/98",
+                 kMasterCard, autofill_manager_->GetPackedCreditCardID(5)));
 }
 
 // Test that we return all credit card profile suggestions when the triggering
@@ -1489,14 +1507,11 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_StopCharsOnly) {
 
   // Test that we sent the right values to the external delegate.
   external_delegate_->CheckSuggestions(
-      kDefaultPageID, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
-                                 "3456",
+      kDefaultPageID, Suggestion("Visa" + kUTF8MidlineEllipsis + "3456",
                                  "04/99", kVisaCard,
                                  autofill_manager_->GetPackedCreditCardID(4)),
-      Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
-                 "8765",
-                 "10/98", kMasterCard,
-                 autofill_manager_->GetPackedCreditCardID(5)));
+      Suggestion("MasterCard" + kUTF8MidlineEllipsis + "8765", "10/98",
+                 kMasterCard, autofill_manager_->GetPackedCreditCardID(5)));
 }
 
 // Test that we return all credit card profile suggestions when the triggering
@@ -1523,8 +1538,7 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_StopCharsWithInput) {
 
   // Test that we sent the right value to the external delegate.
   external_delegate_->CheckSuggestions(
-      kDefaultPageID, Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
-                                 "3123",
+      kDefaultPageID, Suggestion("MasterCard" + kUTF8MidlineEllipsis + "3123",
                                  "08/17", kMasterCard,
                                  autofill_manager_->GetPackedCreditCardID(7)));
 }
@@ -1544,8 +1558,7 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_MatchCharacter) {
 
   // Test that we sent the right values to the external delegate.
   external_delegate_->CheckSuggestions(
-      kDefaultPageID, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
-                                 "3456",
+      kDefaultPageID, Suggestion("Visa" + kUTF8MidlineEllipsis + "3456",
                                  "04/99", kVisaCard,
                                  autofill_manager_->GetPackedCreditCardID(4)));
 }
@@ -1563,15 +1576,13 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_NonCCNumber) {
   GetAutofillSuggestions(form, field);
 
 #if defined(OS_ANDROID)
-  static const char* kVisaSuggestion =
-      "Visa\xC2\xA0\xE2\x8B\xAF"
-      "3456";
-  static const char* kMcSuggestion =
-      "MasterCard\xC2\xA0\xE2\x8B\xAF"
-      "8765";
+  static const std::string kVisaSuggestion =
+      "Visa" + kUTF8MidlineEllipsis + "3456";
+  static const std::string kMcSuggestion =
+      "MasterCard" + kUTF8MidlineEllipsis + "8765";
 #else
-  static const char* kVisaSuggestion = "*3456";
-  static const char* kMcSuggestion = "*8765";
+  static const std::string kVisaSuggestion = "*3456";
+  static const std::string kMcSuggestion = "*8765";
 #endif
 
   // Test that we sent the right values to the external delegate.
@@ -1629,16 +1640,26 @@ TEST_F(AutofillManagerTest,
       kDefaultPageID,
       Suggestion(l10n_util::GetStringUTF8(
                      IDS_AUTOFILL_CREDIT_CARD_HTTP_WARNING_MESSAGE),
-                 "", "", -1),
+                 l10n_util::GetStringUTF8(IDS_AUTOFILL_HTTP_WARNING_LEARN_MORE),
+                 "httpWarning", POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE),
+#if !defined(OS_ANDROID)
+      Suggestion("", "", "", POPUP_ITEM_ID_SEPARATOR),
+#endif
       Suggestion(
-          l10n_util::GetStringUTF8(IDS_AUTOFILL_WARNING_INSECURE_CONNECTION),
-          "", "", -1));
+          l10n_util::GetStringUTF8(IDS_AUTOFILL_WARNING_PAYMENT_DISABLED), "",
+          "", POPUP_ITEM_ID_INSECURE_CONTEXT_PAYMENT_DISABLED_MESSAGE));
 
-  // Clear the test credit cards and try again -- we shouldn't return a warning.
+  // Clear the test credit cards and try again -- we should still show the
+  // warning.
   personal_data_.ClearCreditCards();
   GetAutofillSuggestions(form, field);
-  // Autocomplete suggestions are queried, but not Autofill.
-  EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
+  // Test that we sent the right values to the external delegate.
+  external_delegate_->CheckSuggestions(
+      kDefaultPageID,
+      Suggestion(l10n_util::GetStringUTF8(
+                     IDS_AUTOFILL_CREDIT_CARD_HTTP_WARNING_MESSAGE),
+                 l10n_util::GetStringUTF8(IDS_AUTOFILL_HTTP_WARNING_LEARN_MORE),
+                 "httpWarning", POPUP_ITEM_ID_HTTP_NOT_SECURE_WARNING_MESSAGE));
 }
 
 // Test that we don't show the extra "Payment not secure" warning when the page
@@ -1658,14 +1679,11 @@ TEST_F(AutofillManagerTest,
 
   // Test that we sent the right values to the external delegate.
   external_delegate_->CheckSuggestions(
-      kDefaultPageID, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
-                                 "3456",
+      kDefaultPageID, Suggestion("Visa" + kUTF8MidlineEllipsis + "3456",
                                  "04/99", kVisaCard,
                                  autofill_manager_->GetPackedCreditCardID(4)),
-      Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
-                 "8765",
-                 "10/98", kMasterCard,
-                 autofill_manager_->GetPackedCreditCardID(5)));
+      Suggestion("MasterCard" + kUTF8MidlineEllipsis + "8765", "10/98",
+                 kMasterCard, autofill_manager_->GetPackedCreditCardID(5)));
 }
 
 // Test that we will eventually return the credit card signin promo when there
@@ -1749,14 +1767,11 @@ TEST_F(AutofillManagerTest,
 
   // Test that we sent the right values to the external delegate.
   external_delegate_->CheckSuggestions(
-      kDefaultPageID, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
-                                 "3456",
+      kDefaultPageID, Suggestion("Visa" + kUTF8MidlineEllipsis + "3456",
                                  "04/99", kVisaCard,
                                  autofill_manager_->GetPackedCreditCardID(4)),
-      Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
-                 "8765",
-                 "10/98", kMasterCard,
-                 autofill_manager_->GetPackedCreditCardID(5)));
+      Suggestion("MasterCard" + kUTF8MidlineEllipsis + "8765", "10/98",
+                 kMasterCard, autofill_manager_->GetPackedCreditCardID(5)));
 }
 
 // Test that we return credit card suggestions for secure pages that have a
@@ -1776,14 +1791,11 @@ TEST_F(AutofillManagerTest,
 
   // Test that we sent the right values to the external delegate.
   external_delegate_->CheckSuggestions(
-      kDefaultPageID, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
-                                 "3456",
+      kDefaultPageID, Suggestion("Visa" + kUTF8MidlineEllipsis + "3456",
                                  "04/99", kVisaCard,
                                  autofill_manager_->GetPackedCreditCardID(4)),
-      Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
-                 "8765",
-                 "10/98", kMasterCard,
-                 autofill_manager_->GetPackedCreditCardID(5)));
+      Suggestion("MasterCard" + kUTF8MidlineEllipsis + "8765", "10/98",
+                 kMasterCard, autofill_manager_->GetPackedCreditCardID(5)));
 }
 
 // Test that we return all credit card suggestions in the case that two cards
@@ -1810,18 +1822,13 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_RepeatedObfuscatedNumber) {
 
   // Test that we sent the right values to the external delegate.
   external_delegate_->CheckSuggestions(
-      kDefaultPageID, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
-                                 "3456",
+      kDefaultPageID, Suggestion("Visa" + kUTF8MidlineEllipsis + "3456",
                                  "04/99", kVisaCard,
                                  autofill_manager_->GetPackedCreditCardID(4)),
-      Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
-                 "8765",
-                 "10/98", kMasterCard,
-                 autofill_manager_->GetPackedCreditCardID(5)),
-      Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
-                 "3456",
-                 "05/99", kMasterCard,
-                 autofill_manager_->GetPackedCreditCardID(7)));
+      Suggestion("MasterCard" + kUTF8MidlineEllipsis + "8765", "10/98",
+                 kMasterCard, autofill_manager_->GetPackedCreditCardID(5)),
+      Suggestion("MasterCard" + kUTF8MidlineEllipsis + "3456", "05/99",
+                 kMasterCard, autofill_manager_->GetPackedCreditCardID(7)));
 }
 
 // Test that we return profile and credit card suggestions for combined forms.
@@ -1847,14 +1854,11 @@ TEST_F(AutofillManagerTest, GetAddressAndCreditCardSuggestions) {
 
   // Test that we sent the credit card suggestions to the external delegate.
   external_delegate_->CheckSuggestions(
-      kPageID2, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
-                           "3456",
+      kPageID2, Suggestion("Visa" + kUTF8MidlineEllipsis + "3456",
                            "04/99", kVisaCard,
                            autofill_manager_->GetPackedCreditCardID(4)),
-      Suggestion("MasterCard\xC2\xA0\xE2\x8B\xAF"
-                 "8765",
-                 "10/98", kMasterCard,
-                 autofill_manager_->GetPackedCreditCardID(5)));
+      Suggestion("MasterCard" + kUTF8MidlineEllipsis + "8765", "10/98",
+                 kMasterCard, autofill_manager_->GetPackedCreditCardID(5)));
 }
 
 // Test that for non-https forms with both address and credit card fields, we
@@ -3667,17 +3671,38 @@ TEST_F(AutofillManagerTest, FormSubmittedWithDefaultValues) {
 }
 
 // Tests that credit card data are saved for forms on https
-TEST_F(AutofillManagerTest, ImportFormDataCreditCardHTTPS) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_ImportFormDataCreditCardHTTPS \
+  DISABLED_ImportFormDataCreditCardHTTPS
+#else
+#define MAYBE_ImportFormDataCreditCardHTTPS ImportFormDataCreditCardHTTPS
+#endif
+TEST_F(AutofillManagerTest, MAYBE_ImportFormDataCreditCardHTTPS) {
   TestSaveCreditCards(true);
 }
 
 // Tests that credit card data are saved for forms on http
-TEST_F(AutofillManagerTest, ImportFormDataCreditCardHTTP) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_ImportFormDataCreditCardHTTP DISABLED_ImportFormDataCreditCardHTTP
+#else
+#define MAYBE_ImportFormDataCreditCardHTTP ImportFormDataCreditCardHTTP
+#endif
+TEST_F(AutofillManagerTest, MAYBE_ImportFormDataCreditCardHTTP) {
   TestSaveCreditCards(false);
 }
 
 // Tests that credit card data are saved when autocomplete=off for CC field.
-TEST_F(AutofillManagerTest, CreditCardSavedWhenAutocompleteOff) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_CreditCardSavedWhenAutocompleteOff \
+  DISABLED_CreditCardSavedWhenAutocompleteOff
+#else
+#define MAYBE_CreditCardSavedWhenAutocompleteOff \
+  CreditCardSavedWhenAutocompleteOff
+#endif
+TEST_F(AutofillManagerTest, MAYBE_CreditCardSavedWhenAutocompleteOff) {
   // Set up our form data.
   FormData form;
   CreateTestCreditCardFormData(&form, false, false);
@@ -4376,8 +4401,7 @@ TEST_F(AutofillManagerTest,
   GetAutofillSuggestions(form, number_field);
 
   external_delegate_->CheckSuggestions(
-      kDefaultPageID, Suggestion("Visa\xC2\xA0\xE2\x8B\xAF"
-                                 "3456",
+      kDefaultPageID, Suggestion("Visa" + kUTF8MidlineEllipsis + "3456",
                                  "04/99", kVisaCard,
                                  autofill_manager_->GetPackedCreditCardID(4)));
 }
@@ -4466,7 +4490,13 @@ TEST_F(AutofillManagerTest, FillInUpdatedExpirationDate) {
                                      "4012888888881881");
 }
 
-TEST_F(AutofillManagerTest, UploadCreditCard) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard DISABLED_UploadCreditCard
+#else
+#define MAYBE_UploadCreditCard UploadCreditCard
+#endif
+TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard) {
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4500,7 +4530,13 @@ TEST_F(AutofillManagerTest, UploadCreditCard) {
                                       AutofillMetrics::UPLOAD_OFFERED, 1);
 }
 
-TEST_F(AutofillManagerTest, UploadCreditCard_FeatureNotEnabled) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard_FeatureNotEnabled DISABLED_UploadCreditCard_FeatureNotEnabled
+#else
+#define MAYBE_UploadCreditCard_FeatureNotEnabled UploadCreditCard_FeatureNotEnabled
+#endif
+TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_FeatureNotEnabled) {
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(false);
 
@@ -4535,7 +4571,13 @@ TEST_F(AutofillManagerTest, UploadCreditCard_FeatureNotEnabled) {
   histogram_tester.ExpectTotalCount("Autofill.CardUploadDecisionExpanded", 0);
 }
 
-TEST_F(AutofillManagerTest, UploadCreditCard_CvcUnavailable) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard_CvcUnavailable DISABLED_UploadCreditCard_CvcUnavailable
+#else
+#define MAYBE_UploadCreditCard_CvcUnavailable UploadCreditCard_CvcUnavailable
+#endif
+TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_CvcUnavailable) {
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4571,7 +4613,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard_CvcUnavailable) {
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_NO_CVC, 1);
 
-  rappor::TestRapporService* rappor_service =
+  rappor::TestRapporServiceImpl* rappor_service =
       autofill_client_.test_rappor_service();
   EXPECT_EQ(1, rappor_service->GetReportsCount());
   std::string sample;
@@ -4582,7 +4624,66 @@ TEST_F(AutofillManagerTest, UploadCreditCard_CvcUnavailable) {
   EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
-TEST_F(AutofillManagerTest, UploadCreditCard_MultipleCvcFields) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard_CvcInvalidLength DISABLED_UploadCreditCard_CvcInvalidLength
+#else
+#define MAYBE_UploadCreditCard_CvcInvalidLength UploadCreditCard_CvcInvalidLength
+#endif
+TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_CvcInvalidLength) {
+  personal_data_.ClearAutofillProfiles();
+  autofill_manager_->set_credit_card_upload_enabled(true);
+
+  // Create, fill and submit an address form in order to establish a recent
+  // profile which can be selected for the upload request.
+  FormData address_form;
+  test::CreateTestAddressFormData(&address_form);
+  FormsSeen(std::vector<FormData>(1, address_form));
+  ManuallyFillAddressForm("Flo", "Master", "77401", "US", &address_form);
+  FormSubmitted(address_form);
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  CreateTestCreditCardFormData(&credit_card_form, true, false);
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  // Edit the data, and submit.
+  credit_card_form.fields[0].value = ASCIIToUTF16("Flo Master");
+  credit_card_form.fields[1].value = ASCIIToUTF16("4111111111111111");
+  credit_card_form.fields[2].value = ASCIIToUTF16("11");
+  credit_card_form.fields[3].value = ASCIIToUTF16("2017");
+  credit_card_form.fields[4].value = ASCIIToUTF16("1234");
+
+  base::HistogramTester histogram_tester;
+
+  // Neither a local save nor an upload should happen in this case.
+  EXPECT_CALL(autofill_client_, ConfirmSaveCreditCardLocally(_, _)).Times(0);
+  FormSubmitted(credit_card_form);
+  EXPECT_FALSE(autofill_manager_->credit_card_was_uploaded());
+
+  // Verify that the correct histogram entry (and only that) was logged.
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.CardUploadDecisionExpanded",
+      AutofillMetrics::UPLOAD_NOT_OFFERED_NO_CVC, 1);
+
+  rappor::TestRapporServiceImpl* rappor_service =
+      autofill_client_.test_rappor_service();
+  EXPECT_EQ(1, rappor_service->GetReportsCount());
+  std::string sample;
+  rappor::RapporType type;
+  EXPECT_TRUE(rappor_service->GetRecordedSampleForMetric(
+      "Autofill.CardUploadNotOfferedNoCvc", &sample, &type));
+  EXPECT_EQ("myform.com", sample);
+  EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
+}
+
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard_MultipleCvcFields DISABLED_UploadCreditCard_MultipleCvcFields
+#else
+#define MAYBE_UploadCreditCard_MultipleCvcFields UploadCreditCard_MultipleCvcFields
+#endif
+TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_MultipleCvcFields) {
   autofill_manager_->set_credit_card_upload_enabled(true);
 
   // Remove the profiles that were created in the TestPersonalDataManager
@@ -4641,7 +4742,13 @@ TEST_F(AutofillManagerTest, UploadCreditCard_MultipleCvcFields) {
       AutofillMetrics::UPLOAD_OFFERED, 1);
 }
 
-TEST_F(AutofillManagerTest, UploadCreditCard_NoProfileAvailable) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard_NoProfileAvailable DISABLED_UploadCreditCard_NoProfileAvailable
+#else
+#define MAYBE_UploadCreditCard_NoProfileAvailable UploadCreditCard_NoProfileAvailable
+#endif
+TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NoProfileAvailable) {
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4671,7 +4778,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NoProfileAvailable) {
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ADDRESS, 1);
 
-  rappor::TestRapporService* rappor_service =
+  rappor::TestRapporServiceImpl* rappor_service =
       autofill_client_.test_rappor_service();
   EXPECT_EQ(1, rappor_service->GetReportsCount());
   std::string sample;
@@ -4682,7 +4789,13 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NoProfileAvailable) {
   EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
-TEST_F(AutofillManagerTest, UploadCreditCard_NoNameAvailable) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard_NoNameAvailable DISABLED_UploadCreditCard_NoNameAvailable
+#else
+#define MAYBE_UploadCreditCard_NoNameAvailable UploadCreditCard_NoNameAvailable
+#endif
+TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NoNameAvailable) {
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4718,7 +4831,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NoNameAvailable) {
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_NO_NAME, 1);
 
-  rappor::TestRapporService* rappor_service =
+  rappor::TestRapporServiceImpl* rappor_service =
       autofill_client_.test_rappor_service();
   EXPECT_EQ(1, rappor_service->GetReportsCount());
   std::string sample;
@@ -4729,7 +4842,13 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NoNameAvailable) {
   EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
-TEST_F(AutofillManagerTest, UploadCreditCard_ZipCodesConflict) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard_ZipCodesConflict DISABLED_UploadCreditCard_ZipCodesConflict
+#else
+#define MAYBE_UploadCreditCard_ZipCodesConflict UploadCreditCard_ZipCodesConflict
+#endif
+TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_ZipCodesConflict) {
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4774,7 +4893,13 @@ TEST_F(AutofillManagerTest, UploadCreditCard_ZipCodesConflict) {
       AutofillMetrics::UPLOAD_NOT_OFFERED_CONFLICTING_ZIPS, 1);
 }
 
-TEST_F(AutofillManagerTest, UploadCreditCard_ZipCodesHavePrefixMatch) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard_ZipCodesHavePrefixMatch DISABLED_UploadCreditCard_ZipCodesHavePrefixMatch
+#else
+#define MAYBE_UploadCreditCard_ZipCodesHavePrefixMatch UploadCreditCard_ZipCodesHavePrefixMatch
+#endif
+TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_ZipCodesHavePrefixMatch) {
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4819,7 +4944,13 @@ TEST_F(AutofillManagerTest, UploadCreditCard_ZipCodesHavePrefixMatch) {
       AutofillMetrics::UPLOAD_OFFERED, 1);
 }
 
-TEST_F(AutofillManagerTest, UploadCreditCard_NoZipCodeAvailable) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard_NoZipCodeAvailable DISABLED_UploadCreditCard_NoZipCodeAvailable
+#else
+#define MAYBE_UploadCreditCard_NoZipCodeAvailable UploadCreditCard_NoZipCodeAvailable
+#endif
+TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NoZipCodeAvailable) {
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4863,7 +4994,13 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NoZipCodeAvailable) {
       AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ZIP_CODE, 1);
 }
 
-TEST_F(AutofillManagerTest, UploadCreditCard_NamesMatchLoosely) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard_NamesMatchLoosely DISABLED_UploadCreditCard_NamesMatchLoosely
+#else
+#define MAYBE_UploadCreditCard_NamesMatchLoosely UploadCreditCard_NamesMatchLoosely
+#endif
+TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NamesMatchLoosely) {
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4911,7 +5048,13 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NamesMatchLoosely) {
       AutofillMetrics::UPLOAD_OFFERED, 1);
 }
 
-TEST_F(AutofillManagerTest, UploadCreditCard_NamesHaveToMatch) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard_NamesHaveToMatch DISABLED_UploadCreditCard_NamesHaveToMatch
+#else
+#define MAYBE_UploadCreditCard_NamesHaveToMatch UploadCreditCard_NamesHaveToMatch
+#endif
+TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_NamesHaveToMatch) {
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -4955,7 +5098,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NamesHaveToMatch) {
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_CONFLICTING_NAMES, 1);
 
-  rappor::TestRapporService* rappor_service =
+  rappor::TestRapporServiceImpl* rappor_service =
       autofill_client_.test_rappor_service();
   EXPECT_EQ(1, rappor_service->GetReportsCount());
   std::string sample;
@@ -4966,7 +5109,13 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NamesHaveToMatch) {
   EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
-TEST_F(AutofillManagerTest, UploadCreditCard_UploadDetailsFails) {
+// TODO(crbug.com/666704): Flaky on android_n5x_swarming_rel bot.
+#if defined(OS_ANDROID)
+#define MAYBE_UploadCreditCard_UploadDetailsFails DISABLED_UploadCreditCard_UploadDetailsFails
+#else
+#define MAYBE_UploadCreditCard_UploadDetailsFails UploadCreditCard_UploadDetailsFails
+#endif
+TEST_F(AutofillManagerTest, MAYBE_UploadCreditCard_UploadDetailsFails) {
   personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
@@ -5089,11 +5238,10 @@ TEST_F(AutofillManagerTest, DisplayCreditCardSuggestionsWithMatchingTokens) {
   GetAutofillSuggestions(form, field);
 
 #if defined(OS_ANDROID)
-  static const char* kVisaSuggestion =
-      "Visa\xC2\xA0\xE2\x8B\xAF"
-      "3456";
+  static const std::string kVisaSuggestion =
+      "Visa" + kUTF8MidlineEllipsis + "3456";
 #else
-  static const char* kVisaSuggestion = "*3456";
+  static const std::string kVisaSuggestion = "*3456";
 #endif
 
   external_delegate_->CheckSuggestions(

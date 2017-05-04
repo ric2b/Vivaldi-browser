@@ -37,7 +37,7 @@
 namespace blink {
 
 Stream::Stream(ExecutionContext* context, const String& mediaType)
-    : ActiveDOMObject(context), m_mediaType(mediaType), m_isNeutered(false) {
+    : SuspendableObject(context), m_mediaType(mediaType), m_isNeutered(false) {
   // Create a new internal URL for a stream and register it with the provided
   // media type.
   m_internalURL = BlobURL::createInternalStreamURL();
@@ -71,13 +71,13 @@ void Stream::suspend() {}
 
 void Stream::resume() {}
 
-void Stream::contextDestroyed() {
+void Stream::contextDestroyed(ExecutionContext*) {
   neuter();
   abort();
 }
 
 DEFINE_TRACE(Stream) {
-  ActiveDOMObject::trace(visitor);
+  SuspendableObject::trace(visitor);
 }
 
 }  // namespace blink

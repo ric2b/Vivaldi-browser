@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/simple_thread.h"
@@ -73,7 +74,7 @@ class ProvidedService
     state->initialize_local_name = context()->identity().name();
     state->initialize_userid = context()->identity().user_id();
 
-    context()->connector()->ConnectToInterface(remote_info.identity, &caller_);
+    context()->connector()->BindInterface(remote_info.identity, &caller_);
     caller_->ConnectionAccepted(std::move(state));
 
     return true;
@@ -115,9 +116,8 @@ class ProvidedService
   void ConnectToClassAppAsDifferentUser(
       const service_manager::Identity& target,
       const ConnectToClassAppAsDifferentUserCallback& callback) override {
-    Connector::ConnectParams params(target);
     std::unique_ptr<Connection> connection =
-        context()->connector()->Connect(&params);
+        context()->connector()->Connect(target);
     {
       base::RunLoop loop;
       connection->AddConnectionCompletedClosure(loop.QuitClosure());

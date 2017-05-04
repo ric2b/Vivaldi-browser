@@ -38,6 +38,7 @@
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "components/autofill/core/browser/webdata/autocomplete_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autocomplete_syncable_service.h"
 #include "components/autofill/core/browser/webdata/autofill_profile_syncable_service.h"
 #include "components/autofill/core/browser/webdata/autofill_wallet_metadata_syncable_service.h"
@@ -56,12 +57,12 @@
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/spellcheck/spellcheck_build_features.h"
 #include "components/sync/base/report_unrecoverable_error.h"
-#include "components/sync/driver/glue/browser_thread_model_worker.h"
-#include "components/sync/driver/glue/ui_model_worker.h"
+#include "components/sync/driver/async_directory_type_controller.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/driver/sync_util.h"
-#include "components/sync/driver/ui_data_type_controller.h"
+#include "components/sync/engine/browser_thread_model_worker.h"
 #include "components/sync/engine/passive_model_worker.h"
+#include "components/sync/engine/ui_model_worker.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_sessions/sync_sessions_client.h"
 #include "content/public/browser/browser_thread.h"
@@ -99,7 +100,7 @@
 #include "chrome/browser/spellchecker/spellcheck_service.h"
 #endif
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
 #include "chrome/browser/sync/glue/synced_window_delegates_getter_android.h"
 #endif
 
@@ -110,13 +111,15 @@
 #include "components/sync_wifi/wifi_credential_syncable_service_factory.h"
 #endif
 
+#include "notes/notes_factory.h"
+
 using content::BrowserThread;
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 using browser_sync::ExtensionDataTypeController;
 using browser_sync::ExtensionSettingDataTypeController;
 #endif
 using browser_sync::SearchEngineDataTypeController;
-using syncer::UIDataTypeController;
+using syncer::AsyncDirectoryTypeController;
 
 namespace browser_sync {
 
@@ -127,7 +130,7 @@ class SyncSessionsClientImpl : public sync_sessions::SyncSessionsClient {
  public:
   explicit SyncSessionsClientImpl(Profile* profile) : profile_(profile) {
     window_delegates_getter_.reset(
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
         // Android doesn't have multi-profile support, so no need to pass the
         // profile in.
         new SyncedWindowDelegatesGetterAndroid());
@@ -227,6 +230,10 @@ syncer::SyncService* ChromeSyncClient::GetSyncService() {
   return ProfileSyncServiceFactory::GetSyncServiceForBrowserContext(profile_);
 }
 
+Profile *ChromeSyncClient::GetProfile() {
+  return profile_;
+}
+
 PrefService* ChromeSyncClient::GetPrefService() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return profile_->GetPrefs();
@@ -249,6 +256,10 @@ history::HistoryService* ChromeSyncClient::GetHistoryService() {
       profile_, ServiceAccessType::EXPLICIT_ACCESS);
 }
 
+bool ChromeSyncClient::HasPasswordStore() {
+  return password_store_ != nullptr;
+}
+
 autofill::PersonalDataManager* ChromeSyncClient::GetPersonalDataManager() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return autofill::PersonalDataManagerFactory::GetForProfile(profile_);
@@ -263,11 +274,11 @@ base::Closure ChromeSyncClient::GetPasswordStateChangedCallback() {
 syncer::SyncApiComponentFactory::RegisterDataTypesMethod
 ChromeSyncClient::GetRegisterPlatformTypesCallback() {
   return base::Bind(
-#if BUILDFLAG(ANDROID_JAVA_UI)
+#if defined(OS_ANDROID)
       &ChromeSyncClient::RegisterAndroidDataTypes,
 #else
       &ChromeSyncClient::RegisterDesktopDataTypes,
-#endif  // BUILDFLAG(ANDROID_JAVA_UI)
+#endif  // defined(OS_ANDROID)
       weak_ptr_factory_.GetWeakPtr());
 }
 
@@ -290,6 +301,11 @@ ChromeSyncClient::GetExtensionsActivity() {
 
 sync_sessions::SyncSessionsClient* ChromeSyncClient::GetSyncSessionsClient() {
   return sync_sessions_client_.get();
+}
+
+vivaldi::Notes_Model* ChromeSyncClient::GetNotesModel() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  return vivaldi::NotesModelFactory::GetForProfile(profile_);
 }
 
 base::WeakPtr<syncer::SyncableService>
@@ -345,7 +361,7 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       return app_list::AppListSyncableServiceFactory::GetForProfile(profile_)->
           AsWeakPtr();
 #endif
-#if defined(ENABLE_THEMES)
+#if !defined(OS_ANDROID)
     case syncer::THEMES:
       return ThemeServiceFactory::GetForProfile(profile_)->
           GetThemeSyncableService()->AsWeakPtr();
@@ -435,6 +451,14 @@ ChromeSyncClient::GetSyncBridgeForModelType(syncer::ModelType type) {
     case syncer::DEVICE_INFO:
       return ProfileSyncServiceFactory::GetForProfile(profile_)
           ->GetDeviceInfoSyncBridge()
+          ->AsWeakPtr();
+    case syncer::READING_LIST:
+      // Reading List is only supported on iOS at the moment.
+      NOTREACHED();
+      return base::WeakPtr<syncer::ModelTypeSyncBridge>();
+    case syncer::AUTOFILL:
+      return autofill::AutocompleteSyncBridge::FromWebDataService(
+                 web_data_service_.get())
           ->AsWeakPtr();
     default:
       NOTREACHED();
@@ -534,7 +558,7 @@ void ChromeSyncClient::RegisterDesktopDataTypes(
   }
 #endif
 
-#if defined(ENABLE_THEMES)
+#if !defined(OS_ANDROID)
   // Theme sync is enabled by default.  Register unless explicitly disabled.
   if (!disabled_types.Has(syncer::THEMES)) {
     sync_service->RegisterDataTypeController(
@@ -573,8 +597,9 @@ void ChromeSyncClient::RegisterDesktopDataTypes(
 #if BUILDFLAG(ENABLE_APP_LIST)
   if (app_list::switches::IsAppListSyncEnabled()) {
     sync_service->RegisterDataTypeController(
-        base::MakeUnique<UIDataTypeController>(syncer::APP_LIST, error_callback,
-                                               this));
+        base::MakeUnique<AsyncDirectoryTypeController>(
+            syncer::APP_LIST, error_callback, this, syncer::GROUP_UI,
+            BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
   }
 #endif
 
@@ -582,8 +607,9 @@ void ChromeSyncClient::RegisterDesktopDataTypes(
   // Dictionary sync is enabled by default.
   if (!disabled_types.Has(syncer::DICTIONARY)) {
     sync_service->RegisterDataTypeController(
-        base::MakeUnique<UIDataTypeController>(syncer::DICTIONARY,
-                                               error_callback, this));
+        base::MakeUnique<AsyncDirectoryTypeController>(
+            syncer::DICTIONARY, error_callback, this, syncer::GROUP_UI,
+            BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
   }
 #endif
 
@@ -608,8 +634,9 @@ void ChromeSyncClient::RegisterDesktopDataTypes(
           switches::kEnableWifiCredentialSync) &&
       !disabled_types.Has(syncer::WIFI_CREDENTIALS)) {
     sync_service->RegisterDataTypeController(
-        base::MakeUnique<UIDataTypeController>(syncer::WIFI_CREDENTIALS,
-                                               error_callback, this));
+        base::MakeUnique<AsyncDirectoryTypeController>(
+            syncer::WIFI_CREDENTIALS, error_callback, this, syncer::GROUP_UI,
+            BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
   }
   // TODO(lgcheng): Add switch for this.
   sync_service->RegisterDataTypeController(

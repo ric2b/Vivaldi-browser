@@ -11,6 +11,9 @@
 #include <map>
 #include <memory>
 #include <queue>
+#include <set>
+#include <string>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/id_map.h"
@@ -33,6 +36,8 @@ class WebVector;
 
 namespace content {
 
+class TestPresentationDispatcher;
+
 // PresentationDispatcher is a delegate for Presentation API messages used by
 // Blink. It forwards the calls to the Mojo PresentationService.
 class CONTENT_EXPORT PresentationDispatcher
@@ -44,13 +49,28 @@ class CONTENT_EXPORT PresentationDispatcher
   ~PresentationDispatcher() override;
 
  private:
+  friend class TestPresentationDispatcher;
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestStartSession);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestStartSessionError);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestJoinSession);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestJoinSessionError);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestSendString);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestSendArrayBuffer);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestSendBlobData);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestCloseSession);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest, TestTerminateSession);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest,
+                           TestListenForScreenAvailability);
+  FRIEND_TEST_ALL_PREFIXES(PresentationDispatcherTest,
+                           TestSetDefaultPresentationUrls);
+
   struct SendMessageRequest {
     SendMessageRequest(blink::mojom::PresentationSessionInfoPtr session_info,
-                       blink::mojom::SessionMessagePtr message);
+                       blink::mojom::ConnectionMessagePtr message);
     ~SendMessageRequest();
 
     blink::mojom::PresentationSessionInfoPtr session_info;
-    blink::mojom::SessionMessagePtr message;
+    blink::mojom::ConnectionMessagePtr message;
   };
 
   static SendMessageRequest* CreateSendTextMessageRequest(
@@ -68,13 +88,13 @@ class CONTENT_EXPORT PresentationDispatcher
   void setController(blink::WebPresentationController* controller) override;
   void setReceiver(blink::WebPresentationReceiver*) override;
 
-  void startSession(
-      const blink::WebVector<blink::WebURL>& presentationUrls,
-      blink::WebPresentationConnectionClientCallbacks* callback) override;
-  void joinSession(
-      const blink::WebVector<blink::WebURL>& presentationUrls,
-      const blink::WebString& presentationId,
-      blink::WebPresentationConnectionClientCallbacks* callback) override;
+  void startSession(const blink::WebVector<blink::WebURL>& presentationUrls,
+                    std::unique_ptr<blink::WebPresentationConnectionCallback>
+                        callback) override;
+  void joinSession(const blink::WebVector<blink::WebURL>& presentationUrls,
+                   const blink::WebString& presentationId,
+                   std::unique_ptr<blink::WebPresentationConnectionCallback>
+                       callback) override;
   void sendString(const blink::WebURL& presentationUrl,
                   const blink::WebString& presentationId,
                   const blink::WebString& message) override;
@@ -91,8 +111,9 @@ class CONTENT_EXPORT PresentationDispatcher
   void terminateSession(const blink::WebURL& presentationUrl,
                         const blink::WebString& presentationId) override;
   void getAvailability(
-      const blink::WebURL& availabilityUrl,
-      blink::WebPresentationAvailabilityCallbacks* callbacks) override;
+      const blink::WebVector<blink::WebURL>& availabilityUrl,
+      std::unique_ptr<blink::WebPresentationAvailabilityCallbacks> callbacks)
+      override;
   void startListening(blink::WebPresentationAvailabilityObserver*) override;
   void stopListening(blink::WebPresentationAvailabilityObserver*) override;
   void setDefaultPresentationUrls(
@@ -108,24 +129,26 @@ class CONTENT_EXPORT PresentationDispatcher
   void OnScreenAvailabilityNotSupported(const GURL& url) override;
   void OnScreenAvailabilityUpdated(const GURL& url, bool available) override;
   void OnConnectionStateChanged(
-      blink::mojom::PresentationSessionInfoPtr connection,
+      blink::mojom::PresentationSessionInfoPtr session_info,
       blink::mojom::PresentationConnectionState state) override;
   void OnConnectionClosed(
-      blink::mojom::PresentationSessionInfoPtr connection,
+      blink::mojom::PresentationSessionInfoPtr session_info,
       blink::mojom::PresentationConnectionCloseReason reason,
       const std::string& message) override;
-  void OnSessionMessagesReceived(
+  void OnConnectionMessagesReceived(
       blink::mojom::PresentationSessionInfoPtr session_info,
-      std::vector<blink::mojom::SessionMessagePtr> messages) override;
+      std::vector<blink::mojom::ConnectionMessagePtr> messages) override;
   void OnDefaultSessionStarted(
       blink::mojom::PresentationSessionInfoPtr session_info) override;
 
   void OnSessionCreated(
-      blink::WebPresentationConnectionClientCallbacks* callback,
+      std::unique_ptr<blink::WebPresentationConnectionCallback> callback,
       blink::mojom::PresentationSessionInfoPtr session_info,
       blink::mojom::PresentationErrorPtr error);
   void OnReceiverConnectionAvailable(
-      blink::mojom::PresentationSessionInfoPtr) override;
+      blink::mojom::PresentationSessionInfoPtr,
+      blink::mojom::PresentationConnectionPtr,
+      blink::mojom::PresentationConnectionRequest) override;
 
   // Call to PresentationService to send the message in |request|.
   // |session_info| and |message| of |reuqest| will be consumed.
@@ -133,7 +156,7 @@ class CONTENT_EXPORT PresentationDispatcher
   void DoSendMessage(SendMessageRequest* request);
   void HandleSendMessageRequests(bool success);
 
-  void ConnectToPresentationServiceIfNeeded();
+  virtual void ConnectToPresentationServiceIfNeeded();
 
   void UpdateListeningState();
 
@@ -155,7 +178,7 @@ class CONTENT_EXPORT PresentationDispatcher
   };
 
   using AvailabilityCallbacksMap =
-      IDMap<blink::WebPresentationAvailabilityCallbacks, IDMapOwnPointer>;
+      IDMap<std::unique_ptr<blink::WebPresentationAvailabilityCallbacks>>;
   using AvailabilityObserversSet =
       std::set<blink::WebPresentationAvailabilityObserver*>;
 

@@ -29,7 +29,7 @@ import os
 import unittest
 
 from webkitpy.common.host_mock import MockHost
-from webkitpy.common.system.outputcapture import OutputCapture
+from webkitpy.common.system.output_capture import OutputCapture
 from webkitpy.w3c.test_parser import TestParser
 
 
@@ -223,3 +223,10 @@ CONTENT OF TEST
         self.assertEqual(parser.filename, 'some/bogus/path.html')
         self.assertIsNone(parser.test_doc)
         self.assertIsNone(parser.ref_doc)
+
+    def test_load_file_with_non_ascii_tags(self):
+        host = MockHost()
+        host.filesystem.files['/some/path.xml'] = '<d\xc3\x98dd></d\xc3\x98dd>'
+        parser = TestParser('/some/path.xml', host)
+        self.assertEqual(parser.filename, '/some/path.xml')
+        self.assertIsNone(parser.test_doc)

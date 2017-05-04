@@ -59,11 +59,20 @@ Polymer({
     },
 
     /**
+     * Flag that shows Timezone Selection screen.
+     */
+    timezoneScreenShown: {
+      type: Boolean,
+      value: false,
+    },
+
+    /**
      * Flag that shows Network Selection screen.
      */
     networkSelectionScreenShown: {
       type: Boolean,
       value: false,
+      observer: 'networkSelectionScreenShownChanged_',
     },
 
     /**
@@ -81,6 +90,50 @@ Polymer({
     a11yStatus: {
       type: Object,
     },
+
+    /**
+     * A list of timezones for Timezone Selection screen.
+     * @type {!Array<OobeTypes.TimezoneDsc>}
+     */
+    timezones: {
+      type: Object,
+      value: [],
+    },
+
+    /**
+     * If UI uses forced keyboard navigation.
+     */
+    highlightStrength: {
+      type: String,
+      value: '',
+    },
+  },
+
+  /** @override */
+  ready: function() {
+    CrOncStrings = {
+      OncTypeCellular: loadTimeData.getString('OncTypeCellular'),
+      OncTypeEthernet: loadTimeData.getString('OncTypeEthernet'),
+      OncTypeVPN: loadTimeData.getString('OncTypeVPN'),
+      OncTypeWiFi: loadTimeData.getString('OncTypeWiFi'),
+      OncTypeWiMAX: loadTimeData.getString('OncTypeWiMAX'),
+      networkDisabled: loadTimeData.getString('networkDisabled'),
+      networkListItemConnected:
+          loadTimeData.getString('networkListItemConnected'),
+      networkListItemConnecting:
+          loadTimeData.getString('networkListItemConnecting'),
+      networkListItemConnectingTo:
+          loadTimeData.getString('networkListItemConnectingTo'),
+      networkListItemNotConnected:
+          loadTimeData.getString('networkListItemNotConnected'),
+      vpnNameTemplate: loadTimeData.getString('vpnNameTemplate'),
+
+      // Additional strings for custom items.
+      addMobileNetworkMenuName:
+          loadTimeData.getString('addMobileNetworkMenuName'),
+      addWiFiNetworkMenuName: loadTimeData.getString('addWiFiNetworkMenuName'),
+      proxySettingsMenuName: loadTimeData.getString('proxySettingsMenuName'),
+    };
   },
 
   /**
@@ -91,6 +144,7 @@ Polymer({
     this.networkSelectionScreenShown = false;
     this.languageSelectionScreenShown = false;
     this.accessibilityOptionsScreenShown = false;
+    this.timezoneScreenShown = false;
   },
 
   /**
@@ -105,6 +159,18 @@ Polymer({
    */
   focus: function() {
     this.$.welcomeNextButton.focus();
+  },
+
+  /** @private */
+  networkSelectionScreenShownChanged_: function() {
+    if (this.networkSelectionScreenShown) {
+      // After #networkSelect is stamped, trigger a refresh so that the list
+      // will be updated with the currently visible networks and sized
+      // appropriately.
+      this.async(function() {
+        this.$.networkSelect.refreshNetworks();
+      }.bind(this));
+    }
   },
 
   /**
@@ -146,6 +212,14 @@ Polymer({
   },
 
   /**
+   * Returns true if timezone button should be visible.
+   * @private
+   */
+  isTimezoneButtonVisible_: function(highlightStrength) {
+    return highlightStrength === 'strong';
+  },
+
+  /**
    * Handle "Next" button for "Welcome" screen.
    *
    * @private
@@ -173,6 +247,16 @@ Polymer({
   onWelcomeAccessibilityButtonClicked_: function() {
     this.hideAllScreens_();
     this.accessibilityOptionsScreenShown = true;
+  },
+
+  /**
+   * Handle "Timezone" button for "Welcome" screen.
+   *
+   * @private
+   */
+  onWelcomeTimezoneButtonClicked_: function() {
+    this.hideAllScreens_();
+    this.timezoneScreenShown = true;
   },
 
   /**
@@ -344,5 +428,31 @@ Polymer({
   onA11yOptionChanged_: function(event) {
     chrome.send(
         event.currentTarget.chromeMessage, [event.currentTarget.checked]);
+  },
+
+  /** ******************** Timezone section ******************* */
+
+  /**
+   * Handle "OK" button for "Timezone Selection" screen.
+   *
+   * @private
+   */
+  closeTimezoneSection_: function() {
+    this.hideAllScreens_();
+    this.welcomeScreenShown = true;
+  },
+
+  /**
+   * Handle timezone selection.
+   *
+   * @param {!{detail: {!OobeTypes.Timezone}}} event
+   * @private
+   */
+  onTimezoneSelected_: function(event) {
+    var item = event.detail;
+    if (!item)
+      return;
+
+    this.screen.onTimezoneSelected_(item.value);
   },
 });

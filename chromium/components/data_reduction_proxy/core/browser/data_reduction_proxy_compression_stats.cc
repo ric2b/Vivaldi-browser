@@ -201,6 +201,13 @@ void RecordDailyContentLengthHistograms(
       percent_savings_via_data_reduction_proxy);
 }
 
+void RecordSavingsClearedNegativeClockMetric(int days_since_last_update) {
+  // Data savings are cleared if the system clock moved back by more than
+  // one day.
+  UMA_HISTOGRAM_BOOLEAN("DataReductionProxy.SavingsCleared.NegativeSystemClock",
+                        days_since_last_update < -1);
+}
+
 }  // namespace
 
 class DataReductionProxyCompressionStats::DailyContentLengthUpdate {
@@ -333,6 +340,8 @@ DataReductionProxyCompressionStats::DataReductionProxyCompressionStats(
       pref_service_(prefs),
       delay_(delay),
       data_usage_map_is_dirty_(false),
+      session_total_received_(0),
+      session_total_original_(0),
       current_data_usage_load_status_(NOT_LOADED),
       weak_factory_(this) {
   DCHECK(service);
@@ -413,11 +422,6 @@ void DataReductionProxyCompressionStats::Init() {
   InitListPref(prefs::kDailyHttpReceivedContentLength);
   InitListPref(prefs::kDailyOriginalContentLengthViaDataReductionProxy);
   InitListPref(prefs::kDailyOriginalContentLengthWithDataReductionProxyEnabled);
-
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kClearDataReductionProxyDataSavings)) {
-    ClearDataSavingStatistics();
-  }
 }
 
 void DataReductionProxyCompressionStats::UpdateDataSavings(
@@ -442,6 +446,8 @@ void DataReductionProxyCompressionStats::UpdateContentLengths(
     const scoped_refptr<DataUseGroup>& data_use_group,
     const std::string& mime_type) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  session_total_received_ += data_used;
+  session_total_original_ += original_size;
   std::string data_use_host;
   if (data_use_group) {
     data_use_host = data_use_group->GetHostname();
@@ -480,7 +486,7 @@ void DataReductionProxyCompressionStats::InitListPref(const char* pref) {
   std::unique_ptr<base::ListValue> pref_value =
       std::unique_ptr<base::ListValue>(
           pref_service_->GetList(pref)->DeepCopy());
-  list_pref_map_.add(pref, std::move(pref_value));
+  list_pref_map_[pref] = std::move(pref_value);
 }
 
 int64_t DataReductionProxyCompressionStats::GetInt64(const char* pref_path) {
@@ -514,7 +520,10 @@ base::ListValue* DataReductionProxyCompressionStats::GetList(
     return ListPrefUpdate(pref_service_, pref_path).Get();
 
   DelayedWritePrefs();
-  return list_pref_map_.get(pref_path);
+  auto it = list_pref_map_.find(pref_path);
+  if (it == list_pref_map_.end())
+    return nullptr;
+  return it->second.get();
 }
 
 void DataReductionProxyCompressionStats::WritePrefs() {
@@ -527,9 +536,9 @@ void DataReductionProxyCompressionStats::WritePrefs() {
     pref_service_->SetInt64(iter->first, iter->second);
   }
 
-  for (DataReductionProxyListPrefMap::iterator iter = list_pref_map_.begin();
-       iter != list_pref_map_.end(); ++iter) {
-    TransferList(*(iter->second),
+  for (auto iter = list_pref_map_.begin(); iter != list_pref_map_.end();
+       ++iter) {
+    TransferList(*(iter->second.get()),
                  ListPrefUpdate(pref_service_, iter->first).Get());
   }
 }
@@ -546,6 +555,19 @@ DataReductionProxyCompressionStats::HistoricNetworkStatsInfoToValue() {
                   base::Int64ToString(total_received));
   dict->SetString("historic_original_content_length",
                   base::Int64ToString(total_original));
+  return std::move(dict);
+}
+
+std::unique_ptr<base::Value>
+DataReductionProxyCompressionStats::SessionNetworkStatsInfoToValue() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  auto dict = base::MakeUnique<base::DictionaryValue>();
+  // Use strings to avoid overflow. base::Value only supports 32-bit integers.
+  dict->SetString("session_received_content_length",
+                  base::Int64ToString(session_total_received_));
+  dict->SetString("session_original_content_length",
+                  base::Int64ToString(session_total_original_));
   return std::move(dict);
 }
 
@@ -663,8 +685,8 @@ void DataReductionProxyCompressionStats::OnCurrentDataUsageLoaded(
          data_usage->connection_usage_size() == 1);
   for (const auto& connection_usage : data_usage->connection_usage()) {
     for (const auto& site_usage : connection_usage.site_usage()) {
-      data_usage_map_.set(site_usage.hostname(),
-                          base::MakeUnique<PerSiteDataUsage>(site_usage));
+      data_usage_map_[site_usage.hostname()] =
+          base::MakeUnique<PerSiteDataUsage>(site_usage);
     }
   }
 
@@ -676,29 +698,28 @@ void DataReductionProxyCompressionStats::OnCurrentDataUsageLoaded(
 void DataReductionProxyCompressionStats::ClearDataSavingStatistics() {
   DeleteHistoricalDataUsage();
 
-  list_pref_map_.get(
-      prefs::kDailyContentLengthHttpsWithDataReductionProxyEnabled)->Clear();
-  list_pref_map_
-      .get(prefs::kDailyContentLengthLongBypassWithDataReductionProxyEnabled)
-      ->Clear();
-  list_pref_map_
-      .get(prefs::kDailyContentLengthShortBypassWithDataReductionProxyEnabled)
-      ->Clear();
-  list_pref_map_
-      .get(prefs::kDailyContentLengthUnknownWithDataReductionProxyEnabled)
-      ->Clear();
-  list_pref_map_.get(prefs::kDailyContentLengthViaDataReductionProxy)->Clear();
-  list_pref_map_.get(prefs::kDailyContentLengthWithDataReductionProxyEnabled)
-      ->Clear();
-  list_pref_map_.get(prefs::kDailyHttpOriginalContentLength)->Clear();
-  list_pref_map_.get(prefs::kDailyHttpReceivedContentLength)->Clear();
-  list_pref_map_.get(prefs::kDailyOriginalContentLengthViaDataReductionProxy)
-      ->Clear();
-  list_pref_map_
-      .get(prefs::kDailyOriginalContentLengthWithDataReductionProxyEnabled)
-      ->Clear();
+  pref_service_->ClearPref(
+      prefs::kDailyContentLengthHttpsWithDataReductionProxyEnabled);
+  pref_service_->ClearPref(
+      prefs::kDailyContentLengthLongBypassWithDataReductionProxyEnabled);
+  pref_service_->ClearPref(
+      prefs::kDailyContentLengthShortBypassWithDataReductionProxyEnabled);
+  pref_service_->ClearPref(
+      prefs::kDailyContentLengthUnknownWithDataReductionProxyEnabled);
+  pref_service_->ClearPref(prefs::kDailyContentLengthViaDataReductionProxy);
+  pref_service_->ClearPref(
+      prefs::kDailyContentLengthWithDataReductionProxyEnabled);
+  pref_service_->ClearPref(prefs::kDailyHttpOriginalContentLength);
+  pref_service_->ClearPref(prefs::kDailyHttpReceivedContentLength);
+  pref_service_->ClearPref(
+      prefs::kDailyOriginalContentLengthViaDataReductionProxy);
+  pref_service_->ClearPref(
+      prefs::kDailyOriginalContentLengthWithDataReductionProxyEnabled);
 
-  WritePrefs();
+  for (auto iter = list_pref_map_.begin(); iter != list_pref_map_.end();
+       ++iter) {
+    iter->second->Clear();
+  }
 }
 
 void DataReductionProxyCompressionStats::DelayedWritePrefs() {
@@ -923,6 +944,8 @@ void DataReductionProxyCompressionStats::RecordRequestSizePrefs(
           "Net.DailyContentLength_ViaDataReductionProxy_UnknownMime");
     }
 
+    RecordSavingsClearedNegativeClockMetric(days_since_last_update);
+
     // The system may go backwards in time by up to a day for legitimate
     // reasons, such as with changes to the time zone. In such cases, we
     // keep adding to the current day which is why we check for
@@ -930,6 +953,11 @@ void DataReductionProxyCompressionStats::RecordRequestSizePrefs(
     // Note: we accept the fact that some reported data is shifted to
     // the adjacent day if users travel back and forth across time zones.
     if (days_since_last_update && (days_since_last_update != -1)) {
+      if (days_since_last_update < -1) {
+        pref_service_->SetInt64(
+            prefs::kDataReductionProxySavingsClearedNegativeSystemClock,
+            now.ToInternalValue());
+      }
       SetInt64(data_reduction_proxy::prefs::
                    kDailyHttpOriginalContentLengthApplication,
                0);
@@ -1112,28 +1140,6 @@ void DataReductionProxyCompressionStats::IncrementDailyUmaPrefs(
   }
 }
 
-void DataReductionProxyCompressionStats::RecordUserVisibleDataSavings() {
-  int64_t original_content_length;
-  int64_t received_content_length;
-  int64_t last_update_internal;
-  GetContentLengths(kNumDaysInHistorySummary, &original_content_length,
-                    &received_content_length, &last_update_internal);
-
-  if (original_content_length == 0)
-    return;
-
-  int64_t user_visible_savings_bytes =
-      original_content_length - received_content_length;
-  int user_visible_savings_percent =
-      user_visible_savings_bytes * 100 / original_content_length;
-  UMA_HISTOGRAM_PERCENTAGE(
-      "Net.DailyUserVisibleSavingsPercent_DataReductionProxyEnabled",
-      user_visible_savings_percent);
-  UMA_HISTOGRAM_COUNTS(
-      "Net.DailyUserVisibleSavingsSize_DataReductionProxyEnabled",
-      user_visible_savings_bytes >> 10);
-}
-
 void DataReductionProxyCompressionStats::RecordDataUsage(
     const std::string& data_usage_host,
     int64_t data_used,
@@ -1151,9 +1157,9 @@ void DataReductionProxyCompressionStats::RecordDataUsage(
   }
 
   std::string normalized_host = NormalizeHostname(data_usage_host);
-  auto j = data_usage_map_.add(normalized_host,
-                               base::MakeUnique<PerSiteDataUsage>());
-  PerSiteDataUsage* per_site_usage = j.first->second;
+  auto j = data_usage_map_.insert(
+      std::make_pair(normalized_host, base::MakeUnique<PerSiteDataUsage>()));
+  PerSiteDataUsage* per_site_usage = j.first->second.get();
   per_site_usage->set_hostname(normalized_host);
   per_site_usage->set_original_size(per_site_usage->original_size() +
                                     original_size);
@@ -1174,7 +1180,7 @@ void DataReductionProxyCompressionStats::PersistDataUsage() {
         data_usage_bucket->add_connection_usage();
     for (auto i = data_usage_map_.begin(); i != data_usage_map_.end(); ++i) {
         PerSiteDataUsage* per_site_usage = connection_usage->add_site_usage();
-        per_site_usage->CopyFrom(*(i->second));
+        per_site_usage->CopyFrom(*(i->second.get()));
     }
     service_->StoreCurrentDataUsageBucket(std::move(data_usage_bucket));
   }

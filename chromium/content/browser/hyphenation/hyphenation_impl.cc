@@ -10,30 +10,30 @@
 
 #include "base/files/file.h"
 #include "base/files/file_path.h"
-#include "base/metrics/histogram.h"
+#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/timer/elapsed_timer.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "mojo/public/cpp/system/platform_handle.h"
 
 namespace {
 
 using DictionaryFileMap = std::unordered_map<std::string, base::File>;
 
-static bool IsValidLocale(const std::string& locale) {
+bool IsValidLocale(const std::string& locale) {
   return std::all_of(locale.cbegin(), locale.cend(), [](const char ch) {
     return base::IsAsciiAlpha(ch) || base::IsAsciiDigit(ch) || ch == '-';
   });
 }
 
-static base::File& GetDictionaryFile(const std::string& locale) {
+base::File GetDictionaryFile(const std::string& locale) {
   // Keep Files open in the cache for subsequent calls.
   CR_DEFINE_STATIC_LOCAL(DictionaryFileMap, cache, ());
 
   const auto& it = cache.find(locale);
   if (it != cache.end())
-    return it->second;
+    return it->second.Duplicate();
   const auto& inserted = cache.insert(std::make_pair(locale, base::File()));
   base::File& file = inserted.first->second;
   DCHECK(!file.IsValid());
@@ -48,7 +48,7 @@ static base::File& GetDictionaryFile(const std::string& locale) {
   base::ElapsedTimer timer;
   file.Initialize(path, base::File::FLAG_OPEN | base::File::FLAG_READ);
   UMA_HISTOGRAM_TIMES("Hyphenation.Open.File", timer.Elapsed());
-  return file;
+  return file.Duplicate();
 }
 
 }  // namespace
@@ -65,15 +65,12 @@ void HyphenationImpl::Create(blink::mojom::HyphenationRequest request) {
                           std::move(request));
 }
 
-void HyphenationImpl::OpenDictionary(const mojo::String& locale,
+void HyphenationImpl::OpenDictionary(const std::string& locale,
                                      const OpenDictionaryCallback& callback) {
-  mojo::ScopedHandle handle;
-  if (IsValidLocale(locale)) {
-    base::File& file = GetDictionaryFile(locale);
-    if (file.IsValid())
-      handle = mojo::WrapPlatformFile(file.Duplicate().TakePlatformFile());
-  }
-  callback.Run(std::move(handle));
+  if (IsValidLocale(locale))
+    callback.Run(GetDictionaryFile(locale));
+  else
+    callback.Run(base::File());
 }
 
 }  // namespace hyphenation

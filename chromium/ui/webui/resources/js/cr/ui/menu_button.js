@@ -143,8 +143,8 @@ cr.define('cr.ui', function() {
           }
           break;
         case 'activate':
-          var hideDelayed = e.target instanceof cr.ui.MenuItem &&
-              e.target.checkable;
+          var hideDelayed =
+              e.target instanceof cr.ui.MenuItem && e.target.checkable;
           this.hideMenu(hideDelayed ? HideType.DELAYED : HideType.INSTANT);
           break;
         case 'scroll':
@@ -183,11 +183,8 @@ cr.define('cr.ui', function() {
 
       this.menu.updateCommands(this);
 
-      var event = new UIEvent('menushow',{
-        bubbles: true,
-        cancelable: true,
-        view: window
-      });
+      var event = new UIEvent(
+          'menushow', {bubbles: true, cancelable: true, view: window});
       if (!this.dispatchEvent(event))
         return;
 
@@ -232,11 +229,8 @@ cr.define('cr.ui', function() {
       this.showingEvents_.removeAll();
       this.focus();
 
-      var event = new UIEvent('menuhide', {
-        bubbles: true,
-        cancelable: false,
-        view: window
-      });
+      var event = new UIEvent(
+          'menuhide', {bubbles: true, cancelable: false, view: window});
       this.dispatchEvent(event);
 
       // On windows we might hide the menu in a right mouse button up and if
@@ -258,8 +252,8 @@ cr.define('cr.ui', function() {
      * @private
      */
     positionMenu_: function() {
-      positionPopupAroundElement(this, this.menu, this.anchorType,
-                                 this.invertLeftRight);
+      positionPopupAroundElement(
+          this, this.menu, this.anchorType, this.invertLeftRight);
     },
 
     /**

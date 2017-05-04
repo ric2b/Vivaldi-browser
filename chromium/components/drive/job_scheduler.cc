@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/files/file_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -721,9 +722,11 @@ void JobScheduler::AddPermission(
 }
 
 JobScheduler::JobEntry* JobScheduler::CreateNewJob(JobType type) {
-  JobEntry* job = new JobEntry(type);
-  job->job_info.job_id = job_map_.Add(job);  // Takes the ownership of |job|.
-  return job;
+  auto job = base::MakeUnique<JobEntry>(type);
+  JobEntry* job_raw = job.get();
+  int32_t job_key = job_map_.Add(std::move(job));
+  job_raw->job_info.job_id = job_key;
+  return job_raw;
 }
 
 void JobScheduler::StartJob(JobEntry* job) {

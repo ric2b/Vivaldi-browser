@@ -24,6 +24,7 @@ import java.util.Set;
  */
 @JNINamespace("offline_pages::android")
 public class OfflinePageBridge {
+    public static final String ASYNC_NAMESPACE = "async_loading";
     public static final String BOOKMARK_NAMESPACE = "bookmark";
     public static final String SHARE_NAMESPACE = "share";
 
@@ -78,7 +79,7 @@ public class OfflinePageBridge {
          * Called when the native side of offline pages is changed due to adding, removing or
          * update an offline page.
          */
-        public void offlinePageModelChanged() {}
+        public void offlinePageAdded(OfflinePageItem addedPage) {}
 
         /**
          * Called when an offline page is deleted. This can be called as a result of
@@ -91,10 +92,9 @@ public class OfflinePageBridge {
 
     /**
      * Creates an offline page bridge for a given profile.
-     * Accessible by the package for testability.
      */
     @VisibleForTesting
-    OfflinePageBridge(long nativeOfflinePageBridge) {
+    protected OfflinePageBridge(long nativeOfflinePageBridge) {
         mNativeOfflinePageBridge = nativeOfflinePageBridge;
     }
 
@@ -399,6 +399,14 @@ public class OfflinePageBridge {
         return nativeIsShowingOfflinePreview(mNativeOfflinePageBridge, webContents);
     }
 
+    /**
+     * @return True if download button is being shown in the error page.
+     * @param webContents Contents of the page to check.
+     */
+    public boolean isShowingDownloadButtonInErrorPage(WebContents webContents) {
+        return nativeIsShowingDownloadButtonInErrorPage(mNativeOfflinePageBridge, webContents);
+    }
+
     private static class CheckPagesExistOfflineCallbackInternal {
         private Callback<Set<String>> mCallback;
 
@@ -433,7 +441,7 @@ public class OfflinePageBridge {
     }
 
     @CalledByNative
-    void offlinePageModelLoaded() {
+    protected void offlinePageModelLoaded() {
         mIsNativeOfflinePageModelLoaded = true;
         for (OfflinePageModelObserver observer : mObservers) {
             observer.offlinePageModelLoaded();
@@ -441,9 +449,9 @@ public class OfflinePageBridge {
     }
 
     @CalledByNative
-    private void offlinePageModelChanged() {
+    protected void offlinePageAdded(OfflinePageItem addedPage) {
         for (OfflinePageModelObserver observer : mObservers) {
-            observer.offlinePageModelChanged();
+            observer.offlinePageAdded(addedPage);
         }
     }
 
@@ -451,7 +459,7 @@ public class OfflinePageBridge {
      * Removes references to the native OfflinePageBridge when it is being destroyed.
      */
     @CalledByNative
-    private void offlinePageBridgeDestroyed() {
+    protected void offlinePageBridgeDestroyed() {
         ThreadUtils.assertOnUiThread();
         assert mNativeOfflinePageBridge != 0;
 
@@ -525,5 +533,7 @@ public class OfflinePageBridge {
     private native String nativeGetOfflinePageHeaderForReload(
             long nativeOfflinePageBridge, WebContents webContents);
     private native boolean nativeIsShowingOfflinePreview(
+            long nativeOfflinePageBridge, WebContents webContents);
+    private native boolean nativeIsShowingDownloadButtonInErrorPage(
             long nativeOfflinePageBridge, WebContents webContents);
 }

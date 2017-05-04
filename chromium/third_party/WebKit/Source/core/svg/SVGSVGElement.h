@@ -38,7 +38,6 @@ class SVGMatrixTearOff;
 class SVGNumberTearOff;
 class SVGPointTearOff;
 class SVGTransformTearOff;
-class SVGViewElement;
 class SVGViewSpec;
 
 class SVGSVGElement final : public SVGGraphicsElement,
@@ -49,10 +48,6 @@ class SVGSVGElement final : public SVGGraphicsElement,
 
  public:
   DECLARE_NODE_FACTORY(SVGSVGElement);
-
-  // 'SVGSVGElement' functions
-  bool useCurrentView() const { return m_useCurrentView; }
-  SVGViewSpec* currentView();
 
   float intrinsicWidth() const;
   float intrinsicHeight() const;
@@ -115,13 +110,16 @@ class SVGSVGElement final : public SVGGraphicsElement,
 
   DECLARE_VIRTUAL_TRACE();
 
+  SVGViewSpec* viewSpec() const { return m_viewSpec; }
+  void setViewSpec(SVGViewSpec*);
+
  private:
   explicit SVGSVGElement(Document&);
   ~SVGSVGElement() override;
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  SVGViewSpec& ensureViewSpec();
+
+  void parseAttribute(const AttributeModificationParams&) override;
   bool isPresentationAttribute(const QualifiedName&) const override;
   bool isPresentationAttributeWithSVGDOM(const QualifiedName&) const override;
   void collectStyleForPresentationAttribute(const QualifiedName&,
@@ -138,22 +136,20 @@ class SVGSVGElement final : public SVGGraphicsElement,
 
   bool selfHasRelativeLengths() const override;
 
-  void inheritViewAttributes(SVGViewElement*);
-
   bool shouldSynthesizeViewBox() const;
   void updateUserTransform();
 
   void finishParsingChildren() override;
 
-  enum CheckIntersectionOrEnclosure { CheckIntersection, CheckEnclosure };
+  enum GeometryMatchingMode { CheckIntersection, CheckEnclosure };
 
   bool checkIntersectionOrEnclosure(const SVGElement&,
                                     const FloatRect&,
-                                    CheckIntersectionOrEnclosure) const;
+                                    GeometryMatchingMode) const;
   StaticNodeList* collectIntersectionOrEnclosureList(
       const FloatRect&,
       SVGElement*,
-      CheckIntersectionOrEnclosure) const;
+      GeometryMatchingMode) const;
 
   Member<SVGAnimatedLength> m_x;
   Member<SVGAnimatedLength> m_y;
@@ -163,7 +159,6 @@ class SVGSVGElement final : public SVGGraphicsElement,
   AffineTransform localCoordinateSpaceTransform(
       SVGElement::CTMScope) const override;
 
-  bool m_useCurrentView;
   Member<SMILTimeContainer> m_timeContainer;
   Member<SVGPoint> m_translation;
   Member<SVGViewSpec> m_viewSpec;

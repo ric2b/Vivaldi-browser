@@ -5,6 +5,7 @@
 #include "media/mojo/services/interface_factory_impl.h"
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/base/media_log.h"
 #include "media/mojo/services/mojo_media_client.h"
@@ -20,6 +21,7 @@
 #endif  // defined(ENABLE_MOJO_VIDEO_DECODER)
 
 #if defined(ENABLE_MOJO_RENDERER)
+#include "base/bind_helpers.h"
 #include "media/base/audio_renderer_sink.h"
 #include "media/base/renderer_factory.h"
 #include "media/base/video_renderer_sink.h"
@@ -45,12 +47,12 @@ InterfaceFactoryImpl::InterfaceFactoryImpl(
       media_log_(media_log),
       connection_ref_(std::move(connection_ref)),
       mojo_media_client_(mojo_media_client) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   DCHECK(mojo_media_client_);
 }
 
 InterfaceFactoryImpl::~InterfaceFactoryImpl() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
 }
 
 // mojom::InterfaceFactory implementation.
@@ -68,7 +70,7 @@ void InterfaceFactoryImpl::CreateAudioDecoder(
     return;
   }
 
-  mojo::MakeStrongBinding(
+  audio_decoder_bindings_.AddBinding(
       base::MakeUnique<MojoAudioDecoderService>(
           cdm_service_context_.GetWeakPtr(), std::move(audio_decoder)),
       std::move(request));
@@ -78,7 +80,7 @@ void InterfaceFactoryImpl::CreateAudioDecoder(
 void InterfaceFactoryImpl::CreateVideoDecoder(
     mojom::VideoDecoderRequest request) {
 #if defined(ENABLE_MOJO_VIDEO_DECODER)
-  mojo::MakeStrongBinding(
+  video_decoder_bindings_.AddBinding(
       base::MakeUnique<MojoVideoDecoderService>(mojo_media_client_),
       std::move(request));
 #endif  // defined(ENABLE_MOJO_VIDEO_DECODER)
@@ -105,10 +107,23 @@ void InterfaceFactoryImpl::CreateRenderer(
     return;
   }
 
-  MojoRendererService::Create(
-      cdm_service_context_.GetWeakPtr(), std::move(audio_sink),
-      std::move(video_sink), std::move(renderer),
-      MojoRendererService::InitiateSurfaceRequestCB(), std::move(request));
+  std::unique_ptr<MojoRendererService> mojo_renderer_service =
+      base::MakeUnique<MojoRendererService>(
+          cdm_service_context_.GetWeakPtr(), std::move(audio_sink),
+          std::move(video_sink), std::move(renderer),
+          MojoRendererService::InitiateSurfaceRequestCB());
+
+  MojoRendererService* mojo_renderer_service_ptr = mojo_renderer_service.get();
+
+  StrongBindingSet<mojom::Renderer>::BindingId binding_id =
+      renderer_bindings_.AddBinding(std::move(mojo_renderer_service),
+                                    std::move(request));
+
+  // base::Unretained() is safe because the callback will be fired by
+  // |mojo_renderer_service|, which is owned by |renderer_bindings_|.
+  mojo_renderer_service_ptr->set_bad_message_cb(base::Bind(
+      base::IgnoreResult(&StrongBindingSet<mojom::Renderer>::RemoveBinding),
+      base::Unretained(&renderer_bindings_), binding_id));
 #endif  // defined(ENABLE_MOJO_RENDERER)
 }
 
@@ -119,9 +134,9 @@ void InterfaceFactoryImpl::CreateCdm(
   if (!cdm_factory)
     return;
 
-  mojo::MakeStrongBinding(base::MakeUnique<MojoCdmService>(
-                              cdm_service_context_.GetWeakPtr(), cdm_factory),
-                          std::move(request));
+  cdm_bindings_.AddBinding(base::MakeUnique<MojoCdmService>(
+                               cdm_service_context_.GetWeakPtr(), cdm_factory),
+                           std::move(request));
 #endif  // defined(ENABLE_MOJO_CDM)
 }
 

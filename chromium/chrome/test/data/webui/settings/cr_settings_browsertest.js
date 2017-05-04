@@ -197,6 +197,7 @@ CrSettingsPeoplePageQuickUnlockAuthenticateTest.prototype = {
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     '../fake_chrome_event.js',
     'fake_quick_unlock_private.js',
+    'fake_quick_unlock_uma.js',
     'quick_unlock_authenticate_browsertest_chromeos.js'
   ]),
 };
@@ -227,6 +228,7 @@ CrSettingsPeoplePageLockScreenTest.prototype = {
     '../fake_chrome_event.js',
     'fake_quick_unlock_private.js',
     'fake_settings_private.js',
+    'fake_quick_unlock_uma.js',
     'quick_unlock_authenticate_browsertest_chromeos.js'
   ]),
 };
@@ -257,6 +259,7 @@ CrSettingsPeoplePageSetupPinDialogTest.prototype = {
     '../fake_chrome_event.js',
     'fake_quick_unlock_private.js',
     'fake_settings_private.js',
+    'fake_quick_unlock_uma.js',
     'quick_unlock_authenticate_browsertest_chromeos.js'
   ]),
 };
@@ -651,10 +654,11 @@ CrSettingsSiteSettingsTest.prototype = {
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'category_default_setting_tests.js',
+    'category_setting_exceptions_tests.js',
     'site_details_tests.js',
     'site_details_permission_tests.js',
     'site_list_tests.js',
-    'site_settings_category_tests.js',
     'test_browser_proxy.js',
     'test_site_settings_prefs_browser_proxy.js',
     'zoom_levels_tests.js',
@@ -664,10 +668,11 @@ CrSettingsSiteSettingsTest.prototype = {
 };
 
 TEST_F('CrSettingsSiteSettingsTest', 'SiteSettings', function() {
+  category_default_setting.registerTests();
+  category_setting_exceptions.registerTests();
   site_details.registerTests();
   site_details_permission.registerTests();
   site_list.registerTests();
-  site_settings_category.registerTests();
   zoom_levels.registerTests();
   usb_devices.registerTests();
   protocol_handlers.registerTests();
@@ -713,6 +718,10 @@ TEST_F('CrSettingsDevicePageTest', 'KeyboardTest', function() {
 
 TEST_F('CrSettingsDevicePageTest', 'PointersTest', function() {
   mocha.grep(assert(device_page_tests.TestNames.Pointers)).run();
+});
+
+TEST_F('CrSettingsDevicePageTest', 'PowerTest', function() {
+  mocha.grep(assert(device_page_tests.TestNames.Power)).run();
 });
 GEN('#endif');
 
@@ -936,7 +945,9 @@ TEST_F('CrSettingsRouteDynamicParametersTest', 'MAYBE_All', function() {
 });
 
 // Times out on Windows Tests (dbg). See https://crbug.com/651296.
-GEN('#if defined(OS_WIN) || defined(OS_CHROMEOS)');
+// Times out / crashes on chromium.linux/Linux Tests (dbg) crbug.com/667882
+GEN('#if defined(OS_WIN) || defined(OS_CHROMEOS) || defined(OS_LINUX)' +
+    ' || defined(OS_MACOSX)');
 GEN('#define MAYBE_MainPage_All DISABLED_All');
 GEN('#else');
 GEN('#define MAYBE_MainPage_All All');
@@ -1057,6 +1068,67 @@ GEN('#endif');
 GEN('#if defined(OS_CHROMEOS)');
 
 /**
+ * Test fixture for the CUPS printing page.
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+ */
+function CrSettingsPrintingPageTest() {}
+
+CrSettingsPrintingPageTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload:
+      'chrome://md-settings/printing_page/cups_add_printer_dialog.html',
+
+  /** @override */
+  commandLineSwitches: [{
+    switchName: 'enable-native-cups',
+  }],
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    ROOT_PATH + 'ui/webui/resources/js/assert.js',
+    'test_util.js',
+    'test_browser_proxy.js',
+    'cups_printer_page_tests.js',
+  ]),
+};
+
+TEST_F('CrSettingsPrintingPageTest', 'CupsPrintersTest', function() {
+  mocha.run();
+});
+
+GEN('#endif');
+
+GEN('#if defined(OS_CHROMEOS)');
+
+/**
+ * Test fixture for the Google Play Store (Arc++) page.
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+ */
+function CrSettingsAndroidAppsPageTest() {}
+
+CrSettingsAndroidAppsPageTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload:
+      'chrome://md-settings/android_apps_page/android_apps_page.html',
+
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    ROOT_PATH + 'ui/webui/resources/js/promise_resolver.js',
+    'test_browser_proxy.js',
+    'android_apps_page_test.js',
+  ]),
+};
+
+TEST_F('CrSettingsAndroidAppsPageTest', 'AndroidAppsPageTest', function() {
+  mocha.run();
+});
+
+/**
  * Test fixture for the Date and Time page.
  * @constructor
  * @extends {CrSettingsBrowserTest}
@@ -1080,3 +1152,27 @@ TEST_F('CrSettingsDateTimePageTest', 'DateTimePageTest', function() {
 });
 
 GEN('#endif');
+
+/**
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+ */
+function CrSettingsExtensionControlledIndicatorTest() {}
+
+CrSettingsExtensionControlledIndicatorTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload:
+      'chrome://md-settings/controls/extension_controlled_indicator.html',
+
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'test_browser_proxy.js',
+    'test_extension_control_browser_proxy.js',
+    'extension_controlled_indicator_tests.js',
+  ]),
+};
+
+TEST_F('CrSettingsExtensionControlledIndicatorTest', 'All', function() {
+  mocha.run();
+});

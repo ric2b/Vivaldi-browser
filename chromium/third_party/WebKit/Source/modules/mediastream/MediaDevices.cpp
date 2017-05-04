@@ -70,15 +70,12 @@ MediaDevices* MediaDevices::create(ExecutionContext* context) {
 }
 
 MediaDevices::MediaDevices(ExecutionContext* context)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : SuspendableObject(context),
       m_observing(false),
       m_stopped(false),
       m_dispatchScheduledEventRunner(AsyncMethodRunner<MediaDevices>::create(
           this,
-          &MediaDevices::dispatchScheduledEvent)) {
-  ThreadState::current()->registerPreFinalizer(this);
-}
+          &MediaDevices::dispatchScheduledEvent)) {}
 
 MediaDevices::~MediaDevices() {}
 
@@ -153,7 +150,7 @@ const AtomicString& MediaDevices::interfaceName() const {
 }
 
 ExecutionContext* MediaDevices::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return SuspendableObject::getExecutionContext();
 }
 
 void MediaDevices::removeAllEventListeners() {
@@ -183,7 +180,7 @@ bool MediaDevices::hasPendingActivity() const {
   return m_observing;
 }
 
-void MediaDevices::contextDestroyed() {
+void MediaDevices::contextDestroyed(ExecutionContext*) {
   if (m_stopped)
     return;
 
@@ -200,7 +197,7 @@ void MediaDevices::resume() {
 }
 
 void MediaDevices::scheduleDispatchEvent(Event* event) {
-  m_scheduledEvents.append(event);
+  m_scheduledEvents.push_back(event);
   m_dispatchScheduledEventRunner->runAsync();
 }
 
@@ -252,7 +249,7 @@ DEFINE_TRACE(MediaDevices) {
   visitor->trace(m_dispatchScheduledEventRunner);
   visitor->trace(m_scheduledEvents);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  SuspendableObject::trace(visitor);
 }
 
 }  // namespace blink

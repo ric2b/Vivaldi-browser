@@ -4,10 +4,12 @@
 
 #include "web/DevToolsEmulator.h"
 
+#include "core/fetch/MemoryCache.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
+#include "core/input/EventHandler.h"
 #include "core/page/Page.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -69,31 +71,34 @@ DevToolsEmulator::DevToolsEmulator(WebViewImpl* webViewImpl)
       m_embedderTextAutosizingEnabled(
           webViewImpl->page()->settings().textAutosizingEnabled()),
       m_embedderDeviceScaleAdjustment(
-          webViewImpl->page()->settings().deviceScaleAdjustment()),
+          webViewImpl->page()->settings().getDeviceScaleAdjustment()),
       m_embedderPreferCompositingToLCDTextEnabled(
-          webViewImpl->page()->settings().preferCompositingToLCDTextEnabled()),
-      m_embedderViewportStyle(webViewImpl->page()->settings().viewportStyle()),
+          webViewImpl->page()
+              ->settings()
+              .getPreferCompositingToLCDTextEnabled()),
+      m_embedderViewportStyle(
+          webViewImpl->page()->settings().getViewportStyle()),
       m_embedderPluginsEnabled(
-          webViewImpl->page()->settings().pluginsEnabled()),
+          webViewImpl->page()->settings().getPluginsEnabled()),
       m_embedderAvailablePointerTypes(
-          webViewImpl->page()->settings().availablePointerTypes()),
+          webViewImpl->page()->settings().getAvailablePointerTypes()),
       m_embedderPrimaryPointerType(
-          webViewImpl->page()->settings().primaryPointerType()),
+          webViewImpl->page()->settings().getPrimaryPointerType()),
       m_embedderAvailableHoverTypes(
-          webViewImpl->page()->settings().availableHoverTypes()),
+          webViewImpl->page()->settings().getAvailableHoverTypes()),
       m_embedderPrimaryHoverType(
-          webViewImpl->page()->settings().primaryHoverType()),
+          webViewImpl->page()->settings().getPrimaryHoverType()),
       m_embedderMainFrameResizesAreOrientationChanges(
           webViewImpl->page()
               ->settings()
-              .mainFrameResizesAreOrientationChanges()),
+              .getMainFrameResizesAreOrientationChanges()),
       m_touchEventEmulationEnabled(false),
       m_doubleTapToZoomEnabled(false),
-      m_originalTouchEnabled(false),
-      m_originalDeviceSupportsMouse(false),
+      m_originalTouchEventFeatureDetectionEnabled(false),
       m_originalDeviceSupportsTouch(false),
       m_originalMaxTouchPoints(0),
-      m_embedderScriptEnabled(webViewImpl->page()->settings().scriptEnabled()),
+      m_embedderScriptEnabled(
+          webViewImpl->page()->settings().getScriptEnabled()),
       m_scriptExecutionDisabled(false) {}
 
 DevToolsEmulator::~DevToolsEmulator() {}
@@ -200,6 +205,9 @@ void DevToolsEmulator::enableDeviceEmulation(
       m_emulationParams.scale == params.scale) {
     return;
   }
+  if (m_emulationParams.deviceScaleFactor != params.deviceScaleFactor ||
+      !m_deviceMetricsEnabled)
+    memoryCache()->evictResources();
 
   m_emulationParams = params;
 
@@ -235,6 +243,7 @@ void DevToolsEmulator::disableDeviceEmulation() {
   if (!m_deviceMetricsEnabled)
     return;
 
+  memoryCache()->evictResources();
   m_deviceMetricsEnabled = false;
   m_webViewImpl->setBackgroundColorOverride(Color::transparent);
   m_webViewImpl->page()->settings().setDeviceScaleAdjustment(
@@ -409,7 +418,7 @@ void DevToolsEmulator::applyViewportOverride(TransformationMatrix* transform) {
   transform->scale(m_viewportOverride->scale);
 
   // Translate while taking into account current scroll offset.
-  WebSize scrollOffset = m_webViewImpl->mainFrame()->scrollOffset();
+  WebSize scrollOffset = m_webViewImpl->mainFrame()->getScrollOffset();
   WebFloatPoint visualOffset = m_webViewImpl->visualViewportOffset();
   float scrollX = scrollOffset.width + visualOffset.x;
   float scrollY = scrollOffset.height + visualOffset.y;
@@ -446,19 +455,22 @@ void DevToolsEmulator::setTouchEventEmulationEnabled(bool enabled) {
   if (m_touchEventEmulationEnabled == enabled)
     return;
   if (!m_touchEventEmulationEnabled) {
-    m_originalTouchEnabled = RuntimeEnabledFeatures::touchEnabled();
-    m_originalDeviceSupportsMouse =
-        m_webViewImpl->page()->settings().deviceSupportsMouse();
+    m_originalTouchEventFeatureDetectionEnabled =
+        RuntimeEnabledFeatures::touchEventFeatureDetectionEnabled();
     m_originalDeviceSupportsTouch =
-        m_webViewImpl->page()->settings().deviceSupportsTouch();
+        m_webViewImpl->page()->settings().getDeviceSupportsTouch();
     m_originalMaxTouchPoints =
-        m_webViewImpl->page()->settings().maxTouchPoints();
+        m_webViewImpl->page()->settings().getMaxTouchPoints();
   }
-  RuntimeEnabledFeatures::setTouchEnabled(enabled ? true
-                                                  : m_originalTouchEnabled);
+  RuntimeEnabledFeatures::setTouchEventFeatureDetectionEnabled(
+      enabled ? true : m_originalTouchEventFeatureDetectionEnabled);
   if (!m_originalDeviceSupportsTouch) {
-    m_webViewImpl->page()->settings().setDeviceSupportsMouse(
-        enabled ? false : m_originalDeviceSupportsMouse);
+    if (enabled && m_webViewImpl->mainFrameImpl()) {
+      m_webViewImpl->mainFrameImpl()
+          ->frame()
+          ->eventHandler()
+          .clearMouseEventManager();
+    }
     m_webViewImpl->page()->settings().setDeviceSupportsTouch(
         enabled ? true : m_originalDeviceSupportsTouch);
     // Currently emulation does not provide multiple touch points.
@@ -490,30 +502,32 @@ bool DevToolsEmulator::handleInputEvent(const WebInputEvent& inputEvent) {
 
   // FIXME: This workaround is required for touch emulation on Mac, where
   // compositor-side pinch handling is not enabled. See http://crbug.com/138003.
-  bool isPinch = inputEvent.type == WebInputEvent::GesturePinchBegin ||
-                 inputEvent.type == WebInputEvent::GesturePinchUpdate ||
-                 inputEvent.type == WebInputEvent::GesturePinchEnd;
+  bool isPinch = inputEvent.type() == WebInputEvent::GesturePinchBegin ||
+                 inputEvent.type() == WebInputEvent::GesturePinchUpdate ||
+                 inputEvent.type() == WebInputEvent::GesturePinchEnd;
   if (isPinch && m_touchEventEmulationEnabled) {
     FrameView* frameView = page->deprecatedLocalMainFrame()->view();
-    PlatformGestureEventBuilder gestureEvent(
+    WebGestureEvent scaledEvent = TransformWebGestureEvent(
         frameView, static_cast<const WebGestureEvent&>(inputEvent));
     float pageScaleFactor = page->pageScaleFactor();
-    if (gestureEvent.type() == PlatformEvent::GesturePinchBegin) {
-      m_lastPinchAnchorCss = wrapUnique(new IntPoint(roundedIntPoint(
-          gestureEvent.position() + frameView->scrollOffset())));
-      m_lastPinchAnchorDip = wrapUnique(new IntPoint(gestureEvent.position()));
+    if (scaledEvent.type() == WebInputEvent::GesturePinchBegin) {
+      WebFloatPoint gesturePosition = scaledEvent.positionInRootFrame();
+      m_lastPinchAnchorCss = WTF::wrapUnique(new IntPoint(
+          roundedIntPoint(gesturePosition + frameView->getScrollOffset())));
+      m_lastPinchAnchorDip =
+          WTF::wrapUnique(new IntPoint(flooredIntPoint(gesturePosition)));
       m_lastPinchAnchorDip->scale(pageScaleFactor, pageScaleFactor);
     }
-    if (gestureEvent.type() == PlatformEvent::GesturePinchUpdate &&
+    if (scaledEvent.type() == WebInputEvent::GesturePinchUpdate &&
         m_lastPinchAnchorCss) {
-      float newPageScaleFactor = pageScaleFactor * gestureEvent.scale();
+      float newPageScaleFactor = pageScaleFactor * scaledEvent.pinchScale();
       IntPoint anchorCss(*m_lastPinchAnchorDip.get());
       anchorCss.scale(1.f / newPageScaleFactor, 1.f / newPageScaleFactor);
       m_webViewImpl->setPageScaleFactor(newPageScaleFactor);
       m_webViewImpl->mainFrame()->setScrollOffset(
           toIntSize(*m_lastPinchAnchorCss.get() - toIntSize(anchorCss)));
     }
-    if (gestureEvent.type() == PlatformEvent::GesturePinchEnd) {
+    if (scaledEvent.type() == WebInputEvent::GesturePinchEnd) {
       m_lastPinchAnchorCss.reset();
       m_lastPinchAnchorDip.reset();
     }

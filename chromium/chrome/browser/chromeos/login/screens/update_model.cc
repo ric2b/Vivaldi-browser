@@ -20,14 +20,8 @@ const char UpdateModel::kContextKeyCancelUpdateShortcutEnabled[] =
     "cancel-update-enabled";
 
 UpdateModel::UpdateModel(BaseScreenDelegate* base_screen_delegate)
-    : BaseScreen(base_screen_delegate) {
-}
+    : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_OOBE_UPDATE) {}
 
-UpdateModel::~UpdateModel() {
-}
-
-std::string UpdateModel::GetName() const {
-  return WizardController::kUpdateScreenName;
-}
+UpdateModel::~UpdateModel() {}
 
 }  // namespace chromeos

@@ -80,6 +80,7 @@ blink_core_sources("editing") {
     "commands/DeleteFromTextNodeCommand.h",
     "commands/DeleteSelectionCommand.cpp",
     "commands/DeleteSelectionCommand.h",
+    "commands/DocumentExecCommand.cpp",
     "commands/DragAndDropCommand.cpp",
     "commands/DragAndDropCommand.h",
     "commands/EditCommand.cpp",
@@ -91,6 +92,8 @@ blink_core_sources("editing") {
     "commands/FormatBlockCommand.h",
     "commands/IndentOutdentCommand.cpp",
     "commands/IndentOutdentCommand.h",
+    "commands/InsertIncrementalTextCommand.cpp",
+    "commands/InsertIncrementalTextCommand.h",
     "commands/InsertIntoTextNodeCommand.cpp",
     "commands/InsertIntoTextNodeCommand.h",
     "commands/InsertLineBreakCommand.cpp",
@@ -133,6 +136,7 @@ blink_core_sources("editing") {
     "commands/TypingCommand.h",
     "commands/UndoStack.cpp",
     "commands/UndoStack.h",
+    "commands/UndoStep.cpp",
     "commands/UndoStep.h",
     "commands/UnlinkCommand.cpp",
     "commands/UnlinkCommand.h",
@@ -177,6 +181,8 @@ blink_core_sources("editing") {
     "serializers/StyledMarkupSerializer.h",
     "serializers/TextOffset.cpp",
     "serializers/TextOffset.h",
+    "spellcheck/IdleSpellCheckCallback.cpp",
+    "spellcheck/IdleSpellCheckCallback.h",
     "spellcheck/SpellCheckRequester.cpp",
     "spellcheck/SpellCheckRequester.h",
     "spellcheck/SpellChecker.cpp",
@@ -202,5 +208,66 @@ blink_core_sources("editing") {
   configs += [
     # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
     "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "CompositionUnderlineTest.cpp",
+    "EditingCommandTest.cpp",
+    "EditingStrategyTest.cpp",
+    "EditingStyleTest.cpp",
+    "EditingTestBase.cpp",
+    "EditingTestBase.h",
+    "EditingUtilitiesTest.cpp",
+    "EditorTest.cpp",
+    "EphemeralRangeTest.cpp",
+    "FrameSelectionTest.cpp",
+    "GranularityStrategyTest.cpp",
+    "InputMethodControllerTest.cpp",
+    "PositionTest.cpp",
+    "RelocatablePositionTest.cpp",
+    "SelectionAdjusterTest.cpp",
+    "SelectionControllerTest.cpp",
+    "SelectionTemplateTest.cpp",
+    "SurroundingTextTest.cpp",
+    "VisiblePositionTest.cpp",
+    "VisibleSelectionTest.cpp",
+    "VisibleUnitsTest.cpp",
+    "commands/ApplyBlockElementCommandTest.cpp",
+    "commands/ApplyStyleCommandTest.cpp",
+    "commands/CompositeEditCommandTest.cpp",
+    "commands/DeleteSelectionCommandTest.cpp",
+    "commands/InsertListCommandTest.cpp",
+    "commands/ReplaceSelectionCommandTest.cpp",
+    "commands/TypingCommandTest.cpp",
+    "iterators/BackwardsTextBufferTest.cpp",
+    "iterators/CharacterIteratorTest.cpp",
+    "iterators/ForwardsTextBufferTest.cpp",
+    "iterators/SearchBufferTest.cpp",
+    "iterators/SimplifiedBackwardsTextIteratorTest.cpp",
+    "iterators/TextIteratorTest.cpp",
+    "iterators/TextSearcherICUTest.cpp",
+    "markers/DocumentMarkerControllerTest.cpp",
+    "serializers/StyledMarkupSerializerTest.cpp",
+    "spellcheck/SpellCheckerTest.cpp",
+    "state_machines/BackspaceStateMachineTest.cpp",
+    "state_machines/BackwardGraphemeBoundaryStateMachineTest.cpp",
+    "state_machines/ForwardGraphemeBoundaryStateMachineTest.cpp",
+    "state_machines/StateMachineTestUtil.cpp",
+    "state_machines/StateMachineUtilTest.cpp",
+  ]
+
+  configs += [
+    "//third_party/WebKit/Source/core:blink_core_pch",
+    "//third_party/WebKit/Source:config",
+    "//third_party/WebKit/Source:inside_blink",
+  ]
+
+  deps = [
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/WebKit/Source/core:core",
   ]
 }

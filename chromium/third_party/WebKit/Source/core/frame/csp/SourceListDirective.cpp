@@ -103,6 +103,12 @@ bool SourceListDirective::allowHashedAttributes() const {
   return m_allowHashedAttributes;
 }
 
+bool SourceListDirective::isNone() const {
+  return !m_list.size() && !m_allowSelf && !m_allowStar && !m_allowInline &&
+         !m_allowHashedAttributes && !m_allowEval && !m_allowDynamic &&
+         !m_nonces.size() && !m_hashes.size();
+}
+
 uint8_t SourceListDirective::hashAlgorithmsUsed() const {
   return m_hashAlgorithmsUsed;
 }
@@ -141,10 +147,11 @@ void SourceListDirective::parse(const UChar* begin, const UChar* end) {
       // list itself.
       if (scheme.isEmpty() && host.isEmpty())
         continue;
-      if (m_policy->isDirectiveName(host))
+      if (ContentSecurityPolicy::getDirectiveType(host) !=
+          ContentSecurityPolicy::DirectiveType::Undefined)
         m_policy->reportDirectiveAsSourceExpression(m_directiveName, host);
-      m_list.append(new CSPSource(m_policy, scheme, host, port, path,
-                                  hostWildcard, portWildcard));
+      m_list.push_back(new CSPSource(m_policy, scheme, host, port, path,
+                                     hostWildcard, portWildcard));
     } else {
       m_policy->reportInvalidSourceExpression(
           m_directiveName, String(beginSource, position - beginSource));
@@ -426,6 +433,7 @@ bool SourceListDirective::parseScheme(const UChar* begin,
 //                   / "*"
 // host-char         = ALPHA / DIGIT / "-"
 //
+// static
 bool SourceListDirective::parseHost(
     const UChar* begin,
     const UChar* end,
@@ -440,29 +448,34 @@ bool SourceListDirective::parseHost(
 
   const UChar* position = begin;
 
+  // Parse "*" or [ "*." ].
   if (skipExactly<UChar>(position, end, '*')) {
     hostWildcard = CSPSource::HasWildcard;
 
-    if (position == end)
+    if (position == end) {
+      // "*"
       return true;
+    }
 
     if (!skipExactly<UChar>(position, end, '.'))
       return false;
   }
-
   const UChar* hostBegin = position;
 
+  // Parse 1*host-hcar.
+  if (!skipExactly<UChar, isHostCharacter>(position, end))
+    return false;
+  skipWhile<UChar, isHostCharacter>(position, end);
+
+  // Parse *( "." 1*host-char ).
   while (position < end) {
+    if (!skipExactly<UChar>(position, end, '.'))
+      return false;
     if (!skipExactly<UChar, isHostCharacter>(position, end))
       return false;
-
     skipWhile<UChar, isHostCharacter>(position, end);
-
-    if (position < end && !skipExactly<UChar>(position, end, '.'))
-      return false;
   }
 
-  DCHECK(position == end);
   host = String(hostBegin, end - hostBegin);
   return true;
 }
@@ -558,6 +571,16 @@ void SourceListDirective::addSourceHash(
   m_hashAlgorithmsUsed |= algorithm;
 }
 
+void SourceListDirective::addSourceToMap(
+    HeapHashMap<String, Member<CSPSource>>& hashMap,
+    CSPSource* source) {
+  hashMap.add(source->getScheme(), source);
+  if (source->getScheme() == "http")
+    hashMap.add("https", source);
+  else if (source->getScheme() == "ws")
+    hashMap.add("wss", source);
+}
+
 bool SourceListDirective::hasSourceMatchInList(
     const KURL& url,
     ResourceRequest::RedirectStatus redirectStatus) const {
@@ -569,31 +592,219 @@ bool SourceListDirective::hasSourceMatchInList(
   return false;
 }
 
-bool SourceListDirective::subsumes(
-    HeapVector<Member<SourceListDirective>> other) {
-  // TODO(amalika): Handle here special keywords.
-  if (!m_list.size() || !other.size())
-    return !m_list.size();
+bool SourceListDirective::allowAllInline() const {
+  const ContentSecurityPolicy::DirectiveType& type =
+      ContentSecurityPolicy::getDirectiveType(m_directiveName);
+  if (type != ContentSecurityPolicy::DirectiveType::DefaultSrc &&
+      type != ContentSecurityPolicy::DirectiveType::StyleSrc &&
+      type != ContentSecurityPolicy::DirectiveType::ScriptSrc) {
+    return false;
+  }
+  return m_allowInline && !isHashOrNoncePresent() &&
+         (type != ContentSecurityPolicy::DirectiveType::ScriptSrc ||
+          !m_allowDynamic);
+}
 
-  HeapVector<Member<CSPSource>> normalizedA = other[0]->m_list;
-  for (size_t i = 1; i < other.size(); i++) {
-    normalizedA = other[i]->getIntersectCSPSources(normalizedA);
+HeapVector<Member<CSPSource>> SourceListDirective::getSources(
+    Member<CSPSource> self) const {
+  HeapVector<Member<CSPSource>> sources = m_list;
+  if (m_allowStar) {
+    sources.push_back(new CSPSource(m_policy, "ftp", String(), 0, String(),
+                                    CSPSource::NoWildcard,
+                                    CSPSource::NoWildcard));
+    sources.push_back(new CSPSource(m_policy, "ws", String(), 0, String(),
+                                    CSPSource::NoWildcard,
+                                    CSPSource::NoWildcard));
+    sources.push_back(new CSPSource(m_policy, "http", String(), 0, String(),
+                                    CSPSource::NoWildcard,
+                                    CSPSource::NoWildcard));
+    if (self) {
+      sources.push_back(new CSPSource(m_policy, self->getScheme(), String(), 0,
+                                      String(), CSPSource::NoWildcard,
+                                      CSPSource::NoWildcard));
+    }
+  } else if (m_allowSelf && self) {
+    sources.push_back(self);
   }
 
-  return CSPSource::firstSubsumesSecond(m_list, normalizedA);
+  return sources;
+}
+
+bool SourceListDirective::subsumes(
+    const HeapVector<Member<SourceListDirective>>& other) const {
+  if (!other.size() || other[0]->isNone())
+    return other.size();
+
+  bool allowInlineOther = other[0]->m_allowInline;
+  bool allowEvalOther = other[0]->m_allowEval;
+  bool allowDynamicOther = other[0]->m_allowDynamic;
+  bool allowHashedAttributesOther = other[0]->m_allowHashedAttributes;
+  bool isHashOrNoncePresentOther = other[0]->isHashOrNoncePresent();
+  HashSet<String> noncesB = other[0]->m_nonces;
+  HashSet<CSPHashValue> hashesB = other[0]->m_hashes;
+
+  HeapVector<Member<CSPSource>> normalizedB =
+      other[0]->getSources(other[0]->m_policy->getSelfSource());
+  for (size_t i = 1; i < other.size(); i++) {
+    allowInlineOther = allowInlineOther && other[i]->m_allowInline;
+    allowEvalOther = allowEvalOther && other[i]->m_allowEval;
+    allowDynamicOther = allowDynamicOther && other[i]->m_allowDynamic;
+    allowHashedAttributesOther =
+        allowHashedAttributesOther && other[i]->m_allowHashedAttributes;
+    isHashOrNoncePresentOther =
+        isHashOrNoncePresentOther && other[i]->isHashOrNoncePresent();
+    noncesB = other[i]->getIntersectNonces(noncesB);
+    hashesB = other[i]->getIntersectHashes(hashesB);
+    normalizedB = other[i]->getIntersectCSPSources(normalizedB);
+  }
+
+  if (!subsumesNoncesAndHashes(noncesB, hashesB))
+    return false;
+
+  const ContentSecurityPolicy::DirectiveType type =
+      ContentSecurityPolicy::getDirectiveType(m_directiveName);
+  if (type == ContentSecurityPolicy::DirectiveType::ScriptSrc ||
+      type == ContentSecurityPolicy::DirectiveType::StyleSrc) {
+    if (!m_allowEval && allowEvalOther)
+      return false;
+    if (!m_allowHashedAttributes && allowHashedAttributesOther)
+      return false;
+    bool allowAllInlineOther =
+        allowInlineOther && !isHashOrNoncePresentOther &&
+        (type != ContentSecurityPolicy::DirectiveType::ScriptSrc ||
+         !allowDynamicOther);
+    if (!allowAllInline() && allowAllInlineOther)
+      return false;
+  }
+
+  if (type == ContentSecurityPolicy::DirectiveType::ScriptSrc &&
+      (m_allowDynamic || allowDynamicOther)) {
+    // If `this` does not allow `strict-dynamic`, then it must be that `other`
+    // does allow, so the result is `false`.
+    if (!m_allowDynamic)
+      return false;
+    // All keyword source expressions have been considered so only CSPSource
+    // subsumption is left. However, `strict-dynamic` ignores all CSPSources so
+    // for subsumption to be true either `other` must allow `strict-dynamic` or
+    // have no allowed CSPSources.
+    return allowDynamicOther || !normalizedB.size();
+  }
+
+  // If embedding CSP specifies `self`, `self` refers to the embedee's origin.
+  HeapVector<Member<CSPSource>> normalizedA =
+      getSources(other[0]->m_policy->getSelfSource());
+  return CSPSource::firstSubsumesSecond(normalizedA, normalizedB);
+}
+
+bool SourceListDirective::subsumesNoncesAndHashes(
+    const HashSet<String>& nonces,
+    const HashSet<CSPHashValue> hashes) const {
+  for (const auto& nonce : nonces) {
+    if (!m_nonces.contains(nonce))
+      return false;
+  }
+  for (const auto& hash : hashes) {
+    if (!m_hashes.contains(hash))
+      return false;
+  }
+
+  return true;
+}
+
+HashSet<String> SourceListDirective::getIntersectNonces(
+    const HashSet<String>& other) const {
+  if (!m_nonces.size() || !other.size())
+    return !m_nonces.size() ? m_nonces : other;
+
+  HashSet<String> normalized;
+  for (const auto& nonce : m_nonces) {
+    if (other.contains(nonce))
+      normalized.add(nonce);
+  }
+
+  return normalized;
+}
+
+HashSet<CSPHashValue> SourceListDirective::getIntersectHashes(
+    const HashSet<CSPHashValue>& other) const {
+  if (!m_hashes.size() || !other.size())
+    return !m_hashes.size() ? m_hashes : other;
+
+  HashSet<CSPHashValue> normalized;
+  for (const auto& hash : m_hashes) {
+    if (other.contains(hash))
+      normalized.add(hash);
+  }
+
+  return normalized;
+}
+
+HeapHashMap<String, Member<CSPSource>>
+SourceListDirective::getIntersectSchemesOnly(
+    const HeapVector<Member<CSPSource>>& other) const {
+  HeapHashMap<String, Member<CSPSource>> schemesA;
+  for (const auto& sourceA : m_list) {
+    if (sourceA->isSchemeOnly())
+      addSourceToMap(schemesA, sourceA);
+  }
+  // Add schemes only sources if they are present in both `this` and `other`,
+  // allowing upgrading `http` to `https` and `ws` to `wss`.
+  HeapHashMap<String, Member<CSPSource>> intersect;
+  for (const auto& sourceB : other) {
+    if (sourceB->isSchemeOnly()) {
+      if (schemesA.contains(sourceB->getScheme()))
+        addSourceToMap(intersect, sourceB);
+      else if (sourceB->getScheme() == "http" && schemesA.contains("https"))
+        intersect.add("https", schemesA.get("https"));
+      else if (sourceB->getScheme() == "ws" && schemesA.contains("wss"))
+        intersect.add("wss", schemesA.get("wss"));
+    }
+  }
+
+  return intersect;
 }
 
 HeapVector<Member<CSPSource>> SourceListDirective::getIntersectCSPSources(
-    HeapVector<Member<CSPSource>> otherVector) {
+    const HeapVector<Member<CSPSource>>& other) const {
+  auto schemesMap = getIntersectSchemesOnly(other);
   HeapVector<Member<CSPSource>> normalized;
-  for (const auto& aCspSource : m_list) {
-    Member<CSPSource> matchedCspSource(nullptr);
-    for (const auto& bCspSource : otherVector) {
-      if ((matchedCspSource = bCspSource->intersect(aCspSource)))
-        break;
+  // Add all normalized scheme source expressions.
+  for (const auto& it : schemesMap) {
+    // We do not add secure versions if insecure schemes are present.
+    if ((it.key != "https" || !schemesMap.contains("http")) &&
+        (it.key != "wss" || !schemesMap.contains("ws"))) {
+      normalized.push_back(it.value);
     }
-    if (matchedCspSource)
-      normalized.append(matchedCspSource);
+  }
+
+  HeapVector<Member<CSPSource>> thisVector =
+      getSources(m_policy->getSelfSource());
+  for (const auto& sourceA : thisVector) {
+    if (schemesMap.contains(sourceA->getScheme()))
+      continue;
+
+    CSPSource* match(nullptr);
+    for (const auto& sourceB : other) {
+      // No need to add a host source expression if it is subsumed by the
+      // matching scheme source expression.
+      if (schemesMap.contains(sourceB->getScheme()))
+        continue;
+      // If sourceA is scheme only but there was no intersection for it in the
+      // `other` list, we add all the sourceB with that scheme.
+      if (sourceA->isSchemeOnly()) {
+        if (CSPSource* localMatch = sourceB->intersect(sourceA))
+          normalized.push_back(localMatch);
+        continue;
+      }
+      if (sourceB->subsumes(sourceA)) {
+        match = sourceA;
+        break;
+      }
+      if (CSPSource* localMatch = sourceB->intersect(sourceA))
+        match = localMatch;
+    }
+    if (match)
+      normalized.push_back(match);
   }
   return normalized;
 }

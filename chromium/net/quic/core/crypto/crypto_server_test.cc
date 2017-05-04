@@ -8,7 +8,6 @@
 #include <ostream>
 #include <vector>
 
-#include "base/strings/string_number_conversions.h"
 #include "crypto/secure_hash.h"
 #include "net/quic/core/crypto/cert_compressor.h"
 #include "net/quic/core/crypto/common_cert_set.h"
@@ -21,8 +20,10 @@
 #include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_socket_address_coder.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_text_utils.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/delayed_verify_strike_register_client.h"
+#include "net/quic/test_tools/failing_proof_source.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "net/quic/test_tools/mock_random.h"
 #include "net/quic/test_tools/quic_crypto_server_config_peer.h"
@@ -30,8 +31,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::StringPiece;
-using std::endl;
-using std::ostream;
 using std::string;
 
 namespace net {
@@ -47,7 +46,7 @@ class DummyProofVerifierCallback : public ProofVerifierCallback {
   void Run(bool ok,
            const std::string& error_details,
            std::unique_ptr<ProofVerifyDetails>* details) override {
-    // Do nothing
+    DCHECK(false);
   }
 };
 
@@ -63,7 +62,7 @@ struct TestParams {
         use_stateless_rejects(use_stateless_rejects),
         supported_versions(std::move(supported_versions)) {}
 
-  friend ostream& operator<<(ostream& os, const TestParams& p) {
+  friend std::ostream& operator<<(std::ostream& os, const TestParams& p) {
     os << "  enable_stateless_rejects: " << p.enable_stateless_rejects
        << std::endl;
     os << "  use_stateless_rejects: " << p.use_stateless_rejects << std::endl;
@@ -105,24 +104,24 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
  public:
   CryptoServerTest()
       : rand_(QuicRandom::GetInstance()),
-        client_address_(Loopback4(), 1234),
+        client_address_(QuicIpAddress::Loopback4(), 1234),
         config_(QuicCryptoServerConfig::TESTING,
                 rand_,
                 CryptoTestUtils::ProofSourceForTesting()),
+        peer_(&config_),
         compressed_certs_cache_(
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
         params_(new QuicCryptoNegotiatedParameters),
-        crypto_proof_(new QuicCryptoProof),
+        signed_config_(new QuicSignedServerConfig),
         chlo_packet_size_(kDefaultMaxPacketSize) {
     supported_versions_ = GetParam().supported_versions;
     config_.set_enable_serving_sct(true);
 
     client_version_ = supported_versions_.front();
     client_version_string_ =
-        QuicUtils::TagToString(QuicVersionToQuicTag(client_version_));
+        QuicTagToString(QuicVersionToQuicTag(client_version_));
 
-    FLAGS_quic_require_handshake_confirmation_pre33 = false;
-    FLAGS_enable_quic_stateless_reject_support =
+    FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support =
         GetParam().enable_stateless_rejects;
     use_stateless_rejects_ = GetParam().use_stateless_rejects;
   }
@@ -146,8 +145,9 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
     char public_value[32];
     memset(public_value, 42, sizeof(public_value));
 
-    nonce_hex_ = "#" + QuicUtils::HexEncode(GenerateNonce());
-    pub_hex_ = "#" + QuicUtils::HexEncode(public_value, sizeof(public_value));
+    nonce_hex_ = "#" + QuicTextUtils::HexEncode(GenerateNonce());
+    pub_hex_ =
+        "#" + QuicTextUtils::HexEncode(public_value, sizeof(public_value));
 
     // clang-format off
     CryptoHandshakeMessage client_hello = CryptoTestUtils::Message(
@@ -173,18 +173,19 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
 
     StringPiece srct;
     ASSERT_TRUE(out_.GetStringPiece(kSourceAddressTokenTag, &srct));
-    srct_hex_ = "#" + QuicUtils::HexEncode(srct);
+    srct_hex_ = "#" + QuicTextUtils::HexEncode(srct);
 
     StringPiece scfg;
     ASSERT_TRUE(out_.GetStringPiece(kSCFG, &scfg));
-    server_config_.reset(CryptoFramer::ParseMessage(scfg));
+    server_config_ = CryptoFramer::ParseMessage(scfg);
 
     StringPiece scid;
     ASSERT_TRUE(server_config_->GetStringPiece(kSCID, &scid));
-    scid_hex_ = "#" + QuicUtils::HexEncode(scid);
+    scid_hex_ = "#" + QuicTextUtils::HexEncode(scid);
 
-    crypto_proof_ = scoped_refptr<QuicCryptoProof>(new QuicCryptoProof());
-    DCHECK(crypto_proof_->chain.get() == nullptr);
+    signed_config_ = QuicReferenceCountedPointer<QuicSignedServerConfig>(
+        new QuicSignedServerConfig());
+    DCHECK(signed_config_->chain.get() == nullptr);
   }
 
   // Helper used to accept the result of ValidateClientHello and pass
@@ -202,17 +203,8 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
       *called_ = false;
     }
 
-    void Run(scoped_refptr<Result> result,
+    void Run(QuicReferenceCountedPointer<Result> result,
              std::unique_ptr<ProofSource::Details> /* details */) override {
-      {
-        // Ensure that the strike register client lock is not held.
-        QuicCryptoServerConfigPeer peer(&test_->config_);
-        base::Lock* m = peer.GetStrikeRegisterClientLock();
-        // In Chromium, we will dead lock if the lock is held by the current
-        // thread. Chromium doesn't have AssertNotHeld API call.
-        // m->AssertNotHeld();
-        base::AutoLock lock(*m);
-      }
       ASSERT_FALSE(*called_);
       test_->ProcessValidationResult(std::move(result), should_succeed_,
                                      error_substr_);
@@ -239,16 +231,16 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
     ASSERT_TRUE(server_hello.GetStringPiece(kCADR, &address));
     QuicSocketAddressCoder decoder;
     ASSERT_TRUE(decoder.Decode(address.data(), address.size()));
-    EXPECT_EQ(client_address_.address(), decoder.ip());
+    EXPECT_EQ(client_address_.host(), decoder.ip());
     EXPECT_EQ(client_address_.port(), decoder.port());
   }
 
   void ShouldSucceed(const CryptoHandshakeMessage& message) {
     bool called = false;
-    IPAddress server_ip;
+    QuicSocketAddress server_address;
     config_.ValidateClientHello(
-        message, client_address_.address(), server_ip,
-        supported_versions_.front(), &clock_, crypto_proof_,
+        message, client_address_.host(), server_address,
+        supported_versions_.front(), &clock_, signed_config_,
         std::unique_ptr<ValidateCallback>(
             new ValidateCallback(this, true, "", &called)));
     EXPECT_TRUE(called);
@@ -264,21 +256,22 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
   void ShouldFailMentioning(const char* error_substr,
                             const CryptoHandshakeMessage& message,
                             bool* called) {
-    IPAddress server_ip;
+    QuicSocketAddress server_address;
     config_.ValidateClientHello(
-        message, client_address_.address(), server_ip,
-        supported_versions_.front(), &clock_, crypto_proof_,
+        message, client_address_.host(), server_address,
+        supported_versions_.front(), &clock_, signed_config_,
         std::unique_ptr<ValidateCallback>(
             new ValidateCallback(this, false, error_substr, called)));
   }
 
   class ProcessCallback : public ProcessClientHelloResultCallback {
    public:
-    ProcessCallback(scoped_refptr<ValidateCallback::Result> result,
-                    bool should_succeed,
-                    const char* error_substr,
-                    bool* called,
-                    CryptoHandshakeMessage* out)
+    ProcessCallback(
+        QuicReferenceCountedPointer<ValidateCallback::Result> result,
+        bool should_succeed,
+        const char* error_substr,
+        bool* called,
+        CryptoHandshakeMessage* out)
         : result_(std::move(result)),
           should_succeed_(should_succeed),
           error_substr_(error_substr),
@@ -294,12 +287,12 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
         std::unique_ptr<DiversificationNonce> diversification_nonce,
         std::unique_ptr<ProofSource::Details> proof_source_details) override {
       if (should_succeed_) {
-        ASSERT_EQ(error, QUIC_NO_ERROR) << "Message failed with error "
-                                        << error_details << ": "
-                                        << result_->client_hello.DebugString();
+        ASSERT_EQ(error, QUIC_NO_ERROR)
+            << "Message failed with error " << error_details << ": "
+            << result_->client_hello.DebugString();
       } else {
-        ASSERT_NE(error, QUIC_NO_ERROR) << "Message didn't fail: "
-                                        << result_->client_hello.DebugString();
+        ASSERT_NE(error, QUIC_NO_ERROR)
+            << "Message didn't fail: " << result_->client_hello.DebugString();
 
         EXPECT_TRUE(error_details.find(error_substr_) != string::npos)
             << error_substr_ << " not in " << error_details;
@@ -311,25 +304,26 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
     }
 
    private:
-    const scoped_refptr<ValidateCallback::Result> result_;
+    const QuicReferenceCountedPointer<ValidateCallback::Result> result_;
     const bool should_succeed_;
     const char* const error_substr_;
     bool* called_;
     CryptoHandshakeMessage* out_;
   };
 
-  void ProcessValidationResult(scoped_refptr<ValidateCallback::Result> result,
-                               bool should_succeed,
-                               const char* error_substr) {
-    IPAddress server_ip;
+  void ProcessValidationResult(
+      QuicReferenceCountedPointer<ValidateCallback::Result> result,
+      bool should_succeed,
+      const char* error_substr) {
+    QuicSocketAddress server_address;
     QuicConnectionId server_designated_connection_id =
         rand_for_id_generation_.RandUint64();
     bool called;
     config_.ProcessClientHello(
-        result, /*reject_only=*/false, /*connection_id=*/1, server_ip,
+        result, /*reject_only=*/false, /*connection_id=*/1, server_address,
         client_address_, supported_versions_.front(), supported_versions_,
         use_stateless_rejects_, server_designated_connection_id, &clock_, rand_,
-        &compressed_certs_cache_, params_, crypto_proof_,
+        &compressed_certs_cache_, params_, signed_config_,
         /*total_framing_overhead=*/50, chlo_packet_size_,
         std::unique_ptr<ProcessCallback>(new ProcessCallback(
             result, should_succeed, error_substr, &called, &out_)));
@@ -380,9 +374,9 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
 
   void CheckRejectTag() {
     if (RejectsAreStateless()) {
-      ASSERT_EQ(kSREJ, out_.tag()) << QuicUtils::TagToString(out_.tag());
+      ASSERT_EQ(kSREJ, out_.tag()) << QuicTagToString(out_.tag());
     } else {
-      ASSERT_EQ(kREJ, out_.tag()) << QuicUtils::TagToString(out_.tag());
+      ASSERT_EQ(kREJ, out_.tag()) << QuicTagToString(out_.tag());
     }
   }
 
@@ -393,8 +387,8 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
 
   string XlctHexString() {
     uint64_t xlct = CryptoTestUtils::LeafCertHashForTesting();
-    return "#" +
-           QuicUtils::HexEncode(reinterpret_cast<char*>(&xlct), sizeof(xlct));
+    return "#" + QuicTextUtils::HexEncode(reinterpret_cast<char*>(&xlct),
+                                          sizeof(xlct));
   }
 
  protected:
@@ -402,15 +396,16 @@ class CryptoServerTest : public ::testing::TestWithParam<TestParams> {
   QuicRandom* const rand_;
   MockRandom rand_for_id_generation_;
   MockClock clock_;
-  IPEndPoint client_address_;
+  QuicSocketAddress client_address_;
   QuicVersionVector supported_versions_;
   QuicVersion client_version_;
   string client_version_string_;
   QuicCryptoServerConfig config_;
+  QuicCryptoServerConfigPeer peer_;
   QuicCompressedCertsCache compressed_certs_cache_;
   QuicCryptoServerConfig::ConfigOptions config_options_;
-  scoped_refptr<QuicCryptoNegotiatedParameters> params_;
-  scoped_refptr<QuicCryptoProof> crypto_proof_;
+  QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters> params_;
+  QuicReferenceCountedPointer<QuicSignedServerConfig> signed_config_;
   CryptoHandshakeMessage out_;
   uint8_t orbit_[kOrbitSize];
   bool use_stateless_rejects_;
@@ -717,7 +712,7 @@ TEST_P(CryptoServerTest, DowngradeAttack) {
   // Set the client's preferred version to a supported version that
   // is not the "current" version (supported_versions_.front()).
   string bad_version =
-      QuicUtils::TagToString(QuicVersionToQuicTag(supported_versions_.back()));
+      QuicTagToString(QuicVersionToQuicTag(supported_versions_.back()));
 
   // clang-format off
   CryptoHandshakeMessage msg = CryptoTestUtils::Message(
@@ -826,16 +821,9 @@ TEST_P(CryptoServerTest, CorruptMultipleTags) {
   ShouldSucceed(msg);
   CheckRejectTag();
 
-  if (client_version_ <= QUIC_VERSION_32) {
-    const HandshakeFailureReason kRejectReasons[] = {
-        SOURCE_ADDRESS_TOKEN_DECRYPTION_FAILURE, CLIENT_NONCE_INVALID_FAILURE,
-        SERVER_NONCE_DECRYPTION_FAILURE};
-    CheckRejectReasons(kRejectReasons, arraysize(kRejectReasons));
-  } else {
-    const HandshakeFailureReason kRejectReasons[] = {
-        SOURCE_ADDRESS_TOKEN_DECRYPTION_FAILURE, CLIENT_NONCE_INVALID_FAILURE};
-    CheckRejectReasons(kRejectReasons, arraysize(kRejectReasons));
-  };
+  const HandshakeFailureReason kRejectReasons[] = {
+      SOURCE_ADDRESS_TOKEN_DECRYPTION_FAILURE, CLIENT_NONCE_INVALID_FAILURE};
+  CheckRejectReasons(kRejectReasons, arraysize(kRejectReasons));
 }
 
 TEST_P(CryptoServerTest, NoServerNonce) {
@@ -860,21 +848,14 @@ TEST_P(CryptoServerTest, NoServerNonce) {
 
   ShouldSucceed(msg);
 
-  if (client_version_ <= QUIC_VERSION_32) {
-    CheckRejectTag();
-    const HandshakeFailureReason kRejectReasons[] = {
-        SERVER_NONCE_REQUIRED_FAILURE};
-    CheckRejectReasons(kRejectReasons, arraysize(kRejectReasons));
-  } else {
-    // Even without a server nonce, this ClientHello should be accepted in
-    // version 33.
-    ASSERT_EQ(kSHLO, out_.tag());
-    CheckServerHello(out_);
-  }
+  // Even without a server nonce, this ClientHello should be accepted in
+  // version 33.
+  ASSERT_EQ(kSHLO, out_.tag());
+  CheckServerHello(out_);
 }
 
 TEST_P(CryptoServerTest, ProofForSuppliedServerConfig) {
-  client_address_ = IPEndPoint(Loopback6(), 1234);
+  client_address_ = QuicSocketAddress(QuicIpAddress::Loopback6(), 1234);
   // clang-format off
   CryptoHandshakeMessage msg = CryptoTestUtils::Message(
       "CHLO",
@@ -885,6 +866,7 @@ TEST_P(CryptoServerTest, ProofForSuppliedServerConfig) {
       "#004b5453", srct_hex_.c_str(),
       "PUBS", pub_hex_.c_str(),
       "NONC", nonce_hex_.c_str(),
+      "NONP", "123456789012345678901234567890",
       "VER\0", client_version_string_.c_str(),
       "XLCT", XlctHexString().c_str(),
       "$padding", static_cast<int>(kClientHelloMinimumSize),
@@ -975,7 +957,6 @@ TEST_P(CryptoServerTest, ValidXlct) {
       "#004b5453", srct_hex_.c_str(),
       "PUBS", pub_hex_.c_str(),
       "NONC", nonce_hex_.c_str(),
-      "NONP", "123456789012345678901234567890",
       "VER\0", client_version_string_.c_str(),
       "XLCT", XlctHexString().c_str(),
       "$padding", static_cast<int>(kClientHelloMinimumSize),
@@ -1016,6 +997,28 @@ TEST_P(CryptoServerTest, NonceInSHLO) {
 
   StringPiece nonce;
   EXPECT_TRUE(out_.GetStringPiece(kServerNonceTag, &nonce));
+}
+
+TEST_P(CryptoServerTest, ProofSourceFailure) {
+  // Install a ProofSource which will unconditionally fail
+  peer_.ResetProofSource(std::unique_ptr<ProofSource>(new FailingProofSource));
+
+  // clang-format off
+  CryptoHandshakeMessage msg = CryptoTestUtils::Message(
+      "CHLO",
+      "AEAD", "AESG",
+      "KEXS", "C255",
+      "SCID", scid_hex_.c_str(),
+      "PUBS", pub_hex_.c_str(),
+      "NONC", nonce_hex_.c_str(),
+      "PDMD", "X509",
+      "VER\0", client_version_string_.c_str(),
+      "$padding", static_cast<int>(kClientHelloMinimumSize),
+      nullptr);
+  // clang-format on
+
+  // Just ensure that we don't crash as occurred in b/33916924.
+  ShouldFailMentioning("", msg);
 }
 
 TEST(CryptoServerConfigGenerationTest, Determinism) {
@@ -1120,7 +1123,7 @@ class CryptoServerTestOldVersion : public CryptoServerTest {
   void SetUp() override {
     client_version_ = supported_versions_.back();
     client_version_string_ =
-        QuicUtils::TagToString(QuicVersionToQuicTag(client_version_));
+        QuicTagToString(QuicVersionToQuicTag(client_version_));
     CryptoServerTest::SetUp();
   }
 };
@@ -1172,118 +1175,6 @@ TEST_P(CryptoServerTestOldVersion, XlctNotRequired) {
 
   ShouldSucceed(msg);
   EXPECT_EQ(kSHLO, out_.tag());
-}
-
-class AsyncStrikeServerVerificationTest : public CryptoServerTest {
- protected:
-  AsyncStrikeServerVerificationTest() {}
-
-  void SetUp() override {
-    const string kOrbit = "12345678";
-    config_options_.orbit = kOrbit;
-    strike_register_client_ = new DelayedVerifyStrikeRegisterClient(
-        10000,  // strike_register_max_entries
-        static_cast<uint32_t>(clock_.WallNow().ToUNIXSeconds()),
-        60,  // strike_register_window_secs
-        reinterpret_cast<const uint8_t*>(kOrbit.c_str()),
-        StrikeRegister::NO_STARTUP_PERIOD_NEEDED);
-    config_.SetStrikeRegisterClient(strike_register_client_);
-    ASSERT_NO_FATAL_FAILURE(CryptoServerTest::SetUp());
-    strike_register_client_->StartDelayingVerification();
-  }
-
-  DelayedVerifyStrikeRegisterClient* strike_register_client_;
-};
-
-TEST_P(AsyncStrikeServerVerificationTest, AsyncReplayProtection) {
-  // This tests async validation with a strike register works.
-  // clang-format off
-  CryptoHandshakeMessage msg = CryptoTestUtils::Message(
-      "CHLO",
-      "PDMD", "X509",
-      "AEAD", "AESG",
-      "KEXS", "C255",
-      "SCID", scid_hex_.c_str(),
-      "#004b5453", srct_hex_.c_str(),
-      "PUBS", pub_hex_.c_str(),
-      "NONC", nonce_hex_.c_str(),
-      "VER\0", client_version_string_.c_str(),
-      "$padding", static_cast<int>(kClientHelloMinimumSize),
-      nullptr);
-  // clang-format on
-
-  // Clear the message tag.
-  out_.set_tag(0);
-
-  bool called = false;
-  IPAddress server_ip;
-  config_.ValidateClientHello(
-      msg, client_address_.address(), server_ip, client_version_, &clock_,
-      crypto_proof_, std::unique_ptr<ValidateCallback>(
-                         new ValidateCallback(this, true, "", &called)));
-  // The verification request was queued.
-  ASSERT_FALSE(called);
-  EXPECT_EQ(0u, out_.tag());
-  EXPECT_EQ(1, strike_register_client_->PendingVerifications());
-
-  // Continue processing the verification request.
-  strike_register_client_->RunPendingVerifications();
-  ASSERT_TRUE(called);
-  EXPECT_EQ(0, strike_register_client_->PendingVerifications());
-  // The message should be accepted now.
-  EXPECT_EQ(kSHLO, out_.tag());
-
-  // Rejected if replayed.
-  config_.ValidateClientHello(
-      msg, client_address_.address(), server_ip, client_version_, &clock_,
-      crypto_proof_, std::unique_ptr<ValidateCallback>(
-                         new ValidateCallback(this, true, "", &called)));
-  // The verification request was queued.
-  ASSERT_FALSE(called);
-  EXPECT_EQ(1, strike_register_client_->PendingVerifications());
-
-  strike_register_client_->RunPendingVerifications();
-  ASSERT_TRUE(called);
-  EXPECT_EQ(0, strike_register_client_->PendingVerifications());
-  // The message should be rejected now.
-  CheckRejectTag();
-}
-
-TEST_P(AsyncStrikeServerVerificationTest, RequireHandshakeCofirmationPre33) {
-  FLAGS_quic_require_handshake_confirmation = false;
-  FLAGS_quic_require_handshake_confirmation_pre33 = true;
-  // clang-format off
-  CryptoHandshakeMessage msg = CryptoTestUtils::Message(
-      "CHLO",
-      "PDMD", "X509",
-      "AEAD", "AESG",
-      "KEXS", "C255",
-      "SNI", "foobar1.example.com",
-      "SCID", scid_hex_.c_str(),
-      "#004b5453", srct_hex_.c_str(),
-      "PUBS", pub_hex_.c_str(),
-      "NONC", nonce_hex_.c_str(),
-      "VER\0", client_version_string_.c_str(),
-      "XLCT", XlctHexString().c_str(),
-      "$padding", static_cast<int>(kClientHelloMinimumSize),
-      nullptr);
-  // clang-format on
-
-  ShouldSucceed(msg);
-
-  if (client_version_ <= QUIC_VERSION_32) {
-    // clang-format off
-    const HandshakeFailureReason kRejectReasons[] = {
-      SERVER_NONCE_REQUIRED_FAILURE
-    };
-    // clang-format on
-    CheckRejectReasons(kRejectReasons, arraysize(kRejectReasons));
-    EXPECT_EQ(0, strike_register_client_->PendingVerifications());
-  } else {
-    // version 33.
-    ASSERT_EQ(kSHLO, out_.tag());
-    CheckServerHello(out_);
-  }
 }
 
 }  // namespace test

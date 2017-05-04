@@ -20,8 +20,7 @@ cr.define('cr', function() {
    * @constructor
    * @implements {EventTarget}
    */
-  function EventTarget() {
-  }
+  function EventTarget() {}
 
   EventTarget.prototype = {
     /**
@@ -99,7 +98,5 @@ cr.define('cr', function() {
   };
 
   // Export
-  return {
-    EventTarget: EventTarget
-  };
+  return {EventTarget: EventTarget};
 });

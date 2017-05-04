@@ -39,6 +39,8 @@ Display ScreenBase::GetPrimaryDisplay() const {
 }
 
 Display ScreenBase::GetDisplayNearestWindow(gfx::NativeView view) const {
+  // TODO(riajiang): Implement this for multi-displays either here or in
+  // ScreenMus.
   NOTIMPLEMENTED();
   return GetPrimaryDisplay();
 }
@@ -51,7 +53,7 @@ int ScreenBase::GetNumDisplays() const {
   return static_cast<int>(display_list_.displays().size());
 }
 
-std::vector<Display> ScreenBase::GetAllDisplays() const {
+const std::vector<Display>& ScreenBase::GetAllDisplays() const {
   return display_list_.displays();
 }
 

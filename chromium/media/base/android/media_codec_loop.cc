@@ -39,7 +39,7 @@ MediaCodecLoop::InputData::InputData(const InputData& other)
       subsamples(other.subsamples),
       presentation_time(other.presentation_time),
       is_eos(other.is_eos),
-      is_encrypted(other.is_encrypted) {}
+      encryption_scheme(other.encryption_scheme) {}
 
 MediaCodecLoop::InputData::~InputData() {}
 
@@ -142,7 +142,7 @@ bool MediaCodecLoop::ProcessOneInputBuffer() {
 }
 
 MediaCodecLoop::InputBuffer MediaCodecLoop::DequeueInputBuffer() {
-  DVLOG(2) << __FUNCTION__;
+  DVLOG(2) << __func__;
 
   // Do not dequeue a new input buffer if we failed with MEDIA_CODEC_NO_KEY.
   // That status does not return the input buffer back to the pool of
@@ -163,8 +163,7 @@ MediaCodecLoop::InputBuffer MediaCodecLoop::DequeueInputBuffer() {
       break;
 
     case media::MEDIA_CODEC_ERROR:
-      DLOG(ERROR) << __FUNCTION__
-                  << ": MEDIA_CODEC_ERROR from DequeInputBuffer";
+      DLOG(ERROR) << __func__ << ": MEDIA_CODEC_ERROR from DequeInputBuffer";
       SetState(STATE_ERROR);
       break;
 
@@ -200,14 +199,14 @@ void MediaCodecLoop::EnqueueInputBuffer(const InputBuffer& input_buffer) {
 
   media::MediaCodecStatus status = MEDIA_CODEC_OK;
 
-  if (input_data.is_encrypted) {
+  if (input_data.encryption_scheme.is_encrypted()) {
     // Note that input_data might not have a valid memory ptr if this is a
     // re-send of a buffer that was sent before decryption keys arrived.
 
     status = media_codec_->QueueSecureInputBuffer(
         input_buffer.index, input_data.memory, input_data.length,
         input_data.key_id, input_data.iv, input_data.subsamples,
-        input_data.presentation_time);
+        input_data.encryption_scheme, input_data.presentation_time);
 
   } else {
     status = media_codec_->QueueInputBuffer(
@@ -217,8 +216,7 @@ void MediaCodecLoop::EnqueueInputBuffer(const InputBuffer& input_buffer) {
 
   switch (status) {
     case MEDIA_CODEC_ERROR:
-      DLOG(ERROR) << __FUNCTION__
-                  << ": MEDIA_CODEC_ERROR from QueueInputBuffer";
+      DLOG(ERROR) << __func__ << ": MEDIA_CODEC_ERROR from QueueInputBuffer";
       client_->OnInputDataQueued(false);
       // Transition to the error state after running the completion cb, to keep
       // it in order if the client chooses to flush its queue.
@@ -303,8 +301,7 @@ bool MediaCodecLoop::ProcessOneOutputBuffer() {
       break;
 
     case MEDIA_CODEC_ERROR:
-      DLOG(ERROR) << __FUNCTION__
-                  << ": MEDIA_CODEC_ERROR from DequeueOutputBuffer";
+      DLOG(ERROR) << __func__ << ": MEDIA_CODEC_ERROR from DequeueOutputBuffer";
       SetState(STATE_ERROR);
       break;
 

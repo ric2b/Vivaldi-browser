@@ -4,13 +4,11 @@
 
 #include "ash/common/shelf/shelf_layout_manager.h"
 
-#include "ash/aura/wm_shelf_aura.h"
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/accelerators/accelerator_controller.h"
 #include "ash/common/accelerators/accelerator_table.h"
 #include "ash/common/focus_cycler.h"
 #include "ash/common/material_design/material_design_controller.h"
-#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/session/session_controller.h"
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/shelf_layout_manager_observer.h"
 #include "ash/common/shelf/shelf_view.h"
@@ -21,14 +19,18 @@
 #include "ash/common/system/tray/system_tray_item.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/test_app_list_view_presenter_impl.h"
 #include "ash/test/test_system_tray_item.h"
+#include "ash/wm/lock_state_controller.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/window_parenting_client.h"
@@ -39,7 +41,7 @@
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/display.h"
-#include "ui/display/manager/display_layout.h"
+#include "ui/display/display_layout.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -50,10 +52,6 @@
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
-
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#endif
 
 namespace ash {
 namespace {
@@ -172,11 +170,6 @@ class ShelfDragCallback {
       EXPECT_EQ(auto_hidden_shelf_widget_bounds_.x(), shelf_bounds.x());
       EXPECT_EQ(shelf_widget_bounds_.x(), shelf_bounds.x());
     }
-
-    // if the shelf is being dimmed test dimmer bounds as well.
-    if (GetShelfWidget()->GetDimsShelf())
-      EXPECT_EQ(GetShelfWidget()->GetWindowBoundsInScreen(),
-                GetShelfWidget()->GetDimmerBoundsForTest());
 
     // Auto hidden shelf has a visible height of 0 in MD (where this inequality
     // does not apply); whereas auto hidden shelf has a visible height of 3 in
@@ -310,16 +303,16 @@ class ShelfLayoutManagerTest : public test::AshTestBase {
 
   // Turn on the lock screen.
   void LockScreen() {
-    WmShell::Get()->GetSessionStateDelegate()->LockScreen();
-    // The test session state delegate does not fire the lock state change.
-    Shell::GetInstance()->OnLockStateChanged(true);
+    mojom::SessionInfoPtr info = mojom::SessionInfo::New();
+    info->state = session_manager::SessionState::LOCKED;
+    ash::WmShell::Get()->session_controller()->SetSessionInfo(std::move(info));
   }
 
   // Turn off the lock screen.
   void UnlockScreen() {
-    WmShell::Get()->GetSessionStateDelegate()->UnlockScreen();
-    // The test session state delegate does not fire the lock state change.
-    Shell::GetInstance()->OnLockStateChanged(false);
+    mojom::SessionInfoPtr info = mojom::SessionInfo::New();
+    info->state = session_manager::SessionState::ACTIVE;
+    ash::WmShell::Get()->session_controller()->SetSessionInfo(std::move(info));
   }
 
  private:
@@ -382,8 +375,6 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
   EXPECT_EQ(bounds_shelf.ToString(), window->bounds().ToString());
-  EXPECT_EQ(GetShelfWidget()->GetDimmerBoundsForTest(),
-            GetShelfWidget()->GetWindowBoundsInScreen());
   EXPECT_EQ(shelf_shown.ToString(),
             GetShelfWidget()->GetWindowBoundsInScreen().ToString());
 
@@ -429,7 +420,6 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
-  EXPECT_EQ(GetShelfWidget()->GetDimmerBoundsForTest(), gfx::Rect());
   EXPECT_EQ(bounds_noshelf.ToString(), window->bounds().ToString());
   EXPECT_EQ(shelf_hidden.ToString(),
             GetShelfWidget()->GetWindowBoundsInScreen().ToString());
@@ -451,8 +441,6 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
   EXPECT_EQ(bounds_shelf.ToString(), window->bounds().ToString());
-  EXPECT_EQ(GetShelfWidget()->GetDimmerBoundsForTest(),
-            GetShelfWidget()->GetWindowBoundsInScreen());
   EXPECT_EQ(shelf_shown.ToString(),
             GetShelfWidget()->GetWindowBoundsInScreen().ToString());
 
@@ -465,7 +453,6 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
-  EXPECT_EQ(GetShelfWidget()->GetDimmerBoundsForTest(), gfx::Rect());
   EXPECT_EQ(bounds_noshelf.ToString(), window->bounds().ToString());
   EXPECT_EQ(shelf_hidden.ToString(),
             GetShelfWidget()->GetWindowBoundsInScreen().ToString());
@@ -500,8 +487,6 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
   EXPECT_EQ(bounds_shelf.ToString(), window->bounds().ToString());
-  EXPECT_EQ(GetShelfWidget()->GetDimmerBoundsForTest(),
-            GetShelfWidget()->GetWindowBoundsInScreen());
   EXPECT_EQ(shelf_shown.ToString(),
             GetShelfWidget()->GetWindowBoundsInScreen().ToString());
 
@@ -514,7 +499,6 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
-  EXPECT_EQ(GetShelfWidget()->GetDimmerBoundsForTest(), gfx::Rect());
   EXPECT_EQ(bounds_noshelf.ToString(), window->bounds().ToString());
   EXPECT_EQ(shelf_hidden.ToString(),
             GetShelfWidget()->GetWindowBoundsInScreen().ToString());
@@ -600,14 +584,8 @@ void ShelfLayoutManagerTest::RunGestureDragTests(gfx::Vector2d delta) {
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
 }
 
-// Need to be implemented.  http://crbug.com/111279.
-#if defined(OS_WIN)
-#define MAYBE_SetVisible DISABLED_SetVisible
-#else
-#define MAYBE_SetVisible SetVisible
-#endif
 // Makes sure SetVisible updates work area and widget appropriately.
-TEST_F(ShelfLayoutManagerTest, MAYBE_SetVisible) {
+TEST_F(ShelfLayoutManagerTest, SetVisible) {
   ShelfWidget* shelf_widget = GetShelfWidget();
   ShelfLayoutManager* manager = shelf_widget->shelf_layout_manager();
   // Force an initial layout.
@@ -867,6 +845,18 @@ TEST_F(ShelfLayoutManagerTest, AutoHideShelfOnScreenBoundary) {
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 }
 
+// Assertions around the login screen.
+TEST_F(ShelfLayoutManagerTest, VisibleWhenLoginScreenShowing) {
+  WmShelf* shelf = GetPrimaryShelf();
+
+  mojom::SessionInfoPtr info = mojom::SessionInfo::New();
+  info->state = session_manager::SessionState::LOGIN_PRIMARY;
+  ash::WmShell::Get()->session_controller()->SetSessionInfo(std::move(info));
+
+  EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
+  EXPECT_EQ(SHELF_BACKGROUND_OVERLAP, GetShelfWidget()->GetBackgroundType());
+}
+
 // Assertions around the lock screen showing.
 TEST_F(ShelfLayoutManagerTest, VisibleWhenLockScreenShowing) {
   WmShelf* shelf = GetPrimaryShelf();
@@ -892,9 +882,11 @@ TEST_F(ShelfLayoutManagerTest, VisibleWhenLockScreenShowing) {
   LockScreen();
   // Showing a widget in the lock screen should force the shelf to be visibile.
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
+  EXPECT_EQ(SHELF_BACKGROUND_OVERLAP, GetShelfWidget()->GetBackgroundType());
 
   UnlockScreen();
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
+  EXPECT_EQ(SHELF_BACKGROUND_OVERLAP, GetShelfWidget()->GetBackgroundType());
 }
 
 // Assertions around SetAutoHideBehavior.
@@ -932,171 +924,6 @@ TEST_F(ShelfLayoutManagerTest, SetAutoHideBehavior) {
             widget->GetWorkAreaBoundsInScreen().bottom());
 }
 
-// Basic assertions around the dimming of the shelf.
-TEST_F(ShelfLayoutManagerTest, DimmingBehavior) {
-  ui::test::EventGenerator& generator(GetEventGenerator());
-
-  ShelfWidget* shelf_widget = GetShelfWidget();
-  shelf_widget->DisableDimmingAnimationsForTest();
-  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
-  gfx::Point off_shelf = display.bounds().CenterPoint();
-  gfx::Point on_shelf = shelf_widget->GetWindowBoundsInScreen().CenterPoint();
-  views::Widget* widget = CreateTestWidget();
-
-  // Test there is no dimming object active at this point.
-  generator.MoveMouseTo(on_shelf.x(), on_shelf.y());
-  EXPECT_EQ(-1, shelf_widget->GetDimmingAlphaForTest());
-  generator.MoveMouseTo(off_shelf.x(), off_shelf.y());
-  EXPECT_EQ(-1, shelf_widget->GetDimmingAlphaForTest());
-
-  // After maximization, the shelf should be visible and the dimmer created.
-  widget->Maximize();
-
-  on_shelf = shelf_widget->GetWindowBoundsInScreen().CenterPoint();
-  EXPECT_LT(0, shelf_widget->GetDimmingAlphaForTest());
-
-  // Moving the mouse off the shelf should dim the bar.
-  generator.MoveMouseTo(off_shelf.x(), off_shelf.y());
-  EXPECT_LT(0, shelf_widget->GetDimmingAlphaForTest());
-
-  // Adding touch events outside the shelf should still keep the shelf in
-  // dimmed state.
-  generator.PressTouch();
-  generator.MoveTouch(off_shelf);
-  EXPECT_LT(0, shelf_widget->GetDimmingAlphaForTest());
-  // Move the touch into the shelf area should undim.
-  generator.MoveTouch(on_shelf);
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-  generator.ReleaseTouch();
-  // And a release dims again.
-  EXPECT_LT(0, shelf_widget->GetDimmingAlphaForTest());
-
-  // Moving the mouse on the shelf should undim the bar.
-  generator.MoveMouseTo(on_shelf);
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-
-  // No matter what the touch events do, the shelf should stay undimmed.
-  generator.PressTouch();
-  generator.MoveTouch(off_shelf);
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-  generator.MoveTouch(on_shelf);
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-  generator.MoveTouch(off_shelf);
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-  generator.MoveTouch(on_shelf);
-  generator.ReleaseTouch();
-
-  // After restore, the dimming object should be deleted again.
-  widget->Restore();
-  EXPECT_EQ(-1, shelf_widget->GetDimmingAlphaForTest());
-}
-
-// Test that dimming works correctly with multiple displays.
-TEST_F(ShelfLayoutManagerTest, DimmingBehaviorDualDisplay) {
-  if (!SupportsMultipleDisplays())
-    return;
-
-  // Create two displays.
-  UpdateDisplay("0+0-200x200,+200+0-100x100");
-  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
-  EXPECT_EQ(root_windows.size(), 2U);
-
-  std::vector<ShelfWidget*> shelf_widgets;
-  for (auto* root_window : root_windows) {
-    ShelfLayoutManager* shelf =
-        GetRootWindowController(root_window)->GetShelfLayoutManager();
-    shelf_widgets.push_back(shelf->shelf_widget());
-
-    // For disabling the dimming animation to work, the animation must be
-    // disabled prior to creating the dimmer.
-    shelf_widgets.back()->DisableDimmingAnimationsForTest();
-
-    // Create a maximized window to create the dimmer.
-    views::Widget::InitParams params;
-    params.context = root_window;
-    params.bounds = root_window->GetBoundsInScreen();
-    params.show_state = ui::SHOW_STATE_MAXIMIZED;
-    CreateTestWidgetWithParams(params);
-  }
-
-  ui::test::EventGenerator& generator(GetEventGenerator());
-
-  generator.MoveMouseTo(root_windows[0]->GetBoundsInScreen().CenterPoint());
-  EXPECT_LT(0, shelf_widgets[0]->GetDimmingAlphaForTest());
-  EXPECT_LT(0, shelf_widgets[1]->GetDimmingAlphaForTest());
-
-  generator.MoveMouseTo(
-      shelf_widgets[0]->GetWindowBoundsInScreen().CenterPoint());
-  EXPECT_EQ(0, shelf_widgets[0]->GetDimmingAlphaForTest());
-  EXPECT_LT(0, shelf_widgets[1]->GetDimmingAlphaForTest());
-
-  generator.MoveMouseTo(
-      shelf_widgets[1]->GetWindowBoundsInScreen().CenterPoint());
-  EXPECT_LT(0, shelf_widgets[0]->GetDimmingAlphaForTest());
-  EXPECT_EQ(0, shelf_widgets[1]->GetDimmingAlphaForTest());
-
-  generator.MoveMouseTo(root_windows[1]->GetBoundsInScreen().CenterPoint());
-  EXPECT_LT(0, shelf_widgets[0]->GetDimmingAlphaForTest());
-  EXPECT_LT(0, shelf_widgets[1]->GetDimmingAlphaForTest());
-}
-
-// Assertions around the dimming of the shelf in conjunction with menus.
-TEST_F(ShelfLayoutManagerTest, DimmingBehaviorWithMenus) {
-  ui::test::EventGenerator& generator(GetEventGenerator());
-  generator.MoveMouseTo(0, 0);
-
-  ShelfWidget* shelf_widget = GetShelfWidget();
-  shelf_widget->DisableDimmingAnimationsForTest();
-
-  // After maximization, the shelf should be visible and the dimmer created.
-  views::Widget* widget = CreateTestWidget();
-  widget->Maximize();
-
-  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
-  gfx::Point off_shelf = display.bounds().CenterPoint();
-  gfx::Point on_shelf = shelf_widget->GetWindowBoundsInScreen().CenterPoint();
-
-  // Moving the mouse on the shelf should undim the bar.
-  generator.MoveMouseTo(on_shelf.x(), on_shelf.y());
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-
-  // Simulate a menu opening.
-  shelf_widget->ForceUndimming(true);
-
-  // Moving the mouse off the shelf should not dim the bar.
-  generator.MoveMouseTo(off_shelf.x(), off_shelf.y());
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-
-  // No matter what the touch events do, the shelf should stay undimmed.
-  generator.PressTouch();
-  generator.MoveTouch(off_shelf);
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-  generator.MoveTouch(on_shelf);
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-  generator.MoveTouch(off_shelf);
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-  generator.ReleaseTouch();
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-
-  // "Closing the menu" should now turn off the menu since no event is inside
-  // the shelf any longer.
-  shelf_widget->ForceUndimming(false);
-  EXPECT_LT(0, shelf_widget->GetDimmingAlphaForTest());
-
-  // Moving the mouse again on the shelf which should undim the bar again.
-  // This time we check that the bar stays undimmed when the mouse remains on
-  // the bar and the "menu gets closed".
-  generator.MoveMouseTo(on_shelf.x(), on_shelf.y());
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-  shelf_widget->ForceUndimming(true);
-  generator.MoveMouseTo(off_shelf.x(), off_shelf.y());
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-  generator.MoveMouseTo(on_shelf.x(), on_shelf.y());
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-  shelf_widget->ForceUndimming(true);
-  EXPECT_EQ(0, shelf_widget->GetDimmingAlphaForTest());
-}
-
 // Verifies the shelf is visible when status/shelf is focused.
 TEST_F(ShelfLayoutManagerTest, VisibleWhenStatusOrShelfFocused) {
   WmShelf* shelf = GetPrimaryShelf();
@@ -1122,67 +949,63 @@ TEST_F(ShelfLayoutManagerTest, VisibleWhenStatusOrShelfFocused) {
   EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
 }
 
-// Makes sure shelf will be visible when app list opens as shelf is in
-// SHELF_VISIBLE state,and toggling app list won't change shelf
-// visibility state.
+// Ensure a SHELF_VISIBLE shelf stays visible when the app list is shown.
 TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfVisibleState) {
-  WmShell* shell = WmShell::Get();
   WmShelf* shelf = GetPrimaryShelf();
-  ShelfLayoutManager* layout_manager = GetShelfLayoutManager();
-  layout_manager->LayoutShelf();
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
 
-  // Create a normal unmaximized windowm shelf should be visible.
+  // The tested behavior relies on the app list presenter implementation.
+  test::TestAppListViewPresenterImpl app_list_presenter_impl;
+
+  // Create a normal unmaximized window; the shelf should be visible.
   aura::Window* window = CreateTestWindow();
   window->SetBounds(gfx::Rect(0, 0, 100, 100));
   window->Show();
-  EXPECT_FALSE(shell->GetAppListTargetVisibility());
+  EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 
-  // Show app list and the shelf stays visible.
-  shell->ShowAppList();
-  EXPECT_TRUE(shell->GetAppListTargetVisibility());
+  // Show the app list and the shelf stays visible.
+  app_list_presenter_impl.Show(display_manager()->first_display_id());
+  EXPECT_TRUE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 
-  // Hide app list and the shelf stays visible.
-  shell->DismissAppList();
-  EXPECT_FALSE(shell->GetAppListTargetVisibility());
+  // Hide the app list and the shelf stays visible.
+  app_list_presenter_impl.Dismiss();
+  EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 }
 
-// Makes sure shelf will be shown with SHELF_AUTO_HIDE_SHOWN state
-// when app list opens as shelf is in SHELF_AUTO_HIDE state, and
-// toggling app list won't change shelf visibility state.
+// Ensure a SHELF_AUTO_HIDE shelf is shown temporarily (SHELF_AUTO_HIDE_SHOWN)
+// when the app list is shown, but the visibility state doesn't change.
 TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfAutoHideState) {
-  WmShell* shell = WmShell::Get();
   WmShelf* shelf = GetPrimaryShelf();
-  ShelfLayoutManager* layout_manager = GetShelfLayoutManager();
-  layout_manager->LayoutShelf();
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
 
-  // Create a window and show it in maximized state.
+  // The tested behavior relies on the app list presenter implementation.
+  test::TestAppListViewPresenterImpl app_list_presenter_impl;
+
+  // Create a normal unmaximized window; the shelf should be hidden.
   aura::Window* window = CreateTestWindow();
   window->SetBounds(gfx::Rect(0, 0, 100, 100));
-  window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
   window->Show();
-  wm::ActivateWindow(window);
-
-  EXPECT_FALSE(shell->GetAppListTargetVisibility());
+  EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
+  EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 
-  // Show app list.
-  shell->ShowAppList();
+  // Show the app list and the shelf should be temporarily visible.
+  app_list_presenter_impl.Show(display_manager()->first_display_id());
   // The shelf's auto hide state won't be changed until the timer fires, so
   // force it to update now.
-  layout_manager->UpdateVisibilityState();
-  EXPECT_TRUE(shell->GetAppListTargetVisibility());
+  GetShelfLayoutManager()->UpdateVisibilityState();
+  EXPECT_TRUE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
 
-  // Hide app list.
-  shell->DismissAppList();
-  EXPECT_FALSE(shell->GetAppListTargetVisibility());
+  // Hide the app list and the shelf should be hidden again.
+  app_list_presenter_impl.Dismiss();
+  EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
+  EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 }
 
 // Makes sure that when we have dual displays, with one or both shelves are set
@@ -1198,8 +1021,8 @@ TEST_F(ShelfLayoutManagerTest, DualDisplayOpenAppListWithShelfAutoHideState) {
   EXPECT_EQ(root_windows.size(), 2U);
 
   // Get the shelves in both displays and set them to be 'AutoHide'.
-  WmShelf* shelf_1 = GetRootWindowController(root_windows[0])->wm_shelf_aura();
-  WmShelf* shelf_2 = GetRootWindowController(root_windows[1])->wm_shelf_aura();
+  WmShelf* shelf_1 = GetRootWindowController(root_windows[0])->wm_shelf();
+  WmShelf* shelf_2 = GetRootWindowController(root_windows[1])->wm_shelf();
   EXPECT_NE(shelf_1, shelf_2);
   EXPECT_NE(shelf_1->GetWindow()->GetRootWindow(),
             shelf_2->GetWindow()->GetRootWindow());
@@ -1219,69 +1042,67 @@ TEST_F(ShelfLayoutManagerTest, DualDisplayOpenAppListWithShelfAutoHideState) {
   window_2->Show();
 
   EXPECT_EQ(shelf_1->GetWindow()->GetRootWindow(),
-            WmWindowAura::Get(window_1)->GetRootWindow());
+            WmWindow::Get(window_1)->GetRootWindow());
   EXPECT_EQ(shelf_2->GetWindow()->GetRootWindow(),
-            WmWindowAura::Get(window_2)->GetRootWindow());
+            WmWindow::Get(window_2)->GetRootWindow());
 
-  // Activate one window in one display and manually trigger the update of shelf
-  // visibility.
+  // Activate one window in one display.
   wm::ActivateWindow(window_1);
-  Shell::GetInstance()->UpdateShelfVisibility();
 
-  EXPECT_FALSE(WmShell::Get()->GetAppListTargetVisibility());
+  // The tested behavior relies on the app list presenter implementation.
+  test::TestAppListViewPresenterImpl app_list_presenter_impl;
+
+  Shell::GetInstance()->UpdateShelfVisibility();
+  EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_1->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_2->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf_1->GetAutoHideState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf_2->GetAutoHideState());
 
-  // Show app list.
-  WmShell::Get()->ShowAppList();
+  // Show the app list; only the shelf on the same display should be shown.
+  app_list_presenter_impl.Show(display_manager()->first_display_id());
   Shell::GetInstance()->UpdateShelfVisibility();
-
-  // Only the shelf in the active display should be shown, the other is hidden.
-  EXPECT_TRUE(WmShell::Get()->GetAppListTargetVisibility());
+  EXPECT_TRUE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_1->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf_1->GetAutoHideState());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_2->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf_2->GetAutoHideState());
 
-  // Hide app list, both shelves should be hidden.
-  WmShell::Get()->DismissAppList();
-  EXPECT_FALSE(WmShell::Get()->GetAppListTargetVisibility());
+  // Hide the app list, both shelves should be hidden.
+  app_list_presenter_impl.Dismiss();
+  Shell::GetInstance()->UpdateShelfVisibility();
+  EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_1->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf_2->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf_1->GetAutoHideState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf_2->GetAutoHideState());
 }
 
-// Makes sure the shelf will be hidden when we have a fullscreen window, and it
-// will unhide when we open the app list.
+// Ensure a SHELF_HIDDEN shelf (for a fullscreen window) is shown temporarily
+// when the app list is shown, and hidden again when the app list is dismissed.
 TEST_F(ShelfLayoutManagerTest, OpenAppListWithShelfHiddenState) {
-  WmShell* shell = WmShell::Get();
   WmShelf* shelf = GetPrimaryShelf();
-  ShelfLayoutManager* layout_manager = GetShelfLayoutManager();
-  // For shelf to be visible, app list is not open in initial state.
-  layout_manager->LayoutShelf();
 
-  // Create a window and make it full screen.
+  // The tested behavior relies on the app list presenter implementation.
+  test::TestAppListViewPresenterImpl app_list_presenter_impl;
+
+  // Create a window and make it full screen; the shelf should be hidden.
   aura::Window* window = CreateTestWindow();
   window->SetBounds(gfx::Rect(0, 0, 100, 100));
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_FULLSCREEN);
   window->Show();
   wm::ActivateWindow(window);
-
-  // App list and shelf is not shown.
-  EXPECT_FALSE(shell->GetAppListTargetVisibility());
+  EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_HIDDEN, shelf->GetVisibilityState());
 
-  // Show app list.
-  shell->ShowAppList();
-  EXPECT_TRUE(shell->GetAppListTargetVisibility());
+  // Show the app list and the shelf should be temporarily visible.
+  app_list_presenter_impl.Show(display_manager()->first_display_id());
+  EXPECT_TRUE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 
-  // Hide app list.
-  shell->DismissAppList();
-  EXPECT_FALSE(shell->GetAppListTargetVisibility());
+  // Hide the app list and the shelf should be hidden again.
+  app_list_presenter_impl.Dismiss();
+  EXPECT_FALSE(app_list_presenter_impl.GetTargetVisibility());
   EXPECT_EQ(SHELF_HIDDEN, shelf->GetVisibilityState());
 }
 
@@ -1321,8 +1142,8 @@ TEST_F(ShelfLayoutManagerTest, ShelfWithSystemModalWindowDualDisplay) {
   EXPECT_EQ(2U, root_windows.size());
 
   // Get the shelves in both displays and set them to be 'AutoHide'.
-  WmShelf* shelf_1 = GetRootWindowController(root_windows[0])->wm_shelf_aura();
-  WmShelf* shelf_2 = GetRootWindowController(root_windows[1])->wm_shelf_aura();
+  WmShelf* shelf_1 = GetRootWindowController(root_windows[0])->wm_shelf();
+  WmShelf* shelf_2 = GetRootWindowController(root_windows[1])->wm_shelf();
   EXPECT_NE(shelf_1, shelf_2);
   EXPECT_NE(shelf_1->GetWindow()->GetRootWindow(),
             shelf_2->GetWindow()->GetRootWindow());
@@ -1342,9 +1163,9 @@ TEST_F(ShelfLayoutManagerTest, ShelfWithSystemModalWindowDualDisplay) {
   window_2->Show();
 
   EXPECT_EQ(shelf_1->GetWindow()->GetRootWindow(),
-            WmWindowAura::Get(window_1)->GetRootWindow());
+            WmWindow::Get(window_1)->GetRootWindow());
   EXPECT_EQ(shelf_2->GetWindow()->GetRootWindow(),
-            WmWindowAura::Get(window_2)->GetRootWindow());
+            WmWindow::Get(window_2)->GetRootWindow());
   EXPECT_TRUE(window_1->IsVisible());
   EXPECT_TRUE(window_2->IsVisible());
 
@@ -1434,7 +1255,7 @@ TEST_F(ShelfLayoutManagerTest, PinnedWindowHidesShelf) {
   wm::PinWindow(window1, /* trusted */ false);
   EXPECT_EQ(SHELF_HIDDEN, shelf->GetVisibilityState());
 
-  WmWindowAura::Get(window1)->GetWindowState()->Restore();
+  WmWindow::Get(window1)->GetWindowState()->Restore();
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
 }
 
@@ -1717,50 +1538,10 @@ TEST_F(ShelfLayoutManagerTest, WorkAreaChangeWorkspace) {
             widget_one->GetNativeWindow()->bounds().size().GetArea());
 }
 
-// Confirm that the shelf is dimmed only when content is maximized and
-// shelf is not autohidden.
-TEST_F(ShelfLayoutManagerTest, Dimming) {
-  WmShelf* shelf = GetPrimaryShelf();
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
-  std::unique_ptr<aura::Window> w1(CreateTestWindow());
-  w1->Show();
-  wm::ActivateWindow(w1.get());
-
-  // Normal window doesn't dim shelf.
-  w1->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);
-  ShelfWidget* shelf_widget = GetShelfWidget();
-  EXPECT_FALSE(shelf_widget->GetDimsShelf());
-
-  // Maximized window does.
-  w1->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
-  EXPECT_TRUE(shelf_widget->GetDimsShelf());
-
-  // Change back to normal stops dimming.
-  w1->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);
-  EXPECT_FALSE(shelf_widget->GetDimsShelf());
-
-  // Changing back to maximized dims again.
-  w1->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
-  EXPECT_TRUE(shelf_widget->GetDimsShelf());
-
-  // Changing shelf to autohide stops dimming.
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
-  EXPECT_FALSE(shelf_widget->GetDimsShelf());
-}
-
-// This test fails on Windows (likely due to hard-coded pointer coordinate
-// arithmetic), but the Windows ash shell isn't supported any more so it's
-// probably not worth fixing. Also note that this test uses system tray
-// notification bubbles, which needn't exist: see crbug.com/630641
-#if defined(OS_WIN)
-#define MAYBE_BubbleEnlargesShelfMouseHitArea \
-  DISABLED_BubbleEnlargesShelfMouseHitArea
-#else
-#define MAYBE_BubbleEnlargesShelfMouseHitArea BubbleEnlargesShelfMouseHitArea
-#endif
 // Make sure that the shelf will not hide if the mouse is between a bubble and
-// the shelf.
-TEST_F(ShelfLayoutManagerTest, MAYBE_BubbleEnlargesShelfMouseHitArea) {
+// the shelf. This test uses system tray notification bubbles, which needn't
+// exist: see crbug.com/630641
+TEST_F(ShelfLayoutManagerTest, BubbleEnlargesShelfMouseHitArea) {
   WmShelf* shelf = GetPrimaryShelf();
   ShelfLayoutManager* layout_manager = GetShelfLayoutManager();
   StatusAreaWidget* status_area_widget =
@@ -1793,7 +1574,7 @@ TEST_F(ShelfLayoutManagerTest, MAYBE_BubbleEnlargesShelfMouseHitArea) {
     } else {
       // In our second iteration we show a bubble.
       test::TestSystemTrayItem* item = new test::TestSystemTrayItem();
-      tray->AddTrayItem(item);
+      tray->AddTrayItem(base::WrapUnique(item));
       tray->ShowNotificationView(item);
       EXPECT_TRUE(status_area_widget->IsMessageBubbleShown());
     }
@@ -1811,7 +1592,22 @@ TEST_F(ShelfLayoutManagerTest, MAYBE_BubbleEnlargesShelfMouseHitArea) {
   }
 }
 
+TEST_F(ShelfLayoutManagerTest, BackgroundTypeWhenLockingScreen) {
+  EXPECT_NE(SHELF_BACKGROUND_DEFAULT, GetShelfWidget()->GetBackgroundType());
+
+  Shell::GetInstance()
+      ->lock_state_controller()
+      ->StartLockAnimationAndLockImmediately(false);
+  EXPECT_EQ(SHELF_BACKGROUND_DEFAULT, GetShelfWidget()->GetBackgroundType());
+}
+
 TEST_F(ShelfLayoutManagerTest, ShelfBackgroundColor) {
+  // TODO(bruthig|xiyuan): Move SessionState setup into AshTestBase or
+  // AshTestHelper.
+  mojom::SessionInfoPtr info = mojom::SessionInfo::New();
+  info->state = session_manager::SessionState::ACTIVE;
+  ash::WmShell::Get()->session_controller()->SetSessionInfo(std::move(info));
+
   EXPECT_EQ(SHELF_BACKGROUND_DEFAULT, GetShelfWidget()->GetBackgroundType());
 
   std::unique_ptr<aura::Window> w1(CreateTestWindow());
@@ -1844,6 +1640,12 @@ TEST_F(ShelfLayoutManagerTest, ShelfBackgroundColor) {
 // Verify that the shelf doesn't have the opaque background if it's auto-hide
 // status.
 TEST_F(ShelfLayoutManagerTest, ShelfBackgroundColorAutoHide) {
+  // TODO(bruthig|xiyuan): Move SessionState setup into AshTestBase or
+  // AshTestHelper.
+  mojom::SessionInfoPtr info = mojom::SessionInfo::New();
+  info->state = session_manager::SessionState::ACTIVE;
+  ash::WmShell::Get()->session_controller()->SetSessionInfo(std::move(info));
+
   EXPECT_EQ(SHELF_BACKGROUND_DEFAULT, GetShelfWidget()->GetBackgroundType());
 
   GetPrimaryShelf()->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
@@ -1910,17 +1712,9 @@ TEST_F(ShelfLayoutManagerTest,
   EXPECT_EQ(initial_bounds, reshow_target_bounds);
 }
 
-// Flaky crash on Windows (crbug.com/637873).
-#if defined(OS_WIN)
-#define MAYBE_ShutdownHandlesWindowActivation \
-  DISABLED_ShutdownHandlesWindowActivation
-#else
-#define MAYBE_ShutdownHandlesWindowActivation ShutdownHandlesWindowActivation
-#endif
-
 // Tests that during shutdown, that window activation changes are properly
 // handled, and do not crash (crbug.com/458768)
-TEST_F(ShelfLayoutManagerTest, MAYBE_ShutdownHandlesWindowActivation) {
+TEST_F(ShelfLayoutManagerTest, ShutdownHandlesWindowActivation) {
   GetPrimaryShelf()->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
 
   aura::Window* window1 = CreateTestWindowInShellWithId(0);

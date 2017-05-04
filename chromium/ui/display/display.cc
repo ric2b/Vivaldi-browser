@@ -76,7 +76,7 @@ void Display::ResetForceDeviceScaleFactorForTesting() {
 constexpr int DEFAULT_BITS_PER_PIXEL = 24;
 constexpr int DEFAULT_BITS_PER_COMPONENT = 8;
 
-Display::Display() : Display(kInvalidDisplayID) {}
+Display::Display() : Display(kInvalidDisplayId) {}
 
 Display::Display(int64_t id) : Display(id, gfx::Rect()) {}
 
@@ -153,6 +153,9 @@ void Display::SetScaleAndBounds(float device_scale_factor,
                                                1.0f / device_scale_factor_),
                       gfx::ScaleToFlooredSize(bounds_in_pixel.size(),
                                               1.0f / device_scale_factor_));
+#if defined(OS_ANDROID)
+  size_in_pixels_ = bounds_in_pixel.size();
+#endif  // defined(OS_ANDROID)
   UpdateWorkAreaFromInsets(insets);
 }
 
@@ -170,6 +173,9 @@ void Display::UpdateWorkAreaFromInsets(const gfx::Insets& insets) {
 }
 
 gfx::Size Display::GetSizeInPixel() const {
+  // TODO(oshima): This should always use size_in_pixels_.
+  if (!size_in_pixels_.IsEmpty())
+    return size_in_pixels_;
   return gfx::ScaleToFlooredSize(size(), device_scale_factor_);
 }
 
@@ -187,7 +193,7 @@ bool Display::IsInternal() const {
 
 // static
 int64_t Display::InternalDisplayId() {
-  DCHECK_NE(kInvalidDisplayID, internal_display_id_);
+  DCHECK_NE(kInvalidDisplayId, internal_display_id_);
   return internal_display_id_;
 }
 
@@ -198,13 +204,13 @@ void Display::SetInternalDisplayId(int64_t internal_display_id) {
 
 // static
 bool Display::IsInternalDisplayId(int64_t display_id) {
-  DCHECK_NE(kInvalidDisplayID, display_id);
+  DCHECK_NE(kInvalidDisplayId, display_id);
   return HasInternalDisplay() && internal_display_id_ == display_id;
 }
 
 // static
 bool Display::HasInternalDisplay() {
-  return internal_display_id_ != kInvalidDisplayID;
+  return internal_display_id_ != kInvalidDisplayId;
 }
 
 }  // namespace display

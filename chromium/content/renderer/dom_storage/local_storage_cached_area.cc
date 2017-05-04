@@ -5,6 +5,7 @@
 #include "content/renderer/dom_storage/local_storage_cached_area.h"
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/string16.h"
@@ -15,8 +16,11 @@
 #include "content/common/storage_partition_service.mojom.h"
 #include "content/renderer/dom_storage/local_storage_area.h"
 #include "content/renderer/dom_storage/local_storage_cached_areas.h"
+#include "mojo/public/cpp/bindings/strong_associated_binding.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/web/WebStorageEventDispatcher.h"
+
+namespace content {
 
 namespace {
 
@@ -30,9 +34,29 @@ std::vector<uint8_t> String16ToUint8Vector(const base::string16& input) {
   return std::vector<uint8_t>(data, data + input.size() * sizeof(base::char16));
 }
 
-}  // namespace
+class GetAllCallback : public mojom::LevelDBWrapperGetAllCallback {
+ public:
+  static mojom::LevelDBWrapperGetAllCallbackAssociatedPtrInfo CreateAndBind(
+      mojo::AssociatedGroup* associated_group,
+      const base::Callback<void(bool)>& callback) {
+    mojom::LevelDBWrapperGetAllCallbackAssociatedPtrInfo ptr_info;
+    mojom::LevelDBWrapperGetAllCallbackAssociatedRequest request;
+    associated_group->CreateAssociatedInterface(
+        mojo::AssociatedGroup::WILL_PASS_PTR, &ptr_info, &request);
+    mojo::MakeStrongAssociatedBinding(
+        base::WrapUnique(new GetAllCallback(callback)), std::move(request));
+    return ptr_info;
+  }
 
-namespace content {
+ private:
+  explicit GetAllCallback(const base::Callback<void(bool)>& callback)
+      : m_callback(callback) {}
+  void Complete(bool success) override { m_callback.Run(success); }
+
+  base::Callback<void(bool)> m_callback;
+};
+
+}  // namespace
 
 // These methods are used to pack and unpack the page_url/storage_area_id into
 // source strings to/from the browser.
@@ -57,8 +81,11 @@ LocalStorageCachedArea::LocalStorageCachedArea(
     LocalStorageCachedAreas* cached_areas)
     : origin_(origin), binding_(this),
       cached_areas_(cached_areas), weak_factory_(this) {
-  storage_partition_service->OpenLocalStorage(
-      origin_, binding_.CreateInterfacePtrAndBind(), mojo::GetProxy(&leveldb_));
+  storage_partition_service->OpenLocalStorage(origin_,
+                                              mojo::MakeRequest(&leveldb_));
+  mojom::LevelDBObserverAssociatedPtrInfo ptr_info;
+  binding_.Bind(&ptr_info, leveldb_.associated_group());
+  leveldb_->AddObserver(std::move(ptr_info));
 }
 
 LocalStorageCachedArea::~LocalStorageCachedArea() {
@@ -87,7 +114,8 @@ bool LocalStorageCachedArea::SetItem(const base::string16& key,
                                      const std::string& storage_area_id) {
   // A quick check to reject obviously overbudget items to avoid priming the
   // cache.
-  if (key.length() + value.length() > kPerStorageAreaQuota)
+  if ((key.length() + value.length()) * sizeof(base::char16) >
+      kPerStorageAreaQuota)
     return false;
 
   EnsureLoaded();
@@ -180,8 +208,9 @@ void LocalStorageCachedArea::KeyDeleted(const std::vector<uint8_t>& key,
   }
 
   blink::WebStorageEventDispatcher::dispatchLocalStorageEvent(
-      key_string, Uint8VectorToString16(old_value), base::NullableString16(),
-      origin_.GetURL(), page_url, originating_area);
+      blink::WebString::fromUTF16(key_string),
+      blink::WebString::fromUTF16(Uint8VectorToString16(old_value)),
+      blink::WebString(), origin_.GetURL(), page_url, originating_area);
 }
 
 void LocalStorageCachedArea::AllDeleted(const std::string& source) {
@@ -211,20 +240,8 @@ void LocalStorageCachedArea::AllDeleted(const std::string& source) {
   }
 
   blink::WebStorageEventDispatcher::dispatchLocalStorageEvent(
-      base::NullableString16(), base::NullableString16(),
-      base::NullableString16(), origin_.GetURL(), page_url, originating_area);
-}
-
-void LocalStorageCachedArea::GetAllComplete(const std::string& source) {
-  // Since the GetAll method is synchronous, we need this asynchronously
-  // delivered notification to avoid applying changes to the returned array
-  // that we already have.
-  if (source == get_all_request_id_) {
-    DCHECK(ignore_all_mutations_);
-    DCHECK(!get_all_request_id_.empty());
-    ignore_all_mutations_ = false;
-    get_all_request_id_.clear();
-  }
+      blink::WebString(), blink::WebString(), blink::WebString(),
+      origin_.GetURL(), page_url, originating_area);
 }
 
 void LocalStorageCachedArea::KeyAddedOrChanged(
@@ -259,7 +276,9 @@ void LocalStorageCachedArea::KeyAddedOrChanged(
   }
 
   blink::WebStorageEventDispatcher::dispatchLocalStorageEvent(
-      key_string, old_value, new_value_string, origin_.GetURL(), page_url,
+      blink::WebString::fromUTF16(key_string),
+      blink::WebString::fromUTF16(old_value),
+      blink::WebString::fromUTF16(new_value_string), origin_.GetURL(), page_url,
       originating_area);
 }
 
@@ -269,10 +288,13 @@ void LocalStorageCachedArea::EnsureLoaded() {
 
   base::TimeTicks before = base::TimeTicks::Now();
   ignore_all_mutations_ = true;
-  get_all_request_id_ = base::Uint64ToString(base::RandUint64());
   leveldb::mojom::DatabaseError status = leveldb::mojom::DatabaseError::OK;
   std::vector<content::mojom::KeyValuePtr> data;
-  leveldb_->GetAll(get_all_request_id_, &status, &data);
+  leveldb_->GetAll(GetAllCallback::CreateAndBind(
+                       leveldb_.associated_group(),
+                       base::Bind(&LocalStorageCachedArea::OnGetAllComplete,
+                                  weak_factory_.GetWeakPtr())),
+                   &status, &data);
 
   DOMStorageValuesMap values;
   for (size_t i = 0; i < data.size(); ++i) {
@@ -328,6 +350,15 @@ void LocalStorageCachedArea::OnRemoveItemComplete(
 }
 
 void LocalStorageCachedArea::OnClearComplete(bool success) {
+  DCHECK(success);
+  DCHECK(ignore_all_mutations_);
+  ignore_all_mutations_ = false;
+}
+
+void LocalStorageCachedArea::OnGetAllComplete(bool success) {
+  // Since the GetAll method is synchronous, we need this asynchronously
+  // delivered notification to avoid applying changes to the returned array
+  // that we already have.
   DCHECK(success);
   DCHECK(ignore_all_mutations_);
   ignore_all_mutations_ = false;

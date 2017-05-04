@@ -9,8 +9,8 @@ import android.annotation.TargetApi;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Build;
+import android.support.test.filters.MediumTest;
 import android.support.v7.widget.SwitchCompat;
-import android.test.suitebuilder.annotation.MediumTest;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -105,12 +105,11 @@ public class PartnerHomepageIntegrationTest extends BasePartnerBrowserCustomizat
 
     /**
      * Homepage button visibility should be updated by enabling and disabling homepage in settings.
-     * @throws InterruptedException
      */
     @MediumTest
     @Feature({"Homepage"})
     @RetryOnFailure
-    public void testHomepageButtonEnableDisable() throws InterruptedException {
+    public void testHomepageButtonEnableDisable() {
         // Disable homepage.
         Preferences homepagePreferenceActivity =
                 startPreferences(HomepagePreferences.class.getName());
@@ -150,8 +149,7 @@ public class PartnerHomepageIntegrationTest extends BasePartnerBrowserCustomizat
         });
     }
 
-    private void waitForCheckedState(final Preferences preferenceActivity, boolean isChecked)
-            throws InterruptedException {
+    private void waitForCheckedState(final Preferences preferenceActivity, boolean isChecked) {
         CriteriaHelper.pollUiThread(Criteria.equals(isChecked, new Callable<Boolean>() {
             @Override
             public Boolean call() {

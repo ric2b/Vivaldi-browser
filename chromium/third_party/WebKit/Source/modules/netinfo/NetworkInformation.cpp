@@ -45,9 +45,7 @@ String connectionTypeToString(WebConnectionType type) {
 namespace blink {
 
 NetworkInformation* NetworkInformation::create(ExecutionContext* context) {
-  NetworkInformation* connection = new NetworkInformation(context);
-  connection->suspendIfNeeded();
-  return connection;
+  return new NetworkInformation(context);
 }
 
 NetworkInformation::~NetworkInformation() {
@@ -93,7 +91,7 @@ const AtomicString& NetworkInformation::interfaceName() const {
 }
 
 ExecutionContext* NetworkInformation::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return ContextLifecycleObserver::getExecutionContext();
 }
 
 void NetworkInformation::addedEventListener(
@@ -125,7 +123,7 @@ bool NetworkInformation::hasPendingActivity() const {
   return m_observing;
 }
 
-void NetworkInformation::contextDestroyed() {
+void NetworkInformation::contextDestroyed(ExecutionContext*) {
   m_contextStopped = true;
   stopObserving();
 }
@@ -146,8 +144,7 @@ void NetworkInformation::stopObserving() {
 }
 
 NetworkInformation::NetworkInformation(ExecutionContext* context)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : ContextLifecycleObserver(context),
       m_type(networkStateNotifier().connectionType()),
       m_downlinkMaxMbps(networkStateNotifier().maxBandwidth()),
       m_observing(false),
@@ -155,7 +152,7 @@ NetworkInformation::NetworkInformation(ExecutionContext* context)
 
 DEFINE_TRACE(NetworkInformation) {
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 }  // namespace blink

@@ -6,26 +6,28 @@
 #define CONTENT_BROWSER_DEVTOOLS_PROTOCOL_SCHEMA_HANDLER_H_
 
 #include "base/macros.h"
-#include "content/browser/devtools/protocol/devtools_protocol_dispatcher.h"
+#include "content/browser/devtools/protocol/devtools_domain_handler.h"
+#include "content/browser/devtools/protocol/schema.h"
 
 namespace content {
-namespace devtools {
-namespace schema {
+namespace protocol {
 
-class SchemaHandler {
+class SchemaHandler : public DevToolsDomainHandler,
+                      public Schema::Backend {
  public:
-  using Response = DevToolsProtocolClient::Response;
-
   SchemaHandler();
-  ~SchemaHandler();
+  ~SchemaHandler() override;
 
-  Response GetDomains(std::vector<scoped_refptr<Domain>>* domains);
+  void Wire(UberDispatcher* dispatcher) override;
+
+  Response GetDomains(
+      std::unique_ptr<protocol::Array<Schema::Domain>>* domains) override;
+
  private:
   DISALLOW_COPY_AND_ASSIGN(SchemaHandler);
 };
 
-}  // namespace schema
-}  // namespace devtools
+}  // namespace protocol
 }  // namespace content
 
 #endif  // CONTENT_BROWSER_DEVTOOLS_PROTOCOL_SCHEMA_HANDLER_H_

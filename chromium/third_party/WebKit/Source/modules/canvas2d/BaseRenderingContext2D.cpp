@@ -6,7 +6,6 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/css/cssom/CSSURLImageValue.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/frame/ImageBitmap.h"
@@ -33,14 +32,14 @@ namespace blink {
 
 BaseRenderingContext2D::BaseRenderingContext2D()
     : m_clipAntialiasing(NotAntiAliased) {
-  m_stateStack.append(CanvasRenderingContext2DState::create());
+  m_stateStack.push_back(CanvasRenderingContext2DState::create());
 }
 
 BaseRenderingContext2D::~BaseRenderingContext2D() {}
 
 CanvasRenderingContext2DState& BaseRenderingContext2D::modifiableState() {
   realizeSaves();
-  return *m_stateStack.last();
+  return *m_stateStack.back();
 }
 
 void BaseRenderingContext2D::realizeSaves() {
@@ -49,8 +48,8 @@ void BaseRenderingContext2D::realizeSaves() {
     ASSERT(m_stateStack.size() >= 1);
     // Reduce the current state's unrealized count by one now,
     // to reflect the fact we are saving one state.
-    m_stateStack.last()->restore();
-    m_stateStack.append(CanvasRenderingContext2DState::create(
+    m_stateStack.back()->restore();
+    m_stateStack.push_back(CanvasRenderingContext2DState::create(
         state(), CanvasRenderingContext2DState::DontCopyClipList));
     // Set the new state's unrealized count to 0, because it has no outstanding
     // saves.
@@ -58,7 +57,7 @@ void BaseRenderingContext2D::realizeSaves() {
     // used by the Vector operations copy the unrealized count from the previous
     // state (in turn necessary to support correct resizing and unwinding of the
     // stack).
-    m_stateStack.last()->resetUnrealizedSaveCount();
+    m_stateStack.back()->resetUnrealizedSaveCount();
     SkCanvas* canvas = drawingCanvas();
     if (canvas)
       canvas->save();
@@ -67,14 +66,14 @@ void BaseRenderingContext2D::realizeSaves() {
 }
 
 void BaseRenderingContext2D::save() {
-  m_stateStack.last()->save();
+  m_stateStack.back()->save();
 }
 
 void BaseRenderingContext2D::restore() {
   validateStateStack();
   if (state().hasUnrealizedSaves()) {
     // We never realized the save, so just record that it was unnecessary.
-    m_stateStack.last()->restore();
+    m_stateStack.back()->restore();
     return;
   }
   ASSERT(m_stateStack.size() >= 1);
@@ -82,7 +81,7 @@ void BaseRenderingContext2D::restore() {
     return;
   m_path.transform(state().transform());
   m_stateStack.pop_back();
-  m_stateStack.last()->clearResolvedFilter();
+  m_stateStack.back()->clearResolvedFilter();
   m_path.transform(state().transform().inverse());
   SkCanvas* c = drawingCanvas();
   if (c)
@@ -98,10 +97,11 @@ void BaseRenderingContext2D::restoreMatrixClipStack(SkCanvas* c) const {
   DCHECK(m_stateStack.begin() < m_stateStack.end());
   for (currState = m_stateStack.begin(); currState < m_stateStack.end();
        currState++) {
-    CHECK(currState->get());
     c->setMatrix(SkMatrix::I());
-    currState->get()->playbackClips(c);
-    c->setMatrix(affineTransformToSkMatrix(currState->get()->transform()));
+    if (currState->get()) {
+      currState->get()->playbackClips(c);
+      c->setMatrix(affineTransformToSkMatrix(currState->get()->transform()));
+    }
     c->save();
   }
   c->restore();
@@ -121,7 +121,7 @@ void BaseRenderingContext2D::reset() {
   validateStateStack();
   unwindStateStack();
   m_stateStack.resize(1);
-  m_stateStack.first() = CanvasRenderingContext2DState::create();
+  m_stateStack.front() = CanvasRenderingContext2DState::create();
   m_path.clear();
   if (SkCanvas* c = existingDrawingCanvas()) {
     // The canvas should always have an initial/unbalanced save frame, which
@@ -402,7 +402,7 @@ void BaseRenderingContext2D::setFilter(const String& filterString) {
 
   const CSSValue* filterValue =
       CSSParser::parseSingleValue(CSSPropertyFilter, filterString,
-                                  CSSParserContext(HTMLStandardMode, nullptr));
+                                  CSSParserContext::create(HTMLStandardMode));
 
   if (!filterValue || filterValue->isInitialValue() ||
       filterValue->isInheritedValue())
@@ -622,7 +622,7 @@ void BaseRenderingContext2D::drawPathInternal(
   if (!drawingCanvas())
     return;
 
-  if (draw([&skPath, this](SkCanvas* c, const SkPaint* paint)  // draw lambda
+  if (draw([&skPath](SkCanvas* c, const SkPaint* paint)  // draw lambda
            { c->drawPath(skPath, *paint); },
            [](const SkIRect& rect)  // overdraw test lambda
            { return false; },
@@ -682,7 +682,7 @@ void BaseRenderingContext2D::fillRect(double x,
     return;
 
   SkRect rect = SkRect::MakeXYWH(x, y, width, height);
-  draw([&rect, this](SkCanvas* c, const SkPaint* paint)  // draw lambda
+  draw([&rect](SkCanvas* c, const SkPaint* paint)  // draw lambda
        { c->drawRect(rect, *paint); },
        [&rect, this](const SkIRect& clipBounds)  // overdraw test lambda
        { return rectContainsTransformedRect(rect, clipBounds); },
@@ -719,7 +719,7 @@ void BaseRenderingContext2D::strokeRect(double x,
   SkRect rect = SkRect::MakeXYWH(x, y, width, height);
   FloatRect bounds = rect;
   inflateStrokeRect(bounds);
-  draw([&rect, this](SkCanvas* c, const SkPaint* paint)  // draw lambda
+  draw([&rect](SkCanvas* c, const SkPaint* paint)  // draw lambda
        { strokeRectOnCanvas(rect, c, paint); },
        [](const SkIRect& clipBounds)  // overdraw test lambda
        { return false; },
@@ -739,8 +739,7 @@ void BaseRenderingContext2D::clipInternal(const Path& path,
   SkPath skPath = path.getSkPath();
   skPath.setFillType(parseWinding(windingRuleString));
   modifiableState().clipPath(skPath, m_clipAntialiasing);
-  c->clipPath(skPath, SkRegion::kIntersect_Op,
-              m_clipAntialiasing == AntiAliased);
+  c->clipPath(skPath, SkClipOp::kIntersect, m_clipAntialiasing == AntiAliased);
   if (ExpensiveCanvasHeuristicParameters::ComplexClipsAreExpensive &&
       !skPath.isRect(0) && hasImageBuffer()) {
     imageBuffer()->setHasExpensiveOp();
@@ -1064,7 +1063,7 @@ void BaseRenderingContext2D::drawImageInternal(SkCanvas* c,
     ctm.mapRect(&bounds);
     SkPaint layerPaint;
     layerPaint.setBlendMode(paint->getBlendMode());
-    layerPaint.setImageFilter(sk_ref_sp(paint->getImageFilter()));
+    layerPaint.setImageFilter(paint->refImageFilter());
 
     c->saveLayer(&bounds, &layerPaint);
     c->concat(ctm);
@@ -1080,7 +1079,7 @@ void BaseRenderingContext2D::drawImageInternal(SkCanvas* c,
   if (!imageSource->isVideoElement()) {
     imagePaint.setAntiAlias(shouldDrawImageAntialiased(dstRect));
     image->draw(c, imagePaint, dstRect, srcRect, DoNotRespectImageOrientation,
-                Image::DoNotClampImageToSourceRect);
+                Image::DoNotClampImageToSourceRect, drawImageColorBehavior());
   } else {
     c->save();
     c->clipRect(dstRect);
@@ -1172,6 +1171,10 @@ void BaseRenderingContext2D::drawImage(ExecutionContext* executionContext,
     disableDeferral(reason);
   else if (image->isTextureBacked())
     disableDeferral(DisableDeferralDrawImageWithTextureBackedSourceImage);
+
+  validateStateStack();
+
+  willDrawImage(imageSource);
 
   validateStateStack();
 

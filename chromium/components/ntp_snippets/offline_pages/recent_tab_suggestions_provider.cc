@@ -12,13 +12,15 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/ntp_snippets/features.h"
 #include "components/ntp_snippets/pref_names.h"
 #include "components/ntp_snippets/pref_util.h"
-#include "components/offline_pages/client_policy_controller.h"
-#include "components/offline_pages/offline_page_item.h"
-#include "components/offline_pages/offline_page_model_query.h"
+#include "components/offline_pages/core/client_policy_controller.h"
+#include "components/offline_pages/core/offline_page_item.h"
+#include "components/offline_pages/core/offline_page_model_query.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "components/variations/variations_associated_data.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
@@ -32,12 +34,30 @@ namespace ntp_snippets {
 
 namespace {
 
-const int kMaxSuggestionsCount = 5;
+const int kDefaultMaxSuggestionsCount = 5;
 
-struct OrderOfflinePagesByMostRecentlyVisitedFirst {
+const char* kMaxSuggestionsCountParamName = "recent_tabs_max_count";
+
+int GetMaxSuggestionsCount() {
+  return variations::GetVariationParamByFeatureAsInt(
+      kRecentOfflineTabSuggestionsFeature, kMaxSuggestionsCountParamName,
+      kDefaultMaxSuggestionsCount);
+}
+
+struct OrderOfflinePagesByMostRecentlyCreatedFirst {
   bool operator()(const OfflinePageItem* left,
                   const OfflinePageItem* right) const {
-    return left->last_access_time > right->last_access_time;
+    return left->creation_time > right->creation_time;
+  }
+};
+
+struct OrderOfflinePagesByUrlAndThenMostRecentlyCreatedFirst {
+  bool operator()(const OfflinePageItem* left,
+                  const OfflinePageItem* right) const {
+    if (left->url != right->url) {
+      return left->url < right->url;
+    }
+    return left->creation_time > right->creation_time;
   }
 };
 
@@ -49,17 +69,22 @@ std::unique_ptr<OfflinePageModelQuery> BuildRecentTabsQuery(
   return builder.Build(model->GetPolicyController());
 }
 
+bool IsRecentTab(offline_pages::ClientPolicyController* policy_controller,
+                 const OfflinePageItem& offline_page) {
+  return policy_controller->IsShownAsRecentlyVisitedSite(
+      offline_page.client_id.name_space);
+}
+
 }  // namespace
 
 RecentTabSuggestionsProvider::RecentTabSuggestionsProvider(
     ContentSuggestionsProvider::Observer* observer,
-    CategoryFactory* category_factory,
     offline_pages::OfflinePageModel* offline_page_model,
     PrefService* pref_service)
-    : ContentSuggestionsProvider(observer, category_factory),
+    : ContentSuggestionsProvider(observer),
       category_status_(CategoryStatus::AVAILABLE_LOADING),
       provided_category_(
-          category_factory->FromKnownCategory(KnownCategories::RECENT_TABS)),
+          Category::FromKnownCategory(KnownCategories::RECENT_TABS)),
       offline_page_model_(offline_page_model),
       pref_service_(pref_service),
       weak_ptr_factory_(this) {
@@ -74,8 +99,9 @@ RecentTabSuggestionsProvider::~RecentTabSuggestionsProvider() {
 
 CategoryStatus RecentTabSuggestionsProvider::GetCategoryStatus(
     Category category) {
-  if (category == provided_category_)
+  if (category == provided_category_) {
     return category_status_;
+  }
   NOTREACHED() << "Unknown category " << category.id();
   return CategoryStatus::NOT_PROVIDED;
 }
@@ -89,9 +115,7 @@ CategoryInfo RecentTabSuggestionsProvider::GetCategoryInfo(Category category) {
       /*has_reload_action=*/false,
       /*has_view_all_action=*/false,
       /*show_if_empty=*/false,
-      l10n_util::GetStringUTF16(IDS_NTP_SUGGESTIONS_SECTION_EMPTY));
-  // TODO(vitaliii): Replace IDS_NTP_SUGGESTIONS_SECTION_EMPTY with a
-  // category-specific string.
+      l10n_util::GetStringUTF16(IDS_NTP_RECENT_TAB_SUGGESTIONS_SECTION_EMPTY));
 }
 
 void RecentTabSuggestionsProvider::DismissSuggestion(
@@ -142,9 +166,12 @@ void RecentTabSuggestionsProvider::GetDismissedSuggestionsForDebugging(
     const DismissedSuggestionsCallback& callback) {
   DCHECK_EQ(provided_category_, category);
 
-  // TODO(vitaliii): Query all pages instead by using an empty query.
+  // Offline pages which are not related to recent tabs are also queried here,
+  // so that they can be returned if they happen to be dismissed (e.g. due to a
+  // bug).
+  OfflinePageModelQueryBuilder query_builder;
   offline_page_model_->GetPagesMatchingQuery(
-      BuildRecentTabsQuery(offline_page_model_),
+      query_builder.Build(offline_page_model_->GetPolicyController()),
       base::Bind(&RecentTabSuggestionsProvider::
                      GetPagesMatchingQueryCallbackForGetDismissedSuggestions,
                  weak_ptr_factory_.GetWeakPtr(), callback));
@@ -173,8 +200,9 @@ void RecentTabSuggestionsProvider::
   std::set<std::string> dismissed_ids = ReadDismissedIDsFromPrefs();
   std::vector<ContentSuggestion> suggestions;
   for (const OfflinePageItem& item : offline_pages) {
-    if (!dismissed_ids.count(base::IntToString(item.offline_id)))
+    if (!dismissed_ids.count(base::IntToString(item.offline_id))) {
       continue;
+    }
 
     suggestions.push_back(ConvertOfflinePage(item));
   }
@@ -184,10 +212,13 @@ void RecentTabSuggestionsProvider::
 void RecentTabSuggestionsProvider::OfflinePageModelLoaded(
     offline_pages::OfflinePageModel* model) {}
 
-void RecentTabSuggestionsProvider::OfflinePageModelChanged(
-    offline_pages::OfflinePageModel* model) {
+void RecentTabSuggestionsProvider::OfflinePageAdded(
+    offline_pages::OfflinePageModel* model,
+    const offline_pages::OfflinePageItem& added_page) {
   DCHECK_EQ(offline_page_model_, model);
-  FetchRecentTabs();
+  if (IsRecentTab(model->GetPolicyController(), added_page)) {
+    FetchRecentTabs();
+  }
 }
 
 void RecentTabSuggestionsProvider::
@@ -199,17 +230,19 @@ void RecentTabSuggestionsProvider::
   std::vector<const OfflinePageItem*> recent_tab_items;
   for (const OfflinePageItem& item : offline_pages) {
     std::string offline_page_id = base::IntToString(item.offline_id);
-    if (old_dismissed_ids.count(offline_page_id))
+    if (old_dismissed_ids.count(offline_page_id)) {
       new_dismissed_ids.insert(offline_page_id);
-    else
+    } else {
       recent_tab_items.push_back(&item);
+    }
   }
 
   observer()->OnNewSuggestions(
       this, provided_category_,
-      GetMostRecentlyVisited(std::move(recent_tab_items)));
-  if (new_dismissed_ids.size() != old_dismissed_ids.size())
+      GetMostRecentlyCreatedWithoutDuplicates(std::move(recent_tab_items)));
+  if (new_dismissed_ids.size() != old_dismissed_ids.size()) {
     StoreDismissedIDsToPrefs(new_dismissed_ids);
+  }
 }
 
 void RecentTabSuggestionsProvider::OfflinePageDeleted(
@@ -218,8 +251,9 @@ void RecentTabSuggestionsProvider::OfflinePageDeleted(
   // Because we never switch to NOT_PROVIDED dynamically, there can be no open
   // UI containing an invalidated suggestion unless the status is something
   // other than NOT_PROVIDED, so only notify invalidation in that case.
-  if (category_status_ != CategoryStatus::NOT_PROVIDED)
+  if (category_status_ != CategoryStatus::NOT_PROVIDED) {
     InvalidateSuggestion(offline_id);
+  }
 }
 
 void RecentTabSuggestionsProvider::FetchRecentTabs() {
@@ -233,8 +267,9 @@ void RecentTabSuggestionsProvider::FetchRecentTabs() {
 void RecentTabSuggestionsProvider::NotifyStatusChanged(
     CategoryStatus new_status) {
   DCHECK_NE(CategoryStatus::NOT_PROVIDED, category_status_);
-  if (category_status_ == new_status)
+  if (category_status_ == new_status) {
     return;
+  }
   category_status_ = new_status;
   observer()->OnCategoryStatusChanged(this, provided_category_, new_status);
 }
@@ -263,15 +298,27 @@ ContentSuggestion RecentTabSuggestionsProvider::ConvertOfflinePage(
 }
 
 std::vector<ContentSuggestion>
-RecentTabSuggestionsProvider::GetMostRecentlyVisited(
+RecentTabSuggestionsProvider::GetMostRecentlyCreatedWithoutDuplicates(
     std::vector<const OfflinePageItem*> offline_page_items) const {
+  // |std::unique| only removes duplicates that immediately follow each other.
+  // Thus, first, we have to sort by URL and creation time and only then remove
+  // duplicates and sort the remaining items by creation time.
   std::sort(offline_page_items.begin(), offline_page_items.end(),
-            OrderOfflinePagesByMostRecentlyVisitedFirst());
+            OrderOfflinePagesByUrlAndThenMostRecentlyCreatedFirst());
+  std::vector<const OfflinePageItem*>::iterator new_end = std::unique(
+      offline_page_items.begin(), offline_page_items.end(),
+      [](const OfflinePageItem* left, const OfflinePageItem* right) {
+        return left->url == right->url;
+      });
+  offline_page_items.erase(new_end, offline_page_items.end());
+  std::sort(offline_page_items.begin(), offline_page_items.end(),
+            OrderOfflinePagesByMostRecentlyCreatedFirst());
   std::vector<ContentSuggestion> suggestions;
   for (const OfflinePageItem* offline_page_item : offline_page_items) {
     suggestions.push_back(ConvertOfflinePage(*offline_page_item));
-    if (suggestions.size() == kMaxSuggestionsCount)
+    if (static_cast<int>(suggestions.size()) == GetMaxSuggestionsCount()) {
       break;
+    }
   }
   return suggestions;
 }

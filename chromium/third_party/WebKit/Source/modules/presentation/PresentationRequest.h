@@ -7,19 +7,23 @@
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptPromise.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventTarget.h"
+#include "modules/ModulesExport.h"
+#include "modules/presentation/PresentationPromiseProperty.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
 #include "platform/weborigin/KURL.h"
+#include "wtf/Vector.h"
 
 namespace blink {
 
 // Implements the PresentationRequest interface from the Presentation API from
 // which websites can start or join presentation connections.
-class PresentationRequest final : public EventTargetWithInlineData,
-                                  public ActiveScriptWrappable,
-                                  public ActiveDOMObject {
+class MODULES_EXPORT PresentationRequest final
+    : public EventTargetWithInlineData,
+      public ActiveScriptWrappable<PresentationRequest>,
+      public ContextLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(PresentationRequest);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -28,6 +32,9 @@ class PresentationRequest final : public EventTargetWithInlineData,
 
   static PresentationRequest* create(ExecutionContext*,
                                      const String& url,
+                                     ExceptionState&);
+  static PresentationRequest* create(ExecutionContext*,
+                                     const Vector<String>& urls,
                                      ExceptionState&);
 
   // EventTarget implementation.
@@ -41,7 +48,7 @@ class PresentationRequest final : public EventTargetWithInlineData,
   ScriptPromise reconnect(ScriptState*, const String& id);
   ScriptPromise getAvailability(ScriptState*);
 
-  const KURL& url() const;
+  const Vector<KURL>& urls() const;
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(connectionavailable);
 
@@ -53,9 +60,10 @@ class PresentationRequest final : public EventTargetWithInlineData,
                           RegisteredEventListener&) override;
 
  private:
-  PresentationRequest(ExecutionContext*, const KURL&);
+  PresentationRequest(ExecutionContext*, const Vector<KURL>&);
 
-  KURL m_url;
+  Member<PresentationAvailabilityProperty> m_availabilityProperty;
+  Vector<KURL> m_urls;
 };
 
 }  // namespace blink

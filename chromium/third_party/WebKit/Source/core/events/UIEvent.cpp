@@ -22,6 +22,8 @@
 
 #include "core/events/UIEvent.h"
 
+#include "core/input/InputDeviceCapabilities.h"
+
 namespace blink {
 
 UIEvent::UIEvent() : m_detail(0), m_sourceCapabilities(nullptr) {}
@@ -30,7 +32,7 @@ UIEvent::UIEvent(const AtomicString& eventType,
                  bool canBubbleArg,
                  bool cancelableArg,
                  ComposedMode composedMode,
-                 double platformTimeStamp,
+                 TimeTicks platformTimeStamp,
                  AbstractView* viewArg,
                  int detailArg,
                  InputDeviceCapabilities* sourceCapabilitiesArg)

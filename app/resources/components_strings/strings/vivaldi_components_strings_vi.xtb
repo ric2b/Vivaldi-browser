@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="vi">
+<translation id="1152921474424827756">Truy cập <ph name="BEGIN_LINK" />bản sao được lưu trong bộ nhớ cache<ph name="END_LINK" /> của <ph name="URL" /></translation>
+<translation id="1158211211994409885"><ph name="HOST_NAME" /> đã bất ngờ đóng kết nối.</translation>
+<translation id="1375198122581997741">Giới thiệu Phiên bản</translation>
+<translation id="139305205187523129"><ph name="HOST_NAME" /> không gửi bất kỳ dữ liệu nào.</translation>
+<translation id="1506687042165942984">Hiển thị bản sao đã lưu (nghĩa là đã lỗi thời) của trang này.</translation>
+<translation id="1559528461873125649">Không có tệp hoặc thư mục nào như vậy</translation>
+<translation id="1710259589646384581">OS</translation>
+<translation id="1838667051080421715">Bạn đang xem nguồn của trang web.</translation>
+<translation id="194030505837763158">Truy cập <ph name="LINK" /></translation>
+<translation id="2030481566774242610">Ý của bạn là <ph name="LINK" />?</translation>
+<translation id="2089090684895656482">Bớt</translation>
+<translation id="2166378884831602661">Trang web này không thể cung cấp kết nối an toàn</translation>
+<translation id="2292556288342944218">Quyền truy cập Internet của bạn bị chặn</translation>
+<translation id="255002559098805027"><ph name="HOST_NAME" /> đã gửi phản hồi không hợp lệ.</translation>
+<translation id="2609632851001447353">Các biến thể</translation>
+<translation id="2650446666397867134">Truy cập vào tệp bị từ chối</translation>
+<translation id="2705137772291741111">Không thể đọc được bản sao đã lưu (đã lưu vào bộ nhớ cache) của trang web này.</translation>
+<translation id="2784949926578158345">Kết nối đã được đặt lại.</translation>
+<translation id="284702764277384724">Có vẻ như chứng chỉ máy chủ tại <ph name="HOST_NAME" /> là giả mạo.</translation>
+<translation id="2909946352844186028">Đã phát hiện thấy thay đổi mạng.</translation>
+<translation id="3005723025932146533">Hiển thị bản sao đã lưu</translation>
+<translation id="3109728660330352905">Bạn không có quyền xem trang này.</translation>
+<translation id="3176929007561373547">Kiểm tra cài đặt proxy của bạn hoặc liên hệ với quản trị viên mạng để
+      đảm bảo rằng máy chủ proxy đang hoạt động. Nếu bạn cho rằng mình không cần
+      sử dụng máy chủ proxy:
+      <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673">Hiện không thể truy cập <ph name="HOST_NAME" />.</translation>
+<translation id="3447661539832366887">Chủ sở hữu của thiết bị này đã tắt trò chơi khủng long.</translation>
+<translation id="3586931643579894722">Ẩn chi tiết</translation>
+<translation id="3630155396527302611">Nếu chương trình đã được liệt kê là chương trình được phép truy cập mạng, hãy thử
+      xóa chương trình này khỏi danh sách rồi thêm lại.</translation>
+<translation id="3658742229777143148">Bản sửa đổi</translation>
+<translation id="382518646247711829">Nếu bạn sử dụng máy chủ proxy...</translation>
+<translation id="3973234410852337861"><ph name="HOST_NAME" /> bị chặn</translation>
+<translation id="4021036232240155012">DNS là dịch vụ mạng dịch tên trang web sang địa chỉ Internet.</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> không chấp nhận chứng chỉ đăng nhập của bạn hoặc có thể bạn chưa cung cấp chứng chỉ đăng nhập.</translation>
+<translation id="4522570452068850558">Chi tiết</translation>
+<translation id="4670097147947922288">Bạn đang xem trang tiện ích.</translation>
+<translation id="4708268264240856090">Kết nối của bạn bị gián đoạn</translation>
+<translation id="4744603770635761495">Đường dẫn thực thi</translation>
+<translation id="4764776831041365478">Trang web tại <ph name="URL" /> có thể tạm thời không hoạt động hay được chuyển vĩnh viễn sang địa chỉ web mới.</translation>
+<translation id="5023310440958281426">Kiểm tra chính sách của quản trị viên của bạn</translation>
+<translation id="5115563688576182185">(64 bit)</translation>
+<translation id="5431657950005405462">Không tìm thấy tệp của bạn</translation>
+<translation id="5452270690849572955">Không thể tìm thấy trang <ph name="HOST_NAME" /> này</translation>
+<translation id="5492298309214877701">Trang web trên mạng nội bộ của công ty, tổ chức hoặc trường học này có URL tương tự như trang web bên ngoài.
+    <ph name="LINE_BREAK" />
+    Hãy thử liên hệ với quản trị viên hệ thống của bạn.</translation>
+<translation id="5510766032865166053">Tệp này có thể đã bị di chuyển hoặc xóa.</translation>
+<translation id="5556459405103347317">Tải lại</translation>
+<translation id="5617949217645503996"><ph name="HOST_NAME" /> đã chuyển hướng bạn quá nhiều lần.</translation>
+<translation id="5675650730144413517">Trang này hiện không hoạt động</translation>
+<translation id="5869405914158311789">Không thể truy cập trang web này</translation>
+<translation id="5990559369517809815">Tiện ích đã chặn yêu cầu tới máy chủ.</translation>
+<translation id="6042308850641462728">Thêm</translation>
+<translation id="6146055958333702838">Kiểm tra mọi dây cáp rồi khởi động lại bộ định tuyến, modem hoặc các thiết bị
+    mạng khác mà bạn có thể đang sử dụng.</translation>
+<translation id="6165508094623778733">Tìm hiểu thêm</translation>
+<translation id="6203231073485539293">Kiểm tra kết nối Internet của bạn</translation>
+<translation id="6305205051461490394">Không thể truy cập <ph name="URL" />.</translation>
+<translation id="6321917430147971392">Kiểm tra cài đặt DNS của bạn</translation>
+<translation id="6328639280570009161">Thử tắt dự đoán mạng</translation>
+<translation id="6433595998831338502"><ph name="HOST_NAME" /> đã từ chối kết nối.</translation>
+<translation id="6711464428925977395">Đã xảy ra sự cố với máy chủ proxy hoặc địa chỉ không chính xác.</translation>
+<translation id="6830600606572693159">Trang web tại <ph name="URL" /> hiện không có. Trang này có thể đã bị quá tải hoặc đang ngừng hoạt động để bảo trì.</translation>
+<translation id="6897140037006041989">Tác nhân Người dùng</translation>
+<translation id="7210863904660874423"><ph name="HOST_NAME" /> không tuân thủ các tiêu chuẩn bảo mật.</translation>
+<translation id="7269802741830436641">Trang web này lặp lại chuyển hướng</translation>
+<translation id="7353601530677266744">Dòng Lệnh</translation>
+<translation id="7419106976560586862">Đường dẫn cấu hình</translation>
+<translation id="7518003948725431193">Không tìm thấy trang web nào ứng với địa chỉ web:<ph name="URL" /></translation>
+<translation id="7549584377607005141">Trang web này yêu cầu dữ liệu mà bạn đã nhập trước đó để được hiển thị đúng cách. Bạn có thể gửi lại dữ liệu này nhưng làm như vậy bạn sẽ lặp lại mọi hoạt động mà trang này đã thực hiện trước đó.</translation>
+<translation id="759889825892636187"><ph name="HOST_NAME" /> hiện không thể xử lý yêu cầu này.</translation>
+<translation id="7716424297397655342">Không thể tải trang web này từ bộ nhớ cache</translation>
+<translation id="7758069387465995638">Tường lửa hoặc phần mềm diệt vi-rút có thể đã chặn kết nối.</translation>
+<translation id="778579833039460630">Không nhận được dữ liệu nào</translation>
+<translation id="7951415247503192394">(32 bit)</translation>
+<translation id="8134994873729925007">Không thể tìm thấy <ph name="BEGIN_ABBR" />địa chỉ DNS<ph name="END_ABBR" /> của máy chủ của <ph name="HOST_NAME" />.</translation>
+<translation id="8142868475871995937">Truy cập &lt;strong&gt;vivaldi://policy&lt;/strong&gt; để xem danh sách các URL bị chặn quyền truy cập và các chính sách khác bị quản trị viên hệ thống buộc phải thực thi.</translation>
+<translation id="8149426793427495338">Máy tính của bạn đã chuyển sang chế độ ngủ.</translation>
+<translation id="8150722005171944719">Không thể đọc được tệp tại <ph name="URL" />.  Tệp này có thể đã bị xóa, di chuyển hoặc quyền tệp có thể đang chặn truy cập.</translation>
+<translation id="8225771182978767009">Người thiết lập máy tính này đã chọn chặn trang web này.</translation>
+<translation id="8289355894181816810">Hãy liên hệ với quản trị viên mạng của bạn nếu bạn không chắc chắn về điều này có ý nghĩa gì.</translation>
+<translation id="8332188693563227489">Quyền truy cập <ph name="HOST_NAME" /> bị từ chối</translation>
+<translation id="8498891568109133222"><ph name="HOST_NAME" /> mất quá nhiều thời gian để phản hồi.</translation>
+<translation id="8740359287975076522">Không thể tìm thấy &lt;abbr id="dnsDefinition"&gt;địa chỉ DNS&lt;/abbr&gt; của <ph name="HOST_NAME" />. Đang chẩn đoán sự cố.</translation>
+<translation id="9183425211371246419"><ph name="HOST_NAME" /> sử dụng giao thức không được hỗ trợ.</translation>
+<translation id="933612690413056017">Không có kết nối Internet</translation>
+<translation id="969892804517981540">Phiên bản Chính thức</translation>
+<translation id="988159990683914416">Phiên bản dành cho Nhà phát triển</translation>
+</translationbundle>

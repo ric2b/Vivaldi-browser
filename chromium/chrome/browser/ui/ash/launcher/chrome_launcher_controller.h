@@ -12,19 +12,16 @@
 #include "ash/common/shelf/shelf_item_delegate.h"
 #include "ash/common/shelf/shelf_item_types.h"
 #include "ash/public/interfaces/shelf.mojom.h"
-#include "base/memory/scoped_vector.h"
 #include "chrome/browser/ui/app_icon_loader.h"
 #include "chrome/browser/ui/app_icon_loader_delegate.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_types.h"
 #include "chrome/browser/ui/ash/launcher/settings_window_observer.h"
-#include "extensions/common/constants.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 
 class AccountId;
 class ArcAppDeferredLauncherController;
-class Browser;
 class BrowserShortcutLauncherItemController;
 class GURL;
 class LauncherControllerHelper;
@@ -47,7 +44,8 @@ class BaseWindow;
 }
 
 // A list of the elements which makes up a simple menu description.
-typedef ScopedVector<ChromeLauncherAppMenuItem> ChromeLauncherAppMenuItems;
+using ChromeLauncherAppMenuItems =
+    std::vector<std::unique_ptr<ChromeLauncherAppMenuItem>>;
 
 // ChromeLauncherController manages the launcher items needed for content
 // windows. Launcher items have a type, an optional app id, and a controller.
@@ -86,6 +84,12 @@ class ChromeLauncherController : public ash::mojom::ShelfObserver,
                                              const std::string& app_id,
                                              ash::ShelfItemStatus status) = 0;
 
+  // Returns the shelf item with the given id, or null if |id| isn't found.
+  virtual const ash::ShelfItem* GetItem(ash::ShelfID id) const = 0;
+
+  // Updates the type of an item.
+  virtual void SetItemType(ash::ShelfID id, ash::ShelfItemType type) = 0;
+
   // Updates the running status of an item. It will also update the status of
   // browsers shelf item if needed.
   virtual void SetItemStatus(ash::ShelfID id, ash::ShelfItemStatus status) = 0;
@@ -111,13 +115,9 @@ class ChromeLauncherController : public ash::mojom::ShelfObserver,
   // Pins/unpins the specified id.
   virtual void TogglePinned(ash::ShelfID id) = 0;
 
-  // Returns true if the specified item can be pinned or unpinned. Only apps can
-  // be pinned.
-  virtual bool IsPinnable(ash::ShelfID id) const = 0;
-
-  // If there is no shelf item in the shelf for application |app_id|, one
-  // gets created. The (existing or created) shelf items get then locked
-  // against a users un-pinning removal.
+  // If there is no item in the shelf for application |app_id|, one is created.
+  // The (existing or created) shelf items get then locked against a user's
+  // un-pinning removal. Used for V1 apps opened as windows that aren't pinned.
   virtual void LockV1AppWithID(const std::string& app_id) = 0;
 
   // A previously locked shelf item of type |app_id| gets unlocked. If the
@@ -144,6 +144,13 @@ class ChromeLauncherController : public ash::mojom::ShelfObserver,
                  ash::LaunchSource source,
                  int event_flags);
 
+  // As above but includes |launch_id|, an id that can be passed to an app when
+  // launched in order to support multiple shelf items per app.
+  void LaunchAppWithLaunchId(const std::string& app_id,
+                             const std::string& launch_id,
+                             ash::LaunchSource source,
+                             int event_flags);
+
   // If |app_id| is running, reactivates the app's most recently active window,
   // otherwise launches and activates the app.
   // Used by the app-list, and by pinned-app shelf items.
@@ -151,20 +158,9 @@ class ChromeLauncherController : public ash::mojom::ShelfObserver,
                            ash::LaunchSource source,
                            int event_flags) = 0;
 
-  // Returns the launch type of app for the specified id.
-  virtual extensions::LaunchType GetLaunchType(ash::ShelfID id) = 0;
-
   // Set the image for a specific shelf item (e.g. when set by the app).
   virtual void SetLauncherItemImage(ash::ShelfID shelf_id,
                                     const gfx::ImageSkia& image) = 0;
-
-  // Find out if the given application |id| is a windowed app item and not a
-  // pinned item in the shelf.
-  virtual bool IsWindowedAppInLauncher(const std::string& app_id) = 0;
-
-  // Updates the launch type of the app for the specified id to |launch_type|.
-  virtual void SetLaunchType(ash::ShelfID id,
-                             extensions::LaunchType launch_type) = 0;
 
   // Notify the controller that the state of an non platform app's tabs
   // have changed,
@@ -205,8 +201,9 @@ class ChromeLauncherController : public ash::mojom::ShelfObserver,
   virtual std::vector<content::WebContents*> GetV1ApplicationsFromAppId(
       const std::string& app_id) = 0;
 
-  // Activates a specified shell application.
-  virtual void ActivateShellApp(const std::string& app_id, int index) = 0;
+  // Activates a specified shell application by app id and window index.
+  virtual void ActivateShellApp(const std::string& app_id,
+                                int window_index) = 0;
 
   // Checks if a given |web_contents| is known to be associated with an
   // application of type |app_id|.

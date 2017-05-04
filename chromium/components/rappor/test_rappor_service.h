@@ -13,7 +13,7 @@
 
 #include "base/macros.h"
 #include "components/prefs/testing_pref_service.h"
-#include "components/rappor/rappor_service.h"
+#include "components/rappor/rappor_service_impl.h"
 #include "components/rappor/test_log_uploader.h"
 
 namespace rappor {
@@ -33,6 +33,10 @@ class TestSample : public Sample {
                      uint64_t flags,
                      size_t num_flags) override;
 
+  void SetUInt64Field(const std::string& field_name,
+                      uint64_t value,
+                      NoiseLevel noise_level) override;
+
   struct Shadow {
     explicit Shadow(RapporType type);
     Shadow(const Shadow& other);
@@ -40,6 +44,7 @@ class TestSample : public Sample {
     RapporType type;
     std::map<std::string, uint64_t> flag_fields;
     std::map<std::string, std::string> string_fields;
+    std::map<std::string, std::pair<std::uint64_t, NoiseLevel>> uint64_fields;
   };
 
   Shadow GetShadow() { return shadow_; }
@@ -51,19 +56,19 @@ class TestSample : public Sample {
 // This class provides a simple instance that can be instantiated by tests
 // and examined to check that metrics were recorded.  It assumes the most
 // permissive settings so that any metric can be recorded.
-class TestRapporService : public RapporService {
+class TestRapporServiceImpl : public RapporServiceImpl {
  public:
-  TestRapporService();
+  TestRapporServiceImpl();
 
-  ~TestRapporService() override;
+  ~TestRapporServiceImpl() override;
 
-  // RapporService:
+  // RapporServiceImpl:
   std::unique_ptr<Sample> CreateSample(RapporType type) override;
-  void RecordSampleObj(const std::string& metric_name,
-                       std::unique_ptr<Sample> sample) override;
   void RecordSample(const std::string& metric_name,
-                    RapporType type,
-                    const std::string& sample) override;
+                    std::unique_ptr<Sample> sample) override;
+  void RecordSampleString(const std::string& metric_name,
+                          RapporType type,
+                          const std::string& sample) override;
 
   // Gets the number of reports that would be uploaded by this service.
   // This also clears the internal map of metrics as a biproduct, so if
@@ -129,7 +134,7 @@ class TestRapporService : public RapporService {
   // Sets this to true to mock incognito state.
   bool is_incognito_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestRapporService);
+  DISALLOW_COPY_AND_ASSIGN(TestRapporServiceImpl);
 };
 
 }  // namespace rappor

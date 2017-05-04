@@ -16,7 +16,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -336,8 +335,7 @@ void AutocompleteActionPredictor::CreateLocalCachesFromDatabase() {
 }
 
 void AutocompleteActionPredictor::DeleteAllRows() {
-  if (!initialized_)
-    return;
+  DCHECK(initialized_);
 
   db_cache_.clear();
   db_id_cache_.clear();
@@ -354,8 +352,7 @@ void AutocompleteActionPredictor::DeleteAllRows() {
 
 void AutocompleteActionPredictor::DeleteRowsWithURLs(
     const history::URLRows& rows) {
-  if (!initialized_)
-    return;
+  DCHECK(initialized_);
 
   std::vector<AutocompleteActionPredictorTable::Row::Id> id_list;
 
@@ -443,29 +440,26 @@ void AutocompleteActionPredictor::CreateCaches(
   history::HistoryService* history_service =
       HistoryServiceFactory::GetForProfile(profile_,
                                            ServiceAccessType::EXPLICIT_ACCESS);
-  if (!TryDeleteOldEntries(history_service)) {
-    // Wait for the notification that the history service is ready and the URL
-    // DB is loaded.
-    if (history_service)
-      history_service_observer_.Add(history_service);
+  if (history_service) {
+    TryDeleteOldEntries(history_service);
+    history_service_observer_.Add(history_service);
   }
 }
 
-bool AutocompleteActionPredictor::TryDeleteOldEntries(
+void AutocompleteActionPredictor::TryDeleteOldEntries(
     history::HistoryService* service) {
   CHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
   DCHECK(!profile_->IsOffTheRecord());
   DCHECK(!initialized_);
 
   if (!service)
-    return false;
+    return;
 
   history::URLDatabase* url_db = service->InMemoryDatabase();
   if (!url_db)
-    return false;
+    return;
 
   DeleteOldEntries(url_db);
-  return true;
 }
 
 void AutocompleteActionPredictor::DeleteOldEntries(
@@ -570,8 +564,7 @@ void AutocompleteActionPredictor::OnURLsDeleted(
     bool expired,
     const history::URLRows& deleted_rows,
     const std::set<GURL>& favicon_urls) {
-  if (!initialized_)
-    return;
+  DCHECK(initialized_);
 
   if (all_history)
     DeleteAllRows();
@@ -581,8 +574,8 @@ void AutocompleteActionPredictor::OnURLsDeleted(
 
 void AutocompleteActionPredictor::OnHistoryServiceLoaded(
     history::HistoryService* history_service) {
-  TryDeleteOldEntries(history_service);
-  history_service_observer_.Remove(history_service);
+  if (!initialized_)
+    TryDeleteOldEntries(history_service);
 }
 
 AutocompleteActionPredictor::TransitionalMatch::TransitionalMatch() {

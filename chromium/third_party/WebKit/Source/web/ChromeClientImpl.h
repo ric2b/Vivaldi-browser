@@ -153,8 +153,9 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   void detachCompositorAnimationTimeline(CompositorAnimationTimeline*,
                                          LocalFrame*) override;
 
-  void enterFullscreenForElement(Element*) override;
-  void exitFullscreen(LocalFrame*) override;
+  void enterFullscreen(LocalFrame&) override;
+  void exitFullscreen(LocalFrame&) override;
+  void fullscreenElementChanged(Element*, Element*) override;
 
   void clearCompositedSelection(LocalFrame*) override;
   void updateCompositedSelection(LocalFrame*,
@@ -177,7 +178,8 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   DOMWindow* pagePopupWindowForTesting() const override;
 
   bool shouldOpenModalDialogDuringPageDismissal(
-      const DialogType&,
+      LocalFrame&,
+      DialogType,
       const String& dialogMessage,
       Document::PageDismissalType) const override;
 
@@ -195,9 +197,8 @@ class WEB_EXPORT ChromeClientImpl final : public ChromeClient {
   void ajaxSucceeded(LocalFrame*) override;
 
   void didCancelCompositionOnSelectionChange() override;
-  void willSetInputMethodState() override;
-  void didUpdateTextOfFocusedElementByNonUserInput(LocalFrame&) override;
-  void showImeIfNeeded() override;
+  void resetInputMethod() override;
+  void showVirtualKeyboard() override;
 
   void registerViewportLayers() const override;
 

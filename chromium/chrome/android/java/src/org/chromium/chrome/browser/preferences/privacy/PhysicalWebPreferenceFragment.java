@@ -5,8 +5,6 @@
 package org.chromium.chrome.browser.preferences.privacy;
 
 import android.Manifest;
-import android.content.Context;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -62,11 +60,11 @@ public class PhysicalWebPreferenceFragment extends PreferenceFragment {
             case REQUEST_ID:
                 if (grantResults.length > 0
                         && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    PhysicalWebUma.onPrefsLocationGranted(getActivity());
+                    PhysicalWebUma.onPrefsLocationGranted();
                     Log.d(TAG, "Location permission granted");
                     PhysicalWeb.startPhysicalWeb();
                 } else {
-                    PhysicalWebUma.onPrefsLocationDenied(getActivity());
+                    PhysicalWebUma.onPrefsLocationDenied();
                     Log.d(TAG, "Location permission denied");
                 }
                 break;
@@ -86,10 +84,10 @@ public class PhysicalWebPreferenceFragment extends PreferenceFragment {
             public boolean onPreferenceChange(Preference preference, Object newValue) {
                 boolean enabled = (boolean) newValue;
                 if (enabled) {
-                    PhysicalWebUma.onPrefsFeatureEnabled(getActivity());
+                    PhysicalWebUma.onPrefsFeatureEnabled();
                     ensureLocationPermission();
                 } else {
-                    PhysicalWebUma.onPrefsFeatureDisabled(getActivity());
+                    PhysicalWebUma.onPrefsFeatureDisabled();
                 }
                 PrivacyPreferencesManager.getInstance().setPhysicalWebEnabled(enabled);
                 return true;
@@ -104,15 +102,10 @@ public class PhysicalWebPreferenceFragment extends PreferenceFragment {
         physicalWebLaunch.setOnPreferenceClickListener(new OnPreferenceClickListener() {
             @Override
             public boolean onPreferenceClick(Preference preference) {
-                startActivity(createListUrlsIntent(getActivity()));
+                PhysicalWebUma.onActivityReferral(ListUrlsActivity.PREFERENCE_REFERER);
+                PhysicalWeb.showUrlList();
                 return true;
             }
         });
-    }
-
-    private static Intent createListUrlsIntent(Context context) {
-        Intent intent = new Intent(context, ListUrlsActivity.class);
-        intent.putExtra(ListUrlsActivity.REFERER_KEY, ListUrlsActivity.PREFERENCE_REFERER);
-        return intent;
     }
 }

@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -49,7 +50,7 @@ ServiceWorkerFetchRequest FetchRequestFromWebRequest(
 
   return ServiceWorkerFetchRequest(
       web_request.url(), web_request.method().ascii(), headers,
-      Referrer(web_request.referrerUrl(), web_request.referrerPolicy()),
+      Referrer(web_request.referrerUrl(), web_request.getReferrerPolicy()),
       web_request.isReload());
 }
 
@@ -78,32 +79,14 @@ blink::WebVector<blink::WebServiceWorkerRequest> WebRequestsFromRequests(
   return web_requests;
 }
 
-ServiceWorkerResponse ResponseFromWebResponse(
-    const blink::WebServiceWorkerResponse& web_response) {
-  ServiceWorkerHeaderMap headers;
-  GetServiceWorkerHeaderMapFromWebResponse(web_response, &headers);
-  ServiceWorkerHeaderList cors_exposed_header_names;
-  GetCorsExposedHeaderNamesFromWebResponse(web_response,
-                                           &cors_exposed_header_names);
-  // We don't support streaming for cache.
-  DCHECK(web_response.streamURL().isEmpty());
-  return ServiceWorkerResponse(
-      web_response.url(), web_response.status(),
-      web_response.statusText().ascii(), web_response.responseType(), headers,
-      web_response.blobUUID().ascii(), web_response.blobSize(),
-      web_response.streamURL(), blink::WebServiceWorkerResponseErrorUnknown,
-      base::Time::FromInternalValue(web_response.responseTime()),
-      !web_response.cacheStorageCacheName().isNull(),
-      web_response.cacheStorageCacheName().utf8(), cors_exposed_header_names);
-}
-
 CacheStorageCacheQueryParams QueryParamsFromWebQueryParams(
     const blink::WebServiceWorkerCache::QueryParams& web_query_params) {
   CacheStorageCacheQueryParams query_params;
   query_params.ignore_search = web_query_params.ignoreSearch;
   query_params.ignore_method = web_query_params.ignoreMethod;
   query_params.ignore_vary = web_query_params.ignoreVary;
-  query_params.cache_name = web_query_params.cacheName;
+  query_params.cache_name =
+      blink::WebString::toNullableString16(web_query_params.cacheName);
   return query_params;
 }
 
@@ -121,11 +104,15 @@ CacheStorageCacheOperationType CacheOperationTypeFromWebCacheOperationType(
 
 CacheStorageBatchOperation BatchOperationFromWebBatchOperation(
     const blink::WebServiceWorkerCache::BatchOperation& web_operation) {
+  // We don't support streaming for cache.
+  DCHECK(web_operation.response.streamURL().isEmpty());
+
   CacheStorageBatchOperation operation;
   operation.operation_type =
       CacheOperationTypeFromWebCacheOperationType(web_operation.operationType);
   operation.request = FetchRequestFromWebRequest(web_operation.request);
-  operation.response = ResponseFromWebResponse(web_operation.response);
+  operation.response =
+      GetServiceWorkerResponseFromWebResponse(web_operation.response);
   operation.match_params =
       QueryParamsFromWebQueryParams(web_operation.matchParams);
   return operation;
@@ -158,36 +145,37 @@ class CacheStorageDispatcher::WebCache : public blink::WebServiceWorkerCache {
   }
 
   // From blink::WebServiceWorkerCache:
-  void dispatchMatch(CacheMatchCallbacks* callbacks,
+  void dispatchMatch(std::unique_ptr<CacheMatchCallbacks> callbacks,
                      const blink::WebServiceWorkerRequest& request,
                      const QueryParams& query_params) override {
     if (!dispatcher_)
       return;
-    dispatcher_->dispatchMatchForCache(cache_id_, callbacks, request,
+    dispatcher_->dispatchMatchForCache(cache_id_, std::move(callbacks), request,
                                        query_params);
   }
-  void dispatchMatchAll(CacheWithResponsesCallbacks* callbacks,
+  void dispatchMatchAll(std::unique_ptr<CacheWithResponsesCallbacks> callbacks,
                         const blink::WebServiceWorkerRequest& request,
                         const QueryParams& query_params) override {
     if (!dispatcher_)
       return;
-    dispatcher_->dispatchMatchAllForCache(cache_id_, callbacks, request,
-                                          query_params);
+    dispatcher_->dispatchMatchAllForCache(cache_id_, std::move(callbacks),
+                                          request, query_params);
   }
-  void dispatchKeys(CacheWithRequestsCallbacks* callbacks,
+  void dispatchKeys(std::unique_ptr<CacheWithRequestsCallbacks> callbacks,
                     const blink::WebServiceWorkerRequest& request,
                     const QueryParams& query_params) override {
     if (!dispatcher_)
       return;
-    dispatcher_->dispatchKeysForCache(cache_id_, callbacks, request,
+    dispatcher_->dispatchKeysForCache(cache_id_, std::move(callbacks), request,
                                       query_params);
   }
   void dispatchBatch(
-      CacheBatchCallbacks* callbacks,
+      std::unique_ptr<CacheBatchCallbacks> callbacks,
       const blink::WebVector<BatchOperation>& batch_operations) override {
     if (!dispatcher_)
       return;
-    dispatcher_->dispatchBatchForCache(cache_id_, callbacks, batch_operations);
+    dispatcher_->dispatchBatchForCache(cache_id_, std::move(callbacks),
+                                       batch_operations);
   }
 
  private:
@@ -324,15 +312,15 @@ void CacheStorageDispatcher::OnCacheStorageKeysSuccess(
     int request_id,
     const std::vector<base::string16>& keys) {
   DCHECK_EQ(thread_id, CurrentWorkerId());
-  blink::WebVector<blink::WebString> webKeys(keys.size());
-  for (size_t i = 0; i < keys.size(); ++i)
-    webKeys[i] = keys[i];
-
+  blink::WebVector<blink::WebString> web_keys(keys.size());
+  std::transform(
+      keys.begin(), keys.end(), web_keys.begin(),
+      [](const base::string16& s) { return WebString::fromUTF16(s); });
   UMA_HISTOGRAM_TIMES("ServiceWorkerCache.CacheStorage.Keys",
                       TimeTicks::Now() - keys_times_[request_id]);
   WebServiceWorkerCacheStorage::CacheStorageKeysCallbacks* callbacks =
       keys_callbacks_.Lookup(request_id);
-  callbacks->onSuccess(webKeys);
+  callbacks->onSuccess(web_keys);
   keys_callbacks_.Remove(request_id);
   keys_times_.erase(request_id);
 }
@@ -512,50 +500,55 @@ void CacheStorageDispatcher::OnCacheBatchError(
 }
 
 void CacheStorageDispatcher::dispatchHas(
-    WebServiceWorkerCacheStorage::CacheStorageCallbacks* callbacks,
+    std::unique_ptr<WebServiceWorkerCacheStorage::CacheStorageCallbacks>
+        callbacks,
     const url::Origin& origin,
     const blink::WebString& cacheName) {
-  int request_id = has_callbacks_.Add(callbacks);
+  int request_id = has_callbacks_.Add(std::move(callbacks));
   has_times_[request_id] = base::TimeTicks::Now();
   Send(new CacheStorageHostMsg_CacheStorageHas(CurrentWorkerId(), request_id,
-                                               origin, cacheName));
+                                               origin, cacheName.utf16()));
 }
 
 void CacheStorageDispatcher::dispatchOpen(
-    WebServiceWorkerCacheStorage::CacheStorageWithCacheCallbacks* callbacks,
+    std::unique_ptr<
+        WebServiceWorkerCacheStorage::CacheStorageWithCacheCallbacks> callbacks,
     const url::Origin& origin,
     const blink::WebString& cacheName) {
-  int request_id = open_callbacks_.Add(callbacks);
+  int request_id = open_callbacks_.Add(std::move(callbacks));
   open_times_[request_id] = base::TimeTicks::Now();
   Send(new CacheStorageHostMsg_CacheStorageOpen(CurrentWorkerId(), request_id,
-                                                origin, cacheName));
+                                                origin, cacheName.utf16()));
 }
 
 void CacheStorageDispatcher::dispatchDelete(
-    WebServiceWorkerCacheStorage::CacheStorageCallbacks* callbacks,
+    std::unique_ptr<WebServiceWorkerCacheStorage::CacheStorageCallbacks>
+        callbacks,
     const url::Origin& origin,
     const blink::WebString& cacheName) {
-  int request_id = delete_callbacks_.Add(callbacks);
+  int request_id = delete_callbacks_.Add(std::move(callbacks));
   delete_times_[request_id] = base::TimeTicks::Now();
   Send(new CacheStorageHostMsg_CacheStorageDelete(CurrentWorkerId(), request_id,
-                                                  origin, cacheName));
+                                                  origin, cacheName.utf16()));
 }
 
 void CacheStorageDispatcher::dispatchKeys(
-    WebServiceWorkerCacheStorage::CacheStorageKeysCallbacks* callbacks,
+    std::unique_ptr<WebServiceWorkerCacheStorage::CacheStorageKeysCallbacks>
+        callbacks,
     const url::Origin& origin) {
-  int request_id = keys_callbacks_.Add(callbacks);
+  int request_id = keys_callbacks_.Add(std::move(callbacks));
   keys_times_[request_id] = base::TimeTicks::Now();
   Send(new CacheStorageHostMsg_CacheStorageKeys(CurrentWorkerId(), request_id,
                                                 origin));
 }
 
 void CacheStorageDispatcher::dispatchMatch(
-    WebServiceWorkerCacheStorage::CacheStorageMatchCallbacks* callbacks,
+    std::unique_ptr<WebServiceWorkerCacheStorage::CacheStorageMatchCallbacks>
+        callbacks,
     const url::Origin& origin,
     const blink::WebServiceWorkerRequest& request,
     const blink::WebServiceWorkerCache::QueryParams& query_params) {
-  int request_id = match_callbacks_.Add(callbacks);
+  int request_id = match_callbacks_.Add(std::move(callbacks));
   match_times_[request_id] = base::TimeTicks::Now();
   Send(new CacheStorageHostMsg_CacheStorageMatch(
       CurrentWorkerId(), request_id, origin,
@@ -565,10 +558,11 @@ void CacheStorageDispatcher::dispatchMatch(
 
 void CacheStorageDispatcher::dispatchMatchForCache(
     int cache_id,
-    blink::WebServiceWorkerCache::CacheMatchCallbacks* callbacks,
+    std::unique_ptr<blink::WebServiceWorkerCache::CacheMatchCallbacks>
+        callbacks,
     const blink::WebServiceWorkerRequest& request,
     const blink::WebServiceWorkerCache::QueryParams& query_params) {
-  int request_id = cache_match_callbacks_.Add(callbacks);
+  int request_id = cache_match_callbacks_.Add(std::move(callbacks));
   cache_match_times_[request_id] = base::TimeTicks::Now();
 
   Send(new CacheStorageHostMsg_CacheMatch(
@@ -579,10 +573,11 @@ void CacheStorageDispatcher::dispatchMatchForCache(
 
 void CacheStorageDispatcher::dispatchMatchAllForCache(
     int cache_id,
-    blink::WebServiceWorkerCache::CacheWithResponsesCallbacks* callbacks,
+    std::unique_ptr<blink::WebServiceWorkerCache::CacheWithResponsesCallbacks>
+        callbacks,
     const blink::WebServiceWorkerRequest& request,
     const blink::WebServiceWorkerCache::QueryParams& query_params) {
-  int request_id = cache_match_all_callbacks_.Add(callbacks);
+  int request_id = cache_match_all_callbacks_.Add(std::move(callbacks));
   cache_match_all_times_[request_id] = base::TimeTicks::Now();
 
   Send(new CacheStorageHostMsg_CacheMatchAll(
@@ -593,10 +588,11 @@ void CacheStorageDispatcher::dispatchMatchAllForCache(
 
 void CacheStorageDispatcher::dispatchKeysForCache(
     int cache_id,
-    blink::WebServiceWorkerCache::CacheWithRequestsCallbacks* callbacks,
+    std::unique_ptr<blink::WebServiceWorkerCache::CacheWithRequestsCallbacks>
+        callbacks,
     const blink::WebServiceWorkerRequest& request,
     const blink::WebServiceWorkerCache::QueryParams& query_params) {
-  int request_id = cache_keys_callbacks_.Add(callbacks);
+  int request_id = cache_keys_callbacks_.Add(std::move(callbacks));
   cache_keys_times_[request_id] = base::TimeTicks::Now();
 
   Send(new CacheStorageHostMsg_CacheKeys(
@@ -607,10 +603,11 @@ void CacheStorageDispatcher::dispatchKeysForCache(
 
 void CacheStorageDispatcher::dispatchBatchForCache(
     int cache_id,
-    blink::WebServiceWorkerCache::CacheBatchCallbacks* callbacks,
+    std::unique_ptr<blink::WebServiceWorkerCache::CacheBatchCallbacks>
+        callbacks,
     const blink::WebVector<blink::WebServiceWorkerCache::BatchOperation>&
         web_operations) {
-  int request_id = cache_batch_callbacks_.Add(callbacks);
+  int request_id = cache_batch_callbacks_.Add(std::move(callbacks));
   cache_batch_times_[request_id] = base::TimeTicks::Now();
 
   std::vector<CacheStorageBatchOperation> operations;
@@ -632,7 +629,7 @@ void CacheStorageDispatcher::OnWebCacheDestruction(int cache_id) {
 void CacheStorageDispatcher::PopulateWebResponseFromResponse(
     const ServiceWorkerResponse& response,
     blink::WebServiceWorkerResponse* web_response) {
-  web_response->setURL(response.url);
+  web_response->setURLList(response.url_list);
   web_response->setStatus(response.status_code);
   web_response->setStatusText(WebString::fromASCII(response.status_text));
   web_response->setResponseType(response.response_type);
@@ -643,10 +640,9 @@ void CacheStorageDispatcher::PopulateWebResponseFromResponse(
           : blink::WebString());
   blink::WebVector<blink::WebString> headers(
       response.cors_exposed_header_names.size());
-  std::transform(
-      response.cors_exposed_header_names.begin(),
-      response.cors_exposed_header_names.end(), headers.begin(),
-      [](const std::string& h) { return blink::WebString::fromLatin1(h); });
+  std::transform(response.cors_exposed_header_names.begin(),
+                 response.cors_exposed_header_names.end(), headers.begin(),
+                 [](const std::string& s) { return WebString::fromLatin1(s); });
   web_response->setCorsExposedHeaderNames(headers);
 
   for (const auto& i : response.headers) {

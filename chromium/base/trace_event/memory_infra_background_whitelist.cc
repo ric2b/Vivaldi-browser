@@ -34,6 +34,7 @@ const char* const kDumpProviderWhitelist[] = {
     "Sql",
     "V8Isolate",
     "WinHeap",
+    "SyncDirectory",
     nullptr  // End of list marker.
 };
 
@@ -50,12 +51,6 @@ const char* const kAllocatorDumpNameWhitelist[] = {
     "java_heap/allocated_objects",
     "leveldb/index_db/0x?",
     "leveldb/leveldb_proto/0x?",
-    "leveldb/leveldb_proto/BudgetManager/0x?",
-    "leveldb/leveldb_proto/DomDistillerStore/0x?",
-    "leveldb/leveldb_proto/GCMKeyStore/0x?",
-    "leveldb/leveldb_proto/ImageManager/0x?",
-    "leveldb/leveldb_proto/NTPSnippetImages/0x?",
-    "leveldb/leveldb_proto/NTPSnippets/0x?",
     "leveldb/value_store/Extensions.Database.Open.Settings/0x?",
     "leveldb/value_store/Extensions.Database.Open.Rules/0x?",
     "leveldb/value_store/Extensions.Database.Open.State/0x?",
@@ -91,6 +86,8 @@ const char* const kAllocatorDumpNameWhitelist[] = {
     "v8/isolate_0x?/zapped_for_debug",
     "winheap",
     "winheap/allocated_objects",
+    "sync/0x?/kernel",
+    "sync/0x?/store",
     nullptr  // End of list marker.
 };
 

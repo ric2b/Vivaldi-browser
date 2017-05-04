@@ -35,8 +35,8 @@ import os
 import signal
 import subprocess
 import sys
-import time
 import threading
+import time
 
 from webkitpy.common.system.filesystem import FileSystem
 
@@ -99,31 +99,6 @@ class Executive(object):
     def cpu_count(self):
         return multiprocessing.cpu_count()
 
-    @staticmethod
-    def interpreter_for_script(script_path, fs=None):
-        fs = fs or FileSystem()
-        lines = fs.read_text_file(script_path).splitlines()
-        if not len(lines):
-            return None
-        first_line = lines[0]
-        if not first_line.startswith('#!'):
-            return None
-        if first_line.find('python') > -1:
-            return sys.executable
-        if first_line.find('ruby') > -1:
-            return 'ruby'
-        return None
-
-    @staticmethod
-    def shell_command_for_script(script_path, fs=None):
-        fs = fs or FileSystem()
-        # Win32 does not support shebang. We need to detect the interpreter ourself.
-        if sys.platform == 'win32':
-            interpreter = Executive.interpreter_for_script(script_path, fs)
-            if interpreter:
-                return [interpreter, script_path]
-        return [script_path]
-
     def kill_process(self, pid):
         """Attempts to kill the given pid.
         Will fail silently if pid does not exist or insufficient permissions.
@@ -146,19 +121,19 @@ class Executive(object):
                 retries_left -= 1
                 os.kill(pid, signal.SIGKILL)
                 _ = os.waitpid(pid, os.WNOHANG)
-            except OSError as e:
-                if e.errno == errno.EAGAIN:
+            except OSError as error:
+                if error.errno == errno.EAGAIN:
                     if retries_left <= 0:
                         _log.warning("Failed to kill pid %s.  Too many EAGAIN errors.", pid)
                     continue
-                if e.errno == errno.ESRCH:  # The process does not exist.
+                if error.errno == errno.ESRCH:  # The process does not exist.
                     return
-                if e.errno == errno.EPIPE:  # The process has exited already on cygwin
+                if error.errno == errno.EPIPE:  # The process has exited already on cygwin
                     return
-                if e.errno == errno.ECHILD:
+                if error.errno == errno.ECHILD:
                     # Can't wait on a non-child process, but the kill worked.
                     return
-                if e.errno == errno.EACCES and sys.platform == 'cygwin':
+                if error.errno == errno.EACCES and sys.platform == 'cygwin':
                     # Cygwin python sometimes can't kill native processes.
                     return
                 raise
@@ -205,6 +180,7 @@ class Executive(object):
 
     def check_running_pid(self, pid):
         """Return True if pid is alive, otherwise return False."""
+        _log.debug('Checking whether pid %d is alive.', pid)
         if sys.platform == 'win32':
             return self._win32_check_running_pid(pid)
 
@@ -282,18 +258,11 @@ class Executive(object):
             seconds_left -= sleep_length
             time.sleep(sleep_length)
 
-    def _windows_image_name(self, process_name):
-        name, extension = os.path.splitext(process_name)
-        if not extension:
-            # taskkill expects processes to end in .exe
-            # If necessary we could add a flag to disable appending .exe.
-            process_name = "%s.exe" % name
-        return process_name
-
     def interrupt(self, pid):
         interrupt_signal = signal.SIGINT
-        # FIXME: The python docs seem to imply that platform == 'win32' may need to use signal.CTRL_C_EVENT
-        # http://docs.python.org/2/library/signal.html
+        # Note: The python docs seem to suggest that on Windows, we may want to use
+        # signal.CTRL_C_EVENT (http://docs.python.org/2/library/signal.html), but
+        # it appears that signal.SIGINT also appears to work on Windows.
         try:
             os.kill(pid, interrupt_signal)
         except OSError:
@@ -438,16 +407,9 @@ class Executive(object):
         # The Windows implementation of Popen cannot handle unicode strings. :(
         return map(self._encode_argument_if_needed, string_args)
 
-    # The only required argument to popen is named "args", the rest are optional keyword arguments.
     def popen(self, args, **kwargs):
-        # FIXME: We should always be stringifying the args, but callers who pass shell=True
-        # expect that the exact bytes passed will get passed to the shell (even if they're wrongly encoded).
-        # shell=True is wrong for many other reasons, and we should remove this
-        # hack as soon as we can fix all callers to not use shell=True.
-        if kwargs.get('shell') == True:
-            string_args = args
-        else:
-            string_args = self._stringify_args(args)
+        assert not kwargs.get('shell')
+        string_args = self._stringify_args(args)
         return subprocess.Popen(string_args, **kwargs)
 
     def call(self, args, **kwargs):

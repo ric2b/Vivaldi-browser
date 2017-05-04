@@ -248,7 +248,7 @@ class HttpServerTest : public testing::Test,
   }
 
   void HandleAcceptResult(std::unique_ptr<StreamSocket> socket) {
-    server_->accepted_socket_.reset(socket.release());
+    server_->accepted_socket_ = std::move(socket);
     server_->HandleAcceptResult(OK);
   }
 
@@ -548,7 +548,7 @@ class MockStreamSocket : public StreamSocket {
   void SetSubresourceSpeculation() override {}
   void SetOmniboxSpeculation() override {}
   bool WasEverUsed() const override { return true; }
-  bool WasNpnNegotiated() const override { return false; }
+  bool WasAlpnNegotiated() const override { return false; }
   NextProto GetNegotiatedProtocol() const override { return kProtoUnknown; }
   bool GetSSLInfo(SSLInfo* ssl_info) override { return false; }
   void GetConnectionAttempts(ConnectionAttempts* out) const override {

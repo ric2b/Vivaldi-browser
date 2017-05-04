@@ -14,6 +14,7 @@
 
     <meta name="google" value="notranslate">
 
+    <link rel="stylesheet" href="chrome://resources/css/action_link.css">
     <link rel="stylesheet" href="chrome://resources/css/text_defaults.css">
     <link rel="stylesheet" href="foreground/css/list.css">
     <link rel="stylesheet" href="foreground/css/table.css">
@@ -319,7 +320,7 @@
           </button>
           <button id="cloud-import-details-button"
                   class="icon-button"
-                  tabindex="-1"
+                  tabindex="15"
                   i18n-values="aria-label:CLOUD_IMPORT_SHOW_DETAILS"
                   has-tooltip>
             <iron-icon icon="files:arrow-drop-down"></iron-icon>
@@ -340,12 +341,6 @@
               menu="#sort-menu"
               i18n-values="aria-label:SORT_BUTTON_TOOLTIP"
               aria-activedescendant="sort-menu"
-              has-tooltip>
-        <files-toggle-ripple></files-toggle-ripple>
-        <div class="icon"></div>
-      </button>
-      <button id="details-button" class="icon-button" tabindex="18"
-              i18n-values="aria-label:DETAIL_BUTTON_TOOLTIP"
               has-tooltip>
         <files-toggle-ripple></files-toggle-ripple>
         <div class="icon"></div>
@@ -371,10 +366,10 @@
           <div class="content"></div>
         </div>
         <div class="progress"><div class="value"></div></div>
-        <paper-button class="import" tabindex="-1">
+        <paper-button class="import" tabindex="15">
           <span i18n-content="CLOUD_IMPORT_COMMAND"></span>
         </paper-button>
-        <paper-button class="cancel" tabindex="-1">
+        <paper-button class="cancel" tabindex="15">
           <span i18n-content="CLOUD_IMPORT_CANCEL_COMMAND"></span>
         </paper-button>
       </div>
@@ -443,55 +438,6 @@
           </div>
         </div>
       </div>
-      <div class="splitter" id="list-details-splitter"></div>
-      <div id="details-container" class="details-container">
-        <div id="single-file-details">
-          <div class="filename-container">
-            <div class="filename-icon detail-icon"></div>
-            <div class="filename"></div>
-          </div>
-          <div class="thumbnail-container">
-            <div class="thumbnail"></div>
-          </div>
-          <ul class="details-list">
-            <li class='modification-time'>
-              <span i18n-content="DATE_COLUMN_LABEL"></span>:
-              <span class='content'></span>
-            </li>
-            <li class='file-size'>
-              <span i18n-content="SIZE_COLUMN_LABEL"></span>:
-              <span class='content'></span>
-            </li>
-            <li class='image-size'>
-              <span i18n-content="IMAGE_RESOLUTION_COLUMN_LABEL"></span>:
-              <span class='content'></span>
-            </li>
-            <li class='media-title'>
-              <span i18n-content="MEDIA_TITLE_COLUMN_LABEL"></span>:
-              <span class='content'></span>
-            </li>
-            <li class='media-artist'>
-              <span i18n-content="MEDIA_ARTIST_COLUMN_LABEL"></span>:
-              <span class='content'></span>
-            </li>
-          </ul>
-        </div>
-        <div id="multi-file-details">
-          <div class="thumbnail-container">
-            <div class="thumbnail" generic-thumbnail="folder"></div>
-          </div>
-          <ul class="details-list">
-            <li class='file-count'>
-              <span i18n-content="TOTAL_FILE_COUNT"></span>:
-              <span class='content'></span>
-            </li>
-            <li class='file-size'>
-              <span i18n-content="TOTAL_FILE_SIZE"></span>:
-              <span class='content'></span>
-            </li>
-          </ul>
-        </div>
-      </div>
     </div>
     <div class="dialog-footer progressable" tabindex="-1"
          visibleif="saveas-file open-file open-multi-file folder upload-folder">
@@ -530,5 +476,6 @@
                       i18n-values="no-playback-text:QUICK_VIEW_NO_PLAYBACK_AVAILABLE;no-preview-text:QUICK_VIEW_NO_PREVIEW_AVAILABLE">
     </files-quick-view>
     <iframe id="command-dispatcher" hidden aria-hidden="true"></iframe>
+    <div id="drop-label"></div>
   </body>
 </html>

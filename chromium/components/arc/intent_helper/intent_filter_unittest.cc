@@ -20,41 +20,32 @@ namespace {
 
 class IntentFilterBuilder {
  public:
-  IntentFilterBuilder():
-      filter_spec_(mojom::IntentFilter::New()) {
-  }
+  IntentFilterBuilder() = default;
 
   IntentFilterBuilder& authority(const std::string& host) {
     return authority(host, -1);
   }
 
   IntentFilterBuilder& authority(const std::string& host, int port) {
-    mojom::AuthorityEntryPtr ae = mojom::AuthorityEntry::New();
-    ae->host = host;
-    ae->port = port;
-    if (!filter_spec_->data_authorities.has_value())
-      filter_spec_->data_authorities = std::vector<mojom::AuthorityEntryPtr>();
-    filter_spec_->data_authorities->push_back(std::move(ae));
+    authorities_.emplace_back(host, port);
     return *this;
   }
 
   IntentFilterBuilder& path(const std::string& path,
                             const mojom::PatternType& type) {
-    mojom::PatternMatcherPtr p = mojom::PatternMatcher::New();
-    p->pattern = path;
-    p->type = type;
-    if (!filter_spec_->data_paths.has_value())
-      filter_spec_->data_paths = std::vector<mojom::PatternMatcherPtr>();
-    filter_spec_->data_paths->push_back(std::move(p));
+    paths_.emplace_back(path, type);
     return *this;
   }
 
-  operator IntentFilter() const {
-    return std::move(IntentFilter(filter_spec_));
+  operator IntentFilter() {
+    return IntentFilter(std::move(authorities_), std::move(paths_));
   }
 
  private:
-  mojom::IntentFilterPtr filter_spec_;
+  std::vector<IntentFilter::AuthorityEntry> authorities_;
+  std::vector<IntentFilter::PatternMatcher> paths_;
+
+  DISALLOW_COPY_AND_ASSIGN(IntentFilterBuilder);
 };
 
 }  // namespace
@@ -85,6 +76,19 @@ TEST(IntentFilterTest, TestAuthorityEntry_simple) {
   EXPECT_TRUE(filter.Match(GURL("https://authority1")));
 }
 
+TEST(IntentFilterTest, TestNoAuthorityEntry_simple) {
+  // An empty authority will act as a wildcard, so any http(s) URL will match.
+  IntentFilter filter = IntentFilterBuilder();
+
+  EXPECT_TRUE(filter.Match(GURL("http://validscheme1")));
+  EXPECT_TRUE(filter.Match(GURL("http://validscheme1/path")));
+  EXPECT_TRUE(filter.Match(GURL("https://validscheme2")));
+  EXPECT_TRUE(filter.Match(GURL("https://validscheme2/path")));
+
+  EXPECT_FALSE(filter.Match(GURL("ftp://wedontsupportallschemes")));
+  EXPECT_FALSE(filter.Match(GURL("ftp://wedontsupportallschemes/path")));
+}
+
 TEST(IntentFilterTest, TestAuthorityEntry_no_port) {
   // A filter with no port should accept matching authority URLs with any port.
   IntentFilter filter_no_port = IntentFilterBuilder()
@@ -98,6 +102,19 @@ TEST(IntentFilterTest, TestAuthorityEntry_no_port) {
   EXPECT_TRUE(filter_no_port.Match(GURL("https://authority1:1024")));
   EXPECT_TRUE(filter_no_port.Match(GURL("http://authority1:65535")));
   EXPECT_TRUE(filter_no_port.Match(GURL("https://authority1:65535")));
+}
+
+TEST(IntentFilterTest, TestNoAuthorityEntry_no_port) {
+  // A filter with no port and no authority is still considered a wildcard.
+  IntentFilter filter = IntentFilterBuilder();
+
+  EXPECT_TRUE(filter.Match(GURL("http://validscheme1:0")));
+  EXPECT_TRUE(filter.Match(GURL("http://validscheme1:0/path")));
+  EXPECT_TRUE(filter.Match(GURL("https://validscheme2:420")));
+  EXPECT_TRUE(filter.Match(GURL("https://validscheme2:420/path")));
+
+  EXPECT_FALSE(filter.Match(GURL("custom-scheme://unvalidscheme:0")));
+  EXPECT_FALSE(filter.Match(GURL("custom-scheme://unvalidscheme:0/path")));
 }
 
 TEST(IntentFilterTest, TestAuthorityEntry_with_port) {
@@ -185,6 +202,17 @@ TEST(IntentFilterTest, TestDataPath_literal) {
   EXPECT_FALSE(filter.Match(GURL("http://host.com/path12")));
 
   EXPECT_TRUE(filter.Match(GURL("http://host.com/path1")));
+}
+
+TEST(IntentFilterTest, TestNoAuthorityDataPath_literal) {
+  IntentFilter filter =
+      IntentFilterBuilder().path("/path", mojom::PatternType::PATTERN_LITERAL);
+
+  // A filter with no authority and a custom path must still match our URL.
+  EXPECT_TRUE(filter.Match(GURL("http://validscheme1")));
+  EXPECT_TRUE(filter.Match(GURL("http://validscheme1:0")));
+  EXPECT_TRUE(filter.Match(GURL("http://validscheme1:0/path")));
+  EXPECT_TRUE(filter.Match(GURL("http://validscheme1:10/other/path")));
 }
 
 TEST(IntentFilterTest, TestDataPath_prefix) {

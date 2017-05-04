@@ -44,6 +44,8 @@ STATIC_ASSERT_ENUM(DragOperationMove, WebDragOperationMove);
 STATIC_ASSERT_ENUM(DragOperationDelete, WebDragOperationDelete);
 STATIC_ASSERT_ENUM(DragOperationEvery, WebDragOperationEvery);
 
+bool WebFrameWidgetBase::s_ignoreInputEvents = false;
+
 WebDragOperation WebFrameWidgetBase::dragTargetDragEnter(
     const WebDragData& webDragData,
     const WebPoint& pointInViewport,
@@ -73,6 +75,10 @@ WebDragOperation WebFrameWidgetBase::dragTargetDragOver(
 void WebFrameWidgetBase::dragTargetDragLeave() {
   DCHECK(m_currentDragData);
 
+  if (ignoreInputEvents()) {
+    cancelDrag();
+    return;
+  }
   DragData dragData(m_currentDragData.get(), IntPoint(), IntPoint(),
                     static_cast<DragOperation>(m_operationsAllowed));
 
@@ -107,12 +113,13 @@ void WebFrameWidgetBase::dragTargetDrop(const WebDragData& webDragData,
     return;
   }
 
-  m_currentDragData->setModifiers(modifiers);
-  DragData dragData(m_currentDragData.get(), pointInRootFrame, screenPoint,
-                    static_cast<DragOperation>(m_operationsAllowed));
+  if (!ignoreInputEvents()) {
+    m_currentDragData->setModifiers(modifiers);
+    DragData dragData(m_currentDragData.get(), pointInRootFrame, screenPoint,
+                      static_cast<DragOperation>(m_operationsAllowed));
 
-  page()->dragController().performDrag(&dragData, *toCoreFrame(localRoot()));
-
+    page()->dragController().performDrag(&dragData, *toCoreFrame(localRoot()));
+  }
   m_dragOperation = WebDragOperationNone;
   m_currentDragData = nullptr;
 }
@@ -120,26 +127,33 @@ void WebFrameWidgetBase::dragTargetDrop(const WebDragData& webDragData,
 void WebFrameWidgetBase::dragSourceEndedAt(const WebPoint& pointInViewport,
                                            const WebPoint& screenPoint,
                                            WebDragOperation operation) {
+  if (ignoreInputEvents()) {
+    cancelDrag();
+    return;
+  }
   WebPoint pointInRootFrame(
       page()->frameHost().visualViewport().viewportToRootFrame(
           pointInViewport));
   PlatformMouseEvent pme(
       pointInRootFrame, screenPoint, WebPointerProperties::Button::Left,
       PlatformEvent::MouseMoved, 0, PlatformEvent::NoModifiers,
-      PlatformMouseEvent::RealOrIndistinguishable,
-      WTF::monotonicallyIncreasingTime());
+      PlatformMouseEvent::RealOrIndistinguishable, TimeTicks::Now());
   toCoreFrame(localRoot())
       ->eventHandler()
       .dragSourceEndedAt(pme, static_cast<DragOperation>(operation));
 }
 
 void WebFrameWidgetBase::dragSourceSystemDragEnded() {
-  // It's possible for us to get this callback while not doing a drag if it's
-  // from a previous page that got unloaded.
-  if (m_doingDragAndDrop) {
-    page()->dragController().dragEnded();
-    m_doingDragAndDrop = false;
-  }
+  cancelDrag();
+}
+
+void WebFrameWidgetBase::cancelDrag() {
+  // It's possible for us this to be callback while we're not doing a drag if
+  // it's from a previous page that got unloaded.
+  if (!m_doingDragAndDrop)
+    return;
+  page()->dragController().dragEnded();
+  m_doingDragAndDrop = false;
 }
 
 void WebFrameWidgetBase::startDragging(WebReferrerPolicy policy,
@@ -157,6 +171,15 @@ WebDragOperation WebFrameWidgetBase::dragTargetDragEnterOrOver(
     DragAction dragAction,
     int modifiers) {
   DCHECK(m_currentDragData);
+  // TODO(paulmeyer): It shouldn't be possible for |m_currentDragData| to be
+  // null here, but this is somehow happening (rarely). This suggests that in
+  // some cases drag-over is happening before drag-enter, which should be
+  // impossible. This needs to be investigated further. Once fixed, the extra
+  // check for |!m_currentDragData| should be removed. (crbug.com/671504)
+  if (ignoreInputEvents() || !m_currentDragData) {
+    cancelDrag();
+    return WebDragOperationNone;
+  }
 
   WebPoint pointInRootFrame(viewportToRootFrame(pointInViewport));
 

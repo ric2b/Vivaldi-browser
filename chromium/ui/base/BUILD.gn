@@ -49,7 +49,11 @@ component("ui_data_pack") {
 
 buildflag_header("ui_features") {
   header = "ui_features.h"
-  flags = [ "ENABLE_HIDPI=$enable_hidpi" ]
+  flags = [
+    "ENABLE_HIDPI=$enable_hidpi",
+    "USE_XKBCOMMON=$use_xkbcommon",
+    "MAC_VIEWS_BROWSER=$mac_views_browser",
+  ]
 }
 
 component("base") {
@@ -75,6 +79,8 @@ component("base") {
     "clipboard/clipboard_win.cc",
     "clipboard/clipboard_win.h",
     "clipboard/custom_data_helper_mac.mm",
+    "cocoa/a11y_util.h",
+    "cocoa/a11y_util.mm",
     "cocoa/animation_utils.h",
     "cocoa/appkit_utils.h",
     "cocoa/appkit_utils.mm",
@@ -238,8 +244,6 @@ component("base") {
     "touch/touch_device.h",
     "touch/touch_editing_controller.cc",
     "touch/touch_editing_controller.h",
-    "touch/touch_enabled.cc",
-    "touch/touch_enabled.h",
     "ui_base_export.h",
     "ui_base_exports.cc",
     "ui_base_paths.cc",
@@ -365,8 +369,6 @@ component("base") {
     ":ui_features",
     "//base",
     "//skia",
-    "//ui/events:events_base",
-    "//ui/events/platform",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -385,12 +387,22 @@ component("base") {
     "//url",
   ]
 
+  if (!is_ios) {
+    # iOS does not use Chromium-specific code for event handling.
+    public_deps += [
+      "//ui/events:events_base",
+      "//ui/events/platform",
+    ]
+  }
+
   if (is_ios) {
     set_sources_assignment_filter([])
     sources += [
       "l10n/l10n_util_mac.h",
       "l10n/l10n_util_mac.mm",
     ]
+    public_deps += [ "//ui/events:event_constants" ]
+
     set_sources_assignment_filter(sources_assignment_filter)
   }
 
@@ -650,6 +662,8 @@ static_library("test_support") {
     sources += [
       "test/ios/keyboard_appearance_listener.h",
       "test/ios/keyboard_appearance_listener.mm",
+      "test/ios/ui_image_test_utils.h",
+      "test/ios/ui_image_test_utils.mm",
       "test/ios/ui_view_test_utils.h",
       "test/ios/ui_view_test_utils.mm",
     ]
@@ -659,6 +673,13 @@ static_library("test_support") {
     sources += [ "test/user_interactive_test_case_mac.mm" ]
   } else {
     sources += [ "test/user_interactive_test_case.cc" ]
+  }
+
+  if (is_chromeos) {
+    sources += [
+      "ime/chromeos/mock_input_method_manager.cc",
+      "ime/chromeos/mock_input_method_manager.h",
+    ]
   }
 
   public_deps = [
@@ -759,7 +780,10 @@ test("ui_base_unittests") {
   if (is_ios) {
     # Compile this Mac file on iOS as well.
     set_sources_assignment_filter([])
-    sources += [ "l10n/l10n_util_mac_unittest.mm" ]
+    sources += [
+      "l10n/l10n_util_mac_unittest.mm",
+      "test/ios/ui_image_test_utils_unittest.mm",
+    ]
     set_sources_assignment_filter(sources_assignment_filter)
   } else {  # !is_ios
     sources += [
@@ -890,8 +914,6 @@ test("ui_base_unittests") {
       "//ui/events/platform/x11",
       "//ui/gfx/x",
     ]
-
-    data_deps += [ "//tools/xdisplaycheck" ]
   }
 
   if (is_mac) {

@@ -14,6 +14,7 @@
 namespace media {
 
 static const int kBenchmarkIterations = 20;
+static const int kSampleRate = 48000;
 
 template <typename T>
 void RunInterleaveBench(AudioBus* bus, const std::string& trace_name) {
@@ -44,9 +45,9 @@ void RunInterleaveBench(AudioBus* bus, const std::string& trace_name) {
 
 // Benchmark the FromInterleaved() and ToInterleaved() methods.
 TEST(AudioBusPerfTest, Interleave) {
-  std::unique_ptr<AudioBus> bus = AudioBus::Create(2, 48000 * 120);
-  FakeAudioRenderCallback callback(0.2);
-  callback.Render(bus.get(), 0, 0);
+  std::unique_ptr<AudioBus> bus = AudioBus::Create(2, kSampleRate * 120);
+  FakeAudioRenderCallback callback(0.2, kSampleRate);
+  callback.Render(base::TimeDelta(), base::TimeTicks::Now(), 0, bus.get());
 
   RunInterleaveBench<int8_t>(bus.get(), "int8_t");
   RunInterleaveBench<int16_t>(bus.get(), "int16_t");

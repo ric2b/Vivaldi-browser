@@ -8,7 +8,7 @@
 
 #include "content/common/content_param_traits.h"
 #include "content/common/input/synthetic_pinch_gesture_params.h"
-#include "content/common/input/synthetic_pointer_action_params.h"
+#include "content/common/input/synthetic_pointer_action_list_params.h"
 #include "content/common/input/synthetic_smooth_drag_gesture_params.h"
 #include "content/common/input/synthetic_smooth_scroll_gesture_params.h"
 #include "content/common/input_messages.h"
@@ -28,25 +28,25 @@ std::unique_ptr<content::SyntheticGestureParams> ReadGestureParams(
 }
 }  // namespace
 
-void ParamTraits<ui::ScopedWebInputEvent>::GetSize(base::PickleSizer* s,
-                                                        const param_type& p) {
+void ParamTraits<blink::WebScopedInputEvent>::GetSize(base::PickleSizer* s,
+                                                      const param_type& p) {
   bool valid_web_event = !!p;
   GetParamSize(s, valid_web_event);
   if (valid_web_event)
     GetParamSize(s, static_cast<WebInputEventPointer>(p.get()));
 }
 
-void ParamTraits<ui::ScopedWebInputEvent>::Write(base::Pickle* m,
-                                                      const param_type& p) {
+void ParamTraits<blink::WebScopedInputEvent>::Write(base::Pickle* m,
+                                                    const param_type& p) {
   bool valid_web_event = !!p;
   WriteParam(m, valid_web_event);
   if (valid_web_event)
     WriteParam(m, static_cast<WebInputEventPointer>(p.get()));
 }
 
-bool ParamTraits<ui::ScopedWebInputEvent>::Read(const base::Pickle* m,
-                                                     base::PickleIterator* iter,
-                                                     param_type* p) {
+bool ParamTraits<blink::WebScopedInputEvent>::Read(const base::Pickle* m,
+                                                   base::PickleIterator* iter,
+                                                   param_type* p) {
   bool valid_web_event = false;
   WebInputEventPointer web_event_pointer = NULL;
   if (!ReadParam(m, iter, &valid_web_event) ||
@@ -59,8 +59,8 @@ bool ParamTraits<ui::ScopedWebInputEvent>::Read(const base::Pickle* m,
   return true;
 }
 
-void ParamTraits<ui::ScopedWebInputEvent>::Log(const param_type& p,
-                                                    std::string* l) {
+void ParamTraits<blink::WebScopedInputEvent>::Log(const param_type& p,
+                                                  std::string* l) {
   LogParam(static_cast<WebInputEventPointer>(p.get()), l);
 }
 
@@ -85,9 +85,9 @@ void ParamTraits<content::SyntheticGesturePacket>::Write(base::Pickle* m,
       WriteParam(m, *content::SyntheticTapGestureParams::Cast(
           p.gesture_params()));
       break;
-    case content::SyntheticGestureParams::POINTER_ACTION:
-      WriteParam(
-          m, *content::SyntheticPointerActionParams::Cast(p.gesture_params()));
+    case content::SyntheticGestureParams::POINTER_ACTION_LIST:
+      WriteParam(m, *content::SyntheticPointerActionListParams::Cast(
+                        p.gesture_params()));
       break;
   }
 }
@@ -118,11 +118,10 @@ bool ParamTraits<content::SyntheticGesturePacket>::Read(
       gesture_params =
           ReadGestureParams<content::SyntheticTapGestureParams>(m, iter);
       break;
-    case content::SyntheticGestureParams::POINTER_ACTION: {
+    case content::SyntheticGestureParams::POINTER_ACTION_LIST:
       gesture_params =
-          ReadGestureParams<content::SyntheticPointerActionParams>(m, iter);
+          ReadGestureParams<content::SyntheticPointerActionListParams>(m, iter);
       break;
-    }
     default:
       return false;
   }
@@ -156,9 +155,10 @@ void ParamTraits<content::SyntheticGesturePacket>::Log(const param_type& p,
           *content::SyntheticTapGestureParams::Cast(p.gesture_params()),
           l);
       break;
-    case content::SyntheticGestureParams::POINTER_ACTION:
-      LogParam(*content::SyntheticPointerActionParams::Cast(p.gesture_params()),
-               l);
+    case content::SyntheticGestureParams::POINTER_ACTION_LIST:
+      LogParam(
+          *content::SyntheticPointerActionListParams::Cast(p.gesture_params()),
+          l);
       break;
   }
 }

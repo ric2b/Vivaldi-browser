@@ -57,10 +57,10 @@ InterpolationValue PathInterpolationFunctions::convertValue(
 
   while (pathSource.hasMoreData()) {
     const PathSegmentData segment = pathSource.parseSegment();
-    interpolablePathSegs.append(
+    interpolablePathSegs.push_back(
         SVGPathSegInterpolationFunctions::consumePathSeg(segment,
                                                          currentCoordinates));
-    pathSegTypes.append(segment.command);
+    pathSegTypes.push_back(segment.command);
     length++;
   }
 
@@ -93,7 +93,7 @@ class UnderlyingPathSegTypesChecker
 
   static std::unique_ptr<UnderlyingPathSegTypesChecker> create(
       const InterpolationValue& underlying) {
-    return wrapUnique(
+    return WTF::wrapUnique(
         new UnderlyingPathSegTypesChecker(getPathSegTypes(underlying)));
   }
 
@@ -118,7 +118,8 @@ class UnderlyingPathSegTypesChecker
 InterpolationValue PathInterpolationFunctions::maybeConvertNeutral(
     const InterpolationValue& underlying,
     InterpolationType::ConversionCheckers& conversionCheckers) {
-  conversionCheckers.append(UnderlyingPathSegTypesChecker::create(underlying));
+  conversionCheckers.push_back(
+      UnderlyingPathSegTypesChecker::create(underlying));
   std::unique_ptr<InterpolableList> result =
       InterpolableList::create(PathComponentIndexCount);
   result->set(PathArgsIndex, toInterpolableList(*underlying.interpolableValue)
@@ -154,7 +155,7 @@ PairwiseInterpolationValue PathInterpolationFunctions::maybeMergeSingles(
 
   return PairwiseInterpolationValue(std::move(start.interpolableValue),
                                     std::move(end.interpolableValue),
-                                    end.nonInterpolableValue.release());
+                                    std::move(end.nonInterpolableValue));
 }
 
 void PathInterpolationFunctions::composite(

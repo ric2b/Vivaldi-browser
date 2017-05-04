@@ -22,19 +22,82 @@
 
 #include "core/layout/svg/LayoutSVGResourceClipper.h"
 
-#include "core/SVGNames.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/svg/SVGLayoutSupport.h"
 #include "core/paint/PaintInfo.h"
 #include "core/svg/SVGGeometryElement.h"
 #include "core/svg/SVGUseElement.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/paint/SkPictureBuilder.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/pathops/SkPathOps.h"
 
 namespace blink {
+
+namespace {
+
+enum class ClipStrategy { None, Mask, Path };
+
+ClipStrategy modifyStrategyForClipPath(const ComputedStyle& style,
+                                       ClipStrategy strategy) {
+  // If the shape in the clip-path gets clipped too then fallback to masking.
+  if (strategy != ClipStrategy::Path || !style.clipPath())
+    return strategy;
+  return ClipStrategy::Mask;
+}
+
+ClipStrategy determineClipStrategy(const SVGGraphicsElement& element) {
+  const LayoutObject* layoutObject = element.layoutObject();
+  if (!layoutObject)
+    return ClipStrategy::None;
+  const ComputedStyle& style = layoutObject->styleRef();
+  if (style.display() == EDisplay::None ||
+      style.visibility() != EVisibility::kVisible)
+    return ClipStrategy::None;
+  ClipStrategy strategy = ClipStrategy::None;
+  // Only shapes, paths and texts are allowed for clipping.
+  if (layoutObject->isSVGShape()) {
+    strategy = ClipStrategy::Path;
+  } else if (layoutObject->isSVGText()) {
+    // Text requires masking.
+    strategy = ClipStrategy::Mask;
+  }
+  return modifyStrategyForClipPath(style, strategy);
+}
+
+ClipStrategy determineClipStrategy(const SVGElement& element) {
+  // <use> within <clipPath> have a restricted content model.
+  // (https://drafts.fxtf.org/css-masking-1/#ClipPathElement)
+  if (isSVGUseElement(element)) {
+    const LayoutObject* useLayoutObject = element.layoutObject();
+    if (!useLayoutObject ||
+        useLayoutObject->styleRef().display() == EDisplay::None)
+      return ClipStrategy::None;
+    const SVGGraphicsElement* shapeElement =
+        toSVGUseElement(element).visibleTargetGraphicsElementForClipping();
+    if (!shapeElement)
+      return ClipStrategy::None;
+    ClipStrategy shapeStrategy = determineClipStrategy(*shapeElement);
+    return modifyStrategyForClipPath(useLayoutObject->styleRef(),
+                                     shapeStrategy);
+  }
+  if (!element.isSVGGraphicsElement())
+    return ClipStrategy::None;
+  return determineClipStrategy(toSVGGraphicsElement(element));
+}
+
+bool contributesToClip(const SVGElement& element) {
+  return determineClipStrategy(element) != ClipStrategy::None;
+}
+
+void pathFromElement(const SVGElement& element, Path& clipPath) {
+  if (isSVGGeometryElement(element))
+    toSVGGeometryElement(element).toClipPath(clipPath);
+  else if (isSVGUseElement(element))
+    toSVGUseElement(element).toClipPath(clipPath);
+}
+
+}  // namespace
 
 LayoutSVGResourceClipper::LayoutSVGResourceClipper(SVGClipPathElement* node)
     : LayoutSVGResourceContainer(node), m_inClipExpansion(false) {}
@@ -72,40 +135,19 @@ bool LayoutSVGResourceClipper::calculateClipContentPathIfNeeded() {
   bool usingBuilder = false;
   SkOpBuilder clipPathBuilder;
 
-  for (SVGElement* childElement = Traversal<SVGElement>::firstChild(*element());
-       childElement;
-       childElement = Traversal<SVGElement>::nextSibling(*childElement)) {
-    LayoutObject* childLayoutObject = childElement->layoutObject();
-    if (!childLayoutObject)
+  for (const SVGElement& childElement :
+       Traversal<SVGElement>::childrenOf(*element())) {
+    ClipStrategy strategy = determineClipStrategy(childElement);
+    if (strategy == ClipStrategy::None)
       continue;
-    // Only shapes or paths are supported for direct clipping. We need to
-    // fallback to masking for texts.
-    if (childLayoutObject->isSVGText()) {
-      m_clipContentPath.clear();
-      return false;
-    }
-    if (!childElement->isSVGGraphicsElement())
-      continue;
-
-    const ComputedStyle* style = childLayoutObject->style();
-    if (!style || style->display() == EDisplay::None ||
-        (style->visibility() != EVisibility::Visible &&
-         !isSVGUseElement(*childElement)))
-      continue;
-
-    // Current shape in clip-path gets clipped too. Fallback to masking.
-    if (style->clipPath()) {
+    if (strategy == ClipStrategy::Mask) {
       m_clipContentPath.clear();
       return false;
     }
 
     // First clip shape.
     if (m_clipContentPath.isEmpty()) {
-      if (isSVGGeometryElement(childElement))
-        toSVGGeometryElement(childElement)->toClipPath(m_clipContentPath);
-      else if (isSVGUseElement(childElement))
-        toSVGUseElement(childElement)->toClipPath(m_clipContentPath);
-
+      pathFromElement(childElement, m_clipContentPath);
       continue;
     }
 
@@ -125,10 +167,7 @@ bool LayoutSVGResourceClipper::calculateClipContentPathIfNeeded() {
     }
 
     Path subPath;
-    if (isSVGGeometryElement(childElement))
-      toSVGGeometryElement(childElement)->toClipPath(subPath);
-    else if (isSVGUseElement(childElement))
-      toSVGUseElement(childElement)->toClipPath(subPath);
+    pathFromElement(childElement, subPath);
 
     clipPathBuilder.add(subPath.getSkPath(), kUnion_SkPathOp);
   }
@@ -177,49 +216,24 @@ sk_sp<const SkPicture> LayoutSVGResourceClipper::createContentPicture() {
   FloatRect bounds = strokeBoundingBox();
 
   SkPictureBuilder pictureBuilder(bounds, nullptr, nullptr);
+  // Switch to a paint behavior where all children of this <clipPath> will be
+  // laid out using special constraints:
+  // - fill-opacity/stroke-opacity/opacity set to 1
+  // - masker/filter not applied when laying out the children
+  // - fill is set to the initial fill paint server (solid, black)
+  // - stroke is set to the initial stroke paint server (none)
+  PaintInfo info(pictureBuilder.context(), LayoutRect::infiniteIntRect(),
+                 PaintPhaseForeground, GlobalPaintNormalPhase,
+                 PaintLayerPaintingRenderingClipPathAsMask |
+                     PaintLayerPaintingRenderingResourceSubtree);
 
-  for (SVGElement* childElement = Traversal<SVGElement>::firstChild(*element());
-       childElement;
-       childElement = Traversal<SVGElement>::nextSibling(*childElement)) {
-    LayoutObject* layoutObject = childElement->layoutObject();
-    if (!layoutObject)
+  for (const SVGElement& childElement :
+       Traversal<SVGElement>::childrenOf(*element())) {
+    if (!contributesToClip(childElement))
       continue;
-
-    const ComputedStyle* style = layoutObject->style();
-    if (!style || style->display() == EDisplay::None ||
-        (style->visibility() != EVisibility::Visible &&
-         !isSVGUseElement(*childElement)))
-      continue;
-
-    bool isUseElement = isSVGUseElement(*childElement);
-    if (isUseElement) {
-      const SVGGraphicsElement* clippingElement =
-          toSVGUseElement(*childElement)
-              .visibleTargetGraphicsElementForClipping();
-      if (!clippingElement)
-        continue;
-
-      layoutObject = clippingElement->layoutObject();
-      if (!layoutObject)
-        continue;
-    }
-
-    // Only shapes, paths and texts are allowed for clipping.
-    if (!layoutObject->isSVGShape() && !layoutObject->isSVGText())
-      continue;
-
-    if (isUseElement)
-      layoutObject = childElement->layoutObject();
-
-    // Switch to a paint behavior where all children of this <clipPath> will be
-    // laid out using special constraints:
-    // - fill-opacity/stroke-opacity/opacity set to 1
-    // - masker/filter not applied when laying out the children
-    // - fill is set to the initial fill paint server (solid, black)
-    // - stroke is set to the initial stroke paint server (none)
-    PaintInfo info(pictureBuilder.context(), LayoutRect::infiniteIntRect(),
-                   PaintPhaseForeground, GlobalPaintNormalPhase,
-                   PaintLayerPaintingRenderingClipPathAsMask);
+    // Use the LayoutObject of the direct child even if it is a <use>. In that
+    // case, we will paint the targeted element indirectly.
+    const LayoutObject* layoutObject = childElement.layoutObject();
     layoutObject->paint(info, IntPoint());
   }
 
@@ -230,25 +244,11 @@ sk_sp<const SkPicture> LayoutSVGResourceClipper::createContentPicture() {
 void LayoutSVGResourceClipper::calculateLocalClipBounds() {
   // This is a rough heuristic to appraise the clip size and doesn't consider
   // clip on clip.
-  for (SVGElement* childElement = Traversal<SVGElement>::firstChild(*element());
-       childElement;
-       childElement = Traversal<SVGElement>::nextSibling(*childElement)) {
-    LayoutObject* layoutObject = childElement->layoutObject();
-    if (!layoutObject)
+  for (const SVGElement& childElement :
+       Traversal<SVGElement>::childrenOf(*element())) {
+    if (!contributesToClip(childElement))
       continue;
-    if (!layoutObject->isSVGShape() && !layoutObject->isSVGText() &&
-        !isSVGUseElement(*childElement))
-      continue;
-    const ComputedStyle* style = layoutObject->style();
-    if (!style || style->display() == EDisplay::None ||
-        (style->visibility() != EVisibility::Visible &&
-         !isSVGUseElement(*childElement)))
-      continue;
-    if (isSVGUseElement(*childElement) &&
-        !toSVGUseElement(*childElement)
-             .visibleTargetGraphicsElementForClipping())
-      continue;
-
+    const LayoutObject* layoutObject = childElement.layoutObject();
     m_localClipBounds.unite(layoutObject->localToSVGParentTransform().mapRect(
         layoutObject->visualRectInLocalSVGCoordinates()));
   }
@@ -270,27 +270,23 @@ bool LayoutSVGResourceClipper::hitTestClipContent(
   }
 
   AffineTransform animatedLocalTransform =
-      toSVGClipPathElement(element())->calculateAnimatedLocalTransform();
+      toSVGClipPathElement(element())->calculateTransform(
+          SVGElement::IncludeMotionTransform);
   if (!animatedLocalTransform.isInvertible())
     return false;
 
   point = animatedLocalTransform.inverse().mapPoint(point);
 
-  for (SVGElement* childElement = Traversal<SVGElement>::firstChild(*element());
-       childElement;
-       childElement = Traversal<SVGElement>::nextSibling(*childElement)) {
-    LayoutObject* layoutObject = childElement->layoutObject();
-    if (!layoutObject)
-      continue;
-    if (!layoutObject->isSVGShape() && !layoutObject->isSVGText() &&
-        !isSVGUseElement(*childElement))
+  for (const SVGElement& childElement :
+       Traversal<SVGElement>::childrenOf(*element())) {
+    if (!contributesToClip(childElement))
       continue;
     IntPoint hitPoint;
     HitTestResult result(HitTestRequest::SVGClipContent, hitPoint);
+    LayoutObject* layoutObject = childElement.layoutObject();
     if (layoutObject->nodeAtFloatPoint(result, point, HitTestForeground))
       return true;
   }
-
   return false;
 }
 
@@ -304,7 +300,8 @@ FloatRect LayoutSVGResourceClipper::resourceBoundingBox(
     calculateLocalClipBounds();
 
   AffineTransform transform =
-      toSVGClipPathElement(element())->calculateAnimatedLocalTransform();
+      toSVGClipPathElement(element())->calculateTransform(
+          SVGElement::IncludeMotionTransform);
   if (clipPathUnits() == SVGUnitTypes::kSvgUnitTypeObjectboundingbox) {
     transform.translate(referenceBox.x(), referenceBox.y());
     transform.scaleNonUniform(referenceBox.width(), referenceBox.height());

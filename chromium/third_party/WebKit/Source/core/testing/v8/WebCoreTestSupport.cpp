@@ -45,29 +45,25 @@ namespace {
 
 blink::InstallConditionalFeaturesFunction
     s_originalInstallConditionalFeaturesFunction = nullptr;
+blink::InstallPendingConditionalFeatureFunction
+    s_originalInstallPendingConditionalFeatureFunction = nullptr;
 
 v8::Local<v8::Value> createInternalsObject(v8::Local<v8::Context> context) {
   ScriptState* scriptState = ScriptState::from(context);
   v8::Local<v8::Object> global = scriptState->context()->Global();
   ExecutionContext* executionContext = scriptState->getExecutionContext();
   if (executionContext->isDocument()) {
-    return toV8(Internals::create(executionContext), global,
+    return ToV8(Internals::create(executionContext), global,
                 scriptState->isolate());
   }
   if (executionContext->isWorkerGlobalScope())
-    return toV8(WorkerInternals::create(), global, scriptState->isolate());
+    return ToV8(WorkerInternals::create(), global, scriptState->isolate());
   return v8::Local<v8::Value>();
 }
 }
 
 void injectInternalsObject(v8::Local<v8::Context> context) {
-  // Set conditional features installation function to
-  // |installConditionalFeaturesForTests|
-  if (!s_originalInstallConditionalFeaturesFunction) {
-    s_originalInstallConditionalFeaturesFunction =
-        setInstallConditionalFeaturesFunction(
-            installConditionalFeaturesForTests);
-  }
+  registerInstallConditionalFeaturesForTesting();
 
   ScriptState* scriptState = ScriptState::from(context);
   ScriptState::Scope scope(scriptState);
@@ -82,8 +78,8 @@ void injectInternalsObject(v8::Local<v8::Context> context) {
       .ToChecked();
 }
 
-void installConditionalFeaturesForTests(
-    const WrapperTypeInfo* type,
+void installConditionalFeaturesForTesting(
+    const blink::WrapperTypeInfo* type,
     const blink::ScriptState* scriptState,
     v8::Local<v8::Object> prototypeObject,
     v8::Local<v8::Function> interfaceObject) {
@@ -121,6 +117,38 @@ void resetInternalsObject(v8::Local<v8::Context> context) {
   ASSERT(page);
   Internals::resetToConsistentState(page);
   InternalSettings::from(*page)->resetToConsistentState();
+}
+
+void installPendingConditionalFeatureForTesting(
+    const String& feature,
+    const blink::ScriptState* scriptState) {
+  (*s_originalInstallPendingConditionalFeatureFunction)(feature, scriptState);
+  v8::Local<v8::Object> prototypeObject;
+  v8::Local<v8::Function> interfaceObject;
+  if (feature == "Frobulate") {
+    if (scriptState->perContextData()
+            ->getExistingConstructorAndPrototypeForType(
+                &blink::V8OriginTrialsTest::wrapperTypeInfo, &prototypeObject,
+                &interfaceObject)) {
+      blink::V8OriginTrialsTest::installOriginTrialsSampleAPI(
+          scriptState->isolate(), scriptState->world(), v8::Local<v8::Object>(),
+          prototypeObject, interfaceObject);
+    }
+    return;
+  }
+}
+
+void registerInstallConditionalFeaturesForTesting() {
+  if (!s_originalInstallConditionalFeaturesFunction) {
+    s_originalInstallConditionalFeaturesFunction =
+        setInstallConditionalFeaturesFunction(
+            installConditionalFeaturesForTesting);
+  }
+  if (!s_originalInstallPendingConditionalFeatureFunction) {
+    s_originalInstallPendingConditionalFeatureFunction =
+        setInstallPendingConditionalFeatureFunction(
+            &installPendingConditionalFeatureForTesting);
+  }
 }
 
 }  // namespace WebCoreTestSupport

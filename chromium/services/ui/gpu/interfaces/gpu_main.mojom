@@ -1,0 +1,22 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ui.mojom;
+
+import "cc/ipc/display_compositor.mojom";
+import "gpu/ipc/common/gpu_preferences.mojom";
+import "services/ui/gpu/interfaces/gpu_host.mojom";
+import "services/ui/gpu/interfaces/gpu_service.mojom";
+
+// This is the primordial interface used to (re)start the mus-gpu bundle
+// of services.
+interface GpuMain {
+  CreateDisplayCompositor(
+    cc.mojom.DisplayCompositor& display_compositor,
+    cc.mojom.DisplayCompositorClient display_compositor_client);
+
+  CreateGpuService(GpuService& gpu_service,
+                   GpuHost gpu_host,
+                   gpu.mojom.GpuPreferences preferences);
+};

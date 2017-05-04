@@ -119,14 +119,15 @@ PrecacheManager::AllowedType PrecacheManager::PrecachingAllowed() const {
        data_reduction_proxy_settings_->IsDataReductionProxyEnabled()))
     return AllowedType::DISALLOWED;
 
-  if (!(sync_service_ && sync_service_->IsBackendInitialized()))
+  if (!(sync_service_ && sync_service_->IsEngineInitialized()))
     return AllowedType::PENDING;
 
   // SyncService delegates to SyncPrefs, which must be called on the UI thread.
-  if (history_service_ &&
+  if (history_service_ && !sync_service_->IsLocalSyncEnabled() &&
       sync_service_->GetActiveDataTypes().Has(syncer::SESSIONS) &&
-      !sync_service_->GetEncryptedDataTypes().Has(syncer::SESSIONS))
+      !sync_service_->GetEncryptedDataTypes().Has(syncer::SESSIONS)) {
     return AllowedType::ALLOWED;
+  }
 
   return AllowedType::DISALLOWED;
 }
@@ -308,7 +309,7 @@ void PrecacheManager::OnGetUnfinishedWorkDone(
     }
   } else {
     if (PrecachingAllowed() != AllowedType::PENDING) {
-      // We are not waiting on the sync backend to be initialized. The user
+      // We are not waiting on the sync engine to be initialized. The user
       // either is not in the field trial, or does not have sync enabled.
       // Pretend that precaching started, so that the PrecacheServiceLauncher
       // doesn't try to start it again.

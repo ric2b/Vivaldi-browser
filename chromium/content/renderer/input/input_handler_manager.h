@@ -5,7 +5,8 @@
 #ifndef CONTENT_RENDERER_INPUT_INPUT_HANDLER_MANAGER_H_
 #define CONTENT_RENDERER_INPUT_INPUT_HANDLER_MANAGER_H_
 
-#include "base/containers/scoped_ptr_hash_map.h"
+#include <unordered_map>
+
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
@@ -74,6 +75,7 @@ class CONTENT_EXPORT InputHandlerManager {
 
   void NotifyInputEventHandledOnMainThread(int routing_id,
                                            blink::WebInputEvent::Type,
+                                           blink::WebInputEventResult,
                                            InputEventAckState);
   void ProcessRafAlignedInputOnMainThread(int routing_id);
 
@@ -82,12 +84,12 @@ class CONTENT_EXPORT InputHandlerManager {
 
   using InputEventAckStateCallback =
       base::Callback<void(InputEventAckState,
-                          ui::ScopedWebInputEvent,
+                          blink::WebScopedInputEvent,
                           const ui::LatencyInfo&,
                           std::unique_ptr<ui::DidOverscrollParams>)>;
   // Called from the compositor's thread.
   virtual void HandleInputEvent(int routing_id,
-                                ui::ScopedWebInputEvent input_event,
+                                blink::WebScopedInputEvent input_event,
                                 const ui::LatencyInfo& latency_info,
                                 const InputEventAckStateCallback& callback);
 
@@ -106,7 +108,7 @@ class CONTENT_EXPORT InputHandlerManager {
   // Called from the compositor's thread.
   void DispatchNonBlockingEventToMainThread(
       int routing_id,
-      ui::ScopedWebInputEvent event,
+      blink::WebScopedInputEvent event,
       const ui::LatencyInfo& latency_info);
 
  private:
@@ -134,13 +136,13 @@ class CONTENT_EXPORT InputHandlerManager {
   void DidHandleInputEventAndOverscroll(
       const InputEventAckStateCallback& callback,
       ui::InputHandlerProxy::EventDisposition event_disposition,
-      ui::ScopedWebInputEvent input_event,
+      blink::WebScopedInputEvent input_event,
       const ui::LatencyInfo& latency_info,
       std::unique_ptr<ui::DidOverscrollParams> overscroll_params);
 
-  typedef base::ScopedPtrHashMap<int,  // routing_id
-                                 std::unique_ptr<InputHandlerWrapper>>
-      InputHandlerMap;
+  using InputHandlerMap =
+      std::unordered_map<int,  // routing_id
+                         std::unique_ptr<InputHandlerWrapper>>;
   InputHandlerMap input_handlers_;
 
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;

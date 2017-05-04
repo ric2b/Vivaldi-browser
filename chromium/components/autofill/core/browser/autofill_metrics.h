@@ -383,6 +383,13 @@ class AutofillMetrics {
     FORM_EVENT_LOCAL_SUGGESTION_WILL_SUBMIT_ONCE,
     FORM_EVENT_SERVER_SUGGESTION_WILL_SUBMIT_ONCE,
     FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_WILL_SUBMIT_ONCE,
+    // A dropdown with suggestions was shown and a form was submitted after
+    // that.
+    FORM_EVENT_SUGGESTION_SHOWN_SUBMITTED_ONCE,
+    // A dropdown with suggestions was shown and a form is about to be
+    // submitted. If the submission is not interrupted by JavaScript, the "form
+    // submitted" event above will also be logged.
+    FORM_EVENT_SUGGESTION_SHOWN_WILL_SUBMIT_ONCE,
 
     NUM_FORM_EVENTS,
   };
@@ -656,6 +663,10 @@ class AutofillMetrics {
   // context.
   static void LogIsQueriedCreditCardFormSecure(bool is_secure);
 
+  // This should be called when the user selects the Form-Not-Secure warning
+  // suggestion to show an explanation of the warning.
+  static void LogShowedHttpNotSecureExplanation();
+
   // Utility to autofill form events in the relevant histograms depending on
   // the presence of server and/or local data.
   class FormEventLogger {
@@ -668,6 +679,10 @@ class AutofillMetrics {
 
     inline void set_is_local_data_available(bool is_local_data_available) {
       is_local_data_available_ = is_local_data_available;
+    }
+
+    inline void set_is_context_secure(bool is_context_secure) {
+      is_context_secure_ = is_context_secure;
     }
 
     void OnDidInteractWithAutofillableForm();
@@ -694,6 +709,7 @@ class AutofillMetrics {
     bool is_for_credit_card_;
     bool is_server_data_available_;
     bool is_local_data_available_;
+    bool is_context_secure_;
     bool has_logged_interacted_;
     bool has_logged_suggestions_shown_;
     bool has_logged_masked_server_card_suggestion_selected_;

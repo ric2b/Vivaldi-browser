@@ -6,13 +6,12 @@ import("//build/config/ui.gni")
 
 source_set("surfaces") {
   sources = [
-    "direct_output_surface.cc",
-    "direct_output_surface.h",
     "display_compositor.cc",
     "display_compositor.h",
-    "surfaces_context_provider.cc",
-    "surfaces_context_provider.h",
-    "surfaces_context_provider_delegate.h",
+    "display_output_surface.cc",
+    "display_output_surface.h",
+    "gpu_compositor_frame_sink.cc",
+    "gpu_compositor_frame_sink.h",
   ]
 
   deps = [
@@ -20,28 +19,23 @@ source_set("surfaces") {
     "//cc",
     "//cc/ipc:internal_interfaces",
     "//cc/surfaces",
-    "//cc/surfaces:surface_id",
     "//components/display_compositor",
     "//gpu/command_buffer/client",
-    "//gpu/command_buffer/client:gles2_cmd_helper",
-    "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/client:gles2_interface",
-    "//gpu/ipc/client",
-    "//services/service_manager/public/cpp",
-    "//services/tracing/public/cpp",
-    "//services/ui/common:mus_common",
-    "//services/ui/public/interfaces",
+    "//gpu/ipc:command_buffer",
     "//ui/display/types",
     "//ui/gfx",
     "//ui/gfx/geometry/mojo",
-    "//ui/gl",
   ]
 
   if (use_ozone) {
     sources += [
-      "direct_output_surface_ozone.cc",
-      "direct_output_surface_ozone.h",
+      "display_output_surface_ozone.cc",
+      "display_output_surface_ozone.h",
     ]
-    deps += [ "//gpu/command_buffer/common" ]
+    deps += [
+      "//gpu/command_buffer/common",
+      "//ui/gl",
+    ]
   }
 }

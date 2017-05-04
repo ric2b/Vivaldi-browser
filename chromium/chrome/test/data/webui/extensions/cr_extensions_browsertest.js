@@ -239,6 +239,12 @@ TEST_F('CrExtensionsBrowserTestWithIdQueryParam',
       assert(extension_manager_tests.TestNames.UrlNavigationToDetails)).run();
 });
 
+TEST_F('CrExtensionsBrowserTest', 'ExtensionManagerUpdateItemDataTest',
+       function() {
+  extension_manager_tests.registerTests();
+  mocha.grep(assert(extension_manager_tests.TestNames.UpdateItemData)).run();
+});
+
 ////////////////////////////////////////////////////////////////////////////////
 // Extension Keyboard Shortcuts Tests
 
@@ -291,6 +297,12 @@ TEST_F('CrExtensionsBrowserTest', 'ExtensionErrorPageCodeSectionTest',
        function() {
   extension_error_page_tests.registerTests();
   mocha.grep(assert(extension_error_page_tests.TestNames.CodeSection)).run();
+});
+
+TEST_F('CrExtensionsBrowserTest', 'ExtensionErrorPageErrorSelectionTest',
+       function() {
+  extension_error_page_tests.registerTests();
+  mocha.grep(assert(extension_error_page_tests.TestNames.ErrorSelection)).run();
 });
 
 ////////////////////////////////////////////////////////////////////////////////

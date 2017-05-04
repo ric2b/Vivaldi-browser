@@ -7,8 +7,8 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
-#include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "dbus/object_path.h"
@@ -259,7 +259,7 @@ class BluetoothGattBlueZTest : public testing::Test {
   void NotifySessionCallback(
       std::unique_ptr<BluetoothGattNotifySession> session) {
     ++success_callback_count_;
-    update_sessions_.push_back(session.release());
+    update_sessions_.push_back(std::move(session));
     QuitMessageLoop();
   }
 
@@ -295,7 +295,7 @@ class BluetoothGattBlueZTest : public testing::Test {
   bluez::FakeBluetoothGattDescriptorClient*
       fake_bluetooth_gatt_descriptor_client_;
   std::unique_ptr<device::BluetoothGattConnection> gatt_conn_;
-  ScopedVector<BluetoothGattNotifySession> update_sessions_;
+  std::vector<std::unique_ptr<BluetoothGattNotifySession>> update_sessions_;
   scoped_refptr<BluetoothAdapter> adapter_;
 
   int success_callback_count_;
@@ -1416,12 +1416,13 @@ TEST_F(BluetoothGattBlueZTest, NotifySessions) {
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_EQ(1, observer.gatt_characteristic_value_changed_count());
   EXPECT_TRUE(update_sessions_.empty());
-  EXPECT_TRUE(characteristic->IsNotifying());
+  EXPECT_FALSE(characteristic->IsNotifying());
 
   // Run the main loop. The initial call should complete. The queued call should
   // succeed immediately.
   base::RunLoop().Run();
 
+  EXPECT_TRUE(characteristic->IsNotifying());
   EXPECT_EQ(3, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_EQ(1, observer.gatt_characteristic_value_changed_count());
@@ -1433,10 +1434,14 @@ TEST_F(BluetoothGattBlueZTest, NotifySessions) {
 
   // Stop one of the sessions. The session should become inactive but the
   // characteristic should still be notifying.
-  BluetoothGattNotifySession* session = update_sessions_[0];
+  BluetoothGattNotifySession* session = update_sessions_[0].get();
   EXPECT_TRUE(session->IsActive());
   session->Stop(base::Bind(&BluetoothGattBlueZTest::SuccessCallback,
                            base::Unretained(this)));
+
+  // Run message loop to stop the notify session.
+  base::RunLoop().Run();
+
   EXPECT_EQ(4, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_FALSE(session->IsActive());
@@ -1454,6 +1459,10 @@ TEST_F(BluetoothGattBlueZTest, NotifySessions) {
   // Clear the last session.
   update_sessions_.clear();
   EXPECT_TRUE(update_sessions_.empty());
+
+  // Run message loop in order to do proper cleanup of sessions.
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_FALSE(characteristic->IsNotifying());
 
   success_callback_count_ = 0;
@@ -1469,7 +1478,7 @@ TEST_F(BluetoothGattBlueZTest, NotifySessions) {
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_EQ(1, observer.gatt_characteristic_value_changed_count());
   EXPECT_TRUE(update_sessions_.empty());
-  EXPECT_TRUE(characteristic->IsNotifying());
+  EXPECT_FALSE(characteristic->IsNotifying());
 
   // Run the message loop. Notifications should begin.
   base::RunLoop().Run();
@@ -1491,6 +1500,10 @@ TEST_F(BluetoothGattBlueZTest, NotifySessions) {
                  base::Unretained(this)),
       base::Bind(&BluetoothGattBlueZTest::ServiceErrorCallback,
                  base::Unretained(this)));
+
+  // Run message loop to stop the notify session.
+  base::RunLoop().Run();
+
   EXPECT_EQ(2, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_EQ(2U, update_sessions_.size());
@@ -1564,7 +1577,7 @@ TEST_F(BluetoothGattBlueZTest, NotifySessionsMadeInactive) {
   EXPECT_EQ(0, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_EQ(1, observer.gatt_characteristic_value_changed_count());
-  EXPECT_TRUE(characteristic->IsNotifying());
+  EXPECT_FALSE(characteristic->IsNotifying());
   EXPECT_TRUE(update_sessions_.empty());
 
   // Run the main loop. The initial call should complete. The queued calls
@@ -1590,6 +1603,10 @@ TEST_F(BluetoothGattBlueZTest, NotifySessionsMadeInactive) {
                  base::Unretained(this)));
   EXPECT_EQ(5, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
+
+  // Run message loop to stop the notify session.
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_FALSE(characteristic->IsNotifying());
   EXPECT_EQ(4U, update_sessions_.size());
 
@@ -1607,10 +1624,13 @@ TEST_F(BluetoothGattBlueZTest, NotifySessionsMadeInactive) {
       base::Bind(&BluetoothGattBlueZTest::ServiceErrorCallback,
                  base::Unretained(this)));
 
+  // Run message loop to start the notify session.
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_EQ(0, success_callback_count_);
   EXPECT_EQ(0, error_callback_count_);
   EXPECT_EQ(1, observer.gatt_characteristic_value_changed_count());
-  EXPECT_TRUE(characteristic->IsNotifying());
+  EXPECT_FALSE(characteristic->IsNotifying());
   EXPECT_TRUE(update_sessions_.empty());
 
   base::RunLoop().Run();

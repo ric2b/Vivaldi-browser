@@ -15,9 +15,9 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/synchronization/lock.h"
-#include "base/time/time.h"
 #include "chrome/browser/android/download/chrome_download_delegate.h"
 #include "chrome/browser/android/download/dangerous_download_infobar_delegate.h"
+#include "chrome/browser/android/download/download_manager_service.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/ui/android/view_android_helper.h"
 #include "content/public/browser/browser_context.h"
@@ -219,6 +219,57 @@ void DownloadController::AcquireFileAccessPermission(
       RequestFileAccess(callback_id);
 }
 
+void DownloadController::CreateAndroidDownload(
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
+    const DownloadInfo& info) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(&DownloadController::StartAndroidDownload,
+                 base::Unretained(this),
+                 wc_getter, info));
+}
+
+void DownloadController::StartAndroidDownload(
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
+    const DownloadInfo& info) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  WebContents* web_contents = wc_getter.Run();
+  if (!web_contents) {
+    // The view went away. Can't proceed.
+    LOG(ERROR) << "Tab closed, download failed on URL:" << info.url.spec();
+    return;
+  }
+
+  AcquireFileAccessPermission(
+      web_contents,
+      base::Bind(&DownloadController::StartAndroidDownloadInternal,
+                 base::Unretained(this), wc_getter, info));
+}
+
+void DownloadController::StartAndroidDownloadInternal(
+    const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
+    const DownloadInfo& info, bool allowed) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (!allowed)
+    return;
+
+  WebContents* web_contents = wc_getter.Run();
+  if (!web_contents) {
+    // The view went away. Can't proceed.
+    LOG(ERROR) << "Tab closed, download failed on URL:" << info.url.spec();
+    return;
+  }
+
+  ChromeDownloadDelegate::FromWebContents(web_contents)->
+      EnqueueDownloadManagerRequest(
+          info.url.spec(), info.user_agent,
+          info.content_disposition, info.original_mime_type,
+          info.cookie, info.referer);
+}
+
 bool DownloadController::HasFileAccessPermission(
     ui::WindowAndroid* window_android) {
   ScopedJavaLocalRef<jobject> jwindow_android = window_android->GetJavaObject();
@@ -262,42 +313,12 @@ void DownloadController::OnDownloadUpdated(DownloadItem* item) {
   }
 
   JNIEnv* env = base::android::AttachCurrentThread();
-  ScopedJavaLocalRef<jstring> jguid =
-      ConvertUTF8ToJavaString(env, item->GetGuid());
-  ScopedJavaLocalRef<jstring> jurl =
-      ConvertUTF8ToJavaString(env, item->GetURL().spec());
-  ScopedJavaLocalRef<jstring> jmime_type =
-      ConvertUTF8ToJavaString(env, item->GetMimeType());
-  ScopedJavaLocalRef<jstring> jpath =
-      ConvertUTF8ToJavaString(env, item->GetTargetFilePath().value());
-  ScopedJavaLocalRef<jstring> jfilename = ConvertUTF8ToJavaString(
-      env, item->GetTargetFilePath().BaseName().value());
-  std::string original_url = item->GetOriginalUrl().SchemeIs(url::kDataScheme)
-        ? std::string() : item->GetOriginalUrl().spec();
-  ScopedJavaLocalRef<jstring> joriginal_url =
-      ConvertUTF8ToJavaString(env, original_url);
-  ScopedJavaLocalRef<jstring> jreferrer_url =
-      ConvertUTF8ToJavaString(env, item->GetReferrerUrl().spec());
-
-  ui::PageTransition base_transition =
-      ui::PageTransitionStripQualifier(item->GetTransitionType());
-  bool user_initiated =
-      item->GetTransitionType() & ui::PAGE_TRANSITION_FROM_ADDRESS_BAR ||
-      base_transition == ui::PAGE_TRANSITION_TYPED ||
-      base_transition == ui::PAGE_TRANSITION_AUTO_BOOKMARK ||
-      base_transition == ui::PAGE_TRANSITION_GENERATED ||
-      base_transition == ui::PAGE_TRANSITION_RELOAD ||
-      base_transition == ui::PAGE_TRANSITION_KEYWORD;
-  bool hasUserGesture = item->HasUserGesture() || user_initiated;
+  ScopedJavaLocalRef<jobject> j_item =
+      DownloadManagerService::CreateJavaDownloadInfo(env, item);
   switch (item->GetState()) {
     case DownloadItem::IN_PROGRESS: {
-      base::TimeDelta time_delta;
-      item->TimeRemaining(&time_delta);
       Java_DownloadController_onDownloadUpdated(
-          env, GetJavaObject()->Controller(env), jurl, jmime_type, jfilename,
-          jpath, item->GetReceivedBytes(), jguid, item->PercentComplete(),
-          time_delta.InMilliseconds(), hasUserGesture, item->IsPaused(),
-          item->GetBrowserContext()->IsOffTheRecord());
+          env, GetJavaObject()->Controller(env), j_item);
       break;
     }
     case DownloadItem::COMPLETE:
@@ -307,15 +328,13 @@ void DownloadController::OnDownloadUpdated(DownloadItem* item) {
 
       // Call onDownloadCompleted
       Java_DownloadController_onDownloadCompleted(
-          env, GetJavaObject()->Controller(env), jurl, jmime_type, jfilename,
-          jpath, item->GetReceivedBytes(), jguid, joriginal_url, jreferrer_url,
-          hasUserGesture);
+          env, GetJavaObject()->Controller(env), j_item);
       DownloadController::RecordDownloadCancelReason(
              DownloadController::CANCEL_REASON_NOT_CANCELED);
       break;
     case DownloadItem::CANCELLED:
       Java_DownloadController_onDownloadCancelled(
-          env, GetJavaObject()->Controller(env), jguid);
+          env, GetJavaObject()->Controller(env), j_item);
       DownloadController::RecordDownloadCancelReason(
           DownloadController::CANCEL_REASON_OTHER_NATIVE_RESONS);
       break;
@@ -324,10 +343,8 @@ void DownloadController::OnDownloadUpdated(DownloadItem* item) {
       // NETWORK_FAILED or NETWORK_DISCONNECTED error. Download should auto
       // resume in this case.
       Java_DownloadController_onDownloadInterrupted(
-          env, GetJavaObject()->Controller(env), jurl, jmime_type, jfilename,
-          jpath, item->GetReceivedBytes(), jguid, item->CanResume(),
-          IsInterruptedDownloadAutoResumable(item),
-          item->GetBrowserContext()->IsOffTheRecord());
+          env, GetJavaObject()->Controller(env), j_item,
+          IsInterruptedDownloadAutoResumable(item));
       item->RemoveObserver(this);
       break;
     case DownloadItem::MAX_DOWNLOAD_STATE:
@@ -364,7 +381,7 @@ void DownloadController::StartContextMenuDownload(
     const ContextMenuParams& params, WebContents* web_contents, bool is_link,
     const std::string& extra_headers) {
   int process_id = web_contents->GetRenderProcessHost()->GetID();
-  int routing_id = web_contents->GetRoutingID();
+  int routing_id = web_contents->GetRenderViewHost()->GetRoutingID();
   AcquireFileAccessPermission(
       web_contents, base::Bind(&CreateContextMenuDownload, process_id,
                                routing_id, params, is_link, extra_headers));

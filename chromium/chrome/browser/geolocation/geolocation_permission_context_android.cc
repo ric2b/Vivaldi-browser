@@ -10,10 +10,14 @@
 #include "base/bind.h"
 #include "chrome/browser/android/location_settings.h"
 #include "chrome/browser/android/location_settings_impl.h"
+#include "chrome/browser/android/search_geolocation/search_geolocation_disclosure_tab_helper.h"
+#include "chrome/browser/android/search_geolocation/search_geolocation_service.h"
 #include "chrome/browser/permissions/permission_request_id.h"
 #include "chrome/browser/permissions/permission_update_infobar_delegate_android.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/infobars/core/infobar.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 
@@ -26,6 +30,45 @@ GeolocationPermissionContextAndroid::
 }
 
 GeolocationPermissionContextAndroid::~GeolocationPermissionContextAndroid() {
+}
+
+ContentSetting GeolocationPermissionContextAndroid::GetPermissionStatusInternal(
+    const GURL& requesting_origin,
+    const GURL& embedding_origin) const {
+  ContentSetting value =
+      GeolocationPermissionContext::GetPermissionStatusInternal(
+          requesting_origin, embedding_origin);
+
+  if (value == CONTENT_SETTING_ASK && requesting_origin == embedding_origin) {
+    // Consult the DSE Geolocation setting. Note that this only needs to be
+    // consulted when the content setting is ASK. In the other cases (ALLOW or
+    // BLOCK) checking the setting is redundant, as the setting is kept
+    // consistent with the content setting.
+    SearchGeolocationService* search_helper =
+        SearchGeolocationService::Factory::GetForBrowserContext(profile());
+
+    // If the user is incognito, use the DSE Geolocation setting from the
+    // original profile - but only if it is BLOCK.
+    if (!search_helper) {
+      DCHECK(profile()->IsOffTheRecord());
+      search_helper = SearchGeolocationService::Factory::GetForBrowserContext(
+          profile()->GetOriginalProfile());
+    }
+
+    if (search_helper &&
+        search_helper->UseDSEGeolocationSetting(
+            url::Origin(embedding_origin))) {
+      if (!search_helper->GetDSEGeolocationSetting()) {
+        // If the DSE setting is off, always return BLOCK.
+        value = CONTENT_SETTING_BLOCK;
+      } else if (!profile()->IsOffTheRecord()) {
+        // Otherwise, return ALLOW only if this is not incognito.
+        value = CONTENT_SETTING_ALLOW;
+      }
+    }
+  }
+
+  return value;
 }
 
 void GeolocationPermissionContextAndroid::RequestPermission(
@@ -75,6 +118,33 @@ void GeolocationPermissionContextAndroid::CancelPermissionRequest(
   }
 
   GeolocationPermissionContext::CancelPermissionRequest(web_contents, id);
+}
+
+void GeolocationPermissionContextAndroid::NotifyPermissionSet(
+    const PermissionRequestID& id,
+    const GURL& requesting_origin,
+    const GURL& embedding_origin,
+    const BrowserPermissionCallback& callback,
+    bool persist,
+    ContentSetting content_setting) {
+  GeolocationPermissionContext::NotifyPermissionSet(id, requesting_origin,
+                                                    embedding_origin, callback,
+                                                    persist, content_setting);
+
+  // If this is the default search origin, and the DSE Geolocation setting is
+  // being used, potentially show the disclosure.
+  if (requesting_origin == embedding_origin) {
+    content::WebContents* web_contents =
+        content::WebContents::FromRenderFrameHost(
+            content::RenderFrameHost::FromID(id.render_process_id(),
+                                             id.render_frame_id()));
+    SearchGeolocationDisclosureTabHelper* disclosure_helper =
+        SearchGeolocationDisclosureTabHelper::FromWebContents(web_contents);
+
+    // The tab helper can be null in tests.
+    if (disclosure_helper)
+      disclosure_helper->MaybeShowDisclosure(requesting_origin);
+  }
 }
 
 void GeolocationPermissionContextAndroid::HandleUpdateAndroidPermissions(

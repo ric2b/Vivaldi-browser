@@ -9,8 +9,10 @@
 #include <vector>
 
 #include "base/auto_reset.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "mojo/public/cpp/bindings/map.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/client/drag_drop_delegate.h"
@@ -147,10 +149,9 @@ int DragDropControllerMus::StartDragAndDrop(
   std::map<std::string, std::vector<uint8_t>> drag_data =
       static_cast<const aura::OSExchangeDataProviderMus&>(data.provider())
           .GetData();
-  window_tree_->PerformDragDrop(
-      change_id, source_window_mus->server_id(),
-      mojo::Map<mojo::String, mojo::Array<uint8_t>>::From(drag_data),
-      drag_operations);
+  window_tree_->PerformDragDrop(change_id, source_window_mus->server_id(),
+                                mojo::MapToUnorderedMap(drag_data),
+                                drag_operations);
 
   base::MessageLoop* loop = base::MessageLoop::current();
   base::MessageLoop::ScopedNestableTaskAllower allow_nested(loop);
@@ -200,7 +201,7 @@ DragDropControllerMus::CreateDropTargetEvent(Window* window,
                                              uint32_t effect_bitmask) {
   DCHECK(window->GetHost());
   gfx::Point root_location = screen_location;
-  window->GetHost()->ConvertPointFromNativeScreen(&root_location);
+  window->GetHost()->ConvertScreenInPixelsToDIP(&root_location);
   gfx::Point location = root_location;
   Window::ConvertPointToTarget(window->GetRootWindow(), window, &location);
   std::unique_ptr<ui::DropTargetEvent> event =

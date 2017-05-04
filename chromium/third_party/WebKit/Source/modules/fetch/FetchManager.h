@@ -21,21 +21,20 @@ class FetchManager final : public GarbageCollected<FetchManager>,
 
  public:
   static FetchManager* create(ExecutionContext*);
-  explicit FetchManager(ExecutionContext*);
   ScriptPromise fetch(ScriptState*, FetchRequestData*);
-  void contextDestroyed() override;
-  bool isStopped() const { return m_isStopped; }
+  void contextDestroyed(ExecutionContext*) override;
 
   DECLARE_TRACE();
 
  private:
+  explicit FetchManager(ExecutionContext*);
+
   class Loader;
 
   // Removes loader from |m_loaders|.
   void onLoaderFinished(Loader*);
 
   HeapHashSet<Member<Loader>> m_loaders;
-  bool m_isStopped;
 };
 
 }  // namespace blink

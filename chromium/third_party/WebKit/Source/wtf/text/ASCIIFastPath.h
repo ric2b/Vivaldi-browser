@@ -78,6 +78,7 @@ inline bool isAllASCII(MachineWord word) {
 template <typename CharacterType>
 inline bool charactersAreAllASCII(const CharacterType* characters,
                                   size_t length) {
+  DCHECK_GT(length, 0u);
   MachineWord allCharBits = 0;
   const CharacterType* end = characters + length;
 
@@ -116,7 +117,7 @@ inline void copyLCharsFromUCharSource(LChar* destination,
 
   size_t i = 0;
   for (; i < length && !isAlignedTo<memoryAccessMask>(&source[i]); ++i) {
-    ASSERT(!(source[i] & 0xff00));
+    DCHECK(!(source[i] & 0xff00));
     destination[i] = static_cast<LChar>(source[i]);
   }
 
@@ -126,9 +127,9 @@ inline void copyLCharsFromUCharSource(LChar* destination,
   if (length > ucharsPerLoop) {
     const size_t endLength = length - ucharsPerLoop + 1;
     for (; i < endLength; i += ucharsPerLoop) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
       for (unsigned checkIndex = 0; checkIndex < ucharsPerLoop; ++checkIndex)
-        ASSERT(!(source[i + checkIndex] & 0xff00));
+        DCHECK(!(source[i + checkIndex] & 0xff00));
 #endif
       __m128i first8UChars =
           _mm_load_si128(reinterpret_cast<const __m128i*>(&source[i]));
@@ -141,7 +142,7 @@ inline void copyLCharsFromUCharSource(LChar* destination,
   }
 
   for (; i < length; ++i) {
-    ASSERT(!(source[i] & 0xff00));
+    DCHECK(!(source[i] & 0xff00));
     destination[i] = static_cast<LChar>(source[i]);
   }
 #elif COMPILER(GCC) && CPU(ARM_NEON) && \
@@ -171,7 +172,7 @@ inline void copyLCharsFromUCharSource(LChar* destination,
     *destination++ = static_cast<LChar>(*source++);
 #else
   for (size_t i = 0; i < length; ++i) {
-    ASSERT(!(source[i] & 0xff00));
+    DCHECK(!(source[i] & 0xff00));
     destination[i] = static_cast<LChar>(source[i]);
   }
 #endif

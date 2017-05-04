@@ -8,7 +8,8 @@
 #include <stddef.h>
 
 #include "base/macros.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_iovector.h"
+#include "net/quic/core/quic_packets.h"
 
 namespace net {
 class QuicPacketCreator;

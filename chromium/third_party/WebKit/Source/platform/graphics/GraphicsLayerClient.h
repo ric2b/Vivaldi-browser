@@ -43,9 +43,12 @@ enum GraphicsLayerPaintingPhaseFlags {
   GraphicsLayerPaintOverflowContents = (1 << 3),
   GraphicsLayerPaintCompositedScroll = (1 << 4),
   GraphicsLayerPaintChildClippingMask = (1 << 5),
+  GraphicsLayerPaintAncestorClippingMask = (1 << 6),
+  GraphicsLayerPaintDecoration = (1 << 7),
   GraphicsLayerPaintAllWithOverflowClip =
       (GraphicsLayerPaintBackground | GraphicsLayerPaintForeground |
-       GraphicsLayerPaintMask)
+       GraphicsLayerPaintMask |
+       GraphicsLayerPaintDecoration)
 };
 typedef unsigned GraphicsLayerPaintingPhase;
 
@@ -69,9 +72,6 @@ class PLATFORM_EXPORT GraphicsLayerClient {
   virtual ~GraphicsLayerClient() {}
 
   virtual void invalidateTargetElementForTesting() {}
-  virtual void notifyPaint(bool isFirstPaint,
-                           bool textPainted,
-                           bool imagePainted) {}
 
   virtual IntRect computeInterestRect(
       const GraphicsLayer*,
@@ -89,7 +89,7 @@ class PLATFORM_EXPORT GraphicsLayerClient {
 
   virtual String debugName(const GraphicsLayer*) const = 0;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   // CompositedLayerMapping overrides this to verify that it is not
   // currently painting contents. An ASSERT fails, if it is.
   // This is executed in GraphicsLayer construction and destruction

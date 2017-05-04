@@ -28,7 +28,6 @@
 #include "core/editing/Editor.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
@@ -204,7 +203,7 @@ RangeVector* RangesFromCurrentSelectionOrExtendCaret(
   // We only supports single selections.
   if (selectionModifier.selection().isNone())
     return ranges;
-  ranges->append(firstRangeOf(selectionModifier.selection()));
+  ranges->push_back(firstRangeOf(selectionModifier.selection()));
   return ranges;
 }
 
@@ -376,7 +375,7 @@ static bool executeInsertFragment(LocalFrame& frame,
 static bool executeInsertElement(LocalFrame& frame, HTMLElement* content) {
   DCHECK(frame.document());
   DocumentFragment* fragment = DocumentFragment::create(*frame.document());
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   fragment->appendChild(content, exceptionState);
   if (exceptionState.hadException())
     return false;
@@ -477,8 +476,8 @@ static unsigned verticalScrollDistance(LocalFrame& frame) {
   const ComputedStyle* style = layoutBox.style();
   if (!style)
     return 0;
-  if (!(style->overflowY() == OverflowScroll ||
-        style->overflowY() == OverflowAuto ||
+  if (!(style->overflowY() == EOverflow::Scroll ||
+        style->overflowY() == EOverflow::Auto ||
         hasEditableStyle(*focusedElement)))
     return 0;
   int height = std::min<int>(layoutBox.clientHeight().toInt(),
@@ -516,8 +515,9 @@ static bool canWriteClipboard(LocalFrame& frame, EditorCommandSource source) {
   if (source == CommandFromMenuOrKeyBinding)
     return true;
   Settings* settings = frame.settings();
-  bool defaultValue = (settings && settings->javaScriptCanAccessClipboard()) ||
-                      UserGestureIndicator::utilizeUserGesture();
+  bool defaultValue =
+      (settings && settings->getJavaScriptCanAccessClipboard()) ||
+      UserGestureIndicator::utilizeUserGesture();
   return frame.editor().client().canCopyCut(&frame, defaultValue);
 }
 
@@ -760,7 +760,7 @@ static bool executeFormatBlock(LocalFrame& frame,
 
   AtomicString localName, prefix;
   if (!Document::parseQualifiedName(AtomicString(tagName), prefix, localName,
-                                    IGNORE_EXCEPTION))
+                                    IGNORE_EXCEPTION_FOR_TESTING))
     return false;
   QualifiedName qualifiedTagName(prefix, localName, xhtmlNamespaceURI);
 
@@ -1479,8 +1479,8 @@ static bool canReadClipboard(LocalFrame& frame, EditorCommandSource source) {
   if (source == CommandFromMenuOrKeyBinding)
     return true;
   Settings* settings = frame.settings();
-  bool defaultValue = settings && settings->javaScriptCanAccessClipboard() &&
-                      settings->DOMPasteAllowed();
+  bool defaultValue = settings && settings->getJavaScriptCanAccessClipboard() &&
+                      settings->getDOMPasteAllowed();
   return frame.editor().client().canPaste(&frame, defaultValue);
 }
 

@@ -21,8 +21,6 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
-#include "base/sys_info.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/input_method/candidate_window_controller.h"
 #include "chrome/browser/chromeos/input_method/component_extension_ime_manager_impl.h"
@@ -34,6 +32,7 @@
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/system/devicemode.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "third_party/icu/source/common/unicode/uloc.h"
@@ -862,7 +861,7 @@ InputMethodManagerImpl::InputMethodManagerImpl(
       is_ime_menu_activated_(false) {
   // TODO(mohsen): Revisit using FakeImeKeyboard with mash when InputController
   // work is ready. http://crbug.com/601981
-  if (base::SysInfo::IsRunningOnChromeOS() && !chrome::IsRunningInMash())
+  if (IsRunningAsSystemCompositor() && !chrome::IsRunningInMash())
     keyboard_.reset(ImeKeyboard::Create());
   else
     keyboard_.reset(new FakeImeKeyboard());
@@ -1215,7 +1214,13 @@ void InputMethodManagerImpl::MaybeNotifyImeMenuActivationChanged() {
 }
 
 void InputMethodManagerImpl::OverrideKeyboardUrlRef(const std::string& keyset) {
-  GURL url = keyboard::GetOverrideContentUrl();
+  GURL input_view_url;
+  if (GetActiveIMEState()) {
+    input_view_url =
+        GetActiveIMEState()->GetCurrentInputMethod().input_view_url();
+  }
+  GURL url = input_view_url.is_empty() ? keyboard::GetOverrideContentUrl()
+                                       : input_view_url;
 
   // If fails to find ref or tag "id" in the ref, it means the current IME is
   // not system IME, and we don't support show emoji, handwriting or voice
@@ -1223,6 +1228,7 @@ void InputMethodManagerImpl::OverrideKeyboardUrlRef(const std::string& keyset) {
   if (!url.has_ref())
     return;
   std::string overridden_ref = url.ref();
+
   auto i = overridden_ref.find("id=");
   if (i == std::string::npos)
     return;
@@ -1230,8 +1236,7 @@ void InputMethodManagerImpl::OverrideKeyboardUrlRef(const std::string& keyset) {
   if (keyset.empty()) {
     // Resets the url as the input method default url and notify the hash
     // changed to VK.
-    keyboard::SetOverrideContentUrl(
-        GetActiveIMEState()->GetCurrentInputMethod().input_view_url());
+    keyboard::SetOverrideContentUrl(input_view_url);
     keyboard::KeyboardController* keyboard_controller =
         keyboard::KeyboardController::GetInstance();
     if (keyboard_controller)
@@ -1254,6 +1259,11 @@ void InputMethodManagerImpl::OverrideKeyboardUrlRef(const std::string& keyset) {
   GURL::Replacements replacements;
   replacements.SetRefStr(overridden_ref);
   keyboard::SetOverrideContentUrl(url.ReplaceComponents(replacements));
+
+  keyboard::KeyboardController* keyboard_controller =
+      keyboard::KeyboardController::GetInstance();
+  if (keyboard_controller)
+    keyboard_controller->Reload();
 }
 
 bool InputMethodManagerImpl::IsEmojiHandwritingVoiceOnImeMenuEnabled() {

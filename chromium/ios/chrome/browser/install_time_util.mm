@@ -4,10 +4,14 @@
 
 #include "ios/chrome/browser/install_time_util.h"
 
-#include <Foundation/Foundation.h>
+#import <Foundation/Foundation.h>
 #include <stdint.h>
 
 #include "base/mac/foundation_util.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 

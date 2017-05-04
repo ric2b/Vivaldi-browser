@@ -5,7 +5,7 @@
 #include "net/quic/core/quic_data_reader.h"
 
 #include "net/base/int128.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 
 using base::StringPiece;
 
@@ -78,7 +78,7 @@ bool QuicDataReader::ReadStringPiece(StringPiece* result, size_t size) {
   }
 
   // Set result.
-  result->set(data_ + pos_, size);
+  *result = StringPiece(data_ + pos_, size);
 
   // Iterate.
   pos_ += size;

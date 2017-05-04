@@ -418,7 +418,8 @@ TEST_F(TabManagerTest, ReloadDiscardedTabContextMenu) {
   tab_manager.DiscardWebContentsAt(1, &tabstrip);
   EXPECT_TRUE(tab_manager.IsTabDiscarded(tabstrip.GetWebContentsAt(1)));
 
-  tabstrip.GetWebContentsAt(1)->GetController().Reload(false);
+  tabstrip.GetWebContentsAt(1)->GetController().Reload(
+      content::ReloadType::NORMAL, false);
   EXPECT_FALSE(tab_manager.IsTabDiscarded(tabstrip.GetWebContentsAt(1)));
   tabstrip.CloseAllTabs();
   EXPECT_TRUE(tabstrip.empty());
@@ -703,7 +704,7 @@ TEST_F(TabManagerTest, NextPurgeAndSuspendState) {
   tab_manager.GetWebContentsData(test_contents)
       ->SetLastPurgeAndSuspendModifiedTimeForTesting(test_clock.NowTicks());
 
-  test_clock.Advance(base::TimeDelta::FromSeconds(120));
+  test_clock.Advance(base::TimeDelta::FromSeconds(1200));
   EXPECT_EQ(TabManager::SUSPENDED,
             tab_manager.GetNextPurgeAndSuspendState(
                 test_contents, test_clock.NowTicks(), threshold));

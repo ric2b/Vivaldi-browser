@@ -53,7 +53,7 @@ static UConverter*& cachedConverterICU() {
 
 std::unique_ptr<TextCodec> TextCodecICU::create(const TextEncoding& encoding,
                                                 const void*) {
-  return wrapUnique(new TextCodecICU(encoding));
+  return WTF::wrapUnique(new TextCodecICU(encoding));
 }
 
 void TextCodecICU::registerEncodingNames(EncodingNameRegistrar registrar) {
@@ -113,12 +113,12 @@ void TextCodecICU::registerEncodingNames(EncodingNameRegistrar registrar) {
     registrar(standardName, standardName);
 
     uint16_t numAliases = ucnv_countAliases(name, &error);
-    ASSERT(U_SUCCESS(error));
+    DCHECK(U_SUCCESS(error));
     if (U_SUCCESS(error))
       for (uint16_t j = 0; j < numAliases; ++j) {
         error = U_ZERO_ERROR;
         const char* alias = ucnv_getAlias(name, j, &error);
-        ASSERT(U_SUCCESS(error));
+        DCHECK(U_SUCCESS(error));
         if (U_SUCCESS(error) && alias != standardName)
           registrar(alias, standardName);
       }
@@ -269,7 +269,7 @@ void TextCodecICU::releaseICUConverter() const {
 }
 
 void TextCodecICU::createICUConverter() const {
-  ASSERT(!m_converterICU);
+  DCHECK(!m_converterICU);
 
 #if defined(USING_SYSTEM_ICU)
   const char* name = m_encoding.name();
@@ -353,7 +353,7 @@ String TextCodecICU::decode(const char* bytes,
   // Get a converter for the passed-in encoding.
   if (!m_converterICU) {
     createICUConverter();
-    ASSERT(m_converterICU);
+    DCHECK(m_converterICU);
     if (!m_converterICU) {
       DLOG(ERROR)
           << "error creating ICU encoder even though encoding was in table";
@@ -585,7 +585,7 @@ class TextCodecInput final {
                  size_t length) {
     m_buffer.reserveInitialCapacity(length);
     for (size_t i = 0; i < length; ++i)
-      m_buffer.append(characters[i]);
+      m_buffer.push_back(characters[i]);
     m_begin = m_buffer.data();
     m_end = m_begin + m_buffer.size();
   }
@@ -658,7 +658,7 @@ CString TextCodecICU::encodeInternal(const TextCodecInput& input,
       break;
   }
 
-  ASSERT(U_SUCCESS(err));
+  DCHECK(U_SUCCESS(err));
   if (U_FAILURE(err))
     return CString();
 

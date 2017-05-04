@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -18,12 +19,14 @@
 #include "content/common/service_worker/service_worker_utils.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
+#include "net/base/url_util.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_status.h"
+#include "third_party/WebKit/public/web/WebConsoleMessage.h"
 
 namespace content {
 
@@ -41,6 +44,18 @@ const char kClientAuthenticationError[] =
 const char kRedirectError[] =
     "The script resource is behind a redirect, which is disallowed.";
 const char kServiceWorkerAllowed[] = "Service-Worker-Allowed";
+
+bool ShouldIgnoreSSLError(net::URLRequest* request) {
+  const net::HttpNetworkSession::Params* session_params =
+      request->context()->GetNetworkSessionParams();
+  if (session_params && session_params->ignore_certificate_errors)
+    return true;
+  bool allow_localhost = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kAllowInsecureLocalhost);
+  if (allow_localhost && net::IsLocalhost(request->url().host()))
+    return true;
+  return false;
+}
 
 }  // namespace
 
@@ -67,6 +82,10 @@ ServiceWorkerWriteToCacheJob::ServiceWorkerWriteToCacheJob(
       did_notify_started_(false),
       did_notify_finished_(false),
       weak_factory_(this) {
+  DCHECK(version_);
+  DCHECK(resource_type_ == RESOURCE_TYPE_SCRIPT ||
+         (resource_type_ == RESOURCE_TYPE_SERVICE_WORKER &&
+          version_->script_url() == url_));
   InitNetRequest(extra_load_flags);
 }
 
@@ -252,9 +271,10 @@ void ServiceWorkerWriteToCacheJob::OnSSLCertificateError(
   DCHECK_EQ(net_request_.get(), request);
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerWriteToCacheJob::OnSSLCertificateError");
-  // TODO(michaeln): Pass this thru to our jobs client,
-  // see NotifySSLCertificateError.
-  NotifyStartErrorHelper(net::ERR_INSECURE_RESPONSE, kSSLError);
+  if (ShouldIgnoreSSLError(request))
+    request->ContinueDespiteLastError();
+  else
+    NotifyStartErrorHelper(net::ERR_INSECURE_RESPONSE, kSSLError);
 }
 
 void ServiceWorkerWriteToCacheJob::OnResponseStarted(net::URLRequest* request,
@@ -277,19 +297,13 @@ void ServiceWorkerWriteToCacheJob::OnResponseStarted(net::URLRequest* request,
   }
   // OnSSLCertificateError is not called when the HTTPS connection is reused.
   // So we check cert_status here.
-  if (net::IsCertStatusError(request->ssl_info().cert_status)) {
-    const net::HttpNetworkSession::Params* session_params =
-        request->context()->GetNetworkSessionParams();
-    if (!session_params || !session_params->ignore_certificate_errors) {
-      NotifyStartErrorHelper(net::ERR_INSECURE_RESPONSE, kSSLError);
-      return;
-    }
+  if (net::IsCertStatusError(request->ssl_info().cert_status) &&
+      !ShouldIgnoreSSLError(request)) {
+    NotifyStartErrorHelper(net::ERR_INSECURE_RESPONSE, kSSLError);
+    return;
   }
 
   if (resource_type_ == RESOURCE_TYPE_SERVICE_WORKER) {
-    // TODO(nhiroki): Temporary check for debugging (https://crbug.com/485900).
-    CHECK_EQ(version_->script_url(), url_);
-
     std::string mime_type;
     request->GetMimeType(&mime_type);
     if (mime_type != "application/x-javascript" &&
@@ -425,7 +439,7 @@ net::Error ServiceWorkerWriteToCacheJob::NotifyFinishedCaching(
     // occurred because the worker stops soon after receiving the error
     // response.
     version_->embedded_worker()->AddMessageToConsole(
-        CONSOLE_MESSAGE_LEVEL_ERROR,
+        blink::WebConsoleMessage::LevelError,
         status_message.empty() ? kFetchScriptError : status_message);
   } else {
     size = cache_writer_->bytes_written();

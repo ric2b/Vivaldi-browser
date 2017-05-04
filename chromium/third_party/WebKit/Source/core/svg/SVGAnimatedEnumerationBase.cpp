@@ -38,12 +38,6 @@ SVGAnimatedEnumerationBase::~SVGAnimatedEnumerationBase() {}
 
 void SVGAnimatedEnumerationBase::setBaseVal(unsigned short value,
                                             ExceptionState& exceptionState) {
-  if (this->isReadOnly()) {
-    exceptionState.throwDOMException(NoModificationAllowedError,
-                                     "The attribute is read-only.");
-    return;
-  }
-
   if (!value) {
     exceptionState.throwTypeError(
         "The enumeration value provided is 0, which is not settable.");
@@ -58,13 +52,7 @@ void SVGAnimatedEnumerationBase::setBaseVal(unsigned short value,
     return;
   }
 
-  baseValue()->setValue(value);
-
-  m_baseValueUpdated = true;
-
-  ASSERT(this->attributeName() != QualifiedName::null());
-  contextElement()->invalidateSVGAttributes();
-  contextElement()->svgAttributeBaseValChanged(this->attributeName());
+  SVGAnimatedProperty<SVGEnumerationBase>::setBaseVal(value, exceptionState);
 }
 
 }  // namespace blink

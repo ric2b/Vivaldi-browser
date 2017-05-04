@@ -6,8 +6,10 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/drag_drop_client.h"
@@ -25,13 +27,11 @@
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size_conversions.h"
-#include "ui/native_theme/native_theme.h"
 #include "ui/views/corewm/tooltip.h"
 #include "ui/views/corewm/tooltip_controller.h"
 #include "ui/views/drag_utils.h"
 #include "ui/views/view_constants_aura.h"
 #include "ui/views/widget/desktop_aura/desktop_capture_client.h"
-#include "ui/views/widget/desktop_aura/desktop_cursor_loader_updater.h"
 #include "ui/views/widget/desktop_aura/desktop_event_client.h"
 #include "ui/views/widget/desktop_aura/desktop_focus_rules.h"
 #include "ui/views/widget/desktop_aura/desktop_native_cursor_manager.h"
@@ -46,7 +46,6 @@
 #include "ui/views/widget/widget_aura_utils.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/window_reorderer.h"
-#include "ui/views/window/native_frame_view.h"
 #include "ui/wm/core/compound_event_filter.h"
 #include "ui/wm/core/cursor_manager.h"
 #include "ui/wm/core/focus_controller.h"
@@ -327,14 +326,16 @@ void DesktopNativeWidgetAura::OnHostClosed() {
 
 void DesktopNativeWidgetAura::OnDesktopWindowTreeHostDestroyed(
     aura::WindowTreeHost* host) {
-  // We explicitly do NOT clear the cursor client property. Since the cursor
-  // manager is a singleton, it can outlive any window hierarchy, and it's
-  // important that objects attached to this destroying window hierarchy have
-  // an opportunity to deregister their observers from the cursor manager.
-  // They may want to do this when they are notified that they're being
-  // removed from the window hierarchy, which happens soon after this
-  // function when DesktopWindowTreeHost* calls DestroyDispatcher().
-  native_cursor_manager_->RemoveHost(host);
+  if (use_desktop_native_cursor_manager_) {
+    // We explicitly do NOT clear the cursor client property. Since the cursor
+    // manager is a singleton, it can outlive any window hierarchy, and it's
+    // important that objects attached to this destroying window hierarchy have
+    // an opportunity to deregister their observers from the cursor manager.
+    // They may want to do this when they are notified that they're being
+    // removed from the window hierarchy, which happens soon after this
+    // function when DesktopWindowTreeHost* calls DestroyDispatcher().
+    native_cursor_manager_->RemoveHost(host);
+  }
 
   aura::client::SetScreenPositionClient(host->window(), NULL);
   position_client_.reset();
@@ -408,7 +409,7 @@ void DesktopNativeWidgetAura::InitNativeWidget(
   }
   content_window_->SetType(GetAuraWindowTypeForWidgetType(params.type));
   content_window_->Init(params.layer_type);
-  wm::SetShadowType(content_window_, wm::SHADOW_TYPE_NONE);
+  wm::SetShadowElevation(content_window_, wm::ShadowElevation::NONE);
 
   content_window_container_ = new aura::Window(NULL);
   content_window_container_->Init(ui::LAYER_NOT_DRAWN);
@@ -424,7 +425,6 @@ void DesktopNativeWidgetAura::InitNativeWidget(
   }
   desktop_window_tree_host_->Init(content_window_, params);
 
-  host_->InitHost();
   host_->window()->AddChild(content_window_container_);
   host_->window()->SetProperty(kDesktopNativeWidgetAuraKey, this);
 
@@ -448,19 +448,21 @@ void DesktopNativeWidgetAura::InitNativeWidget(
   root_window_event_filter_.reset(new wm::CompoundEventFilter);
   host_->window()->AddPreTargetHandler(root_window_event_filter_.get());
 
-  // The host's dispatcher must be added to |native_cursor_manager_| before
-  // OnNativeWidgetCreated() is called.
-  cursor_reference_count_++;
-  if (!native_cursor_manager_) {
-    native_cursor_manager_ = new DesktopNativeCursorManager(
-        DesktopCursorLoaderUpdater::Create());
+  use_desktop_native_cursor_manager_ =
+      desktop_window_tree_host_->ShouldUseDesktopNativeCursorManager();
+  if (use_desktop_native_cursor_manager_) {
+    // The host's dispatcher must be added to |native_cursor_manager_| before
+    // OnNativeWidgetCreated() is called.
+    cursor_reference_count_++;
+    if (!native_cursor_manager_)
+      native_cursor_manager_ = new DesktopNativeCursorManager();
+    if (!cursor_manager_) {
+      cursor_manager_ = new wm::CursorManager(
+          std::unique_ptr<wm::NativeCursorManager>(native_cursor_manager_));
+    }
+    native_cursor_manager_->AddHost(host());
+    aura::client::SetCursorClient(host_->window(), cursor_manager_);
   }
-  if (!cursor_manager_) {
-    cursor_manager_ = new wm::CursorManager(
-        std::unique_ptr<wm::NativeCursorManager>(native_cursor_manager_));
-  }
-  native_cursor_manager_->AddHost(host());
-  aura::client::SetCursorClient(host_->window(), cursor_manager_);
 
   desktop_window_tree_host_->OnNativeWidgetCreated(params);
 
@@ -535,10 +537,12 @@ void DesktopNativeWidgetAura::InitNativeWidget(
       GetWidget()->GetRootView()));
 }
 
-void DesktopNativeWidgetAura::OnWidgetInitDone() {}
+void DesktopNativeWidgetAura::OnWidgetInitDone() {
+  desktop_window_tree_host_->OnWidgetInitDone();
+}
 
 NonClientFrameView* DesktopNativeWidgetAura::CreateNonClientFrameView() {
-  return ShouldUseNativeFrame() ? new NativeFrameView(GetWidget()) : NULL;
+  return desktop_window_tree_host_->CreateNonClientFrameView();
 }
 
 bool DesktopNativeWidgetAura::ShouldUseNativeFrame() const {
@@ -689,7 +693,8 @@ void DesktopNativeWidgetAura::SetBounds(const gfx::Rect& bounds) {
   aura::Window* root = host_->window();
   display::Screen* screen = display::Screen::GetScreen();
   gfx::Rect bounds_in_pixels = screen->DIPToScreenRectInWindow(root, bounds);
-  desktop_window_tree_host_->AsWindowTreeHost()->SetBounds(bounds_in_pixels);
+  desktop_window_tree_host_->AsWindowTreeHost()->SetBoundsInPixels(
+      bounds_in_pixels);
 }
 
 void DesktopNativeWidgetAura::SetSize(const gfx::Size& size) {
@@ -936,27 +941,16 @@ void DesktopNativeWidgetAura::SetVisibilityAnimationTransition(
   wm::SetWindowVisibilityAnimationTransition(content_window_, wm_transition);
 }
 
-ui::NativeTheme* DesktopNativeWidgetAura::GetNativeTheme() const {
-  return DesktopWindowTreeHost::GetNativeTheme(content_window_);
-}
-
-void DesktopNativeWidgetAura::OnRootViewLayout() {
-  if (content_window_)
-    desktop_window_tree_host_->OnRootViewLayout();
-}
-
 bool DesktopNativeWidgetAura::IsTranslucentWindowOpacitySupported() const {
   return content_window_ &&
       desktop_window_tree_host_->IsTranslucentWindowOpacitySupported();
 }
 
 void DesktopNativeWidgetAura::OnSizeConstraintsChanged() {
-  content_window_->SetProperty(aura::client::kCanMaximizeKey,
-                               GetWidget()->widget_delegate()->CanMaximize());
-  content_window_->SetProperty(aura::client::kCanMinimizeKey,
-                               GetWidget()->widget_delegate()->CanMinimize());
-  content_window_->SetProperty(aura::client::kCanResizeKey,
-                               GetWidget()->widget_delegate()->CanResize());
+  int32_t behavior = ui::mojom::kResizeBehaviorNone;
+  if (GetWidget()->widget_delegate())
+    behavior = GetWidget()->widget_delegate()->GetResizeBehavior();
+  content_window_->SetProperty(aura::client::kResizeBehaviorKey, behavior);
   desktop_window_tree_host_->SizeConstraintsChanged();
 }
 
@@ -1110,6 +1104,10 @@ void DesktopNativeWidgetAura::OnWindowActivated(
     // Pass in false so that ClearNativeFocus() isn't invoked.
     GetWidget()->GetFocusManager()->StoreFocusedView(false);
   }
+
+  // Give the native widget a chance to handle any specific changes it needs.
+  desktop_window_tree_host_->OnNativeWidgetActivationChanged(
+      content_window_ == gained_active);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1181,10 +1179,11 @@ void DesktopNativeWidgetAura::OnHostWorkspaceChanged(
   native_widget_delegate_->OnNativeWidgetWorkspaceChanged();
 }
 
-void DesktopNativeWidgetAura::OnHostMoved(const aura::WindowTreeHost* host,
-                                          const gfx::Point& new_origin) {
-  TRACE_EVENT1("views", "DesktopNativeWidgetAura::OnHostMoved",
-               "new_origin", new_origin.ToString());
+void DesktopNativeWidgetAura::OnHostMovedInPixels(
+    const aura::WindowTreeHost* host,
+    const gfx::Point& new_origin_in_pixels) {
+  TRACE_EVENT1("views", "DesktopNativeWidgetAura::OnHostMovedInPixels",
+               "new_origin_in_pixels", new_origin_in_pixels.ToString());
 
   native_widget_delegate_->OnNativeWidgetMove();
 }
@@ -1193,6 +1192,9 @@ void DesktopNativeWidgetAura::OnHostMoved(const aura::WindowTreeHost* host,
 // DesktopNativeWidgetAura, private:
 
 void DesktopNativeWidgetAura::UpdateWindowTransparency() {
+  if (!desktop_window_tree_host_->ShouldUpdateWindowTransparency())
+    return;
+
   content_window_->SetTransparent(
       desktop_window_tree_host_->ShouldWindowContentsBeTransparent());
   // Regardless of transparency or not, this root content window will always

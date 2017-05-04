@@ -35,6 +35,7 @@
 #include "platform/heap/Handle.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/PassRefPtr.h"
+#include "wtf/WeakPtr.h"
 #include <memory>
 
 namespace blink {
@@ -45,9 +46,6 @@ class InProcessWorkerObjectProxy;
 class SerializedScriptValue;
 class WorkerClients;
 
-// TODO(nhiroki): "MessagingProxy" is not well-defined term among worker
-// components. Probably we should rename this to something more suitable.
-// (http://crbug.com/603785)
 class CORE_EXPORT InProcessWorkerMessagingProxy
     : public ThreadedMessagingProxyBase {
   WTF_MAKE_NONCOPYABLE(InProcessWorkerMessagingProxy);
@@ -77,6 +75,9 @@ class CORE_EXPORT InProcessWorkerMessagingProxy
 
   // 'virtual' for testing.
   virtual void confirmMessageFromWorkerObject();
+
+  // Called from InProcessWorkerObjectProxy when all pending activities on the
+  // worker context are finished. See InProcessWorkerObjectProxy.h for details.
   virtual void pendingActivityFinished();
 
  protected:
@@ -97,13 +98,26 @@ class CORE_EXPORT InProcessWorkerMessagingProxy
   WeakPersistent<InProcessWorkerBase> m_workerObject;
   Persistent<WorkerClients> m_workerClients;
 
+  struct QueuedTask {
+    RefPtr<SerializedScriptValue> message;
+    std::unique_ptr<MessagePortChannelArray> channels;
+
+    QueuedTask(RefPtr<SerializedScriptValue> message,
+               std::unique_ptr<MessagePortChannelArray> channels);
+    ~QueuedTask();
+  };
+
   // Tasks are queued here until there's a thread object created.
-  Vector<std::unique_ptr<ExecutionContextTask>> m_queuedEarlyTasks;
+  Vector<std::unique_ptr<QueuedTask>> m_queuedEarlyTasks;
 
   // Unconfirmed messages from the parent context thread to the worker thread.
-  unsigned m_unconfirmedMessageCount;
+  // When this is greater than 0, |m_workerGlobalScopeHasPendingActivity| should
+  // be true.
+  unsigned m_unconfirmedMessageCount = 0;
 
-  bool m_workerGlobalScopeMayHavePendingActivity;
+  // Indicates whether there are pending activities (e.g, MessageEvent,
+  // setTimeout) on the worker context.
+  bool m_workerGlobalScopeHasPendingActivity = false;
 
   WeakPtrFactory<InProcessWorkerMessagingProxy> m_weakPtrFactory;
 };

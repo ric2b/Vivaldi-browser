@@ -16,6 +16,7 @@
 #include "chrome/browser/chromeos/base/locale_util.h"
 #include "chrome/browser/chromeos/eol_notification.h"
 #include "chrome/browser/chromeos/hats/hats_notification_controller.h"
+#include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_notification_controller.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_login_manager.h"
 #include "chrome/browser/chromeos/login/signin/token_handle_util.h"
@@ -30,7 +31,6 @@
 class AccountId;
 class GURL;
 class PrefRegistrySimple;
-class PrefService;
 class Profile;
 class TokenHandleFetcher;
 
@@ -317,7 +317,7 @@ class UserSessionManager
   void FinalizePrepareProfile(Profile* profile);
 
   // Starts out-of-box flow with the specified screen.
-  void ActivateWizard(const std::string& screen_name);
+  void ActivateWizard(OobeScreen screen);
 
   // Adds first-time login URLs.
   void InitializeStartUrls() const;
@@ -338,6 +338,14 @@ class UserSessionManager
 
   // Initializes RLZ. If |disabled| is true, RLZ pings are disabled.
   void InitRlzImpl(Profile* profile, bool disabled);
+
+  // If |user| is not a kiosk app, sets session type as seen by extensions
+  // feature system according to |user|'s type.
+  // The value should eventually be set for kiosk users, too - that's done as
+  // part of special, kiosk user session bring-up.
+  // NOTE: This has to be called before profile is initialized - so it is set up
+  // when extension are loaded during profile initialization.
+  void InitNonKioskExtensionFeaturesSessionType(const user_manager::User* user);
 
   // Callback to process RetrieveActiveSessions() request results.
   void OnRestoreActiveSessions(

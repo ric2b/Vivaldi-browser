@@ -17,11 +17,13 @@
 #include "chrome/browser/captive_portal/captive_portal_tab_helper.h"
 #include "chrome/browser/interstitials/chrome_controller_client.h"
 #include "chrome/browser/interstitials/chrome_metrics_helper.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/cert_report_helper.h"
 #include "chrome/browser/ssl/ssl_cert_reporter.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/captive_portal/captive_portal_detector.h"
 #include "components/certificate_reporting/error_reporter.h"
+#include "components/safe_browsing_db/safe_browsing_prefs.h"
 #include "components/security_interstitials/core/common_string_util.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "components/security_interstitials/core/metrics_helper.h"
@@ -76,9 +78,12 @@ CaptivePortalBlockingPage::CaptivePortalBlockingPage(
     std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
     const net::SSLInfo& ssl_info,
     const base::Callback<void(content::CertificateRequestResultType)>& callback)
-    : SecurityInterstitialPage(web_contents,
-                               request_url,
-                               CreateMetricsHelper(web_contents, request_url)),
+    : SecurityInterstitialPage(
+          web_contents,
+          request_url,
+          base::MakeUnique<ChromeControllerClient>(
+              web_contents,
+              CreateMetricsHelper(web_contents, request_url))),
       login_url_(login_url),
       ssl_info_(ssl_info),
       callback_(callback) {
@@ -226,9 +231,15 @@ void CaptivePortalBlockingPage::CommandReceived(const std::string& command) {
       break;
     case security_interstitials::CMD_DO_REPORT:
       controller()->SetReportingPreference(true);
+      safe_browsing::SetExtendedReportingPrefAndMetric(
+          controller()->GetPrefService(), true,
+          safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL);
       break;
     case security_interstitials::CMD_DONT_REPORT:
       controller()->SetReportingPreference(false);
+      safe_browsing::SetExtendedReportingPrefAndMetric(
+          controller()->GetPrefService(), false,
+          safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL);
       break;
     case security_interstitials::CMD_OPEN_REPORTING_PRIVACY:
       controller()->OpenExtendedReportingPrivacyPolicy();
@@ -257,6 +268,7 @@ void CaptivePortalBlockingPage::OnProceed() {
 }
 
 void CaptivePortalBlockingPage::OnDontProceed() {
+  UpdateMetricsAfterSecurityInterstitial();
   if (cert_report_helper_) {
     // Finish collecting information about invalid certificates, if the
     // user opted in to.

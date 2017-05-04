@@ -172,6 +172,10 @@ bool QuiesceStatusChangeChecker::IsExitConditionSatisfied() {
            services_.begin();
        it != services_.end(); ++it) {
     if (!IsSyncDisabled(*it)) {
+      if (!(*it)->ConfigurationDone()) {
+        DVLOG(1) << "Not quiesced: Still Configuring";
+        return false;
+      }
       enabled_services.push_back(*it);
     }
   }

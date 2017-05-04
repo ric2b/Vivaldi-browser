@@ -14,100 +14,34 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/utf_string_conversions.h"
 #include "components/ntp_snippets/category_info.h"
+#include "components/ntp_snippets/category_rankers/constant_category_ranker.h"
+#include "components/ntp_snippets/category_rankers/fake_category_ranker.h"
+#include "components/ntp_snippets/category_rankers/mock_category_ranker.h"
 #include "components/ntp_snippets/category_status.h"
 #include "components/ntp_snippets/content_suggestion.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
+#include "components/ntp_snippets/mock_content_suggestions_provider.h"
 #include "components/ntp_snippets/user_classifier.h"
 #include "components/prefs/testing_pref_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/image/image.h"
 
+using testing::_;
 using testing::ElementsAre;
 using testing::Eq;
 using testing::InvokeWithoutArgs;
 using testing::IsEmpty;
 using testing::Mock;
 using testing::Property;
-using testing::_;
+using testing::Return;
+using testing::StrictMock;
+using testing::UnorderedElementsAre;
 
 namespace ntp_snippets {
 
 namespace {
-
-class MockProvider : public ContentSuggestionsProvider {
- public:
-  MockProvider(Observer* observer,
-               CategoryFactory* category_factory,
-               const std::vector<Category>& provided_categories)
-      : ContentSuggestionsProvider(observer, category_factory) {
-    SetProvidedCategories(provided_categories);
-  }
-
-  void SetProvidedCategories(const std::vector<Category>& provided_categories) {
-    statuses_.clear();
-    provided_categories_ = provided_categories;
-    for (Category category : provided_categories) {
-      statuses_[category.id()] = CategoryStatus::AVAILABLE;
-    }
-  }
-
-  CategoryStatus GetCategoryStatus(Category category) override {
-    return statuses_[category.id()];
-  }
-
-  CategoryInfo GetCategoryInfo(Category category) override {
-    return CategoryInfo(base::ASCIIToUTF16("Section title"),
-                        ContentSuggestionsCardLayout::FULL_CARD, true, false,
-                        true, false,
-                        base::ASCIIToUTF16("No suggestions message"));
-  }
-
-  void FireSuggestionsChanged(
-      Category category,
-      std::vector<ContentSuggestion> suggestions) {
-    observer()->OnNewSuggestions(this, category, std::move(suggestions));
-  }
-
-  void FireCategoryStatusChanged(Category category, CategoryStatus new_status) {
-    statuses_[category.id()] = new_status;
-    observer()->OnCategoryStatusChanged(this, category, new_status);
-  }
-
-  void FireCategoryStatusChangedWithCurrentStatus(Category category) {
-    observer()->OnCategoryStatusChanged(this, category,
-                                        statuses_[category.id()]);
-  }
-
-  void FireSuggestionInvalidated(const ContentSuggestion::ID& suggestion_id) {
-    observer()->OnSuggestionInvalidated(this, suggestion_id);
-  }
-
-  MOCK_METHOD3(ClearHistory,
-               void(base::Time begin,
-                    base::Time end,
-                    const base::Callback<bool(const GURL& url)>& filter));
-  MOCK_METHOD3(Fetch,
-               void(const Category&,
-                    const std::set<std::string>&,
-                    const FetchDoneCallback&));
-  MOCK_METHOD1(ClearCachedSuggestions, void(Category category));
-  MOCK_METHOD2(GetDismissedSuggestionsForDebugging,
-               void(Category category,
-                    const DismissedSuggestionsCallback& callback));
-  MOCK_METHOD1(ClearDismissedSuggestionsForDebugging, void(Category category));
-  MOCK_METHOD1(DismissSuggestion,
-               void(const ContentSuggestion::ID& suggestion_id));
-  MOCK_METHOD2(FetchSuggestionImage,
-               void(const ContentSuggestion::ID& suggestion_id,
-                    const ImageFetchedCallback& callback));
-
- private:
-  std::vector<Category> provided_categories_;
-  std::map<int, CategoryStatus> statuses_;
-};
 
 class MockServiceObserver : public ContentSuggestionsService::Observer {
  public:
@@ -119,6 +53,7 @@ class MockServiceObserver : public ContentSuggestionsService::Observer {
                void(Category changed_category, CategoryStatus new_status));
   MOCK_METHOD1(OnSuggestionInvalidated,
                void(const ContentSuggestion::ID& suggestion_id));
+  MOCK_METHOD0(OnFullRefreshRequired, void());
   MOCK_METHOD0(ContentSuggestionsServiceShutdown, void());
 
  private:
@@ -130,7 +65,8 @@ class MockServiceObserver : public ContentSuggestionsService::Observer {
 class ContentSuggestionsServiceTest : public testing::Test {
  public:
   ContentSuggestionsServiceTest()
-      : pref_service_(new TestingPrefServiceSimple()) {}
+      : pref_service_(base::MakeUnique<TestingPrefServiceSimple>()),
+        category_ranker_(base::MakeUnique<ConstantCategoryRanker>()) {}
 
   void SetUp() override {
     RegisterPrefs();
@@ -179,27 +115,24 @@ class ContentSuggestionsServiceTest : public testing::Test {
     return service()->dismissed_providers_by_category_;
   }
 
-  CategoryFactory* category_factory() { return service()->category_factory(); }
-
-  Category FromKnownCategory(KnownCategories known_category) {
-    return service()->category_factory()->FromKnownCategory(known_category);
+  MockContentSuggestionsProvider* MakeRegisteredMockProvider(
+      Category provided_category) {
+    return MakeRegisteredMockProvider(
+        std::vector<Category>({provided_category}));
   }
 
-  Category FromRemoteCategory(int remote_category) {
-    return service()->category_factory()->FromRemoteCategory(remote_category);
-  }
-
-  MockProvider* RegisterProvider(Category provided_category) {
-    return RegisterProvider(std::vector<Category>({provided_category}));
-  }
-
-  MockProvider* RegisterProvider(
+  MockContentSuggestionsProvider* MakeRegisteredMockProvider(
       const std::vector<Category>& provided_categories) {
-    std::unique_ptr<MockProvider> provider = base::MakeUnique<MockProvider>(
-        service(), category_factory(), provided_categories);
-    MockProvider* result = provider.get();
+    auto provider =
+        base::MakeUnique<testing::StrictMock<MockContentSuggestionsProvider>>(
+            service(), provided_categories);
+    MockContentSuggestionsProvider* result = provider.get();
     service()->RegisterProvider(std::move(provider));
     return result;
+  }
+
+  void SetCategoryRanker(std::unique_ptr<CategoryRanker> category_ranker) {
+    category_ranker_ = std::move(category_ranker);
   }
 
   MOCK_METHOD1(OnImageFetched, void(const gfx::Image&));
@@ -213,8 +146,9 @@ class ContentSuggestionsServiceTest : public testing::Test {
   void CreateContentSuggestionsService(
       ContentSuggestionsService::State enabled) {
     ASSERT_FALSE(service_);
-    service_.reset(new ContentSuggestionsService(
-        enabled, /*history_service=*/nullptr, pref_service_.get()));
+    service_ = base::MakeUnique<ContentSuggestionsService>(
+        enabled, /*signin_manager=*/nullptr, /*history_service=*/nullptr,
+        pref_service_.get(), std::move(category_ranker_));
   }
 
   void ResetService() {
@@ -245,6 +179,7 @@ class ContentSuggestionsServiceTest : public testing::Test {
  private:
   std::unique_ptr<ContentSuggestionsService> service_;
   std::unique_ptr<TestingPrefServiceSimple> pref_service_;
+  std::unique_ptr<CategoryRanker> category_ranker_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSuggestionsServiceTest);
 };
@@ -261,9 +196,10 @@ class ContentSuggestionsServiceDisabledTest
 TEST_F(ContentSuggestionsServiceTest, ShouldRegisterProviders) {
   EXPECT_THAT(service()->state(),
               Eq(ContentSuggestionsService::State::ENABLED));
-  Category articles_category = FromKnownCategory(KnownCategories::ARTICLES);
+  Category articles_category =
+      Category::FromKnownCategory(KnownCategories::ARTICLES);
   Category offline_pages_category =
-      FromKnownCategory(KnownCategories::DOWNLOADS);
+      Category::FromKnownCategory(KnownCategories::DOWNLOADS);
   ASSERT_THAT(providers(), IsEmpty());
   EXPECT_THAT(service()->GetCategories(), IsEmpty());
   EXPECT_THAT(service()->GetCategoryStatus(articles_category),
@@ -271,19 +207,22 @@ TEST_F(ContentSuggestionsServiceTest, ShouldRegisterProviders) {
   EXPECT_THAT(service()->GetCategoryStatus(offline_pages_category),
               Eq(CategoryStatus::NOT_PROVIDED));
 
-  MockProvider* provider1 = RegisterProvider(articles_category);
+  MockContentSuggestionsProvider* provider1 =
+      MakeRegisteredMockProvider(articles_category);
   provider1->FireCategoryStatusChangedWithCurrentStatus(articles_category);
   EXPECT_THAT(providers().count(offline_pages_category), Eq(0ul));
   ASSERT_THAT(providers().count(articles_category), Eq(1ul));
   EXPECT_THAT(providers().at(articles_category), Eq(provider1));
   EXPECT_THAT(providers().size(), Eq(1ul));
-  EXPECT_THAT(service()->GetCategories(), ElementsAre(articles_category));
+  EXPECT_THAT(service()->GetCategories(),
+              UnorderedElementsAre(articles_category));
   EXPECT_THAT(service()->GetCategoryStatus(articles_category),
               Eq(CategoryStatus::AVAILABLE));
   EXPECT_THAT(service()->GetCategoryStatus(offline_pages_category),
               Eq(CategoryStatus::NOT_PROVIDED));
 
-  MockProvider* provider2 = RegisterProvider(offline_pages_category);
+  MockContentSuggestionsProvider* provider2 =
+      MakeRegisteredMockProvider(offline_pages_category);
   provider2->FireCategoryStatusChangedWithCurrentStatus(offline_pages_category);
   ASSERT_THAT(providers().count(offline_pages_category), Eq(1ul));
   EXPECT_THAT(providers().at(articles_category), Eq(provider1));
@@ -291,7 +230,7 @@ TEST_F(ContentSuggestionsServiceTest, ShouldRegisterProviders) {
   EXPECT_THAT(providers().at(offline_pages_category), Eq(provider2));
   EXPECT_THAT(providers().size(), Eq(2ul));
   EXPECT_THAT(service()->GetCategories(),
-              ElementsAre(offline_pages_category, articles_category));
+              UnorderedElementsAre(offline_pages_category, articles_category));
   EXPECT_THAT(service()->GetCategoryStatus(articles_category),
               Eq(CategoryStatus::AVAILABLE));
   EXPECT_THAT(service()->GetCategoryStatus(offline_pages_category),
@@ -299,9 +238,10 @@ TEST_F(ContentSuggestionsServiceTest, ShouldRegisterProviders) {
 }
 
 TEST_F(ContentSuggestionsServiceDisabledTest, ShouldDoNothingWhenDisabled) {
-  Category articles_category = FromKnownCategory(KnownCategories::ARTICLES);
+  Category articles_category =
+      Category::FromKnownCategory(KnownCategories::ARTICLES);
   Category offline_pages_category =
-      FromKnownCategory(KnownCategories::DOWNLOADS);
+      Category::FromKnownCategory(KnownCategories::DOWNLOADS);
   EXPECT_THAT(service()->state(),
               Eq(ContentSuggestionsService::State::DISABLED));
   EXPECT_THAT(providers(), IsEmpty());
@@ -315,11 +255,14 @@ TEST_F(ContentSuggestionsServiceDisabledTest, ShouldDoNothingWhenDisabled) {
 }
 
 TEST_F(ContentSuggestionsServiceTest, ShouldRedirectFetchSuggestionImage) {
-  Category articles_category = FromKnownCategory(KnownCategories::ARTICLES);
+  Category articles_category =
+      Category::FromKnownCategory(KnownCategories::ARTICLES);
   Category offline_pages_category =
-      FromKnownCategory(KnownCategories::DOWNLOADS);
-  MockProvider* provider1 = RegisterProvider(articles_category);
-  MockProvider* provider2 = RegisterProvider(offline_pages_category);
+      Category::FromKnownCategory(KnownCategories::DOWNLOADS);
+  MockContentSuggestionsProvider* provider1 =
+      MakeRegisteredMockProvider(articles_category);
+  MockContentSuggestionsProvider* provider2 =
+      MakeRegisteredMockProvider(offline_pages_category);
 
   provider1->FireSuggestionsChanged(articles_category,
                                     CreateSuggestions(articles_category, {1}));
@@ -339,8 +282,7 @@ TEST_F(ContentSuggestionsServiceTest,
 
   base::RunLoop run_loop;
   // Assuming there will never be a category with the id below.
-  ContentSuggestion::ID suggestion_id(category_factory()->FromIDValue(21563),
-                                      "TestID");
+  ContentSuggestion::ID suggestion_id(Category::FromIDValue(21563), "TestID");
   EXPECT_CALL(*this, OnImageFetched(Property(&gfx::Image::IsEmpty, Eq(true))))
       .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
   service()->FetchSuggestionImage(
@@ -350,11 +292,14 @@ TEST_F(ContentSuggestionsServiceTest,
 }
 
 TEST_F(ContentSuggestionsServiceTest, ShouldRedirectDismissSuggestion) {
-  Category articles_category = FromKnownCategory(KnownCategories::ARTICLES);
+  Category articles_category =
+      Category::FromKnownCategory(KnownCategories::ARTICLES);
   Category offline_pages_category =
-      FromKnownCategory(KnownCategories::DOWNLOADS);
-  MockProvider* provider1 = RegisterProvider(articles_category);
-  MockProvider* provider2 = RegisterProvider(offline_pages_category);
+      Category::FromKnownCategory(KnownCategories::DOWNLOADS);
+  MockContentSuggestionsProvider* provider1 =
+      MakeRegisteredMockProvider(articles_category);
+  MockContentSuggestionsProvider* provider2 =
+      MakeRegisteredMockProvider(offline_pages_category);
 
   provider2->FireSuggestionsChanged(
       offline_pages_category, CreateSuggestions(offline_pages_category, {11}));
@@ -366,9 +311,11 @@ TEST_F(ContentSuggestionsServiceTest, ShouldRedirectDismissSuggestion) {
 }
 
 TEST_F(ContentSuggestionsServiceTest, ShouldRedirectSuggestionInvalidated) {
-  Category articles_category = FromKnownCategory(KnownCategories::ARTICLES);
+  Category articles_category =
+      Category::FromKnownCategory(KnownCategories::ARTICLES);
 
-  MockProvider* provider = RegisterProvider(articles_category);
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider(articles_category);
   MockServiceObserver observer;
   service()->AddObserver(&observer);
 
@@ -395,14 +342,17 @@ TEST_F(ContentSuggestionsServiceTest, ShouldRedirectSuggestionInvalidated) {
 }
 
 TEST_F(ContentSuggestionsServiceTest, ShouldForwardSuggestions) {
-  Category articles_category = FromKnownCategory(KnownCategories::ARTICLES);
+  Category articles_category =
+      Category::FromKnownCategory(KnownCategories::ARTICLES);
   Category offline_pages_category =
-      FromKnownCategory(KnownCategories::DOWNLOADS);
+      Category::FromKnownCategory(KnownCategories::DOWNLOADS);
 
   // Create and register providers
-  MockProvider* provider1 = RegisterProvider(articles_category);
+  MockContentSuggestionsProvider* provider1 =
+      MakeRegisteredMockProvider(articles_category);
   provider1->FireCategoryStatusChangedWithCurrentStatus(articles_category);
-  MockProvider* provider2 = RegisterProvider(offline_pages_category);
+  MockContentSuggestionsProvider* provider2 =
+      MakeRegisteredMockProvider(offline_pages_category);
   provider2->FireCategoryStatusChangedWithCurrentStatus(offline_pages_category);
   ASSERT_THAT(providers().count(articles_category), Eq(1ul));
   EXPECT_THAT(providers().at(articles_category), Eq(provider1));
@@ -467,14 +417,15 @@ TEST_F(ContentSuggestionsServiceTest, ShouldForwardSuggestions) {
 
 TEST_F(ContentSuggestionsServiceTest,
        ShouldNotReturnCategoryInfoForNonexistentCategory) {
-  Category category = FromKnownCategory(KnownCategories::DOWNLOADS);
+  Category category = Category::FromKnownCategory(KnownCategories::DOWNLOADS);
   base::Optional<CategoryInfo> result = service()->GetCategoryInfo(category);
   EXPECT_FALSE(result.has_value());
 }
 
 TEST_F(ContentSuggestionsServiceTest, ShouldReturnCategoryInfo) {
-  Category category = FromKnownCategory(KnownCategories::DOWNLOADS);
-  MockProvider* provider = RegisterProvider(category);
+  Category category = Category::FromKnownCategory(KnownCategories::DOWNLOADS);
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider(category);
   provider->FireCategoryStatusChangedWithCurrentStatus(category);
   base::Optional<CategoryInfo> result = service()->GetCategoryInfo(category);
   ASSERT_TRUE(result.has_value());
@@ -489,8 +440,9 @@ TEST_F(ContentSuggestionsServiceTest, ShouldReturnCategoryInfo) {
 
 TEST_F(ContentSuggestionsServiceTest,
        ShouldRegisterNewCategoryOnNewSuggestions) {
-  Category category = FromKnownCategory(KnownCategories::DOWNLOADS);
-  MockProvider* provider = RegisterProvider(category);
+  Category category = Category::FromKnownCategory(KnownCategories::DOWNLOADS);
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider(category);
   provider->FireCategoryStatusChangedWithCurrentStatus(category);
   MockServiceObserver observer;
   service()->AddObserver(&observer);
@@ -498,7 +450,8 @@ TEST_F(ContentSuggestionsServiceTest,
   // Provider starts providing |new_category| without calling
   // |OnCategoryStatusChanged|. This is supported for now until further
   // reconsideration.
-  Category new_category = FromKnownCategory(KnownCategories::ARTICLES);
+  Category new_category =
+      Category::FromKnownCategory(KnownCategories::ARTICLES);
   provider->SetProvidedCategories(
       std::vector<Category>({category, new_category}));
 
@@ -523,15 +476,17 @@ TEST_F(ContentSuggestionsServiceTest,
 
 TEST_F(ContentSuggestionsServiceTest,
        ShouldRegisterNewCategoryOnCategoryStatusChanged) {
-  Category category = FromKnownCategory(KnownCategories::DOWNLOADS);
-  MockProvider* provider = RegisterProvider(category);
+  Category category = Category::FromKnownCategory(KnownCategories::DOWNLOADS);
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider(category);
   provider->FireCategoryStatusChangedWithCurrentStatus(category);
   MockServiceObserver observer;
   service()->AddObserver(&observer);
 
   // Provider starts providing |new_category| and calls
   // |OnCategoryStatusChanged|, but the category is not yet available.
-  Category new_category = FromKnownCategory(KnownCategories::ARTICLES);
+  Category new_category =
+      Category::FromKnownCategory(KnownCategories::ARTICLES);
   provider->SetProvidedCategories(
       std::vector<Category>({category, new_category}));
   EXPECT_CALL(observer, OnCategoryStatusChanged(new_category,
@@ -545,14 +500,15 @@ TEST_F(ContentSuggestionsServiceTest,
   EXPECT_THAT(service()->GetCategoryStatus(new_category),
               Eq(CategoryStatus::INITIALIZING));
   EXPECT_THAT(service()->GetCategories(),
-              Eq(std::vector<Category>({category, new_category})));
+              UnorderedElementsAre(category, new_category));
 
   service()->RemoveObserver(&observer);
 }
 
 TEST_F(ContentSuggestionsServiceTest, ShouldRemoveCategoryWhenNotProvided) {
-  Category category = FromKnownCategory(KnownCategories::DOWNLOADS);
-  MockProvider* provider = RegisterProvider(category);
+  Category category = Category::FromKnownCategory(KnownCategories::DOWNLOADS);
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider(category);
   MockServiceObserver observer;
   service()->AddObserver(&observer);
 
@@ -572,20 +528,117 @@ TEST_F(ContentSuggestionsServiceTest, ShouldRemoveCategoryWhenNotProvided) {
   service()->RemoveObserver(&observer);
 }
 
-TEST_F(ContentSuggestionsServiceTest, ShouldForwardClearHistory) {
-  Category category = FromKnownCategory(KnownCategories::DOWNLOADS);
-  MockProvider* provider = RegisterProvider(category);
-  base::Time begin = base::Time::FromTimeT(123),
-             end = base::Time::FromTimeT(456);
+TEST_F(ContentSuggestionsServiceTest, ShouldForwardClearHistoryToProviders) {
+  Category category = Category::FromKnownCategory(KnownCategories::DOWNLOADS);
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider(category);
+  base::Time begin = base::Time::FromTimeT(123);
+  base::Time end = base::Time::FromTimeT(456);
   EXPECT_CALL(*provider, ClearHistory(begin, end, _));
   base::Callback<bool(const GURL& url)> filter;
   service()->ClearHistory(begin, end, filter);
 }
 
+TEST_F(ContentSuggestionsServiceTest,
+       ShouldForwardClearHistoryToCategoryRanker) {
+  auto mock_ranker = base::MakeUnique<MockCategoryRanker>();
+  MockCategoryRanker* raw_mock_ranker = mock_ranker.get();
+  SetCategoryRanker(std::move(mock_ranker));
+
+  // The service is recreated to pick up the new ranker.
+  ResetService();
+
+  base::Time begin = base::Time::FromTimeT(123),
+             end = base::Time::FromTimeT(456);
+  EXPECT_CALL(*raw_mock_ranker, ClearHistory(begin, end));
+  base::Callback<bool(const GURL& url)> filter;
+  service()->ClearHistory(begin, end, filter);
+}
+
+TEST_F(ContentSuggestionsServiceTest, ShouldForwardDeleteAllHistoryURLs) {
+  StrictMock<MockServiceObserver> observer;
+  service()->AddObserver(&observer);
+  EXPECT_CALL(observer, OnFullRefreshRequired());
+
+  Category category = Category::FromKnownCategory(KnownCategories::DOWNLOADS);
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider(category);
+  EXPECT_CALL(*provider, ClearHistory(base::Time(), base::Time::Max(), _));
+  static_cast<history::HistoryServiceObserver*>(service())->OnURLsDeleted(
+      /*history_service=*/nullptr, /*all_history=*/true, /*expired=*/false,
+      history::URLRows(), /*favicon_urls=*/std::set<GURL>());
+
+  service()->RemoveObserver(&observer);
+}
+
+TEST_F(ContentSuggestionsServiceTest, ShouldIgnoreExpiredURLDeletions) {
+  Category category = Category::FromKnownCategory(KnownCategories::DOWNLOADS);
+  MakeRegisteredMockProvider(category);
+  // Create an observer to make sure OnFullRefresh() does not get triggered.
+  StrictMock<MockServiceObserver> observer;
+  service()->AddObserver(&observer);
+
+  static_cast<history::HistoryServiceObserver*>(service())->OnURLsDeleted(
+      /*history_service=*/nullptr, /*all_history=*/true,
+      /*expired=*/true, history::URLRows(),
+      /*favicon_urls=*/std::set<GURL>());
+  static_cast<history::HistoryServiceObserver*>(service())->OnURLsDeleted(
+      /*history_service=*/nullptr, /*all_history=*/false,
+      /*expired=*/true,
+      history::URLRows({history::URLRow(GURL("http://google.com")),
+                        history::URLRow(GURL("http://maps.google.com"))}),
+      /*favicon_urls=*/std::set<GURL>());
+
+  service()->RemoveObserver(&observer);
+}
+
+TEST_F(ContentSuggestionsServiceTest, ShouldIgnoreEmptyURLDeletions) {
+  Category category = Category::FromKnownCategory(KnownCategories::DOWNLOADS);
+  MakeRegisteredMockProvider(category);
+  static_cast<history::HistoryServiceObserver*>(service())->OnURLsDeleted(
+      /*history_service=*/nullptr, /*all_history=*/false,
+      /*expired=*/false, history::URLRows(),
+      /*favicon_urls=*/std::set<GURL>());
+}
+
+TEST_F(ContentSuggestionsServiceTest,
+       ShouldNotClearHistoryOnSingleURLDeletion) {
+  Category category = Category::FromKnownCategory(KnownCategories::DOWNLOADS);
+  MakeRegisteredMockProvider(category);
+  // Single URLs should not trigger
+  static_cast<history::HistoryServiceObserver*>(service())->OnURLsDeleted(
+      /*history_service=*/nullptr, /*all_history=*/false,
+      /*expired=*/false,
+      history::URLRows({history::URLRow(GURL("http://google.com"))}),
+      /*favicon_urls=*/std::set<GURL>());
+}
+
+TEST_F(ContentSuggestionsServiceTest,
+       ShouldClearHistoryForMultipleURLDeletion) {
+  StrictMock<MockServiceObserver> observer;
+  service()->AddObserver(&observer);
+  EXPECT_CALL(observer, OnFullRefreshRequired());
+
+  Category category = Category::FromKnownCategory(KnownCategories::DOWNLOADS);
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider(category);
+  EXPECT_CALL(*provider, ClearHistory(base::Time(), base::Time::Max(), _));
+
+  static_cast<history::HistoryServiceObserver*>(service())->OnURLsDeleted(
+      /*history_service=*/nullptr, /*all_history=*/false,
+      /*expired=*/false,
+      history::URLRows({history::URLRow(GURL("http://google.com")),
+                        history::URLRow(GURL("http://youtube.com"))}),
+      /*favicon_urls=*/std::set<GURL>());
+
+  service()->RemoveObserver(&observer);
+}
+
 TEST_F(ContentSuggestionsServiceTest, ShouldForwardFetch) {
-  Category category = FromKnownCategory(KnownCategories::ARTICLES);
+  Category category = Category::FromKnownCategory(KnownCategories::ARTICLES);
   std::set<std::string> known_suggestions;
-  MockProvider* provider = RegisterProvider(category);
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider(category);
   provider->FireCategoryStatusChangedWithCurrentStatus(category);
   EXPECT_CALL(*provider, Fetch(category, known_suggestions, _));
   service()->Fetch(category, known_suggestions, FetchDoneCallback());
@@ -593,12 +646,13 @@ TEST_F(ContentSuggestionsServiceTest, ShouldForwardFetch) {
 
 TEST_F(ContentSuggestionsServiceTest, DismissAndRestoreCategory) {
   // Register a category with one suggestion.
-  Category category = FromKnownCategory(KnownCategories::ARTICLES);
-  MockProvider* provider = RegisterProvider(category);
+  Category category = Category::FromKnownCategory(KnownCategories::ARTICLES);
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider(category);
   provider->FireCategoryStatusChangedWithCurrentStatus(category);
   provider->FireSuggestionsChanged(category, CreateSuggestions(category, {42}));
 
-  EXPECT_THAT(service()->GetCategories(), ElementsAre(category));
+  EXPECT_THAT(service()->GetCategories(), UnorderedElementsAre(category));
   EXPECT_THAT(service()->GetCategoryStatus(category),
               Eq(CategoryStatus::AVAILABLE));
   ExpectThatSuggestionsAre(category, {42});
@@ -619,7 +673,7 @@ TEST_F(ContentSuggestionsServiceTest, DismissAndRestoreCategory) {
   // empty.
   service()->RestoreDismissedCategories();
 
-  EXPECT_THAT(service()->GetCategories(), ElementsAre(category));
+  EXPECT_THAT(service()->GetCategories(), UnorderedElementsAre(category));
   EXPECT_THAT(service()->GetCategoryStatus(category),
               Eq(CategoryStatus::AVAILABLE));
   EXPECT_THAT(service()->GetSuggestionsForCategory(category), IsEmpty());
@@ -629,11 +683,12 @@ TEST_F(ContentSuggestionsServiceTest, DismissAndRestoreCategory) {
 
 TEST_F(ContentSuggestionsServiceTest, ShouldRestoreDismissedCategories) {
   // Create and register provider.
-  Category category1 = service()->category_factory()->FromIDValue(1);
-  Category category2 = service()->category_factory()->FromIDValue(2);
+  Category category1 = Category::FromIDValue(1);
+  Category category2 = Category::FromIDValue(2);
 
   // Setup and verify initial state.
-  MockProvider* provider = RegisterProvider({category1, category2});
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider({category1, category2});
   provider->FireCategoryStatusChangedWithCurrentStatus(category1);
   provider->FireCategoryStatusChangedWithCurrentStatus(category2);
 
@@ -679,8 +734,9 @@ TEST_F(ContentSuggestionsServiceTest, ShouldRestoreDismissedCategories) {
 
 TEST_F(ContentSuggestionsServiceTest, ShouldRestoreDismissalsFromPrefs) {
   // Register a category with one suggestion.
-  Category category = FromKnownCategory(KnownCategories::ARTICLES);
-  MockProvider* provider = RegisterProvider(category);
+  Category category = Category::FromKnownCategory(KnownCategories::ARTICLES);
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider(category);
   provider->FireCategoryStatusChangedWithCurrentStatus(category);
 
   // For a regular initialisation, the category is not dismissed.
@@ -696,13 +752,60 @@ TEST_F(ContentSuggestionsServiceTest, ShouldRestoreDismissalsFromPrefs) {
 
   // Ensure that the provider registered at initialisation is used after
   // restoration.
-  provider = RegisterProvider(category);
+  provider = MakeRegisteredMockProvider(category);
   provider->FireCategoryStatusChangedWithCurrentStatus(category);
   EXPECT_TRUE(service()->IsCategoryDismissed(category));
 
   service()->RestoreDismissedCategories();
   EXPECT_FALSE(service()->IsCategoryDismissed(category));
   EXPECT_THAT(providers().find(category)->second, Eq(provider));
+}
+
+TEST_F(ContentSuggestionsServiceTest, ShouldReturnCategoriesInOrderToDisplay) {
+  const Category first_category = Category::FromRemoteCategory(1);
+  const Category second_category = Category::FromRemoteCategory(2);
+
+  auto fake_ranker = base::MakeUnique<FakeCategoryRanker>();
+  FakeCategoryRanker* raw_fake_ranker = fake_ranker.get();
+  SetCategoryRanker(std::move(fake_ranker));
+
+  raw_fake_ranker->SetOrder({first_category, second_category});
+
+  // The service is recreated to pick up the new ranker.
+  ResetService();
+
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider({first_category, second_category});
+  provider->FireCategoryStatusChangedWithCurrentStatus(first_category);
+  provider->FireCategoryStatusChangedWithCurrentStatus(second_category);
+
+  EXPECT_THAT(service()->GetCategories(),
+              ElementsAre(first_category, second_category));
+
+  // The order to display (in the ranker) changes.
+  raw_fake_ranker->SetOrder({second_category, first_category});
+
+  // Categories order should reflect the new order.
+  EXPECT_THAT(service()->GetCategories(),
+              ElementsAre(second_category, first_category));
+}
+
+TEST_F(ContentSuggestionsServiceTest,
+       ShouldForwardDismissedCategoryToCategoryRanker) {
+  auto mock_ranker = base::MakeUnique<MockCategoryRanker>();
+  MockCategoryRanker* raw_mock_ranker = mock_ranker.get();
+  SetCategoryRanker(std::move(mock_ranker));
+
+  // The service is recreated to pick up the new ranker.
+  ResetService();
+
+  Category category = Category::FromKnownCategory(KnownCategories::BOOKMARKS);
+  MockContentSuggestionsProvider* provider =
+      MakeRegisteredMockProvider(category);
+  provider->FireCategoryStatusChangedWithCurrentStatus(category);
+
+  EXPECT_CALL(*raw_mock_ranker, OnCategoryDismissed(category));
+  service()->DismissCategory(category);
 }
 
 }  // namespace ntp_snippets

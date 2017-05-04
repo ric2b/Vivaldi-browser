@@ -57,7 +57,7 @@ class NotificationDataTest : public ::testing::Test {
 TEST_F(NotificationDataTest, ReflectProperties) {
   Vector<unsigned> vibrationPattern;
   for (size_t i = 0; i < WTF_ARRAY_LENGTH(kNotificationVibration); ++i)
-    vibrationPattern.append(kNotificationVibration[i]);
+    vibrationPattern.push_back(kNotificationVibration[i]);
 
   UnsignedLongOrUnsignedLongSequence vibrationSequence;
   vibrationSequence.setUnsignedLongSequence(vibrationPattern);
@@ -71,7 +71,7 @@ TEST_F(NotificationDataTest, ReflectProperties) {
     action.setIcon(kNotificationActionIcon);
     action.setPlaceholder(kNotificationActionPlaceholder);
 
-    actions.append(action);
+    actions.push_back(action);
   }
 
   NotificationOptions options;
@@ -91,7 +91,7 @@ TEST_F(NotificationDataTest, ReflectProperties) {
 
   // TODO(peter): Test |options.data| and |notificationData.data|.
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   WebNotificationData notificationData = createWebNotificationData(
       getExecutionContext(), kNotificationTitle, options, exceptionState);
   ASSERT_FALSE(exceptionState.hadException());
@@ -129,7 +129,7 @@ TEST_F(NotificationDataTest, ReflectProperties) {
 TEST_F(NotificationDataTest, SilentNotificationWithVibration) {
   Vector<unsigned> vibrationPattern;
   for (size_t i = 0; i < WTF_ARRAY_LENGTH(kNotificationVibration); ++i)
-    vibrationPattern.append(kNotificationVibration[i]);
+    vibrationPattern.push_back(kNotificationVibration[i]);
 
   UnsignedLongOrUnsignedLongSequence vibrationSequence;
   vibrationSequence.setUnsignedLongSequence(vibrationPattern);
@@ -138,7 +138,7 @@ TEST_F(NotificationDataTest, SilentNotificationWithVibration) {
   options.setVibrate(vibrationSequence);
   options.setSilent(true);
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   WebNotificationData notificationData = createWebNotificationData(
       getExecutionContext(), kNotificationTitle, options, exceptionState);
   ASSERT_TRUE(exceptionState.hadException());
@@ -152,12 +152,12 @@ TEST_F(NotificationDataTest, ActionTypeButtonWithPlaceholder) {
   NotificationAction action;
   action.setType("button");
   action.setPlaceholder("I'm afraid I can't do that...");
-  actions.append(action);
+  actions.push_back(action);
 
   NotificationOptions options;
   options.setActions(actions);
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   WebNotificationData notificationData = createWebNotificationData(
       getExecutionContext(), kNotificationTitle, options, exceptionState);
   ASSERT_TRUE(exceptionState.hadException());
@@ -171,7 +171,7 @@ TEST_F(NotificationDataTest, RenotifyWithEmptyTag) {
   options.setTag(kNotificationEmptyTag);
   options.setRenotify(true);
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   WebNotificationData notificationData = createWebNotificationData(
       getExecutionContext(), kNotificationTitle, options, exceptionState);
   ASSERT_TRUE(exceptionState.hadException());
@@ -188,7 +188,7 @@ TEST_F(NotificationDataTest, InvalidIconUrls) {
     action.setAction(kNotificationActionAction);
     action.setTitle(kNotificationActionTitle);
     action.setIcon(kNotificationIconInvalid);
-    actions.append(action);
+    actions.push_back(action);
   }
 
   NotificationOptions options;
@@ -197,7 +197,7 @@ TEST_F(NotificationDataTest, InvalidIconUrls) {
   options.setBadge(kNotificationIconInvalid);
   options.setActions(actions);
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   WebNotificationData notificationData = createWebNotificationData(
       getExecutionContext(), kNotificationTitle, options, exceptionState);
   ASSERT_FALSE(exceptionState.hadException());
@@ -213,7 +213,7 @@ TEST_F(NotificationDataTest, VibrationNormalization) {
   Vector<unsigned> unnormalizedPattern;
   for (size_t i = 0; i < WTF_ARRAY_LENGTH(kNotificationVibrationUnnormalized);
        ++i)
-    unnormalizedPattern.append(kNotificationVibrationUnnormalized[i]);
+    unnormalizedPattern.push_back(kNotificationVibrationUnnormalized[i]);
 
   UnsignedLongOrUnsignedLongSequence vibrationSequence;
   vibrationSequence.setUnsignedLongSequence(unnormalizedPattern);
@@ -221,7 +221,7 @@ TEST_F(NotificationDataTest, VibrationNormalization) {
   NotificationOptions options;
   options.setVibrate(vibrationSequence);
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   WebNotificationData notificationData = createWebNotificationData(
       getExecutionContext(), kNotificationTitle, options, exceptionState);
   EXPECT_FALSE(exceptionState.hadException());
@@ -229,7 +229,7 @@ TEST_F(NotificationDataTest, VibrationNormalization) {
   Vector<int> normalizedPattern;
   for (size_t i = 0; i < WTF_ARRAY_LENGTH(kNotificationVibrationNormalized);
        ++i)
-    normalizedPattern.append(kNotificationVibrationNormalized[i]);
+    normalizedPattern.push_back(kNotificationVibrationNormalized[i]);
 
   ASSERT_EQ(normalizedPattern.size(), notificationData.vibrate.size());
   for (size_t i = 0; i < normalizedPattern.size(); ++i)
@@ -239,7 +239,7 @@ TEST_F(NotificationDataTest, VibrationNormalization) {
 TEST_F(NotificationDataTest, DefaultTimestampValue) {
   NotificationOptions options;
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   WebNotificationData notificationData = createWebNotificationData(
       getExecutionContext(), kNotificationTitle, options, exceptionState);
   EXPECT_FALSE(exceptionState.hadException());
@@ -263,7 +263,7 @@ TEST_F(NotificationDataTest, DirectionValues) {
     NotificationOptions options;
     options.setDir(direction);
 
-    TrackExceptionState exceptionState;
+    DummyExceptionStateForTesting exceptionState;
     WebNotificationData notificationData = createWebNotificationData(
         getExecutionContext(), kNotificationTitle, options, exceptionState);
     ASSERT_FALSE(exceptionState.hadException());
@@ -279,13 +279,13 @@ TEST_F(NotificationDataTest, MaximumActionCount) {
     action.setAction(String::number(i));
     action.setTitle(kNotificationActionTitle);
 
-    actions.append(action);
+    actions.push_back(action);
   }
 
   NotificationOptions options;
   options.setActions(actions);
 
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   WebNotificationData notificationData = createWebNotificationData(
       getExecutionContext(), kNotificationTitle, options, exceptionState);
   ASSERT_FALSE(exceptionState.hadException());

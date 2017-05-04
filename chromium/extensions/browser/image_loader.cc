@@ -19,17 +19,19 @@
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/image_loader_factory.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/manifest_handlers/icons_handler.h"
 #include "skia/ext/image_operations.h"
+#include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image_family.h"
 #include "ui/gfx/image/image_skia.h"
 
 using content::BrowserThread;
-using extensions::Extension;
-using extensions::ExtensionsBrowserClient;
-using extensions::ImageLoader;
-using extensions::Manifest;
+
+namespace extensions {
 
 namespace {
 
@@ -128,8 +130,6 @@ std::vector<SkBitmap> LoadResourceBitmaps(
 
 }  // namespace
 
-namespace extensions {
-
 ////////////////////////////////////////////////////////////////////////////////
 // ImageLoader::ImageRepresentation
 
@@ -137,12 +137,11 @@ ImageLoader::ImageRepresentation::ImageRepresentation(
     const ExtensionResource& resource,
     ResizeCondition resize_condition,
     const gfx::Size& desired_size,
-    ui::ScaleFactor scale_factor)
+    float scale_factor)
     : resource(resource),
       resize_condition(resize_condition),
       desired_size(desired_size),
-      scale_factor(scale_factor) {
-}
+      scale_factor(scale_factor) {}
 
 ImageLoader::ImageRepresentation::~ImageRepresentation() {
 }
@@ -232,10 +231,34 @@ void ImageLoader::LoadImageAsync(const Extension* extension,
                                  const ImageLoaderImageCallback& callback) {
   std::vector<ImageRepresentation> info_list;
   info_list.push_back(ImageRepresentation(
-      resource,
-      ImageRepresentation::RESIZE_WHEN_LARGER,
-      max_size,
-      ui::SCALE_FACTOR_100P));
+      resource, ImageRepresentation::RESIZE_WHEN_LARGER, max_size, 1.f));
+  LoadImagesAsync(extension, info_list, callback);
+}
+
+void ImageLoader::LoadImageAtEveryScaleFactorAsync(
+    const Extension* extension,
+    const gfx::Size& dip_size,
+    const ImageLoaderImageCallback& callback) {
+  std::vector<ImageRepresentation> info_list;
+
+  std::set<float> scales;
+  for (auto scale : ui::GetSupportedScaleFactors())
+    scales.insert(ui::GetScaleForScaleFactor(scale));
+
+  // There may not be a screen in unit tests.
+  auto screen = display::Screen::GetScreen();
+  if (screen) {
+    for (const auto& display : screen->GetAllDisplays())
+      scales.insert(display.device_scale_factor());
+  }
+
+  for (auto scale : scales) {
+    const gfx::Size px_size = gfx::ScaleToFlooredSize(dip_size, scale);
+    ExtensionResource image = IconsInfo::GetIconResource(
+        extension, px_size.width(), ExtensionIconSet::MATCH_BIGGER);
+    info_list.push_back(ImageRepresentation(
+        image, ImageRepresentation::ALWAYS_RESIZE, px_size, scale));
+  }
   LoadImagesAsync(extension, info_list, callback);
 }
 
@@ -256,7 +279,7 @@ void ImageLoader::LoadImagesAsync(
 }
 
 void ImageLoader::LoadImageFamilyAsync(
-    const extensions::Extension* extension,
+    const Extension* extension,
     const std::vector<ImageRepresentation>& info_list,
     const ImageLoaderImageFamilyCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -283,9 +306,8 @@ void ImageLoader::ReplyBack(const ImageLoaderImageCallback& callback,
     const SkBitmap& bitmap = it->bitmap;
     const ImageRepresentation& image_rep = it->image_representation;
 
-    image_skia.AddRepresentation(gfx::ImageSkiaRep(
-        bitmap,
-        ui::GetScaleForScaleFactor(image_rep.scale_factor)));
+    image_skia.AddRepresentation(
+        gfx::ImageSkiaRep(bitmap, image_rep.scale_factor));
   }
 
   gfx::Image image;
@@ -315,8 +337,7 @@ void ImageLoader::ReplyBackWithImageFamily(
     // Create a new ImageSkia for this width/height, or add a representation to
     // an existing ImageSkia with the same width/height.
     image_skia_map[key].AddRepresentation(
-        gfx::ImageSkiaRep(bitmap,
-                          ui::GetScaleForScaleFactor(image_rep.scale_factor)));
+        gfx::ImageSkiaRep(bitmap, image_rep.scale_factor));
   }
 
   for (std::map<std::pair<int, int>, gfx::ImageSkia>::iterator it =

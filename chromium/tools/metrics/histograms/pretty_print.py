@@ -32,12 +32,18 @@ class Error(Exception):
 
 
 UNIT_REWRITES = {
+  'microsecond': 'microseconds',
+  'us': 'microseconds',
   'millisecond': 'ms',
   'milliseconds': 'ms',
   'kb': 'KB',
   'kB': 'KB',
   'kilobytes': 'KB',
   'kbits/s': 'kbps',
+  'mb': 'MB',
+  'mB': 'MB',
+  'megabytes': 'MB',
+  'mbits/s': 'mbps',
   'percent': '%',
   'Percent': '%',
   'percentage': '%',

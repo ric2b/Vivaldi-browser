@@ -42,7 +42,7 @@ Main.RenderingOptionsView = class extends UI.VBox {
     var options = [
       {
         label: Common.UIString('Paint Flashing'),
-        subtitle: Common.UIString('Highlights areas of the page that need to be repainted'),
+        subtitle: Common.UIString('Highlights areas of the page (green) that need to be repainted'),
         setterName: 'setShowPaintRects'
       },
       {
@@ -57,19 +57,18 @@ Main.RenderingOptionsView = class extends UI.VBox {
       },
       {
         label: Common.UIString('Scrolling Performance Issues'),
-        subtitle: Common.UIString('Shows areas of the page that slow down scrolling'),
-        setterName: 'setShowScrollBottleneckRects',
-        tooltip:
-            'Touch and mousewheel event listeners can delay scrolling.\nSome areas need to repaint their content when scrolled.'
+        subtitle: Common.UIString(
+            'Highlights elements (teal) that can slow down scrolling, including touch & wheel event handlers and other main-thread scrolling situations.'),
+        setterName: 'setShowScrollBottleneckRects'
       }
     ];
     for (var i = 0; i < options.length; i++)
-      this._appendCheckbox(options[i].label, options[i].setterName, options[i].subtitle, options[i].tooltip);
+      this._appendCheckbox(options[i].label, options[i].setterName, options[i].subtitle);
 
     this.contentElement.createChild('div').classList.add('panel-section-separator');
 
     var cssMediaSubtitle = Common.UIString('Forces media type for testing print and screen styles');
-    var checkboxLabel = createCheckboxLabel(Common.UIString('Emulate CSS Media'), false, cssMediaSubtitle);
+    var checkboxLabel = UI.createCheckboxLabel(Common.UIString('Emulate CSS Media'), false, cssMediaSubtitle);
     this._mediaCheckbox = checkboxLabel.checkboxElement;
     this._mediaCheckbox.addEventListener('click', this._mediaToggled.bind(this), false);
     this.contentElement.appendChild(checkboxLabel);
@@ -97,14 +96,11 @@ Main.RenderingOptionsView = class extends UI.VBox {
    * @param {string} label
    * @param {string} setterName
    * @param {string=} subtitle
-   * @param {string=} tooltip
    */
-  _appendCheckbox(label, setterName, subtitle, tooltip) {
-    var checkboxLabel = createCheckboxLabel(label, false, subtitle);
+  _appendCheckbox(label, setterName, subtitle) {
+    var checkboxLabel = UI.createCheckboxLabel(label, false, subtitle);
     this._settings.set(setterName, checkboxLabel.checkboxElement);
     checkboxLabel.checkboxElement.addEventListener('click', this._settingToggled.bind(this, setterName));
-    if (tooltip)
-      checkboxLabel.title = tooltip;
     this.contentElement.appendChild(checkboxLabel);
   }
 

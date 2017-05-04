@@ -25,13 +25,6 @@ class AppRegistrationData;
 
 class BrowserDistribution {
  public:
-  enum Type {
-    CHROME_BROWSER,
-    CHROME_FRAME,
-    CHROME_BINARIES,
-    NUM_TYPES
-  };
-
   enum Subfolder {
     SUBFOLDER_CHROME,
     SUBFOLDER_APPS,
@@ -46,10 +39,6 @@ class BrowserDistribution {
   virtual ~BrowserDistribution();
 
   static BrowserDistribution* GetDistribution();
-
-  static BrowserDistribution* GetSpecificDistribution(Type type);
-
-  Type GetType() const { return type_; }
 
   // Getter and adaptors for the underlying |app_reg_data_|.
   const AppRegistrationData& GetAppRegistrationData() const;
@@ -159,14 +148,12 @@ class BrowserDistribution {
   virtual bool HasUserExperiments();
 
  protected:
-  BrowserDistribution(Type type,
-                      std::unique_ptr<AppRegistrationData> app_reg_data);
+  explicit BrowserDistribution(
+      std::unique_ptr<AppRegistrationData> app_reg_data);
 
   template<class DistributionClass>
   static BrowserDistribution* GetOrCreateBrowserDistribution(
       BrowserDistribution** dist);
-
-  const Type type_;
 
   std::unique_ptr<AppRegistrationData> app_reg_data_;
 

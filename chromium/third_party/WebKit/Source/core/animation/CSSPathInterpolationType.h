@@ -14,9 +14,9 @@ class CSSPathInterpolationType : public CSSInterpolationType {
   CSSPathInterpolationType(PropertyHandle property)
       : CSSInterpolationType(property) {}
 
-  void apply(const InterpolableValue&,
-             const NonInterpolableValue*,
-             InterpolationEnvironment&) const final;
+  void applyStandardPropertyValue(const InterpolableValue&,
+                                  const NonInterpolableValue*,
+                                  StyleResolverState&) const final;
   void composite(UnderlyingValueOwner&,
                  double underlyingFraction,
                  const InterpolationValue&,
@@ -32,8 +32,8 @@ class CSSPathInterpolationType : public CSSInterpolationType {
   InterpolationValue maybeConvertValue(const CSSValue&,
                                        const StyleResolverState&,
                                        ConversionCheckers&) const final;
-  InterpolationValue maybeConvertUnderlyingValue(
-      const InterpolationEnvironment&) const final;
+  InterpolationValue maybeConvertStandardPropertyUnderlyingValue(
+      const StyleResolverState&) const final;
   PairwiseInterpolationValue maybeMergeSingles(
       InterpolationValue&& start,
       InterpolationValue&& end) const final;

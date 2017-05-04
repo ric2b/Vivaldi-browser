@@ -13,6 +13,7 @@
 #include "modules/canvas2d/CanvasPathMethods.h"
 #include "modules/canvas2d/CanvasRenderingContext2DState.h"
 #include "modules/canvas2d/CanvasStyle.h"
+#include "platform/graphics/ColorBehavior.h"
 #include "platform/graphics/ExpensiveCanvasHeuristicParameters.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/effects/SkComposeImageFilter.h"
@@ -239,6 +240,10 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   virtual bool isContextLost() const = 0;
 
+  virtual ColorBehavior drawImageColorBehavior() const = 0;
+
+  virtual void willDrawImage(CanvasImageSource*) const {}
+
   void restoreMatrixClipStack(SkCanvas*) const;
 
   DECLARE_VIRTUAL_TRACE();
@@ -296,7 +301,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   CanvasRenderingContext2DState& modifiableState();
   const CanvasRenderingContext2DState& state() const {
-    return *m_stateStack.last();
+    return *m_stateStack.back();
   }
 
   bool computeDirtyRect(const FloatRect& localBounds, SkIRect*);
@@ -440,13 +445,10 @@ void BaseRenderingContext2D::compositedDraw(
     if (filter) {
       SkPaint foregroundPaint =
           *state().getPaint(paintType, DrawForegroundOnly, imageType);
-      sk_sp<SkImageFilter> composedFilter =
-          sk_ref_sp(foregroundPaint.getImageFilter());
-      composedFilter = SkComposeImageFilter::Make(
-          std::move(composedFilter), sk_ref_sp(shadowPaint.getImageFilter()));
-      composedFilter =
-          SkComposeImageFilter::Make(std::move(composedFilter), filter);
-      foregroundPaint.setImageFilter(std::move(composedFilter));
+      foregroundPaint.setImageFilter(SkComposeImageFilter::Make(
+          SkComposeImageFilter::Make(foregroundPaint.refImageFilter(),
+                                     shadowPaint.refImageFilter()),
+          filter));
       c->setMatrix(ctm);
       drawFunc(c, &foregroundPaint);
     } else {

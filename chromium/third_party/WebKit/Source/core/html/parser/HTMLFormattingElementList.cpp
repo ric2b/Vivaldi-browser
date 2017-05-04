@@ -92,7 +92,7 @@ void HTMLFormattingElementList::swapTo(Element* oldElement,
 
 void HTMLFormattingElementList::append(HTMLStackItem* item) {
   ensureNoahsArkCondition(item);
-  m_entries.append(item);
+  m_entries.push_back(item);
 }
 
 void HTMLFormattingElementList::remove(Element* element) {
@@ -102,13 +102,13 @@ void HTMLFormattingElementList::remove(Element* element) {
 }
 
 void HTMLFormattingElementList::appendMarker() {
-  m_entries.append(Entry::MarkerEntry);
+  m_entries.push_back(Entry::MarkerEntry);
 }
 
 void HTMLFormattingElementList::clearToLastMarker() {
   // http://www.whatwg.org/specs/web-apps/current-work/multipage/parsing.html#clear-the-list-of-active-formatting-elements-up-to-the-last-marker
   while (m_entries.size()) {
-    bool shouldStop = m_entries.last().isMarker();
+    bool shouldStop = m_entries.back().isMarker();
     m_entries.pop_back();
     if (shouldStop)
       break;
@@ -143,7 +143,7 @@ void HTMLFormattingElementList::tryToEnsureNoahsArkConditionQuickly(
     if (candidate->attributes().size() != newItemAttributeCount)
       continue;
 
-    candidates.append(candidate);
+    candidates.push_back(candidate);
   }
 
   // There's room for the new element in the ark. There's no need to copy out
@@ -166,13 +166,8 @@ void HTMLFormattingElementList::ensureNoahsArkCondition(
   HeapVector<Member<HTMLStackItem>> remainingCandidates;
   remainingCandidates.reserveInitialCapacity(candidates.size());
 
-  const Vector<Attribute>& attributes = newItem->attributes();
-  for (size_t i = 0; i < attributes.size(); ++i) {
-    const Attribute& attribute = attributes[i];
-
-    for (size_t j = 0; j < candidates.size(); ++j) {
-      HTMLStackItem* candidate = candidates[j];
-
+  for (const auto& attribute : newItem->attributes()) {
+    for (const auto& candidate : candidates) {
       // These properties should already have been checked by
       // tryToEnsureNoahsArkConditionQuickly.
       ASSERT(newItem->attributes().size() == candidate->attributes().size());
@@ -183,7 +178,7 @@ void HTMLFormattingElementList::ensureNoahsArkCondition(
           candidate->getAttributeItem(attribute.name());
       if (candidateAttribute &&
           candidateAttribute->value() == attribute.value())
-        remainingCandidates.append(candidate);
+        remainingCandidates.push_back(candidate);
     }
 
     if (remainingCandidates.size() < kNoahsArkCapacity)

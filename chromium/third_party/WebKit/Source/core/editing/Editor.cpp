@@ -26,7 +26,7 @@
 
 #include "core/editing/Editor.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSPropertyNames.h"
 #include "core/EventNames.h"
 #include "core/HTMLNames.h"
@@ -62,7 +62,6 @@
 #include "core/events/KeyboardEvent.h"
 #include "core/events/ScopedEventQueue.h"
 #include "core/events/TextEvent.h"
-#include "core/fetch/ImageResource.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -80,6 +79,7 @@
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutImage.h"
 #include "core/loader/EmptyClients.h"
+#include "core/loader/resource/ImageResourceContent.h"
 #include "core/page/DragData.h"
 #include "core/page/EditorClient.h"
 #include "core/page/FocusController.h"
@@ -187,7 +187,7 @@ EditingBehavior Editor::behavior() const {
   if (!frame().settings())
     return EditingBehavior(EditingMacBehavior);
 
-  return EditingBehavior(frame().settings()->editingBehaviorType());
+  return EditingBehavior(frame().settings()->getEditingBehaviorType());
 }
 
 static EditorClient& emptyEditorClient() {
@@ -201,10 +201,25 @@ EditorClient& Editor::client() const {
   return emptyEditorClient();
 }
 
+static bool isCaretAtStartOfWrappedLine(const FrameSelection& selection) {
+  if (!selection.isCaret())
+    return false;
+  if (selection.affinity() != TextAffinity::Downstream)
+    return false;
+  const Position& position = selection.start();
+  return !inSameLine(PositionWithAffinity(position, TextAffinity::Upstream),
+                     PositionWithAffinity(position, TextAffinity::Downstream));
+}
+
 bool Editor::handleTextEvent(TextEvent* event) {
   // Default event handling for Drag and Drop will be handled by DragController
   // so we leave the event for it.
   if (event->isDrop())
+    return false;
+
+  // Default event handling for IncrementalInsertion will be handled by
+  // TypingCommand::insertText(), so we leave the event for it.
+  if (event->isIncrementalInsertion())
     return false;
 
   // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
@@ -212,13 +227,15 @@ bool Editor::handleTextEvent(TextEvent* event) {
   m_frame->document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
   if (event->isPaste()) {
-    if (event->pastingFragment())
-      replaceSelectionWithFragment(event->pastingFragment(), false,
-                                   event->shouldSmartReplace(),
-                                   event->shouldMatchStyle());
-    else
+    if (event->pastingFragment()) {
+      replaceSelectionWithFragment(
+          event->pastingFragment(), false, event->shouldSmartReplace(),
+          event->shouldMatchStyle(), InputEvent::InputType::InsertFromPaste);
+    } else {
       replaceSelectionWithText(event->data(), false,
-                               event->shouldSmartReplace());
+                               event->shouldSmartReplace(),
+                               InputEvent::InputType::InsertFromPaste);
+    }
     return true;
   }
 
@@ -227,6 +244,17 @@ bool Editor::handleTextEvent(TextEvent* event) {
     if (event->isLineBreak())
       return insertLineBreak();
     return insertParagraphSeparator();
+  }
+
+  // Typing spaces at the beginning of wrapped line is confusing, because
+  // inserted spaces would appear in the previous line.
+  // Insert a line break automatically so that the spaces appear at the caret.
+  // TODO(kojii): rich editing has the same issue, but has more options and
+  // needs coordination with JS. Enable for plaintext only for now and collect
+  // feedback.
+  if (data == " " && !canEditRichly() &&
+      isCaretAtStartOfWrappedLine(frame().selection())) {
+    insertLineBreak();
   }
 
   return insertTextWithoutSendingTextEvent(data, false, event);
@@ -294,7 +322,7 @@ bool Editor::canDelete() const {
 
 bool Editor::smartInsertDeleteEnabled() const {
   if (Settings* settings = frame().settings())
-    return settings->smartInsertDeleteEnabled();
+    return settings->getSmartInsertDeleteEnabled();
   return false;
 }
 
@@ -305,7 +333,7 @@ bool Editor::canSmartCopyOrDelete() const {
 
 bool Editor::isSelectTrailingWhitespaceEnabled() const {
   if (Settings* settings = frame().settings())
-    return settings->selectTrailingWhitespaceEnabled();
+    return settings->getSelectTrailingWhitespaceEnabled();
   return false;
 }
 
@@ -478,16 +506,17 @@ static PassRefPtr<Image> imageFromNode(const Node& node) {
   if (!layoutObject)
     return nullptr;
 
-  if (layoutObject->isCanvas())
-    return toHTMLCanvasElement(node).copiedImage(FrontBuffer,
-                                                 PreferNoAcceleration);
+  if (layoutObject->isCanvas()) {
+    return toHTMLCanvasElement(node).copiedImage(
+        FrontBuffer, PreferNoAcceleration, SnapshotReasonCopyToClipboard);
+  }
 
   if (layoutObject->isImage()) {
     LayoutImage* layoutImage = toLayoutImage(layoutObject);
     if (!layoutImage)
       return nullptr;
 
-    ImageResource* cachedImage = layoutImage->cachedImage();
+    ImageResourceContent* cachedImage = layoutImage->cachedImage();
     if (!cachedImage || cachedImage->errorOccurred())
       return nullptr;
     return cachedImage->getImage();
@@ -559,7 +588,8 @@ bool Editor::canSmartReplaceWithPasteboard(Pasteboard* pasteboard) {
 void Editor::replaceSelectionWithFragment(DocumentFragment* fragment,
                                           bool selectReplacement,
                                           bool smartReplace,
-                                          bool matchStyle) {
+                                          bool matchStyle,
+                                          InputEvent::InputType inputType) {
   DCHECK(!frame().document()->needsLayoutTreeUpdate());
   if (frame().selection().isNone() ||
       !frame().selection().isContentEditable() || !fragment)
@@ -576,16 +606,18 @@ void Editor::replaceSelectionWithFragment(DocumentFragment* fragment,
     options |= ReplaceSelectionCommand::MatchStyle;
   DCHECK(frame().document());
   ReplaceSelectionCommand::create(*frame().document(), fragment, options,
-                                  InputEvent::InputType::InsertFromPaste)
+                                  inputType)
       ->apply();
   revealSelectionAfterEditingOperation();
 }
 
 void Editor::replaceSelectionWithText(const String& text,
                                       bool selectReplacement,
-                                      bool smartReplace) {
+                                      bool smartReplace,
+                                      InputEvent::InputType inputType) {
   replaceSelectionWithFragment(createFragmentFromText(selectedRange(), text),
-                               selectReplacement, smartReplace, true);
+                               selectReplacement, smartReplace, true,
+                               inputType);
 }
 
 // TODO(xiaochengh): Merge it with |replaceSelectionWithFragment()|.
@@ -678,7 +710,7 @@ bool Editor::canDeleteRange(const EphemeralRange& range) const {
 }
 
 void Editor::respondToChangedContents(const VisibleSelection& endingSelection) {
-  if (frame().settings() && frame().settings()->accessibilityEnabled()) {
+  if (frame().settings() && frame().settings()->getAccessibilityEnabled()) {
     Node* node = endingSelection.start().anchorNode();
     if (AXObjectCache* cache = frame().document()->existingAXObjectCache())
       cache->handleEditableTextContentChanged(node);
@@ -804,16 +836,23 @@ void Editor::appliedEditing(CompositeEditCommand* cmd) {
   // Request spell checking before any further DOM change.
   spellChecker().markMisspellingsAfterApplyingCommand(*cmd);
 
-  EditCommandComposition* composition = cmd->composition();
-  DCHECK(composition);
-  dispatchEditableContentChangedEvents(
-      composition->startingRootEditableElement(),
-      composition->endingRootEditableElement());
+  UndoStep* undoStep = cmd->undoStep();
+  DCHECK(undoStep);
+  dispatchEditableContentChangedEvents(undoStep->startingRootEditableElement(),
+                                       undoStep->endingRootEditableElement());
   // TODO(chongz): Filter empty InputType after spec is finalized.
   dispatchInputEventEditableContentChanged(
-      composition->startingRootEditableElement(),
-      composition->endingRootEditableElement(), cmd->inputType(),
+      undoStep->startingRootEditableElement(),
+      undoStep->endingRootEditableElement(), cmd->inputType(),
       cmd->textDataForInputEvent(), isComposingFromCommand(cmd));
+
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  // The clean layout is consumed by |mostBackwardCaretPosition|, called through
+  // |changeSelectionAfterCommand|. In the long term, we should postpone visible
+  // selection canonicalization so that selection update does not need layout.
+  frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+
   VisibleSelection newSelection(cmd->endingSelection());
 
   // Don't clear the typing style with this selection change. We do those things
@@ -830,14 +869,14 @@ void Editor::appliedEditing(CompositeEditCommand* cmd) {
              (cmd->inputType() == InputEvent::InputType::DeleteByDrag ||
               cmd->inputType() == InputEvent::InputType::InsertFromDrop)) {
     // Only register undo entry when combined with other commands.
-    if (!m_lastEditCommand->composition())
-      m_undoStack->registerUndoStep(m_lastEditCommand->ensureComposition());
-    m_lastEditCommand->appendCommandToComposite(cmd);
+    if (!m_lastEditCommand->undoStep())
+      m_undoStack->registerUndoStep(m_lastEditCommand->ensureUndoStep());
+    m_lastEditCommand->appendCommandToUndoStep(cmd);
   } else {
     // Only register a new undo command if the command passed in is
     // different from the last command
     m_lastEditCommand = cmd;
-    m_undoStack->registerUndoStep(m_lastEditCommand->ensureComposition());
+    m_undoStack->registerUndoStep(m_lastEditCommand->ensureUndoStep());
   }
 
   respondToChangedContents(newSelection);
@@ -854,7 +893,7 @@ static VisibleSelection correctedVisibleSelection(
   return correctedSelection;
 }
 
-void Editor::unappliedEditing(EditCommandComposition* cmd) {
+void Editor::unappliedEditing(UndoStep* cmd) {
   EventQueueScope scope;
 
   dispatchEditableContentChangedEvents(cmd->startingRootEditableElement(),
@@ -870,20 +909,21 @@ void Editor::unappliedEditing(EditCommandComposition* cmd) {
   // VisibleSelections as starting and ending selections.
   frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
-  VisibleSelection newSelection =
+  const VisibleSelection& newSelection =
       correctedVisibleSelection(cmd->startingSelection());
-  if (newSelection.start().document() == frame().document() &&
-      newSelection.end().document() == frame().document())
+  DCHECK(newSelection.isValidFor(*frame().document())) << newSelection;
+  if (!newSelection.isNone()) {
     changeSelectionAfterCommand(
         newSelection,
         FrameSelection::CloseTyping | FrameSelection::ClearTypingStyle);
+  }
 
   m_lastEditCommand = nullptr;
   m_undoStack->registerRedoStep(cmd);
   respondToChangedContents(newSelection);
 }
 
-void Editor::reappliedEditing(EditCommandComposition* cmd) {
+void Editor::reappliedEditing(UndoStep* cmd) {
   EventQueueScope scope;
 
   dispatchEditableContentChangedEvents(cmd->startingRootEditableElement(),
@@ -893,16 +933,19 @@ void Editor::reappliedEditing(EditCommandComposition* cmd) {
       InputEvent::InputType::HistoryRedo, nullAtom,
       InputEvent::EventIsComposing::NotComposing);
 
-  // TODO(yosin): Since |dispatchEditableContentChangedEvents()| and
-  // |dispatchInputEventEditableContentChanged()|, we would like to know
-  // such case. Once we have a case, this |DCHECK()| should be replaced
-  // with if-statement.
-  DCHECK(frame().document());
-  VisibleSelection newSelection(cmd->endingSelection());
-  if (newSelection.isValidFor(*frame().document()))
+  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // needs to be audited.  See http://crbug.com/590369 for more details.
+  // In the long term, we should stop editing commands from storing
+  // VisibleSelections as starting and ending selections.
+  frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+  const VisibleSelection& newSelection =
+      correctedVisibleSelection(cmd->endingSelection());
+  DCHECK(newSelection.isValidFor(*frame().document())) << newSelection;
+  if (!newSelection.isNone()) {
     changeSelectionAfterCommand(
         newSelection,
         FrameSelection::CloseTyping | FrameSelection::ClearTypingStyle);
+  }
 
   m_lastEditCommand = nullptr;
   m_undoStack->registerUndoStep(cmd);
@@ -921,7 +964,7 @@ Editor::Editor(LocalFrame& frame)
       // This is off by default, since most editors want this behavior (this
       // matches IE but not FF).
       m_shouldStyleWithCSS(false),
-      m_killRing(wrapUnique(new KillRing)),
+      m_killRing(WTF::wrapUnique(new KillRing)),
       m_areMarkedTextMatchesHighlighted(false),
       m_defaultParagraphSeparator(EditorParagraphSeparatorIsDiv),
       m_overwriteModeEnabled(false) {}
@@ -1261,6 +1304,8 @@ void Editor::revealSelectionAfterEditingOperation(
     RevealExtentOption revealExtentOption) {
   if (m_preventRevealSelection)
     return;
+  if (!frame().selection().isAvailable())
+    return;
   frame().selection().revealSelection(alignment, revealExtentOption);
 }
 
@@ -1299,7 +1344,10 @@ void Editor::transpose() {
     frame().selection().setSelection(newSelection);
 
   // Insert the transposed characters.
-  replaceSelectionWithText(transposed, false, false);
+  // TODO(chongz): Once we add |InsertTranspose| in |InputEvent::InputType|, we
+  // should use it instead of |InsertFromPaste|.
+  replaceSelectionWithText(transposed, false, false,
+                           InputEvent::InputType::InsertFromPaste);
 }
 
 void Editor::addToKillRing(const EphemeralRange& range) {
@@ -1645,6 +1693,14 @@ void Editor::tidyUpHTMLStructure(Document& document) {
   document.appendChild(root);
 
   // TODO(tkent): Should we check and move Text node children of <html>?
+}
+
+void Editor::replaceSelection(const String& text) {
+  DCHECK(!frame().document()->needsLayoutTreeUpdate());
+  bool selectReplacement = behavior().shouldSelectReplacement();
+  bool smartReplace = true;
+  replaceSelectionWithText(text, selectReplacement, smartReplace,
+                           InputEvent::InputType::InsertReplacementText);
 }
 
 DEFINE_TRACE(Editor) {

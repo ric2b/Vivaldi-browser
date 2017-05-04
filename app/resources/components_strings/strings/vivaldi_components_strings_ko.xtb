@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="ko">
+<translation id="1152921474424827756"><ph name="URL" />의 <ph name="BEGIN_LINK" />캐시된 사본<ph name="END_LINK" />에 액세스</translation>
+<translation id="1158211211994409885"><ph name="HOST_NAME" />와(과)의 연결이 예기치 않게 종료되었습니다.</translation>
+<translation id="1375198122581997741">버전 정보</translation>
+<translation id="139305205187523129"><ph name="HOST_NAME" />에서 전송한 데이터가 없습니다.</translation>
+<translation id="1506687042165942984">오래된 것으로 알려진 이 페이지의 저장된 사본을 표시합니다.</translation>
+<translation id="1559528461873125649">해당 파일이나 디렉토리가 없습니다.</translation>
+<translation id="1710259589646384581">OS</translation>
+<translation id="1838667051080421715">지금 웹페이지의 소스를 보고 있습니다.</translation>
+<translation id="194030505837763158"><ph name="LINK" />(으)로 이동</translation>
+<translation id="2030481566774242610"><ph name="LINK" />을(를) 찾으셨나요?</translation>
+<translation id="2089090684895656482">숨기기</translation>
+<translation id="2166378884831602661">사이트에 보안 연결할 수 없음</translation>
+<translation id="2292556288342944218">인터넷 액세스가 차단됨</translation>
+<translation id="255002559098805027"><ph name="HOST_NAME" />에서 잘못된 응답을 전송했습니다.</translation>
+<translation id="2609632851001447353">유사 버전</translation>
+<translation id="2650446666397867134">파일 액세스 거부됨</translation>
+<translation id="2705137772291741111">사이트의 저장된(캐시된) 사본을 읽을 수 없습니다.</translation>
+<translation id="2784949926578158345">연결이 재설정되었습니다.</translation>
+<translation id="284702764277384724"><ph name="HOST_NAME" />의 서버 인증서가 위조된 것 같습니다.</translation>
+<translation id="2909946352844186028">네트워크 변경이 감지되었습니다.</translation>
+<translation id="3005723025932146533">저장된 사본 표시</translation>
+<translation id="3109728660330352905">이 페이지를 볼 수 있는 권한이 없습니다.</translation>
+<translation id="3176929007561373547">프록시 설정을 확인하거나 네트워크 관리자에게 문의하여
+      프록시 서버가 작동하는지 확인하세요. 프록시 서버를 사용하지 않으려면
+      다음 단계를 따르세요.
+      <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673">현재 <ph name="HOST_NAME" />에 연결할 수 없습니다.</translation>
+<translation id="3447661539832366887">이 기기의 소유자가 공룡 게임을 사용 중지했습니다.</translation>
+<translation id="3586931643579894722">세부정보 숨기기</translation>
+<translation id="3630155396527302611">이미 네트워크 액세스가 허용된 프로그램으로 되어 있는 경우
+    목록에서 삭제한 뒤 다시 추가합니다.</translation>
+<translation id="3658742229777143148">개정</translation>
+<translation id="382518646247711829">프록시 서버를 사용하는 경우</translation>
+<translation id="3973234410852337861"><ph name="HOST_NAME" />이(가) 차단됨</translation>
+<translation id="4021036232240155012">DNS는 웹사이트 이름을 인터넷 주소로 변환하는 네트워크 서비스입니다.</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" />에서 로그인 인증서를 승인하지 않았거나 로그인 인증서가 제공되지 않았을 수 있습니다.</translation>
+<translation id="4522570452068850558">세부정보</translation>
+<translation id="4670097147947922288">지금 확장 프로그램 페이지를 보고 있습니다.</translation>
+<translation id="4708268264240856090">연결이 끊김</translation>
+<translation id="4744603770635761495">실행 가능 경로</translation>
+<translation id="4764776831041365478"><ph name="URL" />의 웹페이지가 일시적으로 다운되었거나 새 웹 주소로 완전히 이동했을 수 있습니다.</translation>
+<translation id="5023310440958281426">관리자 정책을 확인하세요.</translation>
+<translation id="5115563688576182185">(64비트)</translation>
+<translation id="5431657950005405462">파일을 찾을 수 없음</translation>
+<translation id="5452270690849572955"><ph name="HOST_NAME" /> 페이지를 찾을 수 없음</translation>
+<translation id="5492298309214877701">회사, 조직, 학교 인트라넷의 해당 사이트가 외부 웹사이트와 동일한 URL을 갖고 있습니다.
+    <ph name="LINE_BREAK" />
+    시스템 관리자에게 문의하세요.</translation>
+<translation id="5510766032865166053">이동되었거나 삭제되었을 수 있습니다.</translation>
+<translation id="5556459405103347317">새로고침</translation>
+<translation id="5617949217645503996"><ph name="HOST_NAME" />에서 리디렉션한 횟수가 너무 많습니다.</translation>
+<translation id="5675650730144413517">페이지가 작동하지 않습니다.</translation>
+<translation id="5869405914158311789">사이트에 연결할 수 없음</translation>
+<translation id="5990559369517809815">서버에 대한 요청이 확장 프로그램에 의해 차단되었습니다.</translation>
+<translation id="6042308850641462728">더보기</translation>
+<translation id="6146055958333702838">케이블을 확인하고 사용 중인 라우터, 모뎀 또는 기타 네트워크 기기를
+    재부팅하시기 바랍니다.</translation>
+<translation id="6165508094623778733">자세히 알아보기</translation>
+<translation id="6203231073485539293">인터넷 연결을 확인하세요.</translation>
+<translation id="6305205051461490394"><ph name="URL" />에 연결할 수 없습니다.</translation>
+<translation id="6321917430147971392">DNS 설정 확인</translation>
+<translation id="6328639280570009161">네트워크 예측을 사용 중지해 보세요.</translation>
+<translation id="6433595998831338502"><ph name="HOST_NAME" />에서 연결을 거부했습니다.</translation>
+<translation id="6711464428925977395">프록시 서버에 문제가 발생했거나 주소가 잘못되었습니다.</translation>
+<translation id="6830600606572693159"><ph name="URL" />의 웹페이지는 현재 사용할 수 없습니다.  웹페이지가 오버로드되었거나 유지보수를 위해 다운되었을 수 있습니다.</translation>
+<translation id="6897140037006041989">사용자 에이전트</translation>
+<translation id="7210863904660874423"><ph name="HOST_NAME" />에서 보안 기준을 준수하지 않습니다.</translation>
+<translation id="7269802741830436641">이 웹페이지에 리디렉션 순환 오류가 있습니다</translation>
+<translation id="7353601530677266744">명령줄</translation>
+<translation id="7419106976560586862">프로필 경로</translation>
+<translation id="7518003948725431193">다음 웹 주소(<ph name="URL" />)에 대해 발견된 웹페이지가 없습니다.</translation>
+<translation id="7549584377607005141">이 웹페이지를 제대로 표시하려면 이전에 입력한 데이터가 필요합니다. 이 데이터를 다시 보낼 수 있지만 이 경우 해당 페이지에서 이전에 수행한 작업이 반복됩니다.</translation>
+<translation id="759889825892636187">현재 <ph name="HOST_NAME" />에서 요청을 처리할 수 없습니다.</translation>
+<translation id="7716424297397655342">이 사이트를 캐시에서 로드할 수 없음</translation>
+<translation id="7758069387465995638">방화벽이나 바이러스 백신 소프트웨어가 연결을 차단했을 수 있습니다.</translation>
+<translation id="778579833039460630">수신된 데이터 없음</translation>
+<translation id="7951415247503192394">(32비트)</translation>
+<translation id="8134994873729925007"><ph name="HOST_NAME" />의 서버 <ph name="BEGIN_ABBR" />DNS 주소<ph name="END_ABBR" />를 찾을 수 없습니다.</translation>
+<translation id="8142868475871995937">차단된 URL 및 시스템 관리자가 설정한 기타 정책 목록을 확인하려면 &lt;strong&gt;vivaldi://policy&lt;/strong&gt;를 방문하세요.</translation>
+<translation id="8149426793427495338">컴퓨터가 절전 모드 상태입니다.</translation>
+<translation id="8150722005171944719"><ph name="URL" />의 파일을 읽을 수 없습니다. 삭제 또는 이동되었거나 파일 사용 권한이 액세스를 차단할 수도 있습니다.</translation>
+<translation id="8225771182978767009">컴퓨터를 설정한 사용자가 이 사이트를 차단했습니다.</translation>
+<translation id="8289355894181816810">잘 모르는 경우 네트워크 관리자에게 문의하시기 바랍니다.</translation>
+<translation id="8332188693563227489"><ph name="HOST_NAME" />에 대한 액세스가 거부됨</translation>
+<translation id="8498891568109133222"><ph name="HOST_NAME" />에서 응답하는 데 시간이 너무 오래 걸립니다.</translation>
+<translation id="8740359287975076522"><ph name="HOST_NAME" />의 &lt;abbr id="dnsDefinition"&gt;DNS 주소&lt;/abbr&gt;를 찾을 수 없습니다. 문제를 진단하는 중입니다.</translation>
+<translation id="9183425211371246419"><ph name="HOST_NAME" />에서 지원되지 않는 프로토콜을 사용합니다.</translation>
+<translation id="933612690413056017">인터넷에 연결되지 않음</translation>
+<translation id="969892804517981540">공식 빌드</translation>
+<translation id="988159990683914416">개발자 빌드</translation>
+</translationbundle>

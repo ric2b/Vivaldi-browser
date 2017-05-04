@@ -48,7 +48,7 @@ void AudioDSPKernelProcessor::initialize() {
 
   // Create processing kernels, one per channel.
   for (unsigned i = 0; i < numberOfChannels(); ++i)
-    m_kernels.append(createKernel());
+    m_kernels.push_back(createKernel());
 
   m_initialized = true;
   m_hasJustReset = true;
@@ -96,6 +96,20 @@ void AudioDSPKernelProcessor::process(const AudioBus* source,
   }
 }
 
+void AudioDSPKernelProcessor::processOnlyAudioParams(size_t framesToProcess) {
+  if (!isInitialized())
+    return;
+
+  MutexTryLocker tryLocker(m_processLock);
+  // Only update the AudioParams if we can get the lock.  If not, some
+  // other thread is updating the kernels, so we'll have to skip it
+  // this time.
+  if (tryLocker.locked()) {
+    for (unsigned i = 0; i < m_kernels.size(); ++i)
+      m_kernels[i]->processOnlyAudioParams(framesToProcess);
+  }
+}
+
 // Resets filter state
 void AudioDSPKernelProcessor::reset() {
   ASSERT(isMainThread());
@@ -126,7 +140,7 @@ double AudioDSPKernelProcessor::tailTime() const {
   MutexTryLocker tryLocker(m_processLock);
   if (tryLocker.locked()) {
     // It is expected that all the kernels have the same tailTime.
-    return !m_kernels.isEmpty() ? m_kernels.first()->tailTime() : 0;
+    return !m_kernels.isEmpty() ? m_kernels.front()->tailTime() : 0;
   }
   // Since we don't want to block the Audio Device thread, we return a large
   // value instead of trying to acquire the lock.
@@ -138,7 +152,7 @@ double AudioDSPKernelProcessor::latencyTime() const {
   MutexTryLocker tryLocker(m_processLock);
   if (tryLocker.locked()) {
     // It is expected that all the kernels have the same latencyTime.
-    return !m_kernels.isEmpty() ? m_kernels.first()->latencyTime() : 0;
+    return !m_kernels.isEmpty() ? m_kernels.front()->latencyTime() : 0;
   }
   // Since we don't want to block the Audio Device thread, we return a large
   // value instead of trying to acquire the lock.

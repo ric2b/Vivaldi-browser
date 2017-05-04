@@ -24,13 +24,11 @@
 #include "chromeos/network/network_util.h"
 #include "chromeos/network/onc/onc_utils.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/user_manager/user_manager.h"
 
 namespace {
 
 constexpr int kGetNetworksListLimit = 100;
-constexpr uint32_t kScanCompletedMinInstanceVersion = 1;
-constexpr uint32_t kDefaultNetworkChangedMinInstanceVersion = 2;
-constexpr uint32_t kWifiEnabledStateChanged = 3;
 
 chromeos::NetworkStateHandler* GetStateHandler() {
   return chromeos::NetworkHandler::Get()->network_state_handler();
@@ -46,10 +44,12 @@ chromeos::NetworkConnectionHandler* GetNetworkConnectionHandler() {
 }
 
 bool IsDeviceOwner() {
-  // Check whether the logged-in Chrome OS user is allowed to add or
-  // remove WiFi networks.
-  return chromeos::LoginState::Get()->GetLoggedInUserType() ==
-         chromeos::LoginState::LOGGED_IN_USER_OWNER;
+  // Check whether the logged-in Chrome OS user is allowed to add or remove WiFi
+  // networks. The user account state changes immediately after boot. There is a
+  // small window when this may return an incorrect state. However, after things
+  // settle down this is guranteed to reflect the correct user account state.
+  return user_manager::UserManager::Get()->GetActiveUser()->GetAccountId() ==
+         user_manager::UserManager::Get()->GetOwnerAccountId();
 }
 
 std::string GetStringFromOncDictionary(const base::DictionaryValue* dict,
@@ -58,7 +58,7 @@ std::string GetStringFromOncDictionary(const base::DictionaryValue* dict,
   std::string value;
   dict->GetString(key, &value);
   if (required && value.empty())
-    NOTREACHED();
+    VLOG(1) << "Required parameter " << key << " was not found.";
   return value;
 }
 
@@ -100,23 +100,22 @@ arc::mojom::WiFiPtr TranslateONCWifi(const base::DictionaryValue* dict) {
   return wifi;
 }
 
-mojo::Array<mojo::String> TranslateStringArray(const base::ListValue* list) {
-  mojo::Array<mojo::String> strings = mojo::Array<mojo::String>::New(0);
+std::vector<std::string> TranslateStringArray(const base::ListValue* list) {
+  std::vector<std::string> strings;
 
   for (size_t i = 0; i < list->GetSize(); i++) {
     std::string value;
     list->GetString(i, &value);
     DCHECK(!value.empty());
-    strings.push_back(static_cast<mojo::String>(value));
+    strings.push_back(value);
   }
 
   return strings;
 }
 
-mojo::Array<arc::mojom::IPConfigurationPtr> TranslateONCIPConfigs(
+std::vector<arc::mojom::IPConfigurationPtr> TranslateONCIPConfigs(
     const base::ListValue* list) {
-  mojo::Array<arc::mojom::IPConfigurationPtr> configs =
-      mojo::Array<arc::mojom::IPConfigurationPtr>::New(0);
+  std::vector<arc::mojom::IPConfigurationPtr> configs;
 
   for (size_t i = 0; i < list->GetSize(); i++) {
     const base::DictionaryValue* ip_dict = nullptr;
@@ -307,8 +306,9 @@ void ArcNetHostImpl::OnInstanceReady() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   mojom::NetHostPtr host;
-  binding_.Bind(GetProxy(&host));
-  auto* instance = arc_bridge_service()->net()->GetInstanceForMethod("Init");
+  binding_.Bind(MakeRequest(&host));
+  auto* instance =
+      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service()->net(), Init);
   DCHECK(instance);
   instance->Init(std::move(host));
 
@@ -370,8 +370,7 @@ void ArcNetHostImpl::GetNetworks(mojom::GetNetworksRequestType type,
   // Even if there's no WiFi, an empty (size=0) list must be returned and not a
   // null one. The explicitly sized New() constructor ensures the non-null
   // property.
-  mojo::Array<mojom::WifiConfigurationPtr> networks =
-      mojo::Array<mojom::WifiConfigurationPtr>::New(0);
+  std::vector<mojom::WifiConfigurationPtr> networks;
   for (const auto& value : *network_properties_list) {
     mojom::WifiConfigurationPtr wc = mojom::WifiConfiguration::New();
 
@@ -454,7 +453,7 @@ void ArcNetHostImpl::CreateNetwork(mojom::WifiConfigurationPtr cfg,
   std::unique_ptr<base::DictionaryValue> properties(new base::DictionaryValue);
   std::unique_ptr<base::DictionaryValue> wifi_dict(new base::DictionaryValue);
 
-  if (cfg->hexssid.is_null() || !cfg->details) {
+  if (!cfg->hexssid.has_value() || !cfg->details) {
     callback.Run("");
     return;
   }
@@ -468,18 +467,18 @@ void ArcNetHostImpl::CreateNetwork(mojom::WifiConfigurationPtr cfg,
   properties->SetStringWithoutPathExpansion(onc::network_config::kType,
                                             onc::network_config::kWiFi);
   wifi_dict->SetStringWithoutPathExpansion(onc::wifi::kHexSSID,
-                                           cfg->hexssid.get());
+                                           cfg->hexssid.value());
   wifi_dict->SetBooleanWithoutPathExpansion(onc::wifi::kAutoConnect,
                                             details->autoconnect);
-  if (cfg->security.get().empty()) {
+  if (cfg->security.empty()) {
     wifi_dict->SetStringWithoutPathExpansion(onc::wifi::kSecurity,
                                              onc::wifi::kSecurityNone);
   } else {
     wifi_dict->SetStringWithoutPathExpansion(onc::wifi::kSecurity,
-                                             cfg->security.get());
-    if (!details->passphrase.is_null()) {
+                                             cfg->security);
+    if (details->passphrase.has_value()) {
       wifi_dict->SetStringWithoutPathExpansion(onc::wifi::kPassphrase,
-                                               details->passphrase.get());
+                                               details->passphrase.value());
     }
   }
   properties->SetWithoutPathExpansion(onc::network_config::kWiFi,
@@ -511,7 +510,7 @@ bool ArcNetHostImpl::GetNetworkPathFromGuid(const std::string& guid,
   }
 }
 
-void ArcNetHostImpl::ForgetNetwork(const mojo::String& guid,
+void ArcNetHostImpl::ForgetNetwork(const std::string& guid,
                                    const ForgetNetworkCallback& callback) {
   if (!IsDeviceOwner()) {
     callback.Run(mojom::NetworkResult::FAILURE);
@@ -530,7 +529,7 @@ void ArcNetHostImpl::ForgetNetwork(const mojo::String& guid,
       base::Bind(&ForgetNetworkFailureCallback, callback));
 }
 
-void ArcNetHostImpl::StartConnect(const mojo::String& guid,
+void ArcNetHostImpl::StartConnect(const std::string& guid,
                                   const StartConnectCallback& callback) {
   std::string path;
   if (!GetNetworkPathFromGuid(guid, &path)) {
@@ -543,7 +542,7 @@ void ArcNetHostImpl::StartConnect(const mojo::String& guid,
       base::Bind(&StartConnectFailureCallback, callback), false);
 }
 
-void ArcNetHostImpl::StartDisconnect(const mojo::String& guid,
+void ArcNetHostImpl::StartDisconnect(const std::string& guid,
                                      const StartDisconnectCallback& callback) {
   std::string path;
   if (!GetNetworkPathFromGuid(guid, &path)) {
@@ -589,8 +588,8 @@ void ArcNetHostImpl::StartScan() {
 }
 
 void ArcNetHostImpl::ScanCompleted(const chromeos::DeviceState* /*unused*/) {
-  auto* net_instance = arc_bridge_service()->net()->GetInstanceForMethod(
-      "ScanCompleted", kScanCompletedMinInstanceVersion);
+  auto* net_instance =
+      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service()->net(), ScanCompleted);
   if (!net_instance)
     return;
 
@@ -618,8 +617,8 @@ void ArcNetHostImpl::GetDefaultNetwork(
 void ArcNetHostImpl::DefaultNetworkSuccessCallback(
     const std::string& service_path,
     const base::DictionaryValue& dictionary) {
-  auto* net_instance = arc_bridge_service()->net()->GetInstanceForMethod(
-      "DefaultNetworkChanged", kDefaultNetworkChangedMinInstanceVersion);
+  auto* net_instance = ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service()->net(),
+                                                   DefaultNetworkChanged);
   if (!net_instance)
     return;
 
@@ -631,8 +630,8 @@ void ArcNetHostImpl::DefaultNetworkChanged(
     const chromeos::NetworkState* network) {
   if (!network) {
     VLOG(1) << "No default network";
-    auto* net_instance = arc_bridge_service()->net()->GetInstanceForMethod(
-        "DefaultNetworkChanged", kDefaultNetworkChangedMinInstanceVersion);
+    auto* net_instance = ARC_GET_INSTANCE_FOR_METHOD(
+        arc_bridge_service()->net(), DefaultNetworkChanged);
     if (net_instance)
       net_instance->DefaultNetworkChanged(nullptr, nullptr);
     return;
@@ -648,8 +647,8 @@ void ArcNetHostImpl::DefaultNetworkChanged(
 }
 
 void ArcNetHostImpl::DeviceListChanged() {
-  auto* net_instance = arc_bridge_service()->net()->GetInstanceForMethod(
-      "WifiEnabledStateChanged", kWifiEnabledStateChanged);
+  auto* net_instance = ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service()->net(),
+                                                   WifiEnabledStateChanged);
   if (!net_instance)
     return;
 

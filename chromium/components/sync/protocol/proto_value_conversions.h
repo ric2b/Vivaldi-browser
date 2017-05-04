@@ -49,6 +49,7 @@ class ManagedUserSpecifics;
 class ManagedUserWhitelistSpecifics;
 class NavigationRedirect;
 class NigoriSpecifics;
+class NotesSpecifics;
 class PasswordSpecifics;
 class PasswordSpecificsData;
 class PreferenceSpecifics;
@@ -181,6 +182,9 @@ std::unique_ptr<base::DictionaryValue> BookmarkSpecificsToValue(
 
 std::unique_ptr<base::DictionaryValue> DeviceInfoSpecificsToValue(
     const sync_pb::DeviceInfoSpecifics& device_info_specifics);
+
+std::unique_ptr<base::DictionaryValue> NotesSpecificsToValue(
+  const sync_pb::NotesSpecifics& notes_specifics);
 
 std::unique_ptr<base::DictionaryValue> DictionarySpecificsToValue(
     const sync_pb::DictionarySpecifics& dictionary_specifics);

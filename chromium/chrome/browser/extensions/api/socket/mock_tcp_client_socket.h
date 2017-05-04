@@ -17,7 +17,6 @@ class MockTCPClientSocket : public net::TCPClientSocket {
   MockTCPClientSocket();
   virtual ~MockTCPClientSocket();
 
-  // Copied from MockTCPClientSocket in blimp/net/test_common.h
   MOCK_METHOD3(Read, int(net::IOBuffer*, int, const net::CompletionCallback&));
   MOCK_METHOD3(Write, int(net::IOBuffer*, int, const net::CompletionCallback&));
   MOCK_METHOD1(SetReceiveBufferSize, int(int32_t));
@@ -35,7 +34,7 @@ class MockTCPClientSocket : public net::TCPClientSocket {
   MOCK_CONST_METHOD0(UsingTCPFastOpen, bool());
   MOCK_CONST_METHOD0(NumBytesRead, int64_t());
   MOCK_CONST_METHOD0(GetConnectTimeMicros, base::TimeDelta());
-  MOCK_CONST_METHOD0(WasNpnNegotiated, bool());
+  MOCK_CONST_METHOD0(WasAlpnNegotiated, bool());
   MOCK_CONST_METHOD0(GetNegotiatedProtocol, net::NextProto());
   MOCK_METHOD1(GetSSLInfo, bool(net::SSLInfo*));
   MOCK_CONST_METHOD1(GetConnectionAttempts, void(net::ConnectionAttempts*));

@@ -45,8 +45,8 @@
 #include "platform/fonts/TextRenderingMode.h"
 #include "platform/fonts/opentype/OpenTypeVerticalData.h"
 #include "platform/fonts/shaping/ShapeCache.h"
-#include "platform/tracing/web_memory_allocator_dump.h"
-#include "platform/tracing/web_process_memory_dump.h"
+#include "platform/instrumentation/tracing/web_memory_allocator_dump.h"
+#include "platform/instrumentation/tracing/web_process_memory_dump.h"
 #include "public/platform/Platform.h"
 #include "ui/gfx/font_list.h"
 #include "wtf/HashMap.h"
@@ -186,7 +186,7 @@ FontPlatformData* FontCache::getFontPlatformData(
       auto adding =
           &gFontPlatformDataCache->add(key, SizedFontPlatformDataSet())
                .storedValue->value;
-      adding->set(roundedSize, wrapUnique(new FontPlatformData(*result)));
+      adding->set(roundedSize, WTF::wrapUnique(new FontPlatformData(*result)));
     }
   }
 
@@ -201,7 +201,7 @@ std::unique_ptr<FontPlatformData> FontCache::scaleFontPlatformData(
 #if OS(MACOSX)
   return createFontPlatformData(fontDescription, creationParams, fontSize);
 #else
-  return makeUnique<FontPlatformData>(fontPlatformData, fontSize);
+  return WTF::makeUnique<FontPlatformData>(fontPlatformData, fontSize);
 #endif
 }
 
@@ -213,7 +213,7 @@ ShapeCache* FontCache::getShapeCache(const FallbackListCompositeKey& key) {
   ShapeCache* result = nullptr;
   if (it == gFallbackListShaperCache->end()) {
     result = new ShapeCache();
-    gFallbackListShaperCache->set(key, wrapUnique(result));
+    gFallbackListShaperCache->set(key, WTF::wrapUnique(result));
   } else {
     result = it->value.get();
   }
@@ -233,12 +233,9 @@ FontVerticalDataCache& fontVerticalDataCacheInstance() {
   return fontVerticalDataCache;
 }
 
-void FontCache::setFontManager(const sk_sp<SkFontMgr>& fontManager) {
+void FontCache::setFontManager(sk_sp<SkFontMgr> fontManager) {
   DCHECK(!s_staticFontManager);
-  s_staticFontManager = fontManager.get();
-  // Explicitly AddRef since we're going to hold on to the object for the life
-  // of the program.
-  s_staticFontManager->ref();
+  s_staticFontManager = fontManager.release();
 }
 
 PassRefPtr<OpenTypeVerticalData> FontCache::getVerticalData(
@@ -288,7 +285,7 @@ PassRefPtr<SimpleFontData> FontCache::fontDataFromFontPlatformData(
   if (!gFontDataCache)
     gFontDataCache = new FontDataCache;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   if (shouldRetain == DoNotRetain)
     ASSERT(m_purgePreventCount);
 #endif
@@ -337,11 +334,11 @@ static inline void purgePlatformFontDataCache() {
     for (const auto& platformData : sizedFonts.value) {
       if (platformData.value &&
           !gFontDataCache->contains(platformData.value.get()))
-        sizesToRemove.append(platformData.key);
+        sizesToRemove.push_back(platformData.key);
     }
     sizedFonts.value.removeAll(sizesToRemove);
     if (sizedFonts.value.isEmpty())
-      keysToRemove.append(sizedFonts.key);
+      keysToRemove.push_back(sizedFonts.key);
   }
   gFontPlatformDataCache->removeAll(keysToRemove);
 }
@@ -368,7 +365,7 @@ static inline void purgeFontVerticalDataCache() {
              fontVerticalDataCache.begin();
          verticalData != verticalDataEnd; ++verticalData) {
       if (!verticalData->value || !verticalData->value->inFontCache())
-        keysToRemove.append(verticalData->key);
+        keysToRemove.push_back(verticalData->key);
     }
     fontVerticalDataCache.removeAll(keysToRemove);
   }
@@ -394,9 +391,9 @@ void FontCache::invalidateShapeCache() {
 }
 
 void FontCache::purge(PurgeSeverity PurgeSeverity) {
-  // We should never be forcing the purge while the FontCachePurgePreventer is
-  // in scope.
-  ASSERT(!m_purgePreventCount || PurgeSeverity == PurgeIfNeeded);
+  // Ideally we should never be forcing the purge while the
+  // FontCachePurgePreventer is in scope, but we call purge() at any timing
+  // via MemoryCoordinator.
   if (m_purgePreventCount)
     return;
 
@@ -449,7 +446,7 @@ void FontCache::invalidate() {
   for (HeapHashSet<WeakMember<FontCacheClient>>::iterator it =
            fontCacheClients().begin();
        it != end; ++it)
-    clients.append(*it);
+    clients.push_back(*it);
 
   ASSERT(numClients == clients.size());
   for (size_t i = 0; i < numClients; ++i)

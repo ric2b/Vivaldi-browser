@@ -25,10 +25,6 @@ class Profile;
 class TemplateURL;
 class TemplateURLService;
 
-namespace base {
-class ListValue;
-}
-
 namespace content {
 class BrowserContext;
 class WebContents;
@@ -99,12 +95,9 @@ class OmniboxAPI : public BrowserContextKeyedAPI,
   // KeyedService implementation.
   void Shutdown() override;
 
-  // Returns the icon to display in the omnibox for the given extension.
+  // Returns the icon to display in the location bar or omnibox popup for the
+  // given extension.
   gfx::Image GetOmniboxIcon(const std::string& extension_id);
-
-  // Returns the icon to display in the omnibox popup window for the given
-  // extension.
-  gfx::Image GetOmniboxPopupIcon(const std::string& extension_id);
 
  private:
   friend class BrowserContextKeyedAPIFactory<OmniboxAPI>;
@@ -140,7 +133,6 @@ class OmniboxAPI : public BrowserContextKeyedAPI,
 
   // Keeps track of favicon-sized omnibox icons for extensions.
   ExtensionIconManager omnibox_icon_manager_;
-  ExtensionIconManager omnibox_popup_icon_manager_;
 
   std::unique_ptr<TemplateURLService::Subscription> template_url_sub_;
 

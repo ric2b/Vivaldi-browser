@@ -18,19 +18,20 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/bookmarks/browser/bookmark_match.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/browser/titled_url_match.h"
 #include "components/bookmarks/test/test_bookmark_client.h"
 #include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/mock_autocomplete_provider_client.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
+#include "components/omnibox/browser/titled_url_match_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using bookmarks::BookmarkMatch;
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
+using bookmarks::TitledUrlMatch;
 
 namespace {
 
@@ -420,10 +421,12 @@ TEST_F(BookmarkProviderTest, InlineAutocompletion) {
         provider_->FixupUserInput(input).second);
     BookmarkNode node(GURL(query_data[i].url));
     node.SetTitle(base::ASCIIToUTF16(query_data[i].url));
-    BookmarkMatch bookmark_match;
+    TitledUrlMatch bookmark_match;
     bookmark_match.node = &node;
-    const AutocompleteMatch& ac_match = provider_->BookmarkMatchToACMatch(
-        input, fixed_up_input, bookmark_match);
+    int relevance = provider_->CalculateBookmarkMatchRelevance(bookmark_match);
+    const AutocompleteMatch& ac_match = TitledUrlMatchToAutocompleteMatch(
+        bookmark_match, AutocompleteMatchType::BOOKMARK_TITLE, relevance,
+        provider_.get(), classifier_, input, fixed_up_input);
     EXPECT_EQ(query_data[i].allowed_to_be_default_match,
               ac_match.allowed_to_be_default_match) << description;
     EXPECT_EQ(base::ASCIIToUTF16(query_data[i].inline_autocompletion),

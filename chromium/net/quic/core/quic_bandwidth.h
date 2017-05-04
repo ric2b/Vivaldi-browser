@@ -4,24 +4,21 @@
 //
 // QuicBandwidth represents a bandwidth, stored in bits per second resolution.
 
-#ifndef NET_QUIC_QUIC_BANDWIDTH_H_
-#define NET_QUIC_QUIC_BANDWIDTH_H_
-
-#include <stdint.h>
+#ifndef NET_QUIC_CORE_QUIC_BANDWIDTH_H_
+#define NET_QUIC_CORE_QUIC_BANDWIDTH_H_
 
 #include <cmath>
+#include <cstdint>
 #include <ostream>
 
 #include "base/compiler_specific.h"
-#include "net/base/net_export.h"
 #include "net/quic/core/quic_time.h"
+#include "net/quic/core/quic_types.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
 
-typedef uint64_t QuicByteCount;
-typedef uint64_t QuicPacketCount;
-
-class NET_EXPORT_PRIVATE QuicBandwidth {
+class QUIC_EXPORT_PRIVATE QuicBandwidth {
  public:
   // Creates a new QuicBandwidth with an internal value of 0.
   static QuicBandwidth Zero();
@@ -121,4 +118,4 @@ inline std::ostream& operator<<(std::ostream& output,
 }
 
 }  // namespace net
-#endif  // NET_QUIC_QUIC_BANDWIDTH_H_
+#endif  // NET_QUIC_CORE_QUIC_BANDWIDTH_H_

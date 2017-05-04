@@ -47,7 +47,7 @@ namespace chromeos {
 // static
 NetworkScreen* NetworkScreen::Get(ScreenManager* manager) {
   return static_cast<NetworkScreen*>(
-      manager->GetScreen(WizardController::kNetworkScreenName));
+      manager->GetScreen(OobeScreen::SCREEN_OOBE_NETWORK));
 }
 
 NetworkScreen::NetworkScreen(BaseScreenDelegate* base_screen_delegate,
@@ -65,6 +65,8 @@ NetworkScreen::NetworkScreen(BaseScreenDelegate* base_screen_delegate,
 
   input_method::InputMethodManager::Get()->AddObserver(this);
   InitializeTimezoneObserver();
+  OnSystemTimezoneChanged();
+  UpdateLanguageList();
 }
 
 NetworkScreen::~NetworkScreen() {
@@ -78,11 +80,6 @@ NetworkScreen::~NetworkScreen() {
 
 ////////////////////////////////////////////////////////////////////////////////
 // NetworkScreen, NetworkModel implementation:
-
-void NetworkScreen::PrepareToShow() {
-  if (view_)
-    view_->PrepareToShow();
-}
 
 void NetworkScreen::Show() {
   Refresh();
@@ -107,12 +104,6 @@ void NetworkScreen::Hide() {
   timezone_subscription_.reset();
   if (view_)
     view_->Hide();
-}
-
-void NetworkScreen::Initialize(::login::ScreenContext* context) {
-  NetworkModel::Initialize(context);
-  OnSystemTimezoneChanged();
-  UpdateLanguageList();
 }
 
 void NetworkScreen::OnViewDestroyed(NetworkView* view) {

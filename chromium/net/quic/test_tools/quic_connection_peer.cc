@@ -6,7 +6,7 @@
 
 #include "base/stl_util.h"
 #include "net/quic/core/congestion_control/send_algorithm_interface.h"
-#include "net/quic/core/quic_multipath_sent_packet_manager.h"
+#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_packet_writer.h"
 #include "net/quic/core/quic_received_packet_manager.h"
 #include "net/quic/test_tools/quic_framer_peer.h"
@@ -24,17 +24,15 @@ void QuicConnectionPeer::SendAck(QuicConnection* connection) {
 // static
 void QuicConnectionPeer::SetSendAlgorithm(
     QuicConnection* connection,
-    QuicPathId path_id,
     SendAlgorithmInterface* send_algorithm) {
-  GetSentPacketManager(connection, path_id)->SetSendAlgorithm(send_algorithm);
+  GetSentPacketManager(connection)->SetSendAlgorithm(send_algorithm);
 }
 
 // static
 void QuicConnectionPeer::SetLossAlgorithm(
     QuicConnection* connection,
-    QuicPathId path_id,
     LossDetectionInterface* loss_algorithm) {
-  GetSentPacketManager(connection, path_id)->loss_algorithm_ = loss_algorithm;
+  GetSentPacketManager(connection)->loss_algorithm_ = loss_algorithm;
 }
 
 // static
@@ -71,54 +69,14 @@ QuicPacketGenerator* QuicConnectionPeer::GetPacketGenerator(
 
 // static
 QuicSentPacketManager* QuicConnectionPeer::GetSentPacketManager(
-    QuicConnection* connection,
-    QuicPathId path_id) {
-  if (FLAGS_quic_enable_multipath) {
-    return static_cast<QuicSentPacketManager*>(
-        static_cast<QuicMultipathSentPacketManager*>(
-            connection->sent_packet_manager_.get())
-            ->MaybeGetSentPacketManagerForPath(path_id));
-  }
-  return static_cast<QuicSentPacketManager*>(
-      connection->sent_packet_manager_.get());
+    QuicConnection* connection) {
+  return &connection->sent_packet_manager_;
 }
 
 // static
 QuicTime::Delta QuicConnectionPeer::GetNetworkTimeout(
     QuicConnection* connection) {
   return connection->idle_network_timeout_;
-}
-
-// static
-QuicSentEntropyManager* QuicConnectionPeer::GetSentEntropyManager(
-    QuicConnection* connection) {
-  return &connection->sent_entropy_manager_;
-}
-
-// static
-// TODO(ianswett): Create a GetSentEntropyHash which accepts an AckFrame.
-QuicPacketEntropyHash QuicConnectionPeer::GetSentEntropyHash(
-    QuicConnection* connection,
-    QuicPacketNumber packet_number) {
-  QuicSentEntropyManager::CumulativeEntropy last_entropy_copy =
-      connection->sent_entropy_manager_.last_cumulative_entropy_;
-  connection->sent_entropy_manager_.UpdateCumulativeEntropy(packet_number,
-                                                            &last_entropy_copy);
-  return last_entropy_copy.entropy;
-}
-
-// static
-QuicPacketEntropyHash QuicConnectionPeer::PacketEntropy(
-    QuicConnection* connection,
-    QuicPacketNumber packet_number) {
-  return connection->sent_entropy_manager_.GetPacketEntropy(packet_number);
-}
-
-// static
-QuicPacketEntropyHash QuicConnectionPeer::ReceivedEntropyHash(
-    QuicConnection* connection,
-    QuicPacketNumber packet_number) {
-  return connection->received_packet_manager_.EntropyHash(packet_number);
 }
 
 // static
@@ -130,13 +88,13 @@ void QuicConnectionPeer::SetPerspective(QuicConnection* connection,
 
 // static
 void QuicConnectionPeer::SetSelfAddress(QuicConnection* connection,
-                                        const IPEndPoint& self_address) {
+                                        const QuicSocketAddress& self_address) {
   connection->self_address_ = self_address;
 }
 
 // static
 void QuicConnectionPeer::SetPeerAddress(QuicConnection* connection,
-                                        const IPEndPoint& peer_address) {
+                                        const QuicSocketAddress& peer_address) {
   connection->peer_address_ = peer_address;
 }
 
@@ -305,7 +263,7 @@ bool QuicConnectionPeer::HasRetransmittableFrames(
     QuicPathId path_id,
     QuicPacketNumber packet_number) {
   return QuicSentPacketManagerPeer::HasRetransmittableFrames(
-      GetSentPacketManager(connection, path_id), packet_number);
+      GetSentPacketManager(connection), packet_number);
 }
 
 }  // namespace test

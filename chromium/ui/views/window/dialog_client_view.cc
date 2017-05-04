@@ -10,11 +10,13 @@
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/views/background.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/button/blue_button.h"
 #include "ui/views/controls/button/custom_button.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/layout/layout_constants.h"
+#include "ui/views/style/platform_style.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
@@ -67,14 +69,15 @@ void LayoutButton(LabelButton* button,
 
 DialogClientView::DialogClientView(Widget* owner, View* contents_view)
     : ClientView(owner, contents_view),
-      button_row_insets_(0,
-                         kButtonHEdgeMarginNew,
-                         kButtonVEdgeMarginNew,
-                         kButtonHEdgeMarginNew),
       ok_button_(nullptr),
       cancel_button_(nullptr),
       extra_view_(nullptr),
       delegate_allowed_close_(false) {
+  button_row_insets_ =
+      ViewsDelegate::GetInstance()
+          ? ViewsDelegate::GetInstance()->GetDialogButtonInsets()
+          : gfx::Insets(0, kButtonHEdgeMarginNew, kButtonVEdgeMarginNew,
+                        kButtonHEdgeMarginNew);
   // Doing this now ensures this accelerator will have lower priority than
   // one set by the contents view.
   AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
@@ -158,19 +161,26 @@ gfx::Size DialogClientView::GetPreferredSize() const {
   // Initialize the size to fit the buttons and extra view row.
   int extra_view_padding = 0;
   if (!GetDialogDelegate()->GetExtraViewPadding(&extra_view_padding))
-    extra_view_padding = kRelatedButtonHSpacing;
+    extra_view_padding = ViewsDelegate::GetInstance()
+                             ? ViewsDelegate::GetInstance()
+                                   ->GetDialogRelatedButtonHorizontalSpacing()
+                             : kRelatedButtonHSpacing;
   gfx::Size size(
       (ok_button_ ? ok_button_->GetPreferredSize().width() : 0) +
-      (cancel_button_ ? cancel_button_->GetPreferredSize().width() : 0) +
-      (cancel_button_ && ok_button_ ? kRelatedButtonHSpacing : 0) +
+          (cancel_button_ ? cancel_button_->GetPreferredSize().width() : 0) +
+          (cancel_button_ && ok_button_
+           ? (ViewsDelegate::GetInstance()
+                  ? ViewsDelegate::GetInstance()
+                        ->GetDialogRelatedButtonHorizontalSpacing()
+                  : kRelatedButtonHSpacing) : 0) +
       (ShouldShow(extra_view_) ? extra_view_->GetPreferredSize().width() : 0) +
-      (ShouldShow(extra_view_) && has_dialog_buttons() ?
-           extra_view_padding : 0),
+      (ShouldShow(extra_view_) && has_dialog_buttons() ? extra_view_padding
+                                                       : 0),
       0);
 
   int buttons_height = GetButtonsAndExtraViewRowHeight();
   if (buttons_height != 0) {
-    size.Enlarge(0, buttons_height + kRelatedControlVerticalSpacing);
+    size.Enlarge(0, buttons_height + GetButtonsAndExtraViewRowTopPadding());
     // Inset the buttons and extra view.
     const gfx::Insets insets = GetButtonRowInsets();
     size.Enlarge(insets.width(), insets.height());
@@ -212,7 +222,7 @@ void DialogClientView::Layout() {
           GetDialogDelegate()->GetExtraViewPadding(&custom_padding)) {
         // The call to LayoutButton() will already have accounted for some of
         // the padding.
-        custom_padding -= kRelatedButtonHSpacing;
+        custom_padding -= GetButtonsAndExtraViewRowTopPadding();
         row_bounds.set_width(row_bounds.width() - custom_padding);
       }
       row_bounds.set_width(std::min(row_bounds.width(),
@@ -221,7 +231,7 @@ void DialogClientView::Layout() {
     }
 
     if (height > 0)
-      bounds.Inset(0, 0, 0, height + kRelatedControlVerticalSpacing);
+      bounds.Inset(0, 0, 0, height + GetButtonsAndExtraViewRowTopPadding());
   }
 
   // Layout the contents view to the top and side edges of the contents bounds.
@@ -322,10 +332,15 @@ void DialogClientView::ChildVisibilityChanged(View* child) {
 LabelButton* DialogClientView::CreateDialogButton(ui::DialogButton type) {
   const base::string16 title = GetDialogDelegate()->GetDialogButtonLabel(type);
   LabelButton* button = nullptr;
+
+  const bool is_default =
+      GetDialogDelegate()->GetDefaultDialogButton() == type &&
+      (type != ui::DIALOG_BUTTON_CANCEL ||
+       PlatformStyle::kDialogDefaultButtonCanBeCancel);
+
   // The default button is always blue in Harmony.
-  if (GetDialogDelegate()->GetDefaultDialogButton() == type &&
-      (ui::MaterialDesignController::IsSecondaryUiMaterial() ||
-       GetDialogDelegate()->ShouldDefaultButtonBeBlue())) {
+  if (is_default && (ui::MaterialDesignController::IsSecondaryUiMaterial() ||
+                     GetDialogDelegate()->ShouldDefaultButtonBeBlue())) {
     button = MdTextButton::CreateSecondaryUiBlueButton(this, title);
   } else {
     button = MdTextButton::CreateSecondaryUiButton(this, title);
@@ -354,6 +369,21 @@ int DialogClientView::GetButtonsAndExtraViewRowHeight() const {
 gfx::Insets DialogClientView::GetButtonRowInsets() const {
   return GetButtonsAndExtraViewRowHeight() == 0 ? gfx::Insets()
                                                 : button_row_insets_;
+}
+
+int DialogClientView::GetButtonsAndExtraViewRowTopPadding() const {
+  int spacing = button_row_insets_.top();
+  // Some subclasses of DialogClientView, in order to do their own layout, set
+  // button_row_insets_ to gfx::Insets(). To avoid breaking behavior of those
+  // dialogs, supplying 0 for the top inset of the row falls back to
+  // ViewsDelegate::GetRelatedControlVerticalSpacing or
+  // kRelatedControlVerticalSpacing.
+  if (!spacing)
+    spacing = ViewsDelegate::GetInstance()
+                  ? ViewsDelegate::GetInstance()
+                        ->GetDialogRelatedControlVerticalSpacing()
+                  : kRelatedControlVerticalSpacing;
+  return spacing;
 }
 
 void DialogClientView::SetupFocusChain() {

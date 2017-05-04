@@ -139,9 +139,6 @@ class VIEWS_EXPORT Textfield : public View,
   void SetSelectionBackgroundColor(SkColor color);
   void UseDefaultSelectionBackgroundColor();
 
-  // Set drop shadows underneath the text.
-  void SetShadows(const gfx::ShadowValues& shadows);
-
   // Gets/Sets whether or not the cursor is enabled.
   bool GetCursorEnabled() const;
   void SetCursorEnabled(bool enabled);
@@ -320,7 +317,7 @@ class VIEWS_EXPORT Textfield : public View,
   bool ChangeTextDirectionAndLayoutAlignment(
       base::i18n::TextDirection direction) override;
   void ExtendSelectionAndDelete(size_t before, size_t after) override;
-  void EnsureCaretInRect(const gfx::Rect& rect) override;
+  void EnsureCaretNotInRect(const gfx::Rect& rect) override;
   bool IsTextEditCommandEnabled(ui::TextEditCommand command) const override;
   void SetTextEditCommandForNextKeyEvent(ui::TextEditCommand command) override;
 

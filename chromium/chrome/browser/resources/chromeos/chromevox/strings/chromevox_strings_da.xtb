@@ -74,6 +74,7 @@
 <translation id="1680732992526857724">Kontakten <ph name="NAME" /> er slået til</translation>
 <translation id="1692077714702418899">strukturel linje</translation>
 <translation id="1700517974991662022">Besøgt</translation>
+<translation id="1714116687360794776">Måler</translation>
 <translation id="1722567105086139392">Link</translation>
 <translation id="1727806147743597030">si.fo</translation>
 <translation id="174268867904053074">Næste grafik</translation>
@@ -123,6 +124,7 @@
 <translation id="2344193891939537199">Kontrol af dato og tid</translation>
 <translation id="2347456970887948350">Et link</translation>
 <translation id="2359897517538099099">Tabeltilstand er ikke aktiveret.</translation>
+<translation id="2390264819538553347">Tryk på Enter for at gå videre. Tryk på backspace for at gå tilbage.</translation>
 <translation id="241124561063364910">efterfulgt af</translation>
 <translation id="2416512023405990736">Et afkrydsningsfelt uden markering</translation>
 <translation id="2417569100218200841">Indholdsoplysninger</translation>
@@ -177,6 +179,7 @@
 <translation id="2899328121302785497">{COUNT,plural, =1{venstre klammeparentes}one{# venstre klammeparenteser}other{# venstre klammeparenteser}}</translation>
 <translation id="2911433807131383493">Åbn ChromeVox-selvstudie</translation>
 <translation id="2932083475399492303">Skift linjetype mellem strukturel eller layout</translation>
+<translation id="2944762337049891859">Læs siden automatisk, når den er indlæst.</translation>
 <translation id="2964026537669811554">Overskriftsgruppe</translation>
 <translation id="296951647852255825">{COUNT,plural, =1{tabulator}one{# tabulatorer}other{# tabulatorer}}</translation>
 <translation id="2972078295414139404">Intet tidligere besøgt link.</translation>
@@ -188,6 +191,7 @@
 <translation id="3012414509011670858">Der er ingen forrige afsnit.</translation>
 <translation id="3030432017085518523">Alternativknap til menupunkt</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apostrof}one{# apostroffer}other{# apostroffer}}</translation>
+<translation id="3040901448410802366">Statusindikator</translation>
 <translation id="3046838483509668188">Indstillinger i ChromeVox</translation>
 <translation id="3047143736589213134">Eksperimentelt tastatur</translation>
 <translation id="3060756054951570867">Menuen <ph name="TITLE" /> åbnet</translation>
@@ -230,7 +234,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="3321460131042519426">Aktivér tekstombrydning</translation>
 <translation id="3322936298410871309">Forrige niveau 1-overskrift</translation>
 <translation id="3323447499041942178">Tekstfelt</translation>
-<translation id="3329854757664111426">Tryk på Enter for at gå frem.</translation>
+<translation id="3338224621010291843"><ph name="VALUE" /> <ph name="NAME" /> skyder</translation>
 <translation id="3353420241558113817">{"ar": "arabisk",
         "bg": "bulgarsk",
         "ca": "catalansk",
@@ -307,6 +311,7 @@ Hvis du er færdig med selvstudiet, kan du gå til knappen Luk via ChromeVox og 
 <translation id="3712520970944678024">Kontrollerer tale</translation>
 <translation id="3716845769494773620">Flere linjer</translation>
 <translation id="3731746171184829332">Ingen tidligere overskrifter.</translation>
+<translation id="3735039640698208086">Når du afspiller lyd...</translation>
 <translation id="3762198587642264450">Gå til slutningen af ​​den aktuelle række</translation>
 <translation id="3777255250339039212">h1</translation>
 <translation id="3793710123303304873">Dialogboks blev lukket.</translation>
@@ -547,6 +552,7 @@ Tryk på Alt+F for at åbne browsermenuen i Chrome.</translation>
 <translation id="5876817486144482042">Skru ned for talevolumen</translation>
 <translation id="5887397643266327462">Brailletekst er aktiveret.</translation>
 <translation id="5891934789323004067">Tabel</translation>
+<translation id="5899860758576822363">Afspil ved en lavere lydstyrke, når ChromeVox taler</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{lig med}one{# lig med-tegn}other{# lig med-tegn}}</translation>
 <translation id="5939518447894949180">Nulstil</translation>
 <translation id="5948123859135882163">Skift fortolkningen af matematiske udtryk mellem strukturel og semantisk</translation>
@@ -569,6 +575,7 @@ Tryk på Alt+F for at åbne browsermenuen i Chrome.</translation>
 <translation id="6132506484792346370">Et listefelt eller kombifelt</translation>
 <translation id="6138576064440631958">Akkorden $1</translation>
 <translation id="6142308968191113180">Overskrift 4</translation>
+<translation id="6164829606128959761">måler</translation>
 <translation id="6169420925157477918">Billede med lang beskrivelse</translation>
 <translation id="6186305613600865047">Gå til bunden af siden</translation>
 <translation id="6193330012414963395">f.m. e.m.</translation>
@@ -579,6 +586,7 @@ Tryk på Alt+F for at åbne browsermenuen i Chrome.</translation>
 <translation id="6281876499889881039">Næste lignende element.</translation>
 <translation id="6282062888058716985">nav</translation>
 <translation id="6290434000785343030">Ikke flere kombifelter.</translation>
+<translation id="6305702903308659374">Afspil ved normal lydstyrke, selvom ChromeVox taler</translation>
 <translation id="6307969636681130414">Trykket på</translation>
 <translation id="6322856989298155004">Lyde</translation>
 <translation id="6324551002951139333">Der blev fundet en grammatisk fejl</translation>
@@ -691,7 +699,6 @@ Tryk på Alt+F for at åbne browsermenuen i Chrome.</translation>
 <translation id="7492049978501397201">Indtastet dialog</translation>
 <translation id="7518543783849163354">Tryk på Ctrl for midlertidigt at afbryde oplæsning i ChromeVox.</translation>
 <translation id="7532613204005497612">Juni</translation>
-<translation id="7540083713905917247">Skyderen <ph name="VALUE" />, <ph name="NAME" /></translation>
 <translation id="7552432549459840808">Nyttige genveje i Chrome</translation>
 <translation id="7579911500627256166">prikken <ph name="DOT" /></translation>
 <translation id="7596919493010894443">markering er ryddet</translation>
@@ -769,6 +776,7 @@ Tryk på Alt+F for at åbne browsermenuen i Chrome.</translation>
 <translation id="8455868257606149352">Maksimum <ph name="X" /></translation>
 <translation id="84575901236241018">har hurtigtasten <ph name="KEY" /></translation>
 <translation id="847154984256717791">optaget</translation>
+<translation id="8476408756881832830">Sæt afspilning på pause, når ChromeVox taler</translation>
 <translation id="8476508772960940536">vinduesoversigt</translation>
 <translation id="8503360654911991865">Mindsk detaljegraden for navigation</translation>
 <translation id="8520472399088452386">Skalafelt</translation>

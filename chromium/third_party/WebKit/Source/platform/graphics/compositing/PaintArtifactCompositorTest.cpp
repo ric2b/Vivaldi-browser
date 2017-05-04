@@ -15,11 +15,13 @@
 #include "cc/trees/layer_tree_settings.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/paint/EffectPaintPropertyNode.h"
+#include "platform/graphics/paint/GeometryMapper.h"
 #include "platform/graphics/paint/PaintArtifact.h"
 #include "platform/graphics/paint/ScrollPaintPropertyNode.h"
+#include "platform/testing/PaintPropertyTestHelpers.h"
 #include "platform/testing/PictureMatchers.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/TestPaintArtifact.h"
 #include "platform/testing/WebLayerTreeViewImplForTesting.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -27,17 +29,23 @@
 #include <memory>
 
 namespace blink {
-namespace {
 
+#define EXPECT_BLINK_FLOAT_RECT_EQ(expected, actual)         \
+  do {                                                       \
+    EXPECT_FLOAT_EQ((expected).x(), (actual).x());           \
+    EXPECT_FLOAT_EQ((expected).y(), (actual).y());           \
+    EXPECT_FLOAT_EQ((expected).width(), (actual).width());   \
+    EXPECT_FLOAT_EQ((expected).height(), (actual).height()); \
+  } while (false)
+
+using ::blink::testing::createOpacityOnlyEffect;
 using ::testing::Pointee;
 
 PaintChunkProperties defaultPaintChunkProperties() {
-  PaintChunkProperties properties;
-  properties.transform = TransformPaintPropertyNode::root();
-  properties.clip = ClipPaintPropertyNode::root();
-  properties.effect = EffectPaintPropertyNode::root();
-  properties.scroll = ScrollPaintPropertyNode::root();
-  return properties;
+  PropertyTreeState propertyTreeState(
+      TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+      EffectPaintPropertyNode::root(), ScrollPaintPropertyNode::root());
+  return PaintChunkProperties(propertyTreeState);
 }
 
 gfx::Transform translation(SkMScalar x, SkMScalar y) {
@@ -59,15 +67,16 @@ class WebLayerTreeViewWithCompositorFrameSink
   }
 };
 
-class PaintArtifactCompositorTestWithPropertyTrees : public ::testing::Test {
+class PaintArtifactCompositorTestWithPropertyTrees
+    : public ::testing::Test,
+      private ScopedSlimmingPaintV2ForTest {
  protected:
   PaintArtifactCompositorTestWithPropertyTrees()
-      : m_taskRunner(new base::TestSimpleTaskRunner),
+      : ScopedSlimmingPaintV2ForTest(true),
+        m_taskRunner(new base::TestSimpleTaskRunner),
         m_taskRunnerHandle(m_taskRunner) {}
 
   void SetUp() override {
-    RuntimeEnabledFeatures::setSlimmingPaintV2Enabled(true);
-
     // Delay constructing the compositor until after the feature is set.
     m_paintArtifactCompositor = PaintArtifactCompositor::create();
     m_paintArtifactCompositor->enableExtraDataForTesting();
@@ -77,11 +86,9 @@ class PaintArtifactCompositorTestWithPropertyTrees : public ::testing::Test {
     settings.single_thread_proxy_scheduler = false;
     settings.use_layer_lists = true;
     m_webLayerTreeView =
-        makeUnique<WebLayerTreeViewWithCompositorFrameSink>(settings);
+        WTF::makeUnique<WebLayerTreeViewWithCompositorFrameSink>(settings);
     m_webLayerTreeView->setRootLayer(*m_paintArtifactCompositor->getWebLayer());
   }
-
-  void TearDown() override { m_featuresBackup.restore(); }
 
   const cc::PropertyTrees& propertyTrees() {
     return *m_webLayerTreeView->layerTreeHost()
@@ -94,7 +101,7 @@ class PaintArtifactCompositorTestWithPropertyTrees : public ::testing::Test {
   }
 
   void update(const PaintArtifact& artifact) {
-    m_paintArtifactCompositor->update(artifact, nullptr);
+    m_paintArtifactCompositor->update(artifact, nullptr, false);
     m_webLayerTreeView->layerTreeHost()->LayoutAndUpdateLayers();
   }
 
@@ -112,7 +119,6 @@ class PaintArtifactCompositorTestWithPropertyTrees : public ::testing::Test {
   }
 
  private:
-  RuntimeEnabledFeatures::Backup m_featuresBackup;
   std::unique_ptr<PaintArtifactCompositor> m_paintArtifactCompositor;
   scoped_refptr<base::TestSimpleTaskRunner> m_taskRunner;
   base::ThreadTaskRunnerHandle m_taskRunnerHandle;
@@ -142,9 +148,9 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneChunkWithAnOffset) {
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneTransform) {
   // A 90 degree clockwise rotation about (100, 100).
   RefPtr<TransformPaintPropertyNode> transform =
-      TransformPaintPropertyNode::create(TransformPaintPropertyNode::root(),
-                                         TransformationMatrix().rotate(90),
-                                         FloatPoint3D(100, 100, 0));
+      TransformPaintPropertyNode::create(
+          TransformPaintPropertyNode::root(), TransformationMatrix().rotate(90),
+          FloatPoint3D(100, 100, 0), false, 0, CompositingReason3DTransform);
 
   TestPaintArtifact artifact;
   artifact
@@ -192,9 +198,9 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneTransform) {
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, TransformCombining) {
   // A translation by (5, 5) within a 2x scale about (10, 10).
   RefPtr<TransformPaintPropertyNode> transform1 =
-      TransformPaintPropertyNode::create(TransformPaintPropertyNode::root(),
-                                         TransformationMatrix().scale(2),
-                                         FloatPoint3D(10, 10, 0));
+      TransformPaintPropertyNode::create(
+          TransformPaintPropertyNode::root(), TransformationMatrix().scale(2),
+          FloatPoint3D(10, 10, 0), false, 0, CompositingReason3DTransform);
   RefPtr<TransformPaintPropertyNode> transform2 =
       TransformPaintPropertyNode::create(
           transform1, TransformationMatrix().translate(5, 5), FloatPoint3D());
@@ -300,15 +306,18 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, SortingContextID) {
   // Establishes a 3D rendering context.
   RefPtr<TransformPaintPropertyNode> transform2 =
       TransformPaintPropertyNode::create(transform1, TransformationMatrix(),
-                                         FloatPoint3D(), false, 1);
+                                         FloatPoint3D(), false, 1,
+                                         CompositingReason3DTransform);
   // Extends the 3D rendering context of transform2.
   RefPtr<TransformPaintPropertyNode> transform3 =
       TransformPaintPropertyNode::create(transform2, TransformationMatrix(),
-                                         FloatPoint3D(), false, 1);
+                                         FloatPoint3D(), false, 1,
+                                         CompositingReason3DTransform);
   // Establishes a 3D rendering context distinct from transform2.
   RefPtr<TransformPaintPropertyNode> transform4 =
       TransformPaintPropertyNode::create(transform2, TransformationMatrix(),
-                                         FloatPoint3D(), false, 2);
+                                         FloatPoint3D(), false, 2,
+                                         CompositingReason3DTransform);
 
   TestPaintArtifact artifact;
   artifact
@@ -346,7 +355,6 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, SortingContextID) {
       Pointee(drawsRectangle(FloatRect(0, 0, 300, 200), Color::lightGray)));
   int lightGraySortingContextId =
       transformNode(lightGrayLayer).sorting_context_id;
-  EXPECT_EQ(lightGrayLayer->sorting_context_id(), lightGraySortingContextId);
   EXPECT_NE(0, lightGraySortingContextId);
 
   // The dark gray layer is 3D sorted with the light gray layer, but has a
@@ -357,7 +365,6 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, SortingContextID) {
       Pointee(drawsRectangle(FloatRect(0, 0, 300, 200), Color::darkGray)));
   int darkGraySortingContextId =
       transformNode(darkGrayLayer).sorting_context_id;
-  EXPECT_EQ(darkGrayLayer->sorting_context_id(), darkGraySortingContextId);
   EXPECT_EQ(lightGraySortingContextId, darkGraySortingContextId);
   EXPECT_NE(lightGrayLayer->transform_tree_index(),
             darkGrayLayer->transform_tree_index());
@@ -368,7 +375,6 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, SortingContextID) {
   EXPECT_THAT(blackLayer->GetPicture(),
               Pointee(drawsRectangle(FloatRect(0, 0, 300, 200), Color::black)));
   int blackSortingContextId = transformNode(blackLayer).sorting_context_id;
-  EXPECT_EQ(blackLayer->sorting_context_id(), blackSortingContextId);
   EXPECT_NE(0, blackSortingContextId);
   EXPECT_NE(lightGraySortingContextId, blackSortingContextId);
 }
@@ -401,10 +407,12 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneClip) {
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedClips) {
   RefPtr<ClipPaintPropertyNode> clip1 = ClipPaintPropertyNode::create(
       ClipPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
-      FloatRoundedRect(100, 100, 700, 700));
+      FloatRoundedRect(100, 100, 700, 700),
+      CompositingReasonOverflowScrollingTouch);
   RefPtr<ClipPaintPropertyNode> clip2 =
       ClipPaintPropertyNode::create(clip1, TransformPaintPropertyNode::root(),
-                                    FloatRoundedRect(200, 200, 700, 100));
+                                    FloatRoundedRect(200, 200, 700, 100),
+                                    CompositingReasonOverflowScrollingTouch);
 
   TestPaintArtifact artifact;
   artifact
@@ -468,15 +476,15 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedClips) {
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, DeeplyNestedClips) {
   Vector<RefPtr<ClipPaintPropertyNode>> clips;
   for (unsigned i = 1; i <= 10; i++) {
-    clips.append(ClipPaintPropertyNode::create(
-        clips.isEmpty() ? ClipPaintPropertyNode::root() : clips.last(),
+    clips.push_back(ClipPaintPropertyNode::create(
+        clips.isEmpty() ? ClipPaintPropertyNode::root() : clips.back(),
         TransformPaintPropertyNode::root(),
         FloatRoundedRect(5 * i, 0, 100, 200 - 10 * i)));
   }
 
   TestPaintArtifact artifact;
   artifact
-      .chunk(TransformPaintPropertyNode::root(), clips.last(),
+      .chunk(TransformPaintPropertyNode::root(), clips.back(),
              EffectPaintPropertyNode::root())
       .rectDrawing(FloatRect(0, 0, 200, 200), Color::white);
   update(artifact.build());
@@ -557,27 +565,46 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
        ForeignLayerPassesThrough) {
   scoped_refptr<cc::Layer> layer = cc::Layer::Create();
 
-  TestPaintArtifact artifact;
-  artifact.chunk(defaultPaintChunkProperties())
-      .foreignLayer(FloatPoint(50, 100), IntSize(400, 300), layer);
-  update(artifact.build());
+  TestPaintArtifact testArtifact;
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact.chunk(defaultPaintChunkProperties())
+      .foreignLayer(FloatPoint(50, 60), IntSize(400, 300), layer);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::gray);
 
-  ASSERT_EQ(1u, contentLayerCount());
-  EXPECT_EQ(layer, contentLayerAt(0));
+  const PaintArtifact& artifact = testArtifact.build();
+
+  ASSERT_EQ(3u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer1(
+      artifact.paintChunks()[0]);
+  // Foreign layers can't merge.
+  EXPECT_FALSE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer1));
+  PaintArtifactCompositor::PendingLayer pendingLayer2(
+      artifact.paintChunks()[1]);
+  EXPECT_FALSE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[2], pendingLayer2));
+
+  update(artifact);
+
+  ASSERT_EQ(3u, contentLayerCount());
+  EXPECT_EQ(layer, contentLayerAt(1));
   EXPECT_EQ(gfx::Size(400, 300), layer->bounds());
-  EXPECT_EQ(translation(50, 100), layer->screen_space_transform());
+  EXPECT_EQ(translation(50, 60), layer->screen_space_transform());
 }
 
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, EffectTreeConversion) {
-  RefPtr<EffectPaintPropertyNode> effect1 = EffectPaintPropertyNode::create(
-      EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
-      ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.5);
-  RefPtr<EffectPaintPropertyNode> effect2 = EffectPaintPropertyNode::create(
-      effect1, TransformPaintPropertyNode::root(),
-      ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.3);
-  RefPtr<EffectPaintPropertyNode> effect3 = EffectPaintPropertyNode::create(
-      EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
-      ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.2);
+  RefPtr<EffectPaintPropertyNode> effect1 =
+      createOpacityOnlyEffect(EffectPaintPropertyNode::root(), 0.5);
+  RefPtr<EffectPaintPropertyNode> effect2 =
+      createOpacityOnlyEffect(effect1, 0.3);
+  RefPtr<EffectPaintPropertyNode> effect3 =
+      createOpacityOnlyEffect(EffectPaintPropertyNode::root(), 0.2);
 
   TestPaintArtifact artifact;
   artifact
@@ -629,7 +656,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneScrollNode) {
                                          FloatPoint3D());
   RefPtr<ScrollPaintPropertyNode> scroll = ScrollPaintPropertyNode::create(
       ScrollPaintPropertyNode::root(), scrollTranslation, IntSize(11, 13),
-      IntSize(27, 31), true, false);
+      IntSize(27, 31), true, false, 0);
 
   TestPaintArtifact artifact;
   artifact
@@ -661,9 +688,8 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneScrollNode) {
 }
 
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedScrollNodes) {
-  RefPtr<EffectPaintPropertyNode> effect = EffectPaintPropertyNode::create(
-      EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
-      ClipPaintPropertyNode::root(), CompositorFilterOperations(), 0.5);
+  RefPtr<EffectPaintPropertyNode> effect =
+      createOpacityOnlyEffect(EffectPaintPropertyNode::root(), 0.5);
 
   RefPtr<TransformPaintPropertyNode> scrollTranslationA =
       TransformPaintPropertyNode::create(
@@ -671,8 +697,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedScrollNodes) {
           TransformationMatrix().translate(11, 13), FloatPoint3D());
   RefPtr<ScrollPaintPropertyNode> scrollA = ScrollPaintPropertyNode::create(
       ScrollPaintPropertyNode::root(), scrollTranslationA, IntSize(2, 3),
-      IntSize(5, 7), false, true);
-  scrollA->addMainThreadScrollingReasons(
+      IntSize(5, 7), false, true,
       MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects);
   RefPtr<TransformPaintPropertyNode> scrollTranslationB =
       TransformPaintPropertyNode::create(
@@ -680,7 +705,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedScrollNodes) {
           FloatPoint3D());
   RefPtr<ScrollPaintPropertyNode> scrollB = ScrollPaintPropertyNode::create(
       scrollA, scrollTranslationB, IntSize(19, 23), IntSize(29, 31), true,
-      false);
+      false, 0);
   TestPaintArtifact artifact;
   artifact
       .chunk(scrollTranslationA, ClipPaintPropertyNode::root(), effect, scrollA)
@@ -725,5 +750,808 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedScrollNodes) {
                MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects);
 }
 
-}  // namespace
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, MergeSimpleChunks) {
+  TestPaintArtifact testArtifact;
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 200, 300), Color::gray);
+
+  const PaintArtifact& artifact = testArtifact.build();
+
+  ASSERT_EQ(2u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer(artifact.paintChunks()[0]);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer));
+
+  update(artifact);
+
+  ASSERT_EQ(1u, contentLayerCount());
+  {
+    Vector<RectWithColor> rectsWithColor;
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 100, 100), Color::white));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 200, 300), Color::gray));
+
+    const cc::Layer* layer = contentLayerAt(0);
+    EXPECT_THAT(layer->GetPicture(), Pointee(drawsRectangles(rectsWithColor)));
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, MergeClip) {
+  RefPtr<ClipPaintPropertyNode> clip = ClipPaintPropertyNode::create(
+      ClipPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
+      FloatRoundedRect(10, 20, 50, 60));
+
+  TestPaintArtifact testArtifact;
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), clip.get(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 200, 300), Color::black);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 300, 400), Color::gray);
+
+  const PaintArtifact& artifact = testArtifact.build();
+
+  ASSERT_EQ(3u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer(artifact.paintChunks()[0]);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer));
+  pendingLayer.add(artifact.paintChunks()[1], nullptr);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[2], pendingLayer));
+
+  update(artifact);
+
+  ASSERT_EQ(1u, contentLayerCount());
+  {
+    Vector<RectWithColor> rectsWithColor;
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 100, 100), Color::white));
+    // Clip is applied to this PaintChunk.
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(10, 20, 50, 60), Color::black));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 300, 400), Color::gray));
+
+    const cc::Layer* layer = contentLayerAt(0);
+    EXPECT_THAT(layer->GetPicture(), Pointee(drawsRectangles(rectsWithColor)));
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, Merge2DTransform) {
+  RefPtr<TransformPaintPropertyNode> transform =
+      TransformPaintPropertyNode::create(
+          TransformPaintPropertyNode::root(),
+          TransformationMatrix().translate(50, 50), FloatPoint3D(100, 100, 0),
+          false, 0);
+
+  TestPaintArtifact testArtifact;
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact
+      .chunk(transform.get(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::black);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 200, 300), Color::gray);
+
+  const PaintArtifact& artifact = testArtifact.build();
+
+  ASSERT_EQ(3u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer(artifact.paintChunks()[0]);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer));
+  pendingLayer.add(artifact.paintChunks()[1], nullptr);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[2], pendingLayer));
+
+  update(artifact);
+
+  ASSERT_EQ(1u, contentLayerCount());
+  {
+    Vector<RectWithColor> rectsWithColor;
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 100, 100), Color::white));
+    // Transform is applied to this PaintChunk.
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(50, 50, 100, 100), Color::black));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 200, 300), Color::gray));
+
+    const cc::Layer* layer = contentLayerAt(0);
+    EXPECT_THAT(layer->GetPicture(), Pointee(drawsRectangles(rectsWithColor)));
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, MergeTransformOrigin) {
+  RefPtr<TransformPaintPropertyNode> transform =
+      TransformPaintPropertyNode::create(TransformPaintPropertyNode::root(),
+                                         TransformationMatrix().rotate(45),
+                                         FloatPoint3D(100, 100, 0), false, 0);
+
+  TestPaintArtifact testArtifact;
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact
+      .chunk(transform.get(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::black);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 200, 300), Color::gray);
+
+  const PaintArtifact& artifact = testArtifact.build();
+
+  ASSERT_EQ(3u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer(artifact.paintChunks()[0]);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer));
+  pendingLayer.add(artifact.paintChunks()[1], nullptr);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[2], pendingLayer));
+  update(artifact);
+
+  ASSERT_EQ(1u, contentLayerCount());
+  {
+    Vector<RectWithColor> rectsWithColor;
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 42, 100, 100), Color::white));
+    // Transform is applied to this PaintChunk.
+    rectsWithColor.push_back(RectWithColor(
+        FloatRect(29.2893, 0.578644, 141.421, 141.421), Color::black));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(00, 42, 200, 300), Color::gray));
+
+    const cc::Layer* layer = contentLayerAt(0);
+    EXPECT_THAT(layer->GetPicture(), Pointee(drawsRectangles(rectsWithColor)));
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, MergeOpacity) {
+  float opacity = 2.0 / 255.0;
+  RefPtr<EffectPaintPropertyNode> effect = EffectPaintPropertyNode::create(
+      EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
+      ClipPaintPropertyNode::root(), CompositorFilterOperations(), opacity,
+      SkBlendMode::kSrcOver);
+
+  TestPaintArtifact testArtifact;
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             effect.get())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::black);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 200, 300), Color::gray);
+
+  const PaintArtifact& artifact = testArtifact.build();
+
+  ASSERT_EQ(3u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer(artifact.paintChunks()[0]);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer));
+  pendingLayer.add(artifact.paintChunks()[1], nullptr);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[2], pendingLayer));
+
+  update(artifact);
+
+  ASSERT_EQ(1u, contentLayerCount());
+  {
+    Vector<RectWithColor> rectsWithColor;
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 100, 100), Color::white));
+    // Transform is applied to this PaintChunk.
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 100, 100),
+                      Color(Color::black).combineWithAlpha(opacity).rgb()));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 200, 300), Color::gray));
+
+    const cc::Layer* layer = contentLayerAt(0);
+    EXPECT_THAT(layer->GetPicture(), Pointee(drawsRectangles(rectsWithColor)));
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, MergeNested) {
+  // Tests merging of an opacity effect, inside of a clip, inside of a
+  // transform.
+
+  RefPtr<TransformPaintPropertyNode> transform =
+      TransformPaintPropertyNode::create(
+          TransformPaintPropertyNode::root(),
+          TransformationMatrix().translate(50, 50), FloatPoint3D(100, 100, 0),
+          false, 0);
+
+  RefPtr<ClipPaintPropertyNode> clip = ClipPaintPropertyNode::create(
+      ClipPaintPropertyNode::root(), transform.get(),
+      FloatRoundedRect(10, 20, 50, 60));
+
+  float opacity = 2.0 / 255.0;
+  RefPtr<EffectPaintPropertyNode> effect = EffectPaintPropertyNode::create(
+      EffectPaintPropertyNode::root(), transform.get(), clip.get(),
+      CompositorFilterOperations(), opacity, SkBlendMode::kSrcOver);
+
+  TestPaintArtifact testArtifact;
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact.chunk(transform.get(), clip.get(), effect.get())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::black);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 200, 300), Color::gray);
+
+  const PaintArtifact& artifact = testArtifact.build();
+
+  ASSERT_EQ(3u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer(artifact.paintChunks()[0]);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer));
+  pendingLayer.add(artifact.paintChunks()[1], nullptr);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[2], pendingLayer));
+  update(artifact);
+
+  ASSERT_EQ(1u, contentLayerCount());
+  {
+    Vector<RectWithColor> rectsWithColor;
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 100, 100), Color::white));
+    // Transform is applied to this PaintChunk.
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(60, 70, 50, 60),
+                      Color(Color::black).combineWithAlpha(opacity).rgb()));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 200, 300), Color::gray));
+
+    const cc::Layer* layer = contentLayerAt(0);
+    EXPECT_THAT(layer->GetPicture(), Pointee(drawsRectangles(rectsWithColor)));
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, ClipPushedUp) {
+  // Tests merging of an element which has a clipapplied to it,
+  // but has an ancestor transform of them. This can happen for fixed-
+  // or absolute-position elements which escape scroll transforms.
+
+  RefPtr<TransformPaintPropertyNode> transform =
+      TransformPaintPropertyNode::create(
+          TransformPaintPropertyNode::root(),
+          TransformationMatrix().translate(20, 25), FloatPoint3D(100, 100, 0),
+          false, 0);
+
+  RefPtr<TransformPaintPropertyNode> transform2 =
+      TransformPaintPropertyNode::create(
+          transform.get(), TransformationMatrix().translate(20, 25),
+          FloatPoint3D(100, 100, 0), false, 0);
+
+  RefPtr<ClipPaintPropertyNode> clip = ClipPaintPropertyNode::create(
+      ClipPaintPropertyNode::root(), transform2.get(),
+      FloatRoundedRect(10, 20, 50, 60));
+
+  TestPaintArtifact testArtifact;
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), clip.get(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 300, 400), Color::black);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 200, 300), Color::gray);
+
+  const PaintArtifact& artifact = testArtifact.build();
+
+  ASSERT_EQ(3u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer(artifact.paintChunks()[0]);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer));
+  pendingLayer.add(artifact.paintChunks()[1], nullptr);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[2], pendingLayer));
+  update(artifact);
+
+  ASSERT_EQ(1u, contentLayerCount());
+  {
+    Vector<RectWithColor> rectsWithColor;
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 100, 100), Color::white));
+    // The two transforms (combined translation of (40, 50)) are applied here,
+    // before clipping.
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(50, 70, 50, 60), Color(Color::black)));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 200, 300), Color::gray));
+
+    const cc::Layer* layer = contentLayerAt(0);
+    EXPECT_THAT(layer->GetPicture(), Pointee(drawsRectangles(rectsWithColor)));
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, EffectPushedUp) {
+  // Tests merging of an element which has an effect applied to it,
+  // but has an ancestor transform of them. This can happen for fixed-
+  // or absolute-position elements which escape scroll transforms.
+
+  RefPtr<TransformPaintPropertyNode> transform =
+      TransformPaintPropertyNode::create(
+          TransformPaintPropertyNode::root(),
+          TransformationMatrix().translate(20, 25), FloatPoint3D(100, 100, 0),
+          false, 0);
+
+  RefPtr<TransformPaintPropertyNode> transform2 =
+      TransformPaintPropertyNode::create(
+          transform.get(), TransformationMatrix().translate(20, 25),
+          FloatPoint3D(100, 100, 0), false, 0);
+
+  float opacity = 2.0 / 255.0;
+  RefPtr<EffectPaintPropertyNode> effect = EffectPaintPropertyNode::create(
+      EffectPaintPropertyNode::root(), transform2.get(),
+      ClipPaintPropertyNode::root(), CompositorFilterOperations(), opacity,
+      SkBlendMode::kSrcOver);
+
+  TestPaintArtifact testArtifact;
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             effect.get())
+      .rectDrawing(FloatRect(0, 0, 300, 400), Color::black);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 200, 300), Color::gray);
+
+  const PaintArtifact& artifact = testArtifact.build();
+
+  ASSERT_EQ(3u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer(artifact.paintChunks()[0]);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer));
+  pendingLayer.add(artifact.paintChunks()[1], nullptr);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[2], pendingLayer));
+  update(artifact);
+
+  ASSERT_EQ(1u, contentLayerCount());
+  {
+    Vector<RectWithColor> rectsWithColor;
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 100, 100), Color::white));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 300, 400),
+                      Color(Color::black).combineWithAlpha(opacity).rgb()));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 200, 300), Color::gray));
+
+    const cc::Layer* layer = contentLayerAt(0);
+    EXPECT_THAT(layer->GetPicture(), Pointee(drawsRectangles(rectsWithColor)));
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, EffectAndClipPushedUp) {
+  // Tests merging of an element which has an effect applied to it,
+  // but has an ancestor transform of them. This can happen for fixed-
+  // or absolute-position elements which escape scroll transforms.
+
+  RefPtr<TransformPaintPropertyNode> transform =
+      TransformPaintPropertyNode::create(
+          TransformPaintPropertyNode::root(),
+          TransformationMatrix().translate(20, 25), FloatPoint3D(100, 100, 0),
+          false, 0);
+
+  RefPtr<TransformPaintPropertyNode> transform2 =
+      TransformPaintPropertyNode::create(
+          transform.get(), TransformationMatrix().translate(20, 25),
+          FloatPoint3D(100, 100, 0), false, 0);
+
+  RefPtr<ClipPaintPropertyNode> clip = ClipPaintPropertyNode::create(
+      ClipPaintPropertyNode::root(), transform.get(),
+      FloatRoundedRect(10, 20, 50, 60));
+
+  float opacity = 2.0 / 255.0;
+  RefPtr<EffectPaintPropertyNode> effect = EffectPaintPropertyNode::create(
+      EffectPaintPropertyNode::root(), transform2.get(), clip.get(),
+      CompositorFilterOperations(), opacity, SkBlendMode::kSrcOver);
+
+  TestPaintArtifact testArtifact;
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), clip.get(), effect.get())
+      .rectDrawing(FloatRect(0, 0, 300, 400), Color::black);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 200, 300), Color::gray);
+
+  const PaintArtifact& artifact = testArtifact.build();
+
+  ASSERT_EQ(3u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer(artifact.paintChunks()[0]);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer));
+  pendingLayer.add(artifact.paintChunks()[1], nullptr);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[2], pendingLayer));
+  update(artifact);
+
+  ASSERT_EQ(1u, contentLayerCount());
+  {
+    Vector<RectWithColor> rectsWithColor;
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 100, 100), Color::white));
+    // The clip is under |transform| but not |transform2|, so only an adjustment
+    // of (20, 25) occurs.
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(30, 45, 50, 60),
+                      Color(Color::black).combineWithAlpha(opacity).rgb()));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 200, 300), Color::gray));
+
+    const cc::Layer* layer = contentLayerAt(0);
+    EXPECT_THAT(layer->GetPicture(), Pointee(drawsRectangles(rectsWithColor)));
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, ClipAndEffectNoTransform) {
+  // Tests merging of an element which has a clip and effect in the root
+  // transform space.
+
+  RefPtr<ClipPaintPropertyNode> clip = ClipPaintPropertyNode::create(
+      ClipPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
+      FloatRoundedRect(10, 20, 50, 60));
+
+  float opacity = 2.0 / 255.0;
+  RefPtr<EffectPaintPropertyNode> effect = EffectPaintPropertyNode::create(
+      EffectPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
+      clip.get(), CompositorFilterOperations(), opacity, SkBlendMode::kSrcOver);
+
+  TestPaintArtifact testArtifact;
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), clip.get(), effect.get())
+      .rectDrawing(FloatRect(0, 0, 300, 400), Color::black);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 200, 300), Color::gray);
+
+  const PaintArtifact& artifact = testArtifact.build();
+
+  ASSERT_EQ(3u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer(artifact.paintChunks()[0]);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer));
+  pendingLayer.add(artifact.paintChunks()[1], nullptr);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[2], pendingLayer));
+  update(artifact);
+
+  ASSERT_EQ(1u, contentLayerCount());
+  {
+    Vector<RectWithColor> rectsWithColor;
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 100, 100), Color::white));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(10, 20, 50, 60),
+                      Color(Color::black).combineWithAlpha(opacity).rgb()));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 200, 300), Color::gray));
+
+    const cc::Layer* layer = contentLayerAt(0);
+    EXPECT_THAT(layer->GetPicture(), Pointee(drawsRectangles(rectsWithColor)));
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, TwoClips) {
+  // Tests merging of an element which has two clips in the root
+  // transform space.
+
+  RefPtr<ClipPaintPropertyNode> clip = ClipPaintPropertyNode::create(
+      ClipPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
+      FloatRoundedRect(20, 30, 10, 20));
+
+  RefPtr<ClipPaintPropertyNode> clip2 = ClipPaintPropertyNode::create(
+      clip.get(), TransformPaintPropertyNode::root(),
+      FloatRoundedRect(10, 20, 50, 60));
+
+  TestPaintArtifact testArtifact;
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), clip2.get(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 300, 400), Color::black);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 200, 300), Color::gray);
+
+  const PaintArtifact& artifact = testArtifact.build();
+
+  ASSERT_EQ(3u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer(artifact.paintChunks()[0]);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer));
+  pendingLayer.add(artifact.paintChunks()[1], nullptr);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[2], pendingLayer));
+  update(artifact);
+
+  ASSERT_EQ(1u, contentLayerCount());
+  {
+    Vector<RectWithColor> rectsWithColor;
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 100, 100), Color::white));
+    // The interesction of the two clips is (20, 30, 10, 20).
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(20, 30, 10, 20), Color(Color::black)));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 200, 300), Color::gray));
+
+    const cc::Layer* layer = contentLayerAt(0);
+    EXPECT_THAT(layer->GetPicture(), Pointee(drawsRectangles(rectsWithColor)));
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, TwoTransformsClipBetween) {
+  RefPtr<TransformPaintPropertyNode> transform =
+      TransformPaintPropertyNode::create(
+          TransformPaintPropertyNode::root(),
+          TransformationMatrix().translate(20, 25), FloatPoint3D(100, 100, 0),
+          false, 0);
+  RefPtr<ClipPaintPropertyNode> clip = ClipPaintPropertyNode::create(
+      ClipPaintPropertyNode::root(), TransformPaintPropertyNode::root(),
+      FloatRoundedRect(0, 0, 50, 60));
+  RefPtr<TransformPaintPropertyNode> transform2 =
+      TransformPaintPropertyNode::create(
+          transform.get(), TransformationMatrix().translate(20, 25),
+          FloatPoint3D(100, 100, 0), false, 0);
+  TestPaintArtifact testArtifact;
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact
+      .chunk(transform2.get(), clip.get(), EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 300, 400), Color::black);
+  testArtifact
+      .chunk(TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 200, 300), Color::gray);
+  const PaintArtifact& artifact = testArtifact.build();
+  ASSERT_EQ(3u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer(artifact.paintChunks()[0]);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer));
+  pendingLayer.add(artifact.paintChunks()[1], nullptr);
+  EXPECT_TRUE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[2], pendingLayer));
+  update(artifact);
+  ASSERT_EQ(1u, contentLayerCount());
+  {
+    Vector<RectWithColor> rectsWithColor;
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 100, 100), Color::white));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(40, 50, 50, 60), Color(Color::black)));
+    rectsWithColor.push_back(
+        RectWithColor(FloatRect(0, 0, 200, 300), Color::gray));
+    const cc::Layer* layer = contentLayerAt(0);
+    EXPECT_THAT(layer->GetPicture(), Pointee(drawsRectangles(rectsWithColor)));
+  }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OverlapTransform) {
+  RefPtr<TransformPaintPropertyNode> transform =
+      TransformPaintPropertyNode::create(
+          TransformPaintPropertyNode::root(),
+          TransformationMatrix().translate(50, 50), FloatPoint3D(100, 100, 0),
+          false, 0, CompositingReason3DTransform);
+
+  TestPaintArtifact testArtifact;
+  testArtifact.chunk(defaultPaintChunkProperties())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::white);
+  testArtifact
+      .chunk(transform.get(), ClipPaintPropertyNode::root(),
+             EffectPaintPropertyNode::root())
+      .rectDrawing(FloatRect(0, 0, 100, 100), Color::black);
+  testArtifact.chunk(defaultPaintChunkProperties())
+      .rectDrawing(FloatRect(0, 0, 200, 300), Color::gray);
+
+  const PaintArtifact& artifact = testArtifact.build();
+
+  ASSERT_EQ(3u, artifact.paintChunks().size());
+  PaintArtifactCompositor::PendingLayer pendingLayer(artifact.paintChunks()[0]);
+
+  EXPECT_FALSE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[1], pendingLayer));
+
+  PaintArtifactCompositor::PendingLayer pendingLayer2(
+      artifact.paintChunks()[1]);
+  EXPECT_FALSE(PaintArtifactCompositor::canMergeInto(
+      artifact, artifact.paintChunks()[2], pendingLayer2));
+
+  GeometryMapper geometryMapper;
+  EXPECT_TRUE(PaintArtifactCompositor::mightOverlap(
+      artifact.paintChunks()[2], pendingLayer2, geometryMapper));
+
+  update(artifact);
+
+  // The third paint chunk overlaps the second but can't merge due to
+  // incompatible transform. The second paint chunk can't merge into the first
+  // due to a direct compositing reason.
+  ASSERT_EQ(3u, contentLayerCount());
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, MightOverlap) {
+  PaintChunk paintChunk;
+  paintChunk.properties = defaultPaintChunkProperties();
+  paintChunk.bounds = FloatRect(0, 0, 100, 100);
+
+  PaintChunk paintChunk2;
+  paintChunk2.properties = defaultPaintChunkProperties();
+  paintChunk2.bounds = FloatRect(0, 0, 100, 100);
+
+  GeometryMapper geometryMapper;
+  PaintArtifactCompositor::PendingLayer pendingLayer(paintChunk);
+  EXPECT_TRUE(PaintArtifactCompositor::mightOverlap(paintChunk2, pendingLayer,
+                                                    geometryMapper));
+
+  RefPtr<TransformPaintPropertyNode> transform =
+      TransformPaintPropertyNode::create(
+          TransformPaintPropertyNode::root(),
+          TransformationMatrix().translate(99, 0), FloatPoint3D(100, 100, 0),
+          false);
+
+  paintChunk2.properties.propertyTreeState.setTransform(transform.get());
+  EXPECT_TRUE(PaintArtifactCompositor::mightOverlap(paintChunk2, pendingLayer,
+                                                    geometryMapper));
+
+  RefPtr<TransformPaintPropertyNode> transform2 =
+      TransformPaintPropertyNode::create(
+          TransformPaintPropertyNode::root(),
+          TransformationMatrix().translate(100, 0), FloatPoint3D(100, 100, 0),
+          false);
+  paintChunk2.properties.propertyTreeState.setTransform(transform2.get());
+
+  EXPECT_FALSE(PaintArtifactCompositor::mightOverlap(paintChunk2, pendingLayer,
+                                                     geometryMapper));
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, PendingLayer) {
+  PaintChunk chunk1;
+  chunk1.properties.propertyTreeState = PropertyTreeState(
+      TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+      EffectPaintPropertyNode::root(), ScrollPaintPropertyNode::root());
+  chunk1.properties.backfaceHidden = true;
+  chunk1.knownToBeOpaque = true;
+  chunk1.bounds = FloatRect(0, 0, 30, 40);
+
+  PaintArtifactCompositor::PendingLayer pendingLayer(chunk1);
+
+  EXPECT_TRUE(pendingLayer.backfaceHidden);
+  EXPECT_TRUE(pendingLayer.knownToBeOpaque);
+  EXPECT_BLINK_FLOAT_RECT_EQ(FloatRect(0, 0, 30, 40), pendingLayer.bounds);
+
+  PaintChunk chunk2;
+  chunk2.properties.propertyTreeState = chunk1.properties.propertyTreeState;
+  chunk2.properties.backfaceHidden = true;
+  chunk2.knownToBeOpaque = true;
+  chunk2.bounds = FloatRect(10, 20, 30, 40);
+  pendingLayer.add(chunk2, nullptr);
+
+  EXPECT_TRUE(pendingLayer.backfaceHidden);
+  // Bounds not equal to one PaintChunk.
+  EXPECT_FALSE(pendingLayer.knownToBeOpaque);
+  EXPECT_BLINK_FLOAT_RECT_EQ(FloatRect(0, 0, 40, 60), pendingLayer.bounds);
+
+  PaintChunk chunk3;
+  chunk3.properties.propertyTreeState = chunk1.properties.propertyTreeState;
+  chunk3.properties.backfaceHidden = true;
+  chunk3.knownToBeOpaque = true;
+  chunk3.bounds = FloatRect(-5, -25, 20, 20);
+  pendingLayer.add(chunk3, nullptr);
+
+  EXPECT_TRUE(pendingLayer.backfaceHidden);
+  EXPECT_FALSE(pendingLayer.knownToBeOpaque);
+  EXPECT_BLINK_FLOAT_RECT_EQ(FloatRect(-5, -25, 45, 85), pendingLayer.bounds);
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, PendingLayerWithGeometry) {
+  RefPtr<TransformPaintPropertyNode> transform =
+      TransformPaintPropertyNode::create(
+          TransformPaintPropertyNode::root(),
+          TransformationMatrix().translate(20, 25), FloatPoint3D(100, 100, 0),
+          false, 0);
+
+  PaintChunk chunk1;
+  chunk1.properties.propertyTreeState = PropertyTreeState(
+      TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+      EffectPaintPropertyNode::root(), ScrollPaintPropertyNode::root());
+  chunk1.bounds = FloatRect(0, 0, 30, 40);
+
+  PaintArtifactCompositor::PendingLayer pendingLayer(chunk1);
+
+  EXPECT_BLINK_FLOAT_RECT_EQ(FloatRect(0, 0, 30, 40), pendingLayer.bounds);
+
+  PaintChunk chunk2;
+  chunk2.properties.propertyTreeState = chunk1.properties.propertyTreeState;
+  chunk2.properties.propertyTreeState.setTransform(transform);
+  chunk2.bounds = FloatRect(0, 0, 50, 60);
+  GeometryMapper geometryMapper;
+  pendingLayer.add(chunk2, &geometryMapper);
+
+  EXPECT_BLINK_FLOAT_RECT_EQ(FloatRect(0, 0, 70, 85), pendingLayer.bounds);
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, PendingLayerKnownOpaque) {
+  PaintChunk chunk1;
+  chunk1.properties.propertyTreeState = PropertyTreeState(
+      TransformPaintPropertyNode::root(), ClipPaintPropertyNode::root(),
+      EffectPaintPropertyNode::root(), ScrollPaintPropertyNode::root());
+  chunk1.bounds = FloatRect(0, 0, 30, 40);
+  chunk1.knownToBeOpaque = false;
+  PaintArtifactCompositor::PendingLayer pendingLayer(chunk1);
+
+  EXPECT_FALSE(pendingLayer.knownToBeOpaque);
+
+  PaintChunk chunk2;
+  chunk2.properties.propertyTreeState = chunk1.properties.propertyTreeState;
+  chunk2.bounds = FloatRect(0, 0, 25, 35);
+  chunk2.knownToBeOpaque = true;
+  pendingLayer.add(chunk2, nullptr);
+
+  // Chunk 2 doesn't cover the entire layer, so not opaque.
+  EXPECT_FALSE(pendingLayer.knownToBeOpaque);
+
+  PaintChunk chunk3;
+  chunk3.properties.propertyTreeState = chunk1.properties.propertyTreeState;
+  chunk3.bounds = FloatRect(0, 0, 50, 60);
+  chunk3.knownToBeOpaque = true;
+  pendingLayer.add(chunk3, nullptr);
+
+  // Chunk 3 covers the entire layer, so now it's opaque.
+  EXPECT_TRUE(pendingLayer.knownToBeOpaque);
+}
+
 }  // namespace blink

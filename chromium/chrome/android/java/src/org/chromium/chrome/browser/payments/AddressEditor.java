@@ -62,7 +62,8 @@ public class AddressEditor extends EditorBase<AutofillAddress> {
      * [ phone number field ] <----- phone is always present and required.
      */
     @Override
-    public void edit(@Nullable AutofillAddress toEdit, final Callback<AutofillAddress> callback) {
+    public void edit(
+            @Nullable final AutofillAddress toEdit, final Callback<AutofillAddress> callback) {
         super.edit(toEdit, callback);
 
         if (mAutofillProfileBridge == null) mAutofillProfileBridge = new AutofillProfileBridge();
@@ -167,11 +168,12 @@ public class AddressEditor extends EditorBase<AutofillAddress> {
         mPhoneField.setValue(profile.getPhoneNumber());
         editor.addField(mPhoneField);
 
-        // If the user clicks [Cancel], send a null address back to the caller.
+        // If the user clicks [Cancel], send |toEdit| address back to the caller, which was the
+        // original state (could be null, a complete address, a partial address).
         editor.setCancelCallback(new Runnable() {
             @Override
             public void run() {
-                callback.onResult(null);
+                callback.onResult(toEdit);
             }
         });
 
@@ -217,14 +219,8 @@ public class AddressEditor extends EditorBase<AutofillAddress> {
             }
         }
 
-        // Calculate the label for this profile. The label's format depends on the country and
-        // language code for the profile.
-        PersonalDataManager pdm = PersonalDataManager.getInstance();
-        // TODO(crbug.com/666048): New billing address label is wrong.
-        profile.setLabel(pdm.getAddressLabelForPaymentRequest(profile));
-
         // Save the edited autofill profile locally.
-        profile.setGUID(pdm.setProfileToLocal(profile));
+        profile.setGUID(PersonalDataManager.getInstance().setProfileToLocal(profile));
         profile.setIsLocal(true);
     }
 
@@ -311,6 +307,11 @@ public class AddressEditor extends EditorBase<AutofillAddress> {
                     return value != null
                             && PhoneNumberUtils.isGlobalPhoneNumber(
                                     PhoneNumberUtils.stripSeparators(value.toString()));
+                }
+
+                @Override
+                public boolean isLengthMaximum(@Nullable CharSequence value) {
+                    return false;
                 }
             };
         }

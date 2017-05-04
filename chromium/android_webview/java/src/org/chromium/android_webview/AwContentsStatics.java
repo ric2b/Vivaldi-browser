@@ -19,7 +19,7 @@ public class AwContentsStatics {
 
     private static String sUnreachableWebDataUrl;
 
-    private static boolean sRecordFullDocument = false;
+    private static boolean sRecordFullDocument;
 
     /**
      * Return the client certificate lookup table.
@@ -79,6 +79,14 @@ public class AwContentsStatics {
         nativeSetServiceWorkerIoThreadClient(ioThreadClient, browserContext);
     }
 
+    public static boolean getSafeBrowsingEnabled() {
+        return nativeGetSafeBrowsingEnabled();
+    }
+
+    public static void setSafeBrowsingEnabled(boolean enable) {
+        nativeSetSafeBrowsingEnabled(enable);
+    }
+
     //--------------------------------------------------------------------------------------------
     //  Native methods
     //--------------------------------------------------------------------------------------------
@@ -88,4 +96,6 @@ public class AwContentsStatics {
     private static native String nativeGetProductVersion();
     private static native void nativeSetServiceWorkerIoThreadClient(
             AwContentsIoThreadClient ioThreadClient, AwBrowserContext browserContext);
+    private static native boolean nativeGetSafeBrowsingEnabled();
+    private static native void nativeSetSafeBrowsingEnabled(boolean enable);
 }

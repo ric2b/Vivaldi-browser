@@ -6,6 +6,8 @@ import("//build/config/features.gni")
 import("//chrome/common/features.gni")
 import("//components/spellcheck/spellcheck_build_features.gni")
 import("//extensions/features/features.gni")
+import("//media/media_options.gni")
+import("//ppapi/features/features.gni")
 import("//tools/grit/grit_rule.gni")
 
 grit("resources") {
@@ -90,6 +92,7 @@ static_library("renderer") {
     "//chrome:resources",
     "//chrome:strings",
     "//chrome/common",
+    "//chrome/common:instant_mojom",
     "//chrome/common:mojo_bindings",
     "//chrome/common/net",
     "//components/autofill/content/renderer",
@@ -109,6 +112,7 @@ static_library("renderer") {
     "//components/spellcheck:build_features",
     "//components/startup_metric_utils/common:interfaces",
     "//components/subresource_filter/content/renderer",
+    "//components/task_scheduler_util/renderer",
     "//components/translate/content/renderer",
     "//components/translate/core/common",
     "//components/translate/core/language_detection",
@@ -124,6 +128,7 @@ static_library("renderer") {
     "//net",
     "//ppapi/features",
     "//printing/features",
+    "//services/service_manager/public/cpp",
     "//skia",
     "//storage/common",
     "//third_party/WebKit/public:blink",
@@ -187,6 +192,7 @@ static_library("renderer") {
       "safe_browsing/threat_dom_details.cc",
       "safe_browsing/threat_dom_details.h",
     ]
+    deps += [ "//components/safe_browsing/common:common" ]
     if (safe_browsing_mode == 1) {
       sources += [
         "safe_browsing/feature_extractor_clock.cc",
@@ -373,6 +379,7 @@ static_library("test_support") {
 
   deps = [
     ":renderer",
+    "//chrome/common:instant_mojom",
     "//content/test:test_support",
     "//extensions/features",
     "//testing/gmock",

@@ -9,16 +9,14 @@ static_library("browser") {
     "//vivaldi/clientparts",
     "//vivaldi/extensions",
     "//vivaldi/extensions/schema:api",
-    "//vivaldi/extraparts",
     "//vivaldi/importer",
-    "//vivaldi/notes",
     "//vivaldi/notifications",
-    "//vivaldi/prefs:browser_prefs",
     "//vivaldi/ui",
     "//vivaldi/vivapp:vivaldi_app",
   ]
   deps = [
     ":vivaldi_version_info",
+    "//vivaldi/prefs:browser_prefs",
 
     #"//vivaldi/base",
     "//base:base",
@@ -97,4 +95,24 @@ action("vivaldi_version_info") {
            "--vivaldi",
            "-o",
          ] + rebase_path(outputs, root_build_dir)
+}
+
+source_set("init_sparkle") {
+  sources = [
+    "init_sparkle.cc",
+    "init_sparkle.h",
+  ]
+
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//base:base_static",
+    "//url",
+  ]
+
+  if (is_win) {
+    deps += [ "//vivaldi/third_party:sparkle" ]
+  } else if (is_mac) {
+    deps += [ "//vivaldi/app/nibs:vivaldi_xibs" ]
+  }
 }

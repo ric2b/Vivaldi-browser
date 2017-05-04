@@ -10,8 +10,8 @@
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/CompositorProxyClient.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/testing/DummyPageHolder.h"
 #include "core/workers/InProcessWorkerObjectProxy.h"
+#include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
@@ -35,9 +35,8 @@ namespace {
 // CompositorWorkerThreads.
 class TestCompositorWorkerObjectProxy : public InProcessWorkerObjectProxy {
  public:
-  static std::unique_ptr<TestCompositorWorkerObjectProxy> create(
-      ExecutionContext* context) {
-    return wrapUnique(new TestCompositorWorkerObjectProxy(context));
+  static std::unique_ptr<TestCompositorWorkerObjectProxy> create() {
+    return WTF::wrapUnique(new TestCompositorWorkerObjectProxy());
   }
 
   // (Empty) WorkerReportingProxy implementation:
@@ -49,22 +48,16 @@ class TestCompositorWorkerObjectProxy : public InProcessWorkerObjectProxy {
                             const String& message,
                             SourceLocation*) override {}
   void postMessageToPageInspector(const String&) override {}
-
   void didCreateWorkerGlobalScope(WorkerOrWorkletGlobalScope*) override {}
   void didEvaluateWorkerScript(bool success) override {}
   void didCloseWorkerGlobalScope() override {}
   void willDestroyWorkerGlobalScope() override {}
   void didTerminateWorkerThread() override {}
 
-  ExecutionContext* getExecutionContext() override {
-    return m_executionContext.get();
-  }
-
  private:
-  TestCompositorWorkerObjectProxy(ExecutionContext* context)
-      : InProcessWorkerObjectProxy(nullptr), m_executionContext(context) {}
-
-  Persistent<ExecutionContext> m_executionContext;
+  TestCompositorWorkerObjectProxy()
+      : InProcessWorkerObjectProxy(nullptr,
+                                   ParentFrameTaskRunners::create(nullptr)) {}
 };
 
 class TestCompositorProxyClient
@@ -85,7 +78,7 @@ class TestCompositorProxyClient
 class CompositorWorkerTestPlatform : public TestingPlatformSupport {
  public:
   CompositorWorkerTestPlatform()
-      : m_thread(wrapUnique(m_oldPlatform->createThread("Compositor"))) {}
+      : m_thread(WTF::wrapUnique(m_oldPlatform->createThread("Compositor"))) {}
 
   WebThread* compositorThread() const override { return m_thread.get(); }
 
@@ -104,15 +97,12 @@ class CompositorWorkerThreadTest : public ::testing::Test {
  public:
   void SetUp() override {
     CompositorWorkerThread::createSharedBackingThreadForTest();
-    m_page = DummyPageHolder::create();
-    m_objectProxy =
-        TestCompositorWorkerObjectProxy::create(&m_page->document());
+    m_objectProxy = TestCompositorWorkerObjectProxy::create();
     m_securityOrigin =
         SecurityOrigin::create(KURL(ParsedURLString, "http://fake.url/"));
   }
 
   void TearDown() override {
-    m_page.reset();
     CompositorWorkerThread::clearSharedBackingThread();
   }
 
@@ -125,13 +115,13 @@ class CompositorWorkerThreadTest : public ::testing::Test {
         KURL(ParsedURLString, "http://fake.url/"), "fake user agent",
         "//fake source code", nullptr, DontPauseWorkerGlobalScopeOnStart,
         nullptr, "", m_securityOrigin.get(), clients, WebAddressSpaceLocal,
-        nullptr, nullptr, V8CacheOptionsDefault));
+        nullptr, nullptr, WorkerV8Settings::Default()));
     return workerThread;
   }
 
   // Attempts to run some simple script for |worker|.
   void checkWorkerCanExecuteScript(WorkerThread* worker) {
-    std::unique_ptr<WaitableEvent> waitEvent = makeUnique<WaitableEvent>();
+    std::unique_ptr<WaitableEvent> waitEvent = WTF::makeUnique<WaitableEvent>();
     worker->workerBackingThread().backingThread().postTask(
         BLINK_FROM_HERE,
         crossThreadBind(&CompositorWorkerThreadTest::executeScriptInWorker,
@@ -151,10 +141,9 @@ class CompositorWorkerThreadTest : public ::testing::Test {
     waitEvent->signal();
   }
 
-  std::unique_ptr<DummyPageHolder> m_page;
   RefPtr<SecurityOrigin> m_securityOrigin;
   std::unique_ptr<InProcessWorkerObjectProxy> m_objectProxy;
-  CompositorWorkerTestPlatform m_testPlatform;
+  ScopedTestingPlatformSupport<CompositorWorkerTestPlatform> m_platform;
 };
 
 TEST_F(CompositorWorkerThreadTest, Basic) {

@@ -19,7 +19,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/version.h"
@@ -28,7 +27,7 @@
 #include "chrome/common/mac/launchd.h"
 #include "chrome/common/service_process_util_posix.h"
 #include "components/version_info/version_info.h"
-#include "ipc/unix_domain_socket_util.h"
+#include "mojo/edk/embedder/named_platform_handle_utils.h"
 
 @interface NSFileManager (YosemiteSDK)
 - (BOOL)getRelationship:(NSURLRelationship*)outRelationship
@@ -95,7 +94,7 @@ base::FilePath GetServiceProcessSocketName() {
   PathService::Get(base::DIR_TEMP, &socket_name);
   std::string pipe_name = GetServiceProcessScopedName("srv");
   socket_name = socket_name.Append(pipe_name);
-  CHECK_LT(socket_name.value().size(), IPC::kMaxSocketNameLength);
+  CHECK_LT(socket_name.value().size(), mojo::edk::kMaxSocketNameLength);
   return socket_name;
 }
 

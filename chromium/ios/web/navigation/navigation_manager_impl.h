@@ -10,15 +10,13 @@
 #include <memory>
 #include <vector>
 
-#include "base/mac/scoped_nsobject.h"
+#import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
 @class CRWSessionController;
-@class CRWSessionEntry;
 
 namespace web {
 class BrowserState;
@@ -58,7 +56,7 @@ class NavigationManagerImpl : public NavigationManager {
   // Replace the session history with a new one, where |items| is the
   // complete set of navigation items in the new history, and |current_index|
   // is the index of the currently active item.
-  void ReplaceSessionHistory(ScopedVector<NavigationItem> items,
+  void ReplaceSessionHistory(std::vector<std::unique_ptr<NavigationItem>> items,
                              int current_index);
 
   // Sets the delegate used to drive the navigation controller facade.
@@ -132,11 +130,17 @@ class NavigationManagerImpl : public NavigationManager {
   // CRWSessionController.
   void CopyState(NavigationManagerImpl* navigation_manager);
 
- private:
-  // Returns the navigation index that differs from the current item by the
-  // specified |offset|, skipping redirect navigation items. The index returned
-  // is not guaranteed to be valid.
+  // Returns the navigation index that differs from the current item (or pending
+  // item if it exists) by the specified |offset|, skipping redirect navigation
+  // items. The index returned is not guaranteed to be valid.
+  // TODO(crbug.com/661316): Make this method private once navigation code is
+  // moved from CRWWebController to NavigationManagerImpl.
   int GetIndexForOffset(int offset) const;
+
+ private:
+  // Returns true if the PageTransition for the underlying navigation item at
+  // |index| has ui::PAGE_TRANSITION_IS_REDIRECT_MASK.
+  bool IsRedirectItemAtIndex(int index) const;
 
   // The primary delegate for this manager.
   NavigationManagerDelegate* delegate_;

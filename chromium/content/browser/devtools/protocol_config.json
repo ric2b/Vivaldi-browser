@@ -10,12 +10,72 @@
         "export_header": "content/common/content_export.h",
         "options": [
             {
+                "domain": "DOM",
+                "include": ["setFileInputFiles"],
+                "include_events": [],
+                "include_types": ["NodeId", "RGBA"]
+            },
+            {
+                "domain": "Emulation",
+                "include": ["setGeolocationOverride", "clearGeolocationOverride", "setTouchEmulationEnabled", "canEmulate", "setDeviceMetricsOverride", "clearDeviceMetricsOverride", "setVisibleSize"]
+            },
+            {
+                "domain": "Input",
+                "exclude": ["dispatchTouchEvent"],
+                "async": ["dispatchKeyEvent", "dispatchMouseEvent", "synthesizePinchGesture", "synthesizeScrollGesture", "synthesizeTapGesture"]
+            },
+            {
+                "domain": "Inspector"
+            },
+            {
                 "domain": "IO",
                 "async": ["read"]
             },
             {
+                "domain": "Memory",
+                "include": ["setPressureNotificationsSuppressed", "simulatePressureNotification"]
+            },
+            {
+                "domain": "Network",
+                "include": ["enable", "disable", "clearBrowserCache", "clearBrowserCookies", "getCookies", "getAllCookies", "deleteCookie", "setCookie", "setUserAgentOverride", "canEmulateNetworkConditions"],
+                "include_types": ["CookieSameSite", "Cookie"],
+                "include_events": [],
+                "async": ["getCookies", "getAllCookies", "deleteCookie", "setCookie"]
+            },
+            {
+                "domain": "Page",
+                "include": ["enable", "disable", "reload", "navigate", "stopLoading", "getNavigationHistory", "navigateToHistoryEntry", "captureScreenshot",
+                    "startScreencast", "stopScreencast", "screencastFrameAck", "handleJavaScriptDialog", "setColorPickerEnabled", "requestAppBanner",
+                    "setControlNavigations", "processNavigation"],
+                "include_events": ["interstitialShown", "interstitialHidden", "navigationRequested", "screencastVisibilityChanged", "screencastFrame", "colorPicked"],
+                "async": ["captureScreenshot"]
+            },
+            {
+                "domain": "Schema"
+            },
+            {
+                "domain": "Security"
+            },
+            {
+                "domain": "ServiceWorker"
+            },
+            {
+                "domain": "Storage"
+            },
+            {
+                "domain": "SystemInfo",
+                "async": ["getInfo"]
+            },
+            {
+                "domain": "Target"
+            },
+            {
+                "domain": "Tethering",
+                "async": ["bind", "unbind"]
+            },
+            {
                 "domain": "Tracing",
-                "async": ["start", "end"]
+                "async": ["start", "end", "getCategories", "requestMemoryDump"]
             }
         ]
     },

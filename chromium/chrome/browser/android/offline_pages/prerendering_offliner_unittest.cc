@@ -15,9 +15,9 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/common/pref_names.h"
-#include "components/offline_pages/background/offliner.h"
-#include "components/offline_pages/background/save_page_request.h"
-#include "components/offline_pages/stub_offline_page_model.h"
+#include "components/offline_pages/core/background/offliner.h"
+#include "components/offline_pages/core/background/save_page_request.h"
+#include "components/offline_pages/core/stub_offline_page_model.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/web_contents_tester.h"
@@ -43,7 +43,7 @@ class MockPrerenderingLoader : public PrerenderingLoader {
   ~MockPrerenderingLoader() override {}
 
   bool LoadPage(const GURL& url, const LoadPageCallback& callback) override {
-    mock_loading_ = true;
+    mock_loading_ = can_prerender_;
     load_page_callback_ = callback;
     return mock_loading_;
   }
@@ -53,7 +53,6 @@ class MockPrerenderingLoader : public PrerenderingLoader {
     mock_loaded_ = false;
   }
 
-  bool CanPrerender() override { return can_prerender_; }
   bool IsIdle() override { return !mock_loading_ && !mock_loaded_; }
   bool IsLoaded() override { return mock_loaded_; }
 
@@ -62,9 +61,9 @@ class MockPrerenderingLoader : public PrerenderingLoader {
     mock_loading_ = false;
     mock_loaded_ = false;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(load_page_callback_,
-                              Offliner::RequestStatus::PRERENDERING_FAILED,
-                              nullptr /* web_contents */));
+        FROM_HERE,
+        base::Bind(load_page_callback_, Offliner::RequestStatus::LOADING_FAILED,
+                   nullptr /* web_contents */));
   }
 
   void CompleteLoadingAsLoaded() {
@@ -84,7 +83,7 @@ class MockPrerenderingLoader : public PrerenderingLoader {
     mock_loaded_ = false;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(load_page_callback_,
-                              Offliner::RequestStatus::PRERENDERING_CANCELED,
+                              Offliner::RequestStatus::LOADING_CANCELED,
                               nullptr /* web_contents */));
   }
 
@@ -255,7 +254,7 @@ TEST_F(PrerenderingOfflinerTest, LoadAndSaveLoadStartedButFails) {
   loader()->CompleteLoadingAsFailed();
   PumpLoop();
   EXPECT_TRUE(completion_callback_called());
-  EXPECT_EQ(Offliner::RequestStatus::PRERENDERING_FAILED, request_status());
+  EXPECT_EQ(Offliner::RequestStatus::LOADING_FAILED, request_status());
   EXPECT_TRUE(loader()->IsIdle());
   EXPECT_FALSE(SaveInProgress());
 }
@@ -361,7 +360,7 @@ TEST_F(PrerenderingOfflinerTest, LoadAndSaveLoadedButThenCanceledFromLoader) {
   loader()->CompleteLoadingAsCanceled();
   PumpLoop();
   EXPECT_TRUE(completion_callback_called());
-  EXPECT_EQ(Offliner::RequestStatus::PRERENDERING_CANCELED, request_status());
+  EXPECT_EQ(Offliner::RequestStatus::LOADING_CANCELED, request_status());
   EXPECT_FALSE(loader()->IsLoaded());
   // Note: save still in progress since it does not support canceling.
   EXPECT_TRUE(SaveInProgress());

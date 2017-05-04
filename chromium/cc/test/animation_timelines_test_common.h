@@ -240,12 +240,13 @@ class AnimationTimelinesTest : public testing::Test {
   void CreateImplTimelineAndPlayer();
 
   void CreateTestMainLayer();
+  void DestroyTestMainLayer();
   void CreateTestImplLayer(ElementListType element_list_type);
 
   void ReleaseRefPtrs();
 
-  void AnimateLayersTransferEvents(base::TimeTicks time,
-                                   unsigned expect_events);
+  void TickAnimationsTransferEvents(base::TimeTicks time,
+                                    unsigned expect_events);
 
   AnimationPlayer* GetPlayerForElementId(ElementId element_id);
   AnimationPlayer* GetImplPlayerForLayerId(ElementId element_id);

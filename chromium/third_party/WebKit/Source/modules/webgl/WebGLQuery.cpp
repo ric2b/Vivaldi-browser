@@ -15,11 +15,6 @@ WebGLQuery* WebGLQuery::create(WebGL2RenderingContextBase* ctx) {
   return new WebGLQuery(ctx);
 }
 
-WebGLQuery::~WebGLQuery() {
-  // See the comment in WebGLObject::detachAndDeleteObject().
-  detachAndDeleteObject();
-}
-
 WebGLQuery::WebGLQuery(WebGL2RenderingContextBase* ctx)
     : WebGLSharedPlatform3DObject(ctx),
       m_target(0),
@@ -27,14 +22,14 @@ WebGLQuery::WebGLQuery(WebGL2RenderingContextBase* ctx)
       m_queryResultAvailable(false),
       m_queryResult(0),
       m_taskRunner(TaskRunnerHelper::get(TaskType::Unthrottled,
-                                         &ctx->canvas()->document())
-                       ->clone()),
-      m_cancellableTaskFactory(CancellableTaskFactory::create(
-          this,
-          &WebGLQuery::allowAvailabilityUpdate)) {
+                                         &ctx->canvas()->document())) {
   GLuint query;
   ctx->contextGL()->GenQueriesEXT(1, &query);
   setObject(query);
+}
+
+WebGLQuery::~WebGLQuery() {
+  runDestructor();
 }
 
 void WebGLQuery::setTarget(GLenum target) {
@@ -77,7 +72,7 @@ void WebGLQuery::updateCachedResult(gpu::gles2::GLES2Interface* gl) {
     GLuint result = 0;
     gl->GetQueryObjectuivEXT(object(), GL_QUERY_RESULT_EXT, &result);
     m_queryResult = result;
-    m_cancellableTaskFactory->cancel();
+    m_taskHandle.cancel();
   } else {
     scheduleAllowAvailabilityUpdate();
   }
@@ -92,9 +87,11 @@ GLuint WebGLQuery::getQueryResult() {
 }
 
 void WebGLQuery::scheduleAllowAvailabilityUpdate() {
-  if (!m_cancellableTaskFactory->isPending())
-    m_taskRunner->postTask(BLINK_FROM_HERE,
-                           m_cancellableTaskFactory->cancelAndCreate());
+  if (m_taskHandle.isActive())
+    return;
+  m_taskHandle = m_taskRunner->postCancellableTask(
+      BLINK_FROM_HERE, WTF::bind(&WebGLQuery::allowAvailabilityUpdate,
+                                 wrapWeakPersistent(this)));
 }
 
 void WebGLQuery::allowAvailabilityUpdate() {

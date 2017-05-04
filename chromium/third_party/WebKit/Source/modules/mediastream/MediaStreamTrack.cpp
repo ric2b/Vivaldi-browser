@@ -43,17 +43,22 @@
 
 namespace blink {
 
+namespace {
+static const char kContentHintStringNone[] = "";
+static const char kContentHintStringAudioSpeech[] = "speech";
+static const char kContentHintStringAudioMusic[] = "music";
+static const char kContentHintStringVideoMotion[] = "motion";
+static const char kContentHintStringVideoDetail[] = "detail";
+}  // namespace
+
 MediaStreamTrack* MediaStreamTrack::create(ExecutionContext* context,
                                            MediaStreamComponent* component) {
-  MediaStreamTrack* track = new MediaStreamTrack(context, component);
-  track->suspendIfNeeded();
-  return track;
+  return new MediaStreamTrack(context, component);
 }
 
 MediaStreamTrack::MediaStreamTrack(ExecutionContext* context,
                                    MediaStreamComponent* component)
-    : ActiveScriptWrappable(this),
-      ActiveDOMObject(context),
+    : ContextLifecycleObserver(context),
       m_readyState(MediaStreamSource::ReadyStateLive),
       m_isIteratingRegisteredMediaStreams(false),
       m_stopped(false),
@@ -107,6 +112,61 @@ bool MediaStreamTrack::muted() const {
   return m_component->muted();
 }
 
+String MediaStreamTrack::contentHint() const {
+  WebMediaStreamTrack::ContentHintType hint = m_component->contentHint();
+  switch (hint) {
+    case WebMediaStreamTrack::ContentHintType::None:
+      return kContentHintStringNone;
+    case WebMediaStreamTrack::ContentHintType::AudioSpeech:
+      return kContentHintStringAudioSpeech;
+    case WebMediaStreamTrack::ContentHintType::AudioMusic:
+      return kContentHintStringAudioMusic;
+    case WebMediaStreamTrack::ContentHintType::VideoMotion:
+      return kContentHintStringVideoMotion;
+    case WebMediaStreamTrack::ContentHintType::VideoDetail:
+      return kContentHintStringVideoDetail;
+  }
+
+  NOTREACHED();
+  return String();
+}
+
+void MediaStreamTrack::setContentHint(const String& hint) {
+  WebMediaStreamTrack::ContentHintType translatedHint =
+      WebMediaStreamTrack::ContentHintType::None;
+  switch (m_component->source()->type()) {
+    case MediaStreamSource::TypeAudio:
+      if (hint == kContentHintStringNone) {
+        translatedHint = WebMediaStreamTrack::ContentHintType::None;
+      } else if (hint == kContentHintStringAudioSpeech) {
+        translatedHint = WebMediaStreamTrack::ContentHintType::AudioSpeech;
+      } else if (hint == kContentHintStringAudioMusic) {
+        translatedHint = WebMediaStreamTrack::ContentHintType::AudioMusic;
+      } else {
+        // TODO(pbos): Log warning?
+        // Invalid values for audio are to be ignored (similar to invalid enum
+        // values).
+        return;
+      }
+      break;
+    case MediaStreamSource::TypeVideo:
+      if (hint == kContentHintStringNone) {
+        translatedHint = WebMediaStreamTrack::ContentHintType::None;
+      } else if (hint == kContentHintStringVideoMotion) {
+        translatedHint = WebMediaStreamTrack::ContentHintType::VideoMotion;
+      } else if (hint == kContentHintStringVideoDetail) {
+        translatedHint = WebMediaStreamTrack::ContentHintType::VideoDetail;
+      } else {
+        // TODO(pbos): Log warning?
+        // Invalid values for video are to be ignored (similar to invalid enum
+        // values).
+        return;
+      }
+  }
+
+  m_component->setContentHint(translatedHint);
+}
+
 bool MediaStreamTrack::remote() const {
   return m_component->source()->remote();
 }
@@ -139,8 +199,9 @@ void MediaStreamTrack::stopTrack(ExceptionState& exceptionState) {
 }
 
 MediaStreamTrack* MediaStreamTrack::clone(ExecutionContext* context) {
-  MediaStreamComponent* clonedComponent =
-      MediaStreamComponent::create(component()->source());
+  // TODO(pbos): Make sure m_readyState and m_stopped carries over on cloned
+  // tracks.
+  MediaStreamComponent* clonedComponent = component()->clone();
   MediaStreamTrack* clonedTrack =
       MediaStreamTrack::create(context, clonedComponent);
   MediaStreamCenter::instance().didCreateMediaStreamTrack(clonedComponent);
@@ -168,6 +229,25 @@ void MediaStreamTrack::getSettings(MediaTrackSettings& settings) {
     settings.setHeight(platformSettings.height);
   }
   settings.setDeviceId(platformSettings.deviceId);
+  if (platformSettings.hasFacingMode()) {
+    switch (platformSettings.facingMode) {
+      case WebMediaStreamTrack::FacingMode::User:
+        settings.setFacingMode("user");
+        break;
+      case WebMediaStreamTrack::FacingMode::Environment:
+        settings.setFacingMode("environment");
+        break;
+      case WebMediaStreamTrack::FacingMode::Left:
+        settings.setFacingMode("left");
+        break;
+      case WebMediaStreamTrack::FacingMode::Right:
+        settings.setFacingMode("right");
+        break;
+      default:
+        // None, or unknown facing mode. Ignore.
+        break;
+    }
+  }
 }
 
 bool MediaStreamTrack::ended() const {
@@ -205,7 +285,7 @@ void MediaStreamTrack::propagateTrackEnded() {
   m_isIteratingRegisteredMediaStreams = false;
 }
 
-void MediaStreamTrack::contextDestroyed() {
+void MediaStreamTrack::contextDestroyed(ExecutionContext*) {
   m_stopped = true;
 }
 
@@ -249,14 +329,14 @@ const AtomicString& MediaStreamTrack::interfaceName() const {
 }
 
 ExecutionContext* MediaStreamTrack::getExecutionContext() const {
-  return ActiveDOMObject::getExecutionContext();
+  return ContextLifecycleObserver::getExecutionContext();
 }
 
 DEFINE_TRACE(MediaStreamTrack) {
   visitor->trace(m_registeredMediaStreams);
   visitor->trace(m_component);
   EventTargetWithInlineData::trace(visitor);
-  ActiveDOMObject::trace(visitor);
+  ContextLifecycleObserver::trace(visitor);
 }
 
 }  // namespace blink

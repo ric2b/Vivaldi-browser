@@ -53,6 +53,9 @@ class Configuration {
   // Chrome only).
   bool is_updating_multi_chrome() const { return is_updating_multi_chrome_; }
 
+  // Returns true if any invalid switch is found on the command line.
+  bool has_invalid_switch() const { return has_invalid_switch_; }
+
   // Returns the previous version contained in the image's resource.
   const wchar_t* previous_version() const { return previous_version_; }
 
@@ -69,6 +72,7 @@ class Configuration {
   bool is_system_level_;
   bool is_side_by_side_;
   bool is_updating_multi_chrome_;
+  bool has_invalid_switch_;
   const wchar_t* previous_version_;
 
  private:

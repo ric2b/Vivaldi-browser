@@ -49,9 +49,9 @@
 namespace blink {
 
 class ExecutionContext;
+class NavigatorServiceWorker;
 class WebServiceWorker;
 class WebServiceWorkerProvider;
-class WebServiceWorkerRegistration;
 
 class MODULES_EXPORT ServiceWorkerContainer final
     : public EventTargetWithInlineData,
@@ -64,7 +64,8 @@ class MODULES_EXPORT ServiceWorkerContainer final
   using RegistrationCallbacks =
       WebServiceWorkerProvider::WebServiceWorkerRegistrationCallbacks;
 
-  static ServiceWorkerContainer* create(ExecutionContext*);
+  static ServiceWorkerContainer* create(ExecutionContext*,
+                                        NavigatorServiceWorker*);
   ~ServiceWorkerContainer();
 
   DECLARE_VIRTUAL_TRACE();
@@ -84,7 +85,7 @@ class MODULES_EXPORT ServiceWorkerContainer final
   ScriptPromise getRegistration(ScriptState*, const String& documentURL);
   ScriptPromise getRegistrations(ScriptState*);
 
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   // WebServiceWorkerProviderClient overrides.
   void setController(std::unique_ptr<WebServiceWorker::Handle>,
@@ -103,7 +104,7 @@ class MODULES_EXPORT ServiceWorkerContainer final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(message);
 
  private:
-  explicit ServiceWorkerContainer(ExecutionContext*);
+  ServiceWorkerContainer(ExecutionContext*, NavigatorServiceWorker*);
 
   class GetRegistrationForReadyCallback;
   typedef ScriptPromiseProperty<Member<ServiceWorkerContainer>,
@@ -115,6 +116,7 @@ class MODULES_EXPORT ServiceWorkerContainer final
   WebServiceWorkerProvider* m_provider;
   Member<ServiceWorker> m_controller;
   Member<ReadyProperty> m_ready;
+  Member<NavigatorServiceWorker> m_navigator;
 };
 
 }  // namespace blink

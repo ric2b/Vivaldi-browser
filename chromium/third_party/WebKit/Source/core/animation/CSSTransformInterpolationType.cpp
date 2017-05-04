@@ -133,7 +133,7 @@ class InheritedTransformChecker : public InterpolationType::ConversionChecker {
  public:
   static std::unique_ptr<InheritedTransformChecker> create(
       const TransformOperations& inheritedTransform) {
-    return wrapUnique(new InheritedTransformChecker(inheritedTransform));
+    return WTF::wrapUnique(new InheritedTransformChecker(inheritedTransform));
   }
 
   bool isValid(const InterpolationEnvironment& environment,
@@ -168,7 +168,7 @@ InterpolationValue CSSTransformInterpolationType::maybeConvertInherit(
     ConversionCheckers& conversionCheckers) const {
   const TransformOperations& inheritedTransform =
       state.parentStyle()->transform();
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedTransformChecker::create(inheritedTransform));
   return convertTransform(inheritedTransform);
 }
@@ -198,7 +198,7 @@ InterpolationValue CSSTransformInterpolationType::maybeConvertValue(
         LengthUnitsChecker::maybeCreate(std::move(lengthArray), state);
 
     if (lengthUnitsChecker)
-      conversionCheckers.append(std::move(lengthUnitsChecker));
+      conversionCheckers.push_back(std::move(lengthUnitsChecker));
   }
 
   TransformOperations transform = TransformBuilder::createTransformOperations(
@@ -206,19 +206,10 @@ InterpolationValue CSSTransformInterpolationType::maybeConvertValue(
   return convertTransform(std::move(transform));
 }
 
-InterpolationValue CSSTransformInterpolationType::maybeConvertSingle(
-    const PropertySpecificKeyframe& keyframe,
-    const InterpolationEnvironment& environment,
-    const InterpolationValue& underlying,
-    ConversionCheckers& conversionCheckers) const {
-  InterpolationValue result = CSSInterpolationType::maybeConvertSingle(
-      keyframe, environment, underlying, conversionCheckers);
-  if (!result)
-    return nullptr;
-  if (keyframe.composite() != EffectModel::CompositeReplace)
-    toCSSTransformNonInterpolableValue(*result.nonInterpolableValue)
-        .setSingleAdditive();
-  return result;
+void CSSTransformInterpolationType::additiveKeyframeHook(
+    InterpolationValue& value) const {
+  toCSSTransformNonInterpolableValue(*value.nonInterpolableValue)
+      .setSingleAdditive();
 }
 
 PairwiseInterpolationValue CSSTransformInterpolationType::maybeMergeSingles(
@@ -233,9 +224,10 @@ PairwiseInterpolationValue CSSTransformInterpolationType::maybeMergeSingles(
               toCSSTransformNonInterpolableValue(*end.nonInterpolableValue))));
 }
 
-InterpolationValue CSSTransformInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
-  return convertTransform(environment.state().style()->transform());
+InterpolationValue
+CSSTransformInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const StyleResolverState& state) const {
+  return convertTransform(state.style()->transform());
 }
 
 void CSSTransformInterpolationType::composite(
@@ -253,14 +245,14 @@ void CSSTransformInterpolationType::composite(
       underlyingNonInterpolableValue.composite(nonInterpolableValue, progress);
 }
 
-void CSSTransformInterpolationType::apply(
+void CSSTransformInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue* untypedNonInterpolableValue,
-    InterpolationEnvironment& environment) const {
+    StyleResolverState& state) const {
   double progress = toInterpolableNumber(interpolableValue).value();
   const CSSTransformNonInterpolableValue& nonInterpolableValue =
       toCSSTransformNonInterpolableValue(*untypedNonInterpolableValue);
-  environment.state().style()->setTransform(
+  state.style()->setTransform(
       nonInterpolableValue.getInterpolatedTransform(progress));
 }
 

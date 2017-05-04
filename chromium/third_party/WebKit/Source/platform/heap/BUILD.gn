@@ -26,6 +26,8 @@ source_set("heap") {
     "Heap.h",
     "HeapAllocator.cpp",
     "HeapAllocator.h",
+    "HeapCompact.cpp",
+    "HeapCompact.h",
     "HeapPage.cpp",
     "HeapPage.h",
     "InlinedGlobalMarkingVisitor.h",
@@ -42,6 +44,8 @@ source_set("heap") {
     "SafePoint.cpp",
     "SafePoint.h",
     "SelfKeepAlive.h",
+    "SparseHeapBitmap.cpp",
+    "SparseHeapBitmap.h",
     "StackFrameDepth.cpp",
     "StackFrameDepth.h",
     "ThreadState.cpp",
@@ -56,6 +60,7 @@ source_set("heap") {
   defines = [ "BLINK_PLATFORM_IMPLEMENTATION=1" ]
 
   configs += [
+    "//third_party/WebKit/Source:blink_pch",
     "//third_party/WebKit/Source:config",
     "//third_party/WebKit/Source:non_test_config",
     "//third_party/WebKit/Source:inside_blink",
@@ -75,6 +80,7 @@ source_set("heap") {
 test("blink_heap_unittests") {
   sources = [
     "BlinkGCMemoryDumpProviderTest.cpp",
+    "HeapCompactTest.cpp",
     "HeapTest.cpp",
     "PersistentTest.cpp",
     "RunAllTests.cpp",

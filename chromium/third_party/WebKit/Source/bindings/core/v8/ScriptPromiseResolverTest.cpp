@@ -61,7 +61,7 @@ class ScriptPromiseResolverTest : public ::testing::Test {
 };
 
 TEST_F(ScriptPromiseResolverTest, construct) {
-  ASSERT_FALSE(getExecutionContext()->activeDOMObjectsAreStopped());
+  ASSERT_FALSE(getExecutionContext()->isContextDestroyed());
   ScriptState::Scope scope(getScriptState());
   ScriptPromiseResolver::create(getScriptState());
 }
@@ -281,7 +281,7 @@ TEST_F(ScriptPromiseResolverTest, suspend) {
       BlinkGC::NoHeapPointersOnStack, BlinkGC::GCWithSweep, BlinkGC::ForcedGC);
   ASSERT_TRUE(ScriptPromiseResolverKeepAlive::isAlive());
 
-  getExecutionContext()->suspendActiveDOMObjects();
+  getExecutionContext()->suspendSuspendableObjects();
   resolver->resolve("hello");
   ThreadState::current()->collectGarbage(
       BlinkGC::NoHeapPointersOnStack, BlinkGC::GCWithSweep, BlinkGC::ForcedGC);

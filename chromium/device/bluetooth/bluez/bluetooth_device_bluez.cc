@@ -11,7 +11,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/metrics/histogram.h"
+#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "dbus/bus.h"
@@ -180,7 +181,7 @@ BluetoothDeviceBlueZ::~BluetoothDeviceBlueZ() {
   for (const auto& iter : gatt_services_swapped) {
     DCHECK(adapter());
     adapter()->NotifyGattServiceRemoved(
-        static_cast<BluetoothRemoteGattServiceBlueZ*>(iter.second));
+        static_cast<BluetoothRemoteGattServiceBlueZ*>(iter.second.get()));
   }
 }
 
@@ -325,10 +326,11 @@ bool BluetoothDeviceBlueZ::IsPaired() const {
           object_path_);
   DCHECK(properties);
 
-  // Trusted devices are devices that don't support pairing but that the
-  // user has explicitly connected; it makes no sense for UI purposes to
-  // treat them differently from each other.
-  return properties->paired.value() || properties->trusted.value();
+  // The Paired property reflects the successful pairing for BR/EDR/LE. The
+  // value of the Paired property is always false for the devices that don't
+  // support pairing. Once a device is paired successfully, both Paired and
+  // Trusted properties will be set to true.
+  return properties->paired.value();
 }
 
 bool BluetoothDeviceBlueZ::IsConnected() const {
@@ -441,7 +443,7 @@ void BluetoothDeviceBlueZ::Connect(
   VLOG(1) << object_path_.value() << ": Connecting, " << num_connecting_calls_
           << " in progress";
 
-  if (IsPaired() || !pairing_delegate || !IsPairable()) {
+  if (IsPaired() || !pairing_delegate) {
     // No need to pair, or unable to, skip straight to connection.
     ConnectInternal(false, callback, error_callback);
   } else {
@@ -678,8 +680,7 @@ void BluetoothDeviceBlueZ::GattServiceAdded(
   BluetoothRemoteGattServiceBlueZ* service =
       new BluetoothRemoteGattServiceBlueZ(adapter(), this, object_path);
 
-  gatt_services_.set(service->GetIdentifier(),
-                     std::unique_ptr<BluetoothRemoteGattService>(service));
+  gatt_services_[service->GetIdentifier()] = base::WrapUnique(service);
   DCHECK(service->object_path() == object_path);
   DCHECK(service->GetUUID().IsValid());
 
@@ -689,15 +690,14 @@ void BluetoothDeviceBlueZ::GattServiceAdded(
 
 void BluetoothDeviceBlueZ::GattServiceRemoved(
     const dbus::ObjectPath& object_path) {
-  GattServiceMap::const_iterator iter =
-      gatt_services_.find(object_path.value());
+  auto iter = gatt_services_.find(object_path.value());
   if (iter == gatt_services_.end()) {
     VLOG(3) << "Unknown GATT service removed: " << object_path.value();
     return;
   }
 
   BluetoothRemoteGattServiceBlueZ* service =
-      static_cast<BluetoothRemoteGattServiceBlueZ*>(iter->second);
+      static_cast<BluetoothRemoteGattServiceBlueZ*>(iter->second.get());
 
   VLOG(1) << "Removing remote GATT service with UUID: '"
           << service->GetUUID().canonical_value()
@@ -705,7 +705,8 @@ void BluetoothDeviceBlueZ::GattServiceRemoved(
 
   DCHECK(service->object_path() == object_path);
   std::unique_ptr<BluetoothRemoteGattService> scoped_service =
-      gatt_services_.take_and_erase(iter->first);
+      std::move(gatt_services_[object_path.value()]);
+  gatt_services_.erase(iter);
 
   DCHECK(adapter());
   discovery_complete_notified_.erase(service);
@@ -928,6 +929,9 @@ void BluetoothDeviceBlueZ::OnSetTrusted(bool success) {
 
 void BluetoothDeviceBlueZ::OnDisconnect(const base::Closure& callback) {
   VLOG(1) << object_path_.value() << ": Disconnected";
+  // Do not notify about changed device since this is already done by
+  // the dbus::PropertySet and the property change callback for BlueZ.
+  DidDisconnectGatt(false /* notifyDeviceChanged */);
   callback.Run();
 }
 

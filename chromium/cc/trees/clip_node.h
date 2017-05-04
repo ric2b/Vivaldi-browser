@@ -5,7 +5,10 @@
 #ifndef CC_TREES_CLIP_NODE_H_
 #define CC_TREES_CLIP_NODE_H_
 
+#include <memory>
+
 #include "cc/base/cc_export.h"
+#include "cc/trees/clip_expander.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace base {
@@ -20,9 +23,16 @@ struct CC_EXPORT ClipNode {
   ClipNode();
   ClipNode(const ClipNode& other);
 
+  ClipNode& operator=(const ClipNode& other);
+
+  ~ClipNode();
+
+  // The node index of this node in the clip tree node vector.
   int id;
+  // The node index of the parent node in the clip tree node vector.
   int parent_id;
-  int owner_id;
+  // The layer id of the layer that owns this node.
+  int owning_layer_id;
 
   enum class ClipType {
     // The node doesn't contribute a new clip. It exists only for caching clips
@@ -30,7 +40,15 @@ struct CC_EXPORT ClipNode {
     NONE,
 
     // The node contributes a new clip (that is, |clip| needs to be applied).
-    APPLIES_LOCAL_CLIP
+    APPLIES_LOCAL_CLIP,
+
+    // This node represents a space expansion. When computing visible rects,
+    // the accumulated clip inherited by this node gets expanded. Similarly,
+    // when mapping a rect in descendant space to the rect in ancestor space
+    // that depends on the descendant rect's contents, this node expands the
+    // descendant rect. This is used for effects like pixel-moving filters,
+    // where clipped-out content can affect visible output.
+    EXPANDS_CLIP
   };
 
   ClipType clip_type;
@@ -38,6 +56,9 @@ struct CC_EXPORT ClipNode {
   // The clip rect that this node contributes, expressed in the space of its
   // transform node.
   gfx::RectF clip;
+
+  // For nodes that expand, this represents the amount of expansion.
+  std::unique_ptr<ClipExpander> clip_expander;
 
   // Clip nodes are used for two reasons. First, they are used for determining
   // which parts of each layer are visible. Second, they are used for
@@ -59,14 +80,14 @@ struct CC_EXPORT ClipNode {
   int target_transform_id;
 
   // The id of the effect node that defines the clip node's target space.
+  // TODO(crbug.com/642581 crbug.com/642584): As we progress toward SPv2 and
+  // layer list mode, there may be layers having the same clip but draw onto
+  // different target. Target information shall be removed from here.
   int target_effect_id;
 
   // When true, |clip_in_target_space| does not include clips from ancestor
   // nodes.
   bool layer_clipping_uses_only_local_clip : 1;
-
-  // True if target surface needs to be drawn with a clip applied.
-  bool target_is_clipped : 1;
 
   // True if layers with this clip tree node need to be drawn with a clip
   // applied.

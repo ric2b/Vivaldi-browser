@@ -70,12 +70,10 @@ void WebDisplayItemListImpl::appendEndClipItem() {
   display_item_list_->CreateAndAppendPairedEndItem<cc::EndClipDisplayItem>();
 }
 
-void WebDisplayItemListImpl::appendClipPathItem(
-    const SkPath& clip_path,
-    SkRegion::Op clip_op,
-    bool antialias) {
+void WebDisplayItemListImpl::appendClipPathItem(const SkPath& clip_path,
+                                                bool antialias) {
   display_item_list_->CreateAndAppendPairedBeginItem<cc::ClipPathDisplayItem>(
-      clip_path, clip_op, antialias);
+      clip_path, antialias);
 }
 
 void WebDisplayItemListImpl::appendEndClipPathItem() {
@@ -110,7 +108,7 @@ void WebDisplayItemListImpl::appendEndTransformItem() {
 
 void WebDisplayItemListImpl::appendCompositingItem(
     float opacity,
-    SkXfermode::Mode xfermode,
+    SkBlendMode xfermode,
     SkRect* bounds,
     SkColorFilter* color_filter) {
   DCHECK_GE(opacity, 0.f);
@@ -159,6 +157,11 @@ void WebDisplayItemListImpl::appendEndScrollItem() {
 
 void WebDisplayItemListImpl::setIsSuitableForGpuRasterization(bool isSuitable) {
   display_item_list_->SetIsSuitableForGpuRasterization(isSuitable);
+}
+
+void WebDisplayItemListImpl::setImpliedColorSpace(
+    const gfx::ColorSpace& implied_color_space) {
+  display_item_list_->SetImpliedColorSpace(implied_color_space);
 }
 
 WebDisplayItemListImpl::~WebDisplayItemListImpl() {

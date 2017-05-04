@@ -37,7 +37,7 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
     }
   };
 
-  void commit(ScriptState*, ExceptionState&);
+  ScriptPromise commit(ScriptState*, ExceptionState&);
 
   // CanvasRenderingContext implementation
   ~OffscreenCanvasRenderingContext2D() override;
@@ -51,7 +51,7 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
     BaseRenderingContext2D::clearRect(x, y, width, height);
   }
   PassRefPtr<Image> getImage(AccelerationHint, SnapshotReason) const final;
-  ImageData* toImageData(SnapshotReason) const override;
+  ImageData* toImageData(SnapshotReason) override;
   void reset() override;
 
   // BaseRenderingContext2D implementation
@@ -85,6 +85,8 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
 
   ImageBitmap* transferToImageBitmap(ScriptState*) final;
 
+  ColorBehavior drawImageColorBehavior() const final;
+
  protected:
   OffscreenCanvasRenderingContext2D(
       ScriptState*,
@@ -104,8 +106,8 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
 DEFINE_TYPE_CASTS(OffscreenCanvasRenderingContext2D,
                   CanvasRenderingContext,
                   context,
-                  context->is2d() && context->getOffscreenCanvas(),
-                  context.is2d() && context.getOffscreenCanvas());
+                  context->is2d() && context->offscreenCanvas(),
+                  context.is2d() && context.offscreenCanvas());
 
 }  // namespace blink
 

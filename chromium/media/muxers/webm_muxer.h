@@ -20,6 +20,7 @@
 #include "media/base/media_export.h"
 #include "media/base/video_codecs.h"
 #include "third_party/libwebm/source/mkvmuxer.hpp"
+#include "ui/gfx/geometry/size.h"
 
 namespace gfx {
 class Size;
@@ -47,6 +48,15 @@ class MEDIA_EXPORT WebmMuxer : public NON_EXPORTED_BASE(mkvmuxer::IMkvWriter) {
   // either any file header or a SingleBlock.
   using WriteDataCB = base::Callback<void(base::StringPiece)>;
 
+  // Container for the parameters that muxer uses that is extracted from
+  // media::VideoFrame.
+  struct MEDIA_EXPORT VideoParameters {
+    VideoParameters(scoped_refptr<media::VideoFrame> frame);
+    ~VideoParameters();
+    gfx::Size visible_rect_size;
+    double frame_rate;
+  };
+
   // |codec| can be VP8 or VP9 and should coincide with whatever is sent in
   // OnEncodedVideo().
   WebmMuxer(VideoCodec codec,
@@ -56,17 +66,19 @@ class MEDIA_EXPORT WebmMuxer : public NON_EXPORTED_BASE(mkvmuxer::IMkvWriter) {
   ~WebmMuxer() override;
 
   // Functions to add video and audio frames with |encoded_data.data()|
-  // to WebM Segment.
-  void OnEncodedVideo(const scoped_refptr<VideoFrame>& video_frame,
+  // to WebM Segment. Either one returns true on success.
+  bool OnEncodedVideo(const VideoParameters& params,
                       std::unique_ptr<std::string> encoded_data,
                       base::TimeTicks timestamp,
                       bool is_key_frame);
-  void OnEncodedAudio(const media::AudioParameters& params,
+  bool OnEncodedAudio(const media::AudioParameters& params,
                       std::unique_ptr<std::string> encoded_data,
                       base::TimeTicks timestamp);
 
   void Pause();
   void Resume();
+
+  void ForceOneLibWebmErrorForTesting() { force_one_libwebm_error_ = true; }
 
  private:
   friend class WebmMuxerTest;
@@ -87,8 +99,8 @@ class MEDIA_EXPORT WebmMuxer : public NON_EXPORTED_BASE(mkvmuxer::IMkvWriter) {
   void ElementStartNotify(mkvmuxer::uint64 element_id,
                           mkvmuxer::int64 position) override;
 
-  // Helper to simplify saving frames.
-  void AddFrame(std::unique_ptr<std::string> encoded_data,
+  // Helper to simplify saving frames. Returns true on success.
+  bool AddFrame(std::unique_ptr<std::string> encoded_data,
                 uint8_t track_index,
                 base::TimeDelta timestamp,
                 bool is_key_frame);
@@ -126,6 +138,8 @@ class MEDIA_EXPORT WebmMuxer : public NON_EXPORTED_BASE(mkvmuxer::IMkvWriter) {
 
   // The MkvMuxer active element.
   mkvmuxer::Segment segment_;
+  // Flag to force the next call to a |segment_| method to return false.
+  bool force_one_libwebm_error_;
 
   // Hold on to all encoded video frames to dump them with and when audio is
   // received, if expected, since WebM headers can only be written once.

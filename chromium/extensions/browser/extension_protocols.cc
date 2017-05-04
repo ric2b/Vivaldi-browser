@@ -67,12 +67,13 @@
 
 using content::BrowserThread;
 using content::ResourceRequestInfo;
-using content::ResourceType;
 using extensions::Extension;
 using extensions::SharedModuleInfo;
 
 namespace extensions {
 namespace {
+
+ExtensionProtocolTestHandler* g_test_handler = nullptr;
 
 class GeneratedBackgroundPageJob : public net::URLRequestSimpleJob {
  public:
@@ -394,11 +395,12 @@ bool URLIsForExtensionIcon(const GURL& url, const Extension* extension) {
   if (!extension)
     return false;
 
-  std::string path = url.path();
   DCHECK_EQ(url.host(), extension->id());
+  base::StringPiece path = url.path_piece();
   DCHECK(path.length() > 0 && path[0] == '/');
-  path = path.substr(1);
-  return extensions::IconsInfo::GetIcons(extension).ContainsPath(path);
+  base::StringPiece path_without_slash = path.substr(1);
+  return extensions::IconsInfo::GetIcons(extension).ContainsPath(
+      path_without_slash);
 }
 
 class ExtensionProtocolHandler
@@ -525,6 +527,14 @@ ExtensionProtocolHandler::MaybeCreateJob(
       return NULL;
     }
   }
+
+  if (g_test_handler) {
+    net::URLRequestJob* test_job =
+        g_test_handler->Run(request, network_delegate, relative_path);
+    if (test_job)
+      return test_job;
+  }
+
   ContentVerifyJob* verify_job = NULL;
   ContentVerifier* verifier = extension_info_map_->content_verifier();
   if (verifier) {
@@ -590,6 +600,10 @@ CreateExtensionProtocolHandler(bool is_incognito,
                                extensions::InfoMap* extension_info_map) {
   return base::MakeUnique<ExtensionProtocolHandler>(is_incognito,
                                                     extension_info_map);
+}
+
+void SetExtensionProtocolTestHandler(ExtensionProtocolTestHandler* handler) {
+  g_test_handler = handler;
 }
 
 }  // namespace extensions

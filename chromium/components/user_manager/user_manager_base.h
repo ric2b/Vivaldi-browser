@@ -22,11 +22,9 @@
 #include "components/user_manager/user_manager_export.h"
 #include "components/user_manager/user_type.h"
 
-class PrefService;
 class PrefRegistrySimple;
 
 namespace base {
-class DictionaryValue;
 class ListValue;
 class TaskRunner;
 }
@@ -106,6 +104,11 @@ class USER_MANAGER_EXPORT UserManagerBase : public UserManager {
   void RemoveSessionStateObserver(
       UserManager::UserSessionStateObserver* obs) override;
   void NotifyLocalStateChanged() override;
+  void NotifyUserImageChanged(const User& user) override;
+  void NotifyUserProfileImageUpdateFailed(const User& user) override;
+  void NotifyUserProfileImageUpdated(
+      const User& user,
+      const gfx::ImageSkia& profile_image) override;
   void ChangeUserChildStatus(User* user, bool is_child) override;
   void Initialize() override;
 

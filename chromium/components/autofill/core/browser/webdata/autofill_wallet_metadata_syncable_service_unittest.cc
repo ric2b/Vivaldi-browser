@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/base64.h"
-#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -65,13 +64,13 @@ ACTION_P2(GetCopiesOf, profiles, cards) {
   for (const auto& profile : *profiles) {
     std::string utf8_server_id;
     base::Base64Encode(profile.server_id(), &utf8_server_id);
-    arg0->add(utf8_server_id, base::WrapUnique(new AutofillProfile(profile)));
+    (*arg0)[utf8_server_id] = base::MakeUnique<AutofillProfile>(profile);
   }
 
   for (const auto& card : *cards) {
     std::string utf8_server_id;
     base::Base64Encode(card.server_id(), &utf8_server_id);
-    arg1->add(utf8_server_id, base::WrapUnique(new CreditCard(card)));
+    (*arg1)[utf8_server_id] = base::MakeUnique<CreditCard>(card);
   }
 }
 
@@ -121,9 +120,8 @@ class MockService : public AutofillWalletMetadataSyncableService {
  private:
   MOCK_CONST_METHOD2(
       GetLocalData,
-      bool(base::ScopedPtrHashMap<std::string,
-                                  std::unique_ptr<AutofillProfile>>*,
-           base::ScopedPtrHashMap<std::string, std::unique_ptr<CreditCard>>*));
+      bool(std::unordered_map<std::string, std::unique_ptr<AutofillProfile>>*,
+           std::unordered_map<std::string, std::unique_ptr<CreditCard>>*));
 
   syncer::SyncError SendChangesToSyncServerConcrete(
       const syncer::SyncChangeList& changes) {
@@ -185,28 +183,33 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest, NoMetadataToReturn) {
 
 AutofillProfile BuildAddress(const std::string& server_id,
                              int64_t use_count,
-                             int64_t use_date) {
+                             int64_t use_date,
+                             bool has_converted) {
   AutofillProfile profile(AutofillProfile::SERVER_PROFILE, server_id);
   profile.set_use_count(use_count);
   profile.set_use_date(base::Time::FromInternalValue(use_date));
+  profile.set_has_converted(has_converted);
   return profile;
 }
 
 CreditCard BuildCard(const std::string& server_id,
                      int64_t use_count,
-                     int64_t use_date) {
+                     int64_t use_date,
+                     const std::string& billing_address_id) {
   CreditCard card(CreditCard::MASKED_SERVER_CARD, server_id);
   card.set_use_count(use_count);
   card.set_use_date(base::Time::FromInternalValue(use_date));
+  card.set_billing_address_id(billing_address_id);
   return card;
 }
 
-MATCHER_P5(SyncDataMatches,
+MATCHER_P6(SyncAddressDataMatches,
            sync_tag,
            metadata_type,
            server_id,
            use_count,
            use_date,
+           has_converted,
            "") {
   return arg.IsValid() &&
          syncer::AUTOFILL_WALLET_METADATA == arg.GetDataType() &&
@@ -214,22 +217,43 @@ MATCHER_P5(SyncDataMatches,
          metadata_type == arg.GetSpecifics().wallet_metadata().type() &&
          server_id == arg.GetSpecifics().wallet_metadata().id() &&
          use_count == arg.GetSpecifics().wallet_metadata().use_count() &&
-         use_date == arg.GetSpecifics().wallet_metadata().use_date();
+         use_date == arg.GetSpecifics().wallet_metadata().use_date() &&
+         has_converted ==
+             arg.GetSpecifics().wallet_metadata().address_has_converted();
+}
+
+MATCHER_P6(SyncCardDataMatches,
+           sync_tag,
+           metadata_type,
+           server_id,
+           use_count,
+           use_date,
+           billing_address_id,
+           "") {
+  return arg.IsValid() &&
+         syncer::AUTOFILL_WALLET_METADATA == arg.GetDataType() &&
+         sync_tag == syncer::SyncDataLocal(arg).GetTag() &&
+         metadata_type == arg.GetSpecifics().wallet_metadata().type() &&
+         server_id == arg.GetSpecifics().wallet_metadata().id() &&
+         use_count == arg.GetSpecifics().wallet_metadata().use_count() &&
+         use_date == arg.GetSpecifics().wallet_metadata().use_date() &&
+         billing_address_id ==
+             arg.GetSpecifics().wallet_metadata().card_billing_address_id();
 }
 
 // Verify that all metadata from disk is sent to the sync server.
 TEST_F(AutofillWalletMetadataSyncableServiceTest, ReturnAllMetadata) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
 
-  EXPECT_THAT(
-      local_.GetAllSyncData(syncer::AUTOFILL_WALLET_METADATA),
-      UnorderedElementsAre(
-          SyncDataMatches(kAddr1SyncTag,
-                          sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8,
-                          1, 2),
-          SyncDataMatches(kCard1SyncTag, sync_pb::WalletMetadataSpecifics::CARD,
-                          kCard1Utf8, 3, 4)));
+  EXPECT_THAT(local_.GetAllSyncData(syncer::AUTOFILL_WALLET_METADATA),
+              UnorderedElementsAre(
+                  SyncAddressDataMatches(
+                      kAddr1SyncTag, sync_pb::WalletMetadataSpecifics::ADDRESS,
+                      kAddr1Utf8, 1, 2, true),
+                  SyncCardDataMatches(kCard1SyncTag,
+                                      sync_pb::WalletMetadataSpecifics::CARD,
+                                      kCard1Utf8, 3, 4, kAddr1Utf8)));
 }
 
 void MergeMetadata(MockService* local, MockService* remote) {
@@ -272,8 +296,8 @@ MATCHER_P2(SyncChangeMatches, change_type, sync_tag, "") {
 // Verify that remote data without local counterpart is deleted during the
 // initial merge.
 TEST_F(AutofillWalletMetadataSyncableServiceTest, DeleteFromServerOnMerge) {
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
 
   EXPECT_CALL(local_, UpdateAddressStats(_)).Times(0);
   EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
@@ -287,37 +311,53 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest, DeleteFromServerOnMerge) {
   MergeMetadata(&local_, &remote_);
 }
 
-MATCHER_P6(SyncChangeAndDataMatch,
+MATCHER_P7(SyncAddressChangeAndDataMatch,
            change_type,
            sync_tag,
            metadata_type,
            server_id,
            use_count,
            use_date,
+           has_converted,
            "") {
   return Value(arg, SyncChangeMatches(change_type, sync_tag)) &&
          Value(arg.sync_data(),
-               SyncDataMatches(sync_tag, metadata_type, server_id, use_count,
-                               use_date));
+               SyncAddressDataMatches(sync_tag, metadata_type, server_id,
+                                      use_count, use_date, has_converted));
+}
+
+MATCHER_P7(SyncCardChangeAndDataMatch,
+           change_type,
+           sync_tag,
+           metadata_type,
+           server_id,
+           use_count,
+           use_date,
+           billing_address_id,
+           "") {
+  return Value(arg, SyncChangeMatches(change_type, sync_tag)) &&
+         Value(arg.sync_data(),
+               SyncCardDataMatches(sync_tag, metadata_type, server_id,
+                                   use_count, use_date, billing_address_id));
 }
 
 // Verify that local data is sent to the sync server during the initial merge,
 // if the server does not have the data already.
 TEST_F(AutofillWalletMetadataSyncableServiceTest, AddToServerOnMerge) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
 
   EXPECT_CALL(local_, UpdateAddressStats(_)).Times(0);
   EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
-  EXPECT_CALL(
-      local_,
-      SendChangesToSyncServer(UnorderedElementsAre(
-          SyncChangeAndDataMatch(syncer::SyncChange::ACTION_ADD, kAddr1SyncTag,
-                                 sync_pb::WalletMetadataSpecifics::ADDRESS,
-                                 kAddr1Utf8, 1, 2),
-          SyncChangeAndDataMatch(syncer::SyncChange::ACTION_ADD, kCard1SyncTag,
-                                 sync_pb::WalletMetadataSpecifics::CARD,
-                                 kCard1Utf8, 3, 4))));
+  EXPECT_CALL(local_, SendChangesToSyncServer(UnorderedElementsAre(
+                          SyncAddressChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_ADD, kAddr1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::ADDRESS,
+                              kAddr1Utf8, 1, 2, true),
+                          SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_ADD, kCard1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard1Utf8, 3, 4, kAddr1Utf8))));
 
   MergeMetadata(&local_, &remote_);
 }
@@ -326,10 +366,10 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest, AddToServerOnMerge) {
 // local and remote data are identical during the initial merge.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        IgnoreIdenticalValuesOnMerge) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
 
   EXPECT_CALL(local_, UpdateAddressStats(_)).Times(0);
   EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
@@ -338,24 +378,43 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
   MergeMetadata(&local_, &remote_);
 }
 
-MATCHER_P3(AutofillMetadataMatches, server_id, use_count, use_date, "") {
+MATCHER_P4(AutofillAddressMetadataMatches,
+           server_id,
+           use_count,
+           use_date,
+           has_converted,
+           "") {
   return arg.server_id() == server_id &&
          arg.use_count() == base::checked_cast<size_t>(use_count) &&
-         arg.use_date() == base::Time::FromInternalValue(use_date);
+         arg.use_date() == base::Time::FromInternalValue(use_date) &&
+         arg.has_converted() == has_converted;
+}
+
+MATCHER_P4(AutofillCardMetadataMatches,
+           server_id,
+           use_count,
+           use_date,
+           billing_address_id,
+           "") {
+  return arg.server_id() == server_id &&
+         arg.use_count() == base::checked_cast<size_t>(use_count) &&
+         arg.use_date() == base::Time::FromInternalValue(use_date) &&
+         arg.billing_address_id() == billing_address_id;
 }
 
 // Verify that remote data with higher values of use count and last use date is
 // saved to disk during the initial merge.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        SaveHigherValuesLocallyOnMerge) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 10, 20));
-  remote_.UpdateCardStats(BuildCard(kCard1, 30, 40));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 10, 20, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 30, 40, kAddr1));
 
-  EXPECT_CALL(local_,
-              UpdateAddressStats(AutofillMetadataMatches(kAddr1, 10, 20)));
-  EXPECT_CALL(local_, UpdateCardStats(AutofillMetadataMatches(kCard1, 30, 40)));
+  EXPECT_CALL(local_, UpdateAddressStats(AutofillAddressMetadataMatches(
+                          kAddr1, 10, 20, true)));
+  EXPECT_CALL(local_, UpdateCardStats(
+                          AutofillCardMetadataMatches(kCard1, 30, 40, kAddr1)));
   EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
 
   MergeMetadata(&local_, &remote_);
@@ -365,22 +424,22 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // sent to the sync server during the initial merge.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        SendHigherValuesToServerOnMerge) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 10, 20));
-  local_.UpdateCardStats(BuildCard(kCard1, 30, 40));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 10, 20, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 30, 40, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr2));
 
   EXPECT_CALL(local_, UpdateAddressStats(_)).Times(0);
   EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
-  EXPECT_CALL(
-      local_,
-      SendChangesToSyncServer(UnorderedElementsAre(
-          SyncChangeAndDataMatch(
-              syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
-              sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 10, 20),
-          SyncChangeAndDataMatch(
-              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
-              sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 30, 40))));
+  EXPECT_CALL(local_, SendChangesToSyncServer(UnorderedElementsAre(
+                          SyncAddressChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::ADDRESS,
+                              kAddr1Utf8, 10, 20, true),
+                          SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard1Utf8, 30, 40, kAddr1Utf8))));
 
   MergeMetadata(&local_, &remote_);
 }
@@ -389,13 +448,13 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // local metadata is updated.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        DontSendLowerValueToServerOnSingleChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
-  AutofillProfile address = BuildAddress(kAddr1, 0, 0);
-  CreditCard card = BuildCard(kCard1, 0, 0);
+  AutofillProfile address = BuildAddress(kAddr1, 0, 0, false);
+  CreditCard card = BuildCard(kCard1, 0, 0, kAddr2);
 
   EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
 
@@ -409,24 +468,24 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // metadata is updated.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        SendHigherValuesToServerOnLocalSingleChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
-  AutofillProfile address = BuildAddress(kAddr1, 10, 20);
-  CreditCard card = BuildCard(kCard1, 30, 40);
+  AutofillProfile address = BuildAddress(kAddr1, 10, 20, true);
+  CreditCard card = BuildCard(kCard1, 30, 40, kAddr2);
 
-  EXPECT_CALL(
-      local_,
-      SendChangesToSyncServer(ElementsAre(SyncChangeAndDataMatch(
-          syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
-          sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 10, 20))));
-  EXPECT_CALL(
-      local_,
-      SendChangesToSyncServer(ElementsAre(SyncChangeAndDataMatch(
-          syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
-          sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 30, 40))));
+  EXPECT_CALL(local_,
+              SendChangesToSyncServer(ElementsAre(SyncAddressChangeAndDataMatch(
+                  syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
+                  sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 10, 20,
+                  true))));
+  EXPECT_CALL(local_,
+              SendChangesToSyncServer(ElementsAre(SyncCardChangeAndDataMatch(
+                  syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+                  sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 30, 40,
+                  kAddr2Utf8))));
 
   local_.AutofillProfileChanged(AutofillProfileChange(
       AutofillProfileChange::UPDATE, address.guid(), &address));
@@ -439,13 +498,13 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // instead.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        DontAddToServerOnSingleChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
-  AutofillProfile address = BuildAddress(kAddr2, 5, 6);
-  CreditCard card = BuildCard(kCard2, 7, 8);
+  AutofillProfile address = BuildAddress(kAddr2, 5, 6, false);
+  CreditCard card = BuildCard(kCard2, 7, 8, kAddr2);
 
   EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
 
@@ -458,24 +517,24 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // Verify that new metadata is sent to the sync server when multiple metadata
 // values change at once.
 TEST_F(AutofillWalletMetadataSyncableServiceTest, AddToServerOnMultiChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   // These methods do not trigger notifications or sync:
-  local_.UpdateAddressStats(BuildAddress(kAddr2, 5, 6));
-  local_.UpdateCardStats(BuildCard(kCard2, 7, 8));
+  local_.UpdateAddressStats(BuildAddress(kAddr2, 5, 6, true));
+  local_.UpdateCardStats(BuildCard(kCard2, 7, 8, kAddr2));
 
-  EXPECT_CALL(
-      local_,
-      SendChangesToSyncServer(UnorderedElementsAre(
-          SyncChangeAndDataMatch(syncer::SyncChange::ACTION_ADD, kAddr2SyncTag,
-                                 sync_pb::WalletMetadataSpecifics::ADDRESS,
-                                 kAddr2Utf8, 5, 6),
-          SyncChangeAndDataMatch(syncer::SyncChange::ACTION_ADD, kCard2SyncTag,
-                                 sync_pb::WalletMetadataSpecifics::CARD,
-                                 kCard2Utf8, 7, 8))));
+  EXPECT_CALL(local_, SendChangesToSyncServer(UnorderedElementsAre(
+                          SyncAddressChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_ADD, kAddr2SyncTag,
+                              sync_pb::WalletMetadataSpecifics::ADDRESS,
+                              kAddr2Utf8, 5, 6, true),
+                          SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_ADD, kCard2SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard2Utf8, 7, 8, kAddr2Utf8))));
 
   local_.AutofillMultipleChanged();
 }
@@ -484,24 +543,24 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest, AddToServerOnMultiChange) {
 // when multiple metadata values change at once.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        UpdateToHigherValueOnServerOnMultiChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   // These methods do not trigger notifications or sync:
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 5, 6));
-  local_.UpdateCardStats(BuildCard(kCard1, 7, 8));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 5, 6, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 7, 8, kAddr2));
 
-  EXPECT_CALL(
-      local_,
-      SendChangesToSyncServer(UnorderedElementsAre(
-          SyncChangeAndDataMatch(
-              syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
-              sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 5, 6),
-          SyncChangeAndDataMatch(
-              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
-              sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 7, 8))));
+  EXPECT_CALL(local_, SendChangesToSyncServer(UnorderedElementsAre(
+                          SyncAddressChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::ADDRESS,
+                              kAddr1Utf8, 5, 6, true),
+                          SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard1Utf8, 7, 8, kAddr2Utf8))));
 
   local_.AutofillMultipleChanged();
 }
@@ -510,14 +569,14 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // when multiple metadata values change at once.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        DontUpdateToLowerValueOnServerOnMultiChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   // These methods do not trigger notifications or sync:
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 0, 0));
-  local_.UpdateCardStats(BuildCard(kCard1, 0, 0));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 0, 0, false));
+  local_.UpdateCardStats(BuildCard(kCard1, 0, 0, kAddr2));
 
   EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
 
@@ -528,10 +587,10 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // multiple metadata values change at once.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        DeleteFromServerOnMultiChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   // This method dooes not trigger notifications or sync:
   local_.ClearServerData();
@@ -549,10 +608,10 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // Verify that empty sync change from the sync server does not trigger writing
 // to disk or sending any data to the sync server.
 TEST_F(AutofillWalletMetadataSyncableServiceTest, EmptySyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
 
   EXPECT_CALL(local_, UpdateAddressStats(_)).Times(0);
@@ -562,18 +621,49 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest, EmptySyncChange) {
   local_.ProcessSyncChanges(FROM_HERE, syncer::SyncChangeList());
 }
 
-syncer::SyncChange BuildChange(
+void BuildBasicChange(syncer::SyncChange::SyncChangeType change_type,
+                      const std::string& sync_tag,
+                      sync_pb::WalletMetadataSpecifics::Type metadata_type,
+                      const std::string& server_id,
+                      int64_t use_count,
+                      int64_t use_date,
+                      sync_pb::EntitySpecifics* entity) {
+  entity->mutable_wallet_metadata()->set_type(metadata_type);
+  entity->mutable_wallet_metadata()->set_id(server_id);
+  entity->mutable_wallet_metadata()->set_use_count(use_count);
+  entity->mutable_wallet_metadata()->set_use_date(use_date);
+}
+
+syncer::SyncChange BuildAddressChange(
     syncer::SyncChange::SyncChangeType change_type,
     const std::string& sync_tag,
     sync_pb::WalletMetadataSpecifics::Type metadata_type,
     const std::string& server_id,
     int64_t use_count,
-    int64_t use_date) {
+    int64_t use_date,
+    bool has_converted) {
   sync_pb::EntitySpecifics entity;
-  entity.mutable_wallet_metadata()->set_type(metadata_type);
-  entity.mutable_wallet_metadata()->set_id(server_id);
-  entity.mutable_wallet_metadata()->set_use_count(use_count);
-  entity.mutable_wallet_metadata()->set_use_date(use_date);
+  BuildBasicChange(change_type, sync_tag, metadata_type, server_id, use_count,
+                   use_date, &entity);
+  entity.mutable_wallet_metadata()->set_address_has_converted(has_converted);
+  return syncer::SyncChange(
+      FROM_HERE, change_type,
+      syncer::SyncData::CreateLocalData(sync_tag, sync_tag, entity));
+}
+
+syncer::SyncChange BuildCardChange(
+    syncer::SyncChange::SyncChangeType change_type,
+    const std::string& sync_tag,
+    sync_pb::WalletMetadataSpecifics::Type metadata_type,
+    const std::string& server_id,
+    int64_t use_count,
+    int64_t use_date,
+    const std::string& billing_address_id) {
+  sync_pb::EntitySpecifics entity;
+  BuildBasicChange(change_type, sync_tag, metadata_type, server_id, use_count,
+                   use_date, &entity);
+  entity.mutable_wallet_metadata()->set_card_billing_address_id(
+      billing_address_id);
   return syncer::SyncChange(
       FROM_HERE, change_type,
       syncer::SyncData::CreateLocalData(sync_tag, sync_tag, entity));
@@ -584,18 +674,18 @@ syncer::SyncChange BuildChange(
 // server.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        IgnoreNewMetadataFromServerOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
-  changes.push_back(BuildChange(syncer::SyncChange::ACTION_ADD, kAddr2SyncTag,
-                                sync_pb::WalletMetadataSpecifics::ADDRESS,
-                                kAddr2Utf8, 5, 6));
-  changes.push_back(BuildChange(syncer::SyncChange::ACTION_ADD, kCard2SyncTag,
-                                sync_pb::WalletMetadataSpecifics::CARD,
-                                kCard2Utf8, 7, 8));
+  changes.push_back(BuildAddressChange(
+      syncer::SyncChange::ACTION_ADD, kAddr2SyncTag,
+      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr2Utf8, 5, 6, true));
+  changes.push_back(BuildCardChange(
+      syncer::SyncChange::ACTION_ADD, kCard2SyncTag,
+      sync_pb::WalletMetadataSpecifics::CARD, kCard2Utf8, 7, 8, kAddr2Utf8));
 
   EXPECT_CALL(local_, UpdateAddressStats(_)).Times(0);
   EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
@@ -608,22 +698,23 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // disk when processing on-going sync changes.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        SaveHigherValuesFromServerOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
-  changes.push_back(BuildChange(
+  changes.push_back(BuildAddressChange(
       syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
-      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 10, 20));
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
-                  sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 30, 40));
+      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 10, 20, true));
+  changes.push_back(BuildCardChange(
+      syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+      sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 30, 40, kAddr2Utf8));
 
-  EXPECT_CALL(local_,
-              UpdateAddressStats(AutofillMetadataMatches(kAddr1, 10, 20)));
-  EXPECT_CALL(local_, UpdateCardStats(AutofillMetadataMatches(kCard1, 30, 40)));
+  EXPECT_CALL(local_, UpdateAddressStats(AutofillAddressMetadataMatches(
+                          kAddr1, 10, 20, true)));
+  EXPECT_CALL(local_, UpdateCardStats(
+                          AutofillCardMetadataMatches(kCard1, 30, 40, kAddr2)));
   EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
 
   local_.ProcessSyncChanges(FROM_HERE, changes);
@@ -633,30 +724,30 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // processing on-going sync changes.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        SendHigherValuesToServerOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
-                  sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 0, 0));
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
-                  sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 0, 0));
+  changes.push_back(BuildAddressChange(
+      syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
+      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 0, 0, false));
+  changes.push_back(BuildCardChange(
+      syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+      sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 0, 0, kAddr2Utf8));
 
   EXPECT_CALL(local_, UpdateAddressStats(_)).Times(0);
   EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
-  EXPECT_CALL(
-      local_,
-      SendChangesToSyncServer(UnorderedElementsAre(
-          SyncChangeAndDataMatch(
-              syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
-              sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 1, 2),
-          SyncChangeAndDataMatch(
-              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
-              sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 3, 4))));
+  EXPECT_CALL(local_, SendChangesToSyncServer(UnorderedElementsAre(
+                          SyncAddressChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::ADDRESS,
+                              kAddr1Utf8, 1, 2, true),
+                          SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard1Utf8, 3, 4, kAddr1Utf8))));
 
   local_.ProcessSyncChanges(FROM_HERE, changes);
 }
@@ -664,30 +755,30 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // Verify that addition of known metadata is treated the same as an update.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        TreatAdditionOfKnownMetadataAsUpdateOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
-  changes.push_back(BuildChange(syncer::SyncChange::ACTION_ADD, kAddr1SyncTag,
-                                sync_pb::WalletMetadataSpecifics::ADDRESS,
-                                kAddr1Utf8, 0, 0));
-  changes.push_back(BuildChange(syncer::SyncChange::ACTION_ADD, kCard1SyncTag,
-                                sync_pb::WalletMetadataSpecifics::CARD,
-                                kCard1Utf8, 0, 0));
+  changes.push_back(BuildAddressChange(
+      syncer::SyncChange::ACTION_ADD, kAddr1SyncTag,
+      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 0, 0, false));
+  changes.push_back(BuildCardChange(
+      syncer::SyncChange::ACTION_ADD, kCard1SyncTag,
+      sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 0, 0, kAddr2Utf8));
 
   EXPECT_CALL(local_, UpdateAddressStats(_)).Times(0);
   EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
-  EXPECT_CALL(
-      local_,
-      SendChangesToSyncServer(UnorderedElementsAre(
-          SyncChangeAndDataMatch(
-              syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
-              sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 1, 2),
-          SyncChangeAndDataMatch(
-              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
-              sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 3, 4))));
+  EXPECT_CALL(local_, SendChangesToSyncServer(UnorderedElementsAre(
+                          SyncAddressChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::ADDRESS,
+                              kAddr1Utf8, 1, 2, true),
+                          SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard1Utf8, 3, 4, kAddr1Utf8))));
 
   local_.ProcessSyncChanges(FROM_HERE, changes);
 }
@@ -696,18 +787,18 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // no disk writes and no messages sent to the server.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        IgnoreUpdateOfUnknownMetadataOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_UPDATE, kAddr2SyncTag,
-                  sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr2Utf8, 0, 0));
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_UPDATE, kCard2SyncTag,
-                  sync_pb::WalletMetadataSpecifics::CARD, kCard2Utf8, 0, 0));
+  changes.push_back(BuildAddressChange(
+      syncer::SyncChange::ACTION_UPDATE, kAddr2SyncTag,
+      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr2Utf8, 0, 0, false));
+  changes.push_back(BuildCardChange(
+      syncer::SyncChange::ACTION_UPDATE, kCard2SyncTag,
+      sync_pb::WalletMetadataSpecifics::CARD, kCard2Utf8, 0, 0, kAddr2Utf8));
 
   EXPECT_CALL(local_, UpdateAddressStats(_)).Times(0);
   EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
@@ -720,18 +811,18 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // ignored. There should be no disk writes and no messages sent to the server.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        IgnoreDeleteOfUnknownMetadataOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_DELETE, kAddr2SyncTag,
-                  sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr2Utf8, 0, 0));
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_DELETE, kCard2SyncTag,
-                  sync_pb::WalletMetadataSpecifics::CARD, kCard2Utf8, 0, 0));
+  changes.push_back(BuildAddressChange(
+      syncer::SyncChange::ACTION_DELETE, kAddr2SyncTag,
+      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr2Utf8, 0, 0, false));
+  changes.push_back(BuildCardChange(
+      syncer::SyncChange::ACTION_DELETE, kCard2SyncTag,
+      sync_pb::WalletMetadataSpecifics::CARD, kCard2Utf8, 0, 0, kAddr2Utf8));
 
   EXPECT_CALL(local_, UpdateAddressStats(_)).Times(0);
   EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
@@ -744,30 +835,30 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // trigger an undelete message sent to the server.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        UndeleteExistingMetadataOnSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateCardStats(BuildCard(kCard1, 3, 4));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_DELETE, kAddr1SyncTag,
-                  sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 0, 0));
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_DELETE, kCard1SyncTag,
-                  sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 0, 0));
+  changes.push_back(BuildAddressChange(
+      syncer::SyncChange::ACTION_DELETE, kAddr1SyncTag,
+      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 0, 0, false));
+  changes.push_back(BuildCardChange(
+      syncer::SyncChange::ACTION_DELETE, kCard1SyncTag,
+      sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 0, 0, kAddr2Utf8));
 
   EXPECT_CALL(local_, UpdateAddressStats(_)).Times(0);
   EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
-  EXPECT_CALL(
-      local_,
-      SendChangesToSyncServer(UnorderedElementsAre(
-          SyncChangeAndDataMatch(syncer::SyncChange::ACTION_ADD, kAddr1SyncTag,
-                                 sync_pb::WalletMetadataSpecifics::ADDRESS,
-                                 kAddr1Utf8, 1, 2),
-          SyncChangeAndDataMatch(syncer::SyncChange::ACTION_ADD, kCard1SyncTag,
-                                 sync_pb::WalletMetadataSpecifics::CARD,
-                                 kCard1Utf8, 3, 4))));
+  EXPECT_CALL(local_, SendChangesToSyncServer(UnorderedElementsAre(
+                          SyncAddressChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_ADD, kAddr1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::ADDRESS,
+                              kAddr1Utf8, 1, 2, true),
+                          SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_ADD, kCard1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard1Utf8, 3, 4, kAddr1Utf8))));
 
   local_.ProcessSyncChanges(FROM_HERE, changes);
 }
@@ -776,22 +867,22 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // data, which is used to avoid calling the expensive GetAllSyncData() function.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        CacheIsUpToDateAfterSyncChange) {
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  local_.UpdateAddressStats(BuildAddress(kAddr2, 3, 4));
-  local_.UpdateCardStats(BuildCard(kCard1, 5, 6));
-  local_.UpdateCardStats(BuildCard(kCard2, 7, 8));
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateAddressStats(BuildAddress(kAddr2, 3, 4));
-  remote_.UpdateCardStats(BuildCard(kCard1, 5, 6));
-  remote_.UpdateCardStats(BuildCard(kCard2, 7, 8));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  local_.UpdateAddressStats(BuildAddress(kAddr2, 3, 4, false));
+  local_.UpdateCardStats(BuildCard(kCard1, 5, 6, kAddr1));
+  local_.UpdateCardStats(BuildCard(kCard2, 7, 8, kAddr2));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, true));
+  remote_.UpdateAddressStats(BuildAddress(kAddr2, 3, 4, false));
+  remote_.UpdateCardStats(BuildCard(kCard1, 5, 6, kAddr1));
+  remote_.UpdateCardStats(BuildCard(kCard2, 7, 8, kAddr2));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
-  changes.push_back(BuildChange(
+  changes.push_back(BuildAddressChange(
       syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
-      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 10, 20));
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
-                  sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 50, 60));
+      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 10, 20, false));
+  changes.push_back(BuildCardChange(
+      syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+      sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 50, 60, kAddr1Utf8));
   local_.ProcessSyncChanges(FROM_HERE, changes);
   // This method dooes not trigger notifications or sync:
   local_.ClearServerData();
@@ -812,23 +903,24 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // values to the sync server.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        SaveHigherValuesLocallyOnLateDataArrival) {
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  remote_.UpdateCardStats(BuildCard(kCard1, 5, 6, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
-                  sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 5, 6));
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
-                  sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 7, 8));
+  changes.push_back(BuildAddressChange(
+      syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
+      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 5, 6, true));
+  changes.push_back(BuildCardChange(
+      syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+      sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 7, 8, kAddr2Utf8));
   local_.ProcessSyncChanges(FROM_HERE, changes);
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 0, 0));
-  local_.UpdateCardStats(BuildCard(kCard1, 0, 0));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 0, 0, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 0, 0, kAddr2));
 
-  EXPECT_CALL(local_,
-              UpdateAddressStats(AutofillMetadataMatches(kAddr1, 5, 6)));
-  EXPECT_CALL(local_, UpdateCardStats(AutofillMetadataMatches(kCard1, 7, 8)));
+  EXPECT_CALL(local_, UpdateAddressStats(
+                          AutofillAddressMetadataMatches(kAddr1, 5, 6, true)));
+  EXPECT_CALL(local_, UpdateCardStats(
+                          AutofillCardMetadataMatches(kCard1, 7, 8, kAddr2)));
   EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
 
   local_.AutofillMultipleChanged();
@@ -839,41 +931,132 @@ TEST_F(AutofillWalletMetadataSyncableServiceTest,
 // once the data finally arrives.
 TEST_F(AutofillWalletMetadataSyncableServiceTest,
        SaveHigherValuesLocallyOnLateDataArrivalAfterPartialUpdates) {
-  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2));
-  remote_.UpdateAddressStats(BuildAddress(kAddr2, 3, 4));
-  remote_.UpdateCardStats(BuildCard(kCard1, 5, 6));
-  remote_.UpdateCardStats(BuildCard(kCard2, 7, 8));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 2, false));
+  remote_.UpdateAddressStats(BuildAddress(kAddr2, 3, 4, false));
+  remote_.UpdateCardStats(BuildCard(kCard1, 5, 6, kAddr1));
+  remote_.UpdateCardStats(BuildCard(kCard2, 7, 8, kAddr1));
   MergeMetadata(&local_, &remote_);
   syncer::SyncChangeList changes;
-  changes.push_back(BuildChange(
+  changes.push_back(BuildAddressChange(
       syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
-      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 9, 10));
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
-                  sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 11, 12));
-  changes.push_back(BuildChange(
+      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr1Utf8, 9, 10, false));
+  changes.push_back(BuildCardChange(
+      syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+      sync_pb::WalletMetadataSpecifics::CARD, kCard1Utf8, 11, 12, kAddr2Utf8));
+  changes.push_back(BuildAddressChange(
       syncer::SyncChange::ACTION_UPDATE, kAddr2SyncTag,
-      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr2Utf8, 13, 14));
-  changes.push_back(
-      BuildChange(syncer::SyncChange::ACTION_UPDATE, kCard2SyncTag,
-                  sync_pb::WalletMetadataSpecifics::CARD, kCard2Utf8, 15, 16));
+      sync_pb::WalletMetadataSpecifics::ADDRESS, kAddr2Utf8, 13, 14, true));
+  changes.push_back(BuildCardChange(
+      syncer::SyncChange::ACTION_UPDATE, kCard2SyncTag,
+      sync_pb::WalletMetadataSpecifics::CARD, kCard2Utf8, 15, 16, kAddr1Utf8));
   local_.ProcessSyncChanges(FROM_HERE, changes);
   changes.resize(2);
   local_.ProcessSyncChanges(FROM_HERE, changes);
-  local_.UpdateAddressStats(BuildAddress(kAddr1, 0, 0));
-  local_.UpdateAddressStats(BuildAddress(kAddr2, 0, 0));
-  local_.UpdateCardStats(BuildCard(kCard1, 0, 0));
-  local_.UpdateCardStats(BuildCard(kCard2, 0, 0));
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 0, 0, false));
+  local_.UpdateAddressStats(BuildAddress(kAddr2, 0, 0, false));
+  local_.UpdateCardStats(BuildCard(kCard1, 0, 0, kAddr1));
+  local_.UpdateCardStats(BuildCard(kCard2, 0, 0, kAddr2));
 
-  EXPECT_CALL(local_,
-              UpdateAddressStats(AutofillMetadataMatches(kAddr1, 9, 10)));
-  EXPECT_CALL(local_, UpdateCardStats(AutofillMetadataMatches(kCard1, 11, 12)));
-  EXPECT_CALL(local_,
-              UpdateAddressStats(AutofillMetadataMatches(kAddr2, 13, 14)));
-  EXPECT_CALL(local_, UpdateCardStats(AutofillMetadataMatches(kCard2, 15, 16)));
+  EXPECT_CALL(local_, UpdateAddressStats(AutofillAddressMetadataMatches(
+                          kAddr1, 9, 10, false)));
+  EXPECT_CALL(local_, UpdateCardStats(
+                          AutofillCardMetadataMatches(kCard1, 11, 12, kAddr2)));
+  EXPECT_CALL(local_, UpdateAddressStats(AutofillAddressMetadataMatches(
+                          kAddr2, 13, 14, true)));
+  EXPECT_CALL(local_, UpdateCardStats(
+                          AutofillCardMetadataMatches(kCard2, 15, 16, kAddr1)));
   EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
 
   local_.AutofillMultipleChanged();
+}
+
+// Verify that the merge logic keeps the best data on a field by field basis.
+// Make sure that if the better data is split across the local and server
+// version, both are updated with the merge results.
+TEST_F(AutofillWalletMetadataSyncableServiceTest, SaveHigherValues_Mixed1) {
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 1, 20, true));
+  local_.UpdateCardStats(BuildCard(kCard1, 30, 4, ""));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 10, 2, false));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 40, kAddr1));
+
+  EXPECT_CALL(local_, UpdateAddressStats(AutofillAddressMetadataMatches(
+                          kAddr1, 10, 20, true)));
+  EXPECT_CALL(local_, UpdateCardStats(
+                          AutofillCardMetadataMatches(kCard1, 30, 40, kAddr1)));
+  EXPECT_CALL(local_, SendChangesToSyncServer(UnorderedElementsAre(
+                          SyncAddressChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::ADDRESS,
+                              kAddr1Utf8, 10, 20, true),
+                          SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard1Utf8, 30, 40, kAddr1Utf8))));
+
+  MergeMetadata(&local_, &remote_);
+}
+
+// Verify that the merge logic keeps the best data on a field by field basis.
+// Make sure that if the better data is split across the local and server
+// version, both are updated with the merge results.
+// Same as SaveHigherValues_Mixed1 but with the higher values moved from local
+// to server and vice versa.
+TEST_F(AutofillWalletMetadataSyncableServiceTest, SaveHigherValues_Mixed2) {
+  local_.UpdateAddressStats(BuildAddress(kAddr1, 10, 2, false));
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 40, kAddr1));
+  remote_.UpdateAddressStats(BuildAddress(kAddr1, 1, 20, true));
+  remote_.UpdateCardStats(BuildCard(kCard1, 30, 4, ""));
+
+  EXPECT_CALL(local_, UpdateAddressStats(AutofillAddressMetadataMatches(
+                          kAddr1, 10, 20, true)));
+  EXPECT_CALL(local_, UpdateCardStats(
+                          AutofillCardMetadataMatches(kCard1, 30, 40, kAddr1)));
+  EXPECT_CALL(local_, SendChangesToSyncServer(UnorderedElementsAre(
+                          SyncAddressChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kAddr1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::ADDRESS,
+                              kAddr1Utf8, 10, 20, true),
+                          SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard1Utf8, 30, 40, kAddr1Utf8))));
+
+  MergeMetadata(&local_, &remote_);
+}
+
+// Verify that if both local and server have a different non empty billing
+// address id, the one with the most recent (bigger) use date is kept.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       SaveHigherValues_DifferentBillingAddressId_LocalMostRecent) {
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 40, kAddr1));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr2));
+
+  // The value from the local should be kept because it has a more recent use
+  // date.
+  EXPECT_CALL(local_, UpdateCardStats(_)).Times(0);
+  EXPECT_CALL(local_, SendChangesToSyncServer(
+                          UnorderedElementsAre(SyncCardChangeAndDataMatch(
+                              syncer::SyncChange::ACTION_UPDATE, kCard1SyncTag,
+                              sync_pb::WalletMetadataSpecifics::CARD,
+                              kCard1Utf8, 3, 40, kAddr1Utf8))));
+
+  MergeMetadata(&local_, &remote_);
+}
+
+// Verify that if both local and server have a different non empty billing
+// address id, the one with the most recent (bigger) use date is kept.
+TEST_F(AutofillWalletMetadataSyncableServiceTest,
+       SaveHigherValues_DifferentBillingAddressId_RemoteMostRecent) {
+  local_.UpdateCardStats(BuildCard(kCard1, 3, 4, kAddr1));
+  remote_.UpdateCardStats(BuildCard(kCard1, 3, 40, kAddr2));
+
+  // The value from the remote should be kept because it has a more recent use
+  // date.
+  EXPECT_CALL(local_, UpdateCardStats(
+                          AutofillCardMetadataMatches(kCard1, 3, 40, kAddr2)));
+  EXPECT_CALL(local_, SendChangesToSyncServer(_)).Times(0);
+
+  MergeMetadata(&local_, &remote_);
 }
 
 }  // namespace

@@ -51,9 +51,7 @@ class ChromeContentBrowserClientExtensionsPart
       const GURL& new_url);
   static bool AllowServiceWorker(const GURL& scope,
                                  const GURL& first_party_url,
-                                 content::ResourceContext* context,
-                                 int render_process_id,
-                                 int render_frame_id);
+                                 content::ResourceContext* context);
   static void OverrideNavigationParams(content::SiteInstance* site_instance,
                                        ui::PageTransition* transition,
                                        bool* is_renderer_initiated,
@@ -88,7 +86,8 @@ class ChromeContentBrowserClientExtensionsPart
   void GetAdditionalFileSystemBackends(
       content::BrowserContext* browser_context,
       const base::FilePath& storage_partition_path,
-      ScopedVector<storage::FileSystemBackend>* additional_backends) override;
+      std::vector<std::unique_ptr<storage::FileSystemBackend>>*
+          additional_backends) override;
   void AppendExtraRendererCommandLineSwitches(
       base::CommandLine* command_line,
       content::RenderProcessHost* process,

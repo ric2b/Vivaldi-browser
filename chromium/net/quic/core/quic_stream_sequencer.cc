@@ -10,21 +10,17 @@
 #include <utility>
 
 #include "base/format_macros.h"
-#include "base/logging.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
-#include "net/quic/core/quic_bug_tracker.h"
-#include "net/quic/core/quic_clock.h"
 #include "net/quic/core/quic_flags.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_stream.h"
 #include "net/quic/core/quic_stream_sequencer_buffer.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_bug_tracker.h"
+#include "net/quic/platform/api/quic_clock.h"
+#include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_str_cat.h"
 
-using base::IntToString;
 using base::StringPiece;
-using base::StringPrintf;
-using std::min;
 using std::string;
 
 namespace net {
@@ -59,12 +55,12 @@ void QuicStreamSequencer::OnStreamFrame(const QuicStreamFrame& frame) {
       byte_offset, StringPiece(frame.data_buffer, frame.data_length),
       clock_->ApproximateNow(), &bytes_written, &error_details);
   if (result != QUIC_NO_ERROR) {
-    string details = "Stream" + base::Uint64ToString(stream_->id()) + ": " +
-                     QuicUtils::ErrorToString(result) + ": " + error_details +
-                     "\nPeer Address: " +
-                     stream_->PeerAddressOfLatestPacket().ToString();
-    DLOG(WARNING) << QuicUtils::ErrorToString(result);
-    DLOG(WARNING) << details;
+    string details = QuicStrCat(
+        "Stream ", stream_->id(), ": ", QuicErrorCodeToString(result), ": ",
+        error_details, "\nPeer Address: ",
+        stream_->PeerAddressOfLatestPacket().ToString());
+    QUIC_LOG_FIRST_N(WARNING, 50) << QuicErrorCodeToString(result);
+    QUIC_LOG_FIRST_N(WARNING, 50) << details;
     stream_->CloseConnectionWithDetails(result, details);
     return;
   }
@@ -108,9 +104,9 @@ bool QuicStreamSequencer::MaybeCloseStream() {
     return false;
   }
 
-  DVLOG(1) << "Passing up termination, as we've processed "
-           << buffered_frames_.BytesConsumed() << " of " << close_offset_
-           << " bytes.";
+  QUIC_DVLOG(1) << "Passing up termination, as we've processed "
+                << buffered_frames_.BytesConsumed() << " of " << close_offset_
+                << " bytes.";
   // This will cause the stream to consume the FIN.
   // Technically it's an error if |num_bytes_consumed| isn't exactly
   // equal to |close_offset|, but error handling seems silly at this point.
@@ -143,8 +139,7 @@ int QuicStreamSequencer::Readv(const struct iovec* iov, size_t iov_len) {
   QuicErrorCode read_error =
       buffered_frames_.Readv(iov, iov_len, &bytes_read, &error_details);
   if (read_error != QUIC_NO_ERROR) {
-    string details = StringPrintf("Stream %" PRIu32 ": %s", stream_->id(),
-                                  error_details.c_str());
+    string details = QuicStrCat("Stream ", stream_->id(), ": ", error_details);
     stream_->CloseConnectionWithDetails(read_error, details);
     return static_cast<int>(bytes_read);
   }
@@ -206,9 +201,9 @@ void QuicStreamSequencer::ReleaseBufferIfEmpty() {
 void QuicStreamSequencer::FlushBufferedFrames() {
   DCHECK(ignore_read_data_);
   size_t bytes_flushed = buffered_frames_.FlushBufferedFrames();
-  DVLOG(1) << "Flushing buffered data at offset "
-           << buffered_frames_.BytesConsumed() << " length " << bytes_flushed
-           << " for stream " << stream_->id();
+  QUIC_DVLOG(1) << "Flushing buffered data at offset "
+                << buffered_frames_.BytesConsumed() << " length "
+                << bytes_flushed << " for stream " << stream_->id();
   stream_->AddBytesConsumed(bytes_flushed);
   MaybeCloseStream();
 }
@@ -223,13 +218,13 @@ QuicStreamOffset QuicStreamSequencer::NumBytesConsumed() const {
 
 const string QuicStreamSequencer::DebugString() const {
   // clang-format off
-  return "QuicStreamSequencer:"
-         "\n  bytes buffered: " + IntToString(NumBytesBuffered()) +
-         "\n  bytes consumed: " + IntToString( NumBytesConsumed()) +
-         "\n  has bytes to read: " +  (HasBytesToRead() ? "true" : "false") +
-         "\n  frames received: " + IntToString(num_frames_received()) +
-         "\n  close offset bytes: " + IntToString( close_offset_) +
-         "\n  is closed: " + (IsClosed() ? "true" : "false");
+  return QuicStrCat("QuicStreamSequencer:",
+                "\n  bytes buffered: ", NumBytesBuffered(),
+                "\n  bytes consumed: ", NumBytesConsumed(),
+                "\n  has bytes to read: ", HasBytesToRead() ? "true" : "false",
+                "\n  frames received: ", num_frames_received(),
+                "\n  close offset bytes: ", close_offset_,
+                "\n  is closed: ", IsClosed() ? "true" : "false");
   // clang-format on
 }
 

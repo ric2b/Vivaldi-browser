@@ -165,6 +165,10 @@ struct PasswordForm {
   // element corresponding to the new password. Optional, and not persisted.
   base::string16 new_password_element;
 
+  // The confirmation password element. Optional, only set on form parsing, and
+  // not persisted.
+  base::string16 confirmation_password_element;
+
   // The new password. Optional, and not persisted.
   base::string16 new_password_value;
 
@@ -293,7 +297,8 @@ bool ArePasswordFormUniqueKeyEqual(const PasswordForm& left,
 
 // A comparator for the unique key.
 struct LessThanUniqueKey {
-  bool operator()(const PasswordForm* left, const PasswordForm* right) const;
+  bool operator()(const std::unique_ptr<PasswordForm>& left,
+                  const std::unique_ptr<PasswordForm>& right) const;
 };
 
 // For testing.

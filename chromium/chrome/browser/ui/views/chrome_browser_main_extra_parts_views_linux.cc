@@ -56,7 +56,7 @@ ui::NativeTheme* GetNativeThemeForWindow(aura::Window* window) {
     return ui::NativeThemeDarkAura::instance();
   }
 
-  return ui::NativeThemeAura::instance();
+  return ui::NativeTheme::GetInstanceForNativeUi();
 }
 
 }  // namespace
@@ -66,14 +66,12 @@ ChromeBrowserMainExtraPartsViewsLinux::ChromeBrowserMainExtraPartsViewsLinux() {
 
 ChromeBrowserMainExtraPartsViewsLinux::
     ~ChromeBrowserMainExtraPartsViewsLinux() {
-  // X11DesktopHandler is destructed at this point, so we don't need to remove
-  // ourselves as an X11DesktopHandlerObserver
-  DCHECK(!aura::Env::GetInstanceDontCreate());
+  views::X11DesktopHandler::get()->RemoveObserver(this);
 }
 
 void ChromeBrowserMainExtraPartsViewsLinux::PreEarlyInitialization() {
   // TODO(erg): Refactor this into a dlopen call when we add a GTK3 port.
-  views::LinuxUI* gtk2_ui = BuildGtk2UI();
+  views::LinuxUI* gtk2_ui = BuildGtkUi();
   gtk2_ui->SetNativeThemeOverride(base::Bind(&GetNativeThemeForWindow));
   views::LinuxUI::SetInstance(gtk2_ui);
 }

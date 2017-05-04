@@ -18,11 +18,15 @@
 #include "ui/views/window/dialog_client_view.h"
 #include "ui/views/window/dialog_delegate.h"
 
+#if defined(OS_MACOSX)
+#include "ui/base/test/scoped_fake_full_keyboard_access.h"
+#endif
+
 namespace views {
 
 namespace {
 
-class TestDialog : public DialogDelegateView, public ButtonListener {
+class TestDialog : public DialogDelegateView {
  public:
   TestDialog()
       : input_(new views::Textfield()),
@@ -30,7 +34,6 @@ class TestDialog : public DialogDelegateView, public ButtonListener {
         accepted_(false),
         closed_(false),
         closeable_(false),
-        last_pressed_button_(nullptr),
         should_handle_escape_(false) {
     AddChildView(input_);
   }
@@ -72,23 +75,13 @@ class TestDialog : public DialogDelegateView, public ButtonListener {
   View* GetInitiallyFocusedView() override { return input_; }
   bool ShouldUseCustomFrame() const override { return true; }
 
-  // ButtonListener override:
-  void ButtonPressed(Button* sender, const ui::Event& event) override {
-    last_pressed_button_ = sender;
-  }
-
-  Button* last_pressed_button() const { return last_pressed_button_; }
-
   void CheckAndResetStates(bool canceled,
                            bool accepted,
-                           bool closed,
-                           Button* last_pressed) {
+                           bool closed) {
     EXPECT_EQ(canceled, canceled_);
     canceled_ = false;
     EXPECT_EQ(accepted, accepted_);
     accepted_ = false;
-    EXPECT_EQ(last_pressed, last_pressed_button_);
-    last_pressed_button_ = nullptr;
     EXPECT_EQ(closed, closed_);
     closed_ = false;
   }
@@ -112,7 +105,6 @@ class TestDialog : public DialogDelegateView, public ButtonListener {
   bool closed_;
   // Prevent the dialog from closing, for repeated ok and cancel button clicks.
   bool closeable_;
-  Button* last_pressed_button_;
   base::string16 title_;
   bool should_handle_escape_;
 
@@ -162,28 +154,42 @@ TEST_F(DialogTest, AcceptAndCancel) {
   const ui::KeyEvent return_event(
       ui::ET_KEY_PRESSED, ui::VKEY_RETURN, ui::EF_NONE);
   SimulateKeyEvent(return_event);
-  dialog()->CheckAndResetStates(false, true, false, nullptr);
+  dialog()->CheckAndResetStates(false, true, false);
   const ui::KeyEvent escape_event(
       ui::ET_KEY_PRESSED, ui::VKEY_ESCAPE, ui::EF_NONE);
   SimulateKeyEvent(escape_event);
-  dialog()->CheckAndResetStates(false, false, true, nullptr);
+  dialog()->CheckAndResetStates(false, false, true);
 
-  // Check ok and cancel button behavior on a directed return key events.
-  ok_button->OnKeyPressed(return_event);
-  dialog()->CheckAndResetStates(false, true, false, nullptr);
-  cancel_button->OnKeyPressed(return_event);
-  dialog()->CheckAndResetStates(true, false, false, nullptr);
+// Check ok and cancel button behavior on a directed return key event. Buttons
+// won't respond to a return key event on Mac, since it performs the default
+// action.
+#if defined(OS_MACOSX)
+  EXPECT_FALSE(ok_button->OnKeyPressed(return_event));
+  dialog()->CheckAndResetStates(false, false, false);
+  EXPECT_FALSE(cancel_button->OnKeyPressed(return_event));
+  dialog()->CheckAndResetStates(false, false, false);
+#else
+  EXPECT_TRUE(ok_button->OnKeyPressed(return_event));
+  dialog()->CheckAndResetStates(false, true, false);
+  EXPECT_TRUE(cancel_button->OnKeyPressed(return_event));
+  dialog()->CheckAndResetStates(true, false, false);
+#endif
 
-  // Check that return accelerators cancel dialogs if cancel is focused.
+  // Check that return accelerators cancel dialogs if cancel is focused, except
+  // on Mac where return should perform the default action.
   cancel_button->RequestFocus();
   EXPECT_EQ(cancel_button, dialog()->GetFocusManager()->GetFocusedView());
   SimulateKeyEvent(return_event);
-  dialog()->CheckAndResetStates(true, false, false, nullptr);
+#if defined(OS_MACOSX)
+  dialog()->CheckAndResetStates(false, true, false);
+#else
+  dialog()->CheckAndResetStates(true, false, false);
+#endif
 
   // Check that escape can be overridden.
   dialog()->set_should_handle_escape(true);
   SimulateKeyEvent(escape_event);
-  dialog()->CheckAndResetStates(false, false, false, nullptr);
+  dialog()->CheckAndResetStates(false, false, false);
 }
 
 TEST_F(DialogTest, RemoveDefaultButton) {
@@ -269,6 +275,40 @@ TEST_F(DialogTest, BoundsAccommodateTitle) {
 TEST_F(DialogTest, InitialFocus) {
   EXPECT_TRUE(dialog()->input()->HasFocus());
   EXPECT_EQ(dialog()->input(), dialog()->GetFocusManager()->GetFocusedView());
+}
+
+// If the initially focused View provided is unfocusable, check the next
+// available focusable View is focused.
+TEST_F(DialogTest, UnfocusableInitialFocus) {
+#if defined(OS_MACOSX)
+  // On Mac, make all buttons unfocusable by turning off full keyboard access.
+  // This is the more common configuration, and if a dialog has a focusable
+  // textfield, tree or table, that should obtain focus instead.
+  ui::test::ScopedFakeFullKeyboardAccess::GetInstance()
+      ->set_full_keyboard_access_state(false);
+#endif
+
+  DialogDelegateView* dialog = new DialogDelegateView();
+  Textfield* textfield = new Textfield();
+  dialog->AddChildView(textfield);
+  Widget* dialog_widget =
+      DialogDelegate::CreateDialogWidget(dialog, GetContext(), nullptr);
+
+#if !defined(OS_MACOSX)
+  // For non-Mac, turn off focusability on all the dialog's buttons manually.
+  // This achieves the same effect as disabling full keyboard access.
+  DialogClientView* dcv = dialog->GetDialogClientView();
+  dcv->ok_button()->SetFocusBehavior(View::FocusBehavior::NEVER);
+  dcv->cancel_button()->SetFocusBehavior(View::FocusBehavior::NEVER);
+#endif
+
+  // On showing the dialog, the initially focused View will be the OK button.
+  // Since it is no longer focusable, focus should advance to the next focusable
+  // View, which is |textfield|.
+  dialog_widget->Show();
+  EXPECT_TRUE(textfield->HasFocus());
+  EXPECT_EQ(textfield, dialog->GetFocusManager()->GetFocusedView());
+  dialog_widget->Close();
 }
 
 }  // namespace views

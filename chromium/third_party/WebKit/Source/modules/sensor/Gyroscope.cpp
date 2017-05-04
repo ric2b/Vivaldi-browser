@@ -10,29 +10,30 @@ using device::mojom::blink::SensorType;
 
 namespace blink {
 
-Gyroscope* Gyroscope::create(ScriptState* scriptState,
+Gyroscope* Gyroscope::create(ExecutionContext* executionContext,
                              const SensorOptions& options,
                              ExceptionState& exceptionState) {
-  return new Gyroscope(scriptState, options, exceptionState);
+  return new Gyroscope(executionContext, options, exceptionState);
 }
 
 // static
-Gyroscope* Gyroscope::create(ScriptState* scriptState,
+Gyroscope* Gyroscope::create(ExecutionContext* executionContext,
                              ExceptionState& exceptionState) {
-  return create(scriptState, SensorOptions(), exceptionState);
+  return create(executionContext, SensorOptions(), exceptionState);
 }
 
-Gyroscope::Gyroscope(ScriptState* scriptState,
+Gyroscope::Gyroscope(ExecutionContext* executionContext,
                      const SensorOptions& options,
                      ExceptionState& exceptionState)
-    : Sensor(scriptState, options, exceptionState, SensorType::GYROSCOPE) {}
+    : Sensor(executionContext, options, exceptionState, SensorType::GYROSCOPE) {
+}
 
 GyroscopeReading* Gyroscope::reading() const {
   return static_cast<GyroscopeReading*>(Sensor::reading());
 }
 
 std::unique_ptr<SensorReadingFactory> Gyroscope::createSensorReadingFactory() {
-  return makeUnique<SensorReadingFactoryImpl<GyroscopeReading>>();
+  return WTF::makeUnique<SensorReadingFactoryImpl<GyroscopeReading>>();
 }
 
 DEFINE_TRACE(Gyroscope) {

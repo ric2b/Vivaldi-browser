@@ -35,6 +35,7 @@
 #include "core/inspector/WorkerInspectorController.h"
 #include "core/inspector/WorkerThreadDebugger.h"
 #include "core/origin_trials/OriginTrialContext.h"
+#include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/ThreadedWorkletGlobalScope.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerClients.h"
@@ -114,7 +115,7 @@ void WorkerThread::start(std::unique_ptr<WorkerThreadStartupData> startupData) {
   workerBackingThread().backingThread().postTask(
       BLINK_FROM_HERE, crossThreadBind(&WorkerThread::initializeOnWorkerThread,
                                        crossThreadUnretained(this),
-                                       passed(std::move(startupData))));
+                                       WTF::passed(std::move(startupData))));
 }
 
 void WorkerThread::terminate() {
@@ -189,19 +190,20 @@ bool WorkerThread::isCurrentThread() {
 }
 
 void WorkerThread::postTask(const WebTraceLocation& location,
-                            std::unique_ptr<ExecutionContextTask> task,
-                            bool isInstrumented) {
+                            std::unique_ptr<ExecutionContextTask> task) {
   if (isInShutdown())
     return;
-  if (isInstrumented) {
-    DCHECK(isCurrentThread());
-    InspectorInstrumentation::asyncTaskScheduled(globalScope(), "Worker task",
-                                                 task.get());
-  }
   workerBackingThread().backingThread().postTask(
       location, crossThreadBind(&WorkerThread::performTaskOnWorkerThread,
                                 crossThreadUnretained(this),
-                                passed(std::move(task)), isInstrumented));
+                                WTF::passed(std::move(task))));
+}
+
+void WorkerThread::postTask(const WebTraceLocation& location,
+                            std::unique_ptr<WTF::CrossThreadClosure> task) {
+  std::unique_ptr<ExecutionContextTask> wrappedTask = createCrossThreadTask(
+      &WTF::CrossThreadClosure::operator(), WTF::passed(std::move(task)));
+  postTask(location, std::move(wrappedTask));
 }
 
 void WorkerThread::appendDebuggerTask(
@@ -209,9 +211,9 @@ void WorkerThread::appendDebuggerTask(
   DCHECK(isMainThread());
   if (isInShutdown())
     return;
-  m_inspectorTaskRunner->appendTask(
-      crossThreadBind(&WorkerThread::performDebuggerTaskOnWorkerThread,
-                      crossThreadUnretained(this), passed(std::move(task))));
+  m_inspectorTaskRunner->appendTask(crossThreadBind(
+      &WorkerThread::performDebuggerTaskOnWorkerThread,
+      crossThreadUnretained(this), WTF::passed(std::move(task))));
   {
     MutexLocker lock(m_threadStateMutex);
     if (isolate() && m_threadState != ThreadState::ReadyToShutdown)
@@ -296,10 +298,10 @@ WorkerThread::WorkerThread(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy,
                            WorkerReportingProxy& workerReportingProxy)
     : m_workerThreadId(getNextWorkerThreadId()),
       m_forcibleTerminationDelayInMs(kForcibleTerminationDelayInMs),
-      m_inspectorTaskRunner(makeUnique<InspectorTaskRunner>()),
+      m_inspectorTaskRunner(WTF::makeUnique<InspectorTaskRunner>()),
       m_workerLoaderProxy(workerLoaderProxy),
       m_workerReportingProxy(workerReportingProxy),
-      m_shutdownEvent(wrapUnique(
+      m_shutdownEvent(WTF::wrapUnique(
           new WaitableEvent(WaitableEvent::ResetPolicy::Manual,
                             WaitableEvent::InitialState::NonSignaled))),
       m_workerThreadLifecycleContext(new WorkerThreadLifecycleContext) {
@@ -351,9 +353,9 @@ void WorkerThread::terminateInternal(TerminationMode mode) {
         case TerminationMode::Graceful:
           DCHECK(!m_forcibleTerminationTaskHandle.isActive());
           m_forcibleTerminationTaskHandle =
-              Platform::current()
-                  ->mainThread()
-                  ->getWebTaskRunner()
+              workerReportingProxy()
+                  .getParentFrameTaskRunners()
+                  ->get(TaskType::UnspecedTimer)
                   ->postDelayedCancellableTask(
                       BLINK_FROM_HERE,
                       WTF::bind(&WorkerThread::mayForciblyTerminateExecution,
@@ -451,7 +453,11 @@ void WorkerThread::initializeOnWorkerThread(
   WorkerThreadStartMode startMode = startupData->m_startMode;
   std::unique_ptr<Vector<char>> cachedMetaData =
       std::move(startupData->m_cachedMetaData);
-  V8CacheOptions v8CacheOptions = startupData->m_v8CacheOptions;
+  V8CacheOptions v8CacheOptions =
+      startupData->m_workerV8Settings.m_v8CacheOptions;
+  bool heapLimitIncreasedForDebugging =
+      startupData->m_workerV8Settings.m_heapLimitMode ==
+      WorkerV8Settings::HeapLimitMode::IncreasedForDebugging;
 
   {
     MutexLocker lock(m_threadStateMutex);
@@ -462,6 +468,10 @@ void WorkerThread::initializeOnWorkerThread(
 
     // Optimize for memory usage instead of latency for the worker isolate.
     isolate()->IsolateInBackgroundNotification();
+
+    if (heapLimitIncreasedForDebugging) {
+      isolate()->IncreaseHeapLimitForDebugging();
+    }
 
     m_consoleMessageStorage = new ConsoleMessageStorage();
     m_globalScope = createWorkerGlobalScope(std::move(startupData));
@@ -555,14 +565,11 @@ void WorkerThread::performShutdownOnWorkerThread() {
 }
 
 void WorkerThread::performTaskOnWorkerThread(
-    std::unique_ptr<ExecutionContextTask> task,
-    bool isInstrumented) {
+    std::unique_ptr<ExecutionContextTask> task) {
   DCHECK(isCurrentThread());
   if (m_threadState != ThreadState::Running)
     return;
 
-  InspectorInstrumentation::AsyncTask asyncTask(globalScope(), task.get(),
-                                                isInstrumented);
   {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
         CustomCountHistogram, scopedUsCounter,
@@ -636,8 +643,8 @@ void WorkerThread::setExitCode(const MutexLocker& lock, ExitCode exitCode) {
 }
 
 bool WorkerThread::isThreadStateMutexLocked(const MutexLocker& /* unused */) {
-#if ENABLE(ASSERT)
-  // Mutex::locked() is available only if ENABLE(ASSERT) is true.
+#if DCHECK_IS_ON()
+  // Mutex::locked() is available only if DCHECK_IS_ON() is true.
   return m_threadStateMutex.locked();
 #else
   // Otherwise, believe the given MutexLocker holds |m_threadStateMutex|.

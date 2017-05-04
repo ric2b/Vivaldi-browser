@@ -3,19 +3,13 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
-#include "base/guid.h"
-#include "base/json/json_reader.h"
-#include "base/json/json_writer.h"
-#include "base/strings/string_util.h"
 #include "base/values.h"
-#include "content/public/child/v8_value_converter.h"
+#include "extensions/renderer/api_binding_test.h"
 #include "extensions/renderer/api_binding_test_util.h"
 #include "extensions/renderer/api_request_handler.h"
 #include "gin/converter.h"
 #include "gin/public/context_holder.h"
 #include "gin/public/isolate_holder.h"
-#include "gin/test/v8_test.h"
-#include "gin/try_catch.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace extensions {
@@ -25,9 +19,12 @@ namespace {
 const char kEchoArgs[] =
     "(function() { this.result = Array.from(arguments); })";
 
+// TODO(devlin): We should probably hoist this up to e.g. api_binding_types.h.
+using ArgumentList = std::vector<v8::Local<v8::Value>>;
+
 }  // namespace
 
-class APIRequestHandlerTest : public gin::V8Test {
+class APIRequestHandlerTest : public APIBindingTest {
  public:
   // Runs the given |function|.
   void RunJS(v8::Local<v8::Function> function,
@@ -53,10 +50,8 @@ class APIRequestHandlerTest : public gin::V8Test {
 // Tests adding a request to the request handler, and then triggering the
 // response.
 TEST_F(APIRequestHandlerTest, AddRequestAndCompleteRequestTest) {
-  v8::Isolate* isolate = instance_->isolate();
-  v8::HandleScope handle_scope(instance_->isolate());
-  v8::Local<v8::Context> context =
-      v8::Local<v8::Context>::New(instance_->isolate(), context_);
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = ContextLocal();
 
   APIRequestHandler request_handler(
       base::Bind(&APIRequestHandlerTest::RunJS, base::Unretained(this)));
@@ -66,8 +61,8 @@ TEST_F(APIRequestHandlerTest, AddRequestAndCompleteRequestTest) {
   v8::Local<v8::Function> function = FunctionFromString(context, kEchoArgs);
   ASSERT_FALSE(function.IsEmpty());
 
-  std::string request_id =
-      request_handler.AddPendingRequest(isolate, function, context);
+  int request_id = request_handler.AddPendingRequest(isolate(), function,
+                                                     context, ArgumentList());
   EXPECT_THAT(request_handler.GetPendingRequestIdsForTesting(),
               testing::UnorderedElementsAre(request_id));
 
@@ -78,20 +73,16 @@ TEST_F(APIRequestHandlerTest, AddRequestAndCompleteRequestTest) {
   request_handler.CompleteRequest(request_id, *response_arguments);
 
   EXPECT_TRUE(did_run_js());
-  std::unique_ptr<base::Value> result_value =
-      GetBaseValuePropertyFromObject(context->Global(), context, "result");
-  ASSERT_TRUE(result_value);
-  EXPECT_EQ(ReplaceSingleQuotes(kArguments), ValueToString(*result_value));
+  EXPECT_EQ(ReplaceSingleQuotes(kArguments),
+            GetStringPropertyFromObject(context->Global(), context, "result"));
 
   EXPECT_TRUE(request_handler.GetPendingRequestIdsForTesting().empty());
 }
 
 // Tests that trying to run non-existent or invalided requests is a no-op.
 TEST_F(APIRequestHandlerTest, InvalidRequestsTest) {
-  v8::Isolate* isolate = instance_->isolate();
-  v8::HandleScope handle_scope(instance_->isolate());
-  v8::Local<v8::Context> context =
-      v8::Local<v8::Context>::New(instance_->isolate(), context_);
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = ContextLocal();
 
   APIRequestHandler request_handler(
       base::Bind(&APIRequestHandlerTest::RunJS, base::Unretained(this)));
@@ -99,8 +90,8 @@ TEST_F(APIRequestHandlerTest, InvalidRequestsTest) {
   v8::Local<v8::Function> function = FunctionFromString(context, kEchoArgs);
   ASSERT_FALSE(function.IsEmpty());
 
-  std::string request_id =
-      request_handler.AddPendingRequest(isolate, function, context);
+  int request_id = request_handler.AddPendingRequest(isolate(), function,
+                                                     context, ArgumentList());
   EXPECT_THAT(request_handler.GetPendingRequestIdsForTesting(),
               testing::UnorderedElementsAre(request_id));
 
@@ -109,7 +100,7 @@ TEST_F(APIRequestHandlerTest, InvalidRequestsTest) {
   ASSERT_TRUE(response_arguments);
 
   // Try running with a non-existent request id.
-  std::string fake_request_id = base::GenerateGUID();
+  int fake_request_id = 42;
   request_handler.CompleteRequest(fake_request_id, *response_arguments);
   EXPECT_FALSE(did_run_js());
 
@@ -120,11 +111,11 @@ TEST_F(APIRequestHandlerTest, InvalidRequestsTest) {
 }
 
 TEST_F(APIRequestHandlerTest, MultipleRequestsAndContexts) {
-  v8::Isolate* isolate = instance_->isolate();
-  v8::HandleScope handle_scope(instance_->isolate());
-  v8::Local<v8::Context> context_a =
-      v8::Local<v8::Context>::New(isolate, context_);
-  v8::Local<v8::Context> context_b = v8::Context::New(isolate);
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context_a = ContextLocal();
+  v8::Local<v8::Context> context_b = v8::Context::New(isolate());
+  gin::ContextHolder holder_b(isolate());
+  holder_b.SetContext(context_b);
 
   APIRequestHandler request_handler(
       base::Bind(&APIRequestHandlerTest::RunJS, base::Unretained(this)));
@@ -137,10 +128,10 @@ TEST_F(APIRequestHandlerTest, MultipleRequestsAndContexts) {
   v8::Local<v8::Function> function_b = FunctionFromString(
       context_b, "(function(res) { this.result = res + 'beta'; })");
 
-  std::string request_a =
-      request_handler.AddPendingRequest(isolate, function_a, context_a);
-  std::string request_b =
-      request_handler.AddPendingRequest(isolate, function_b, context_b);
+  int request_a = request_handler.AddPendingRequest(isolate(), function_a,
+                                                    context_a, ArgumentList());
+  int request_b = request_handler.AddPendingRequest(isolate(), function_b,
+                                                    context_b, ArgumentList());
 
   EXPECT_THAT(request_handler.GetPendingRequestIdsForTesting(),
               testing::UnorderedElementsAre(request_a, request_b));
@@ -154,11 +145,9 @@ TEST_F(APIRequestHandlerTest, MultipleRequestsAndContexts) {
   EXPECT_THAT(request_handler.GetPendingRequestIdsForTesting(),
               testing::UnorderedElementsAre(request_b));
 
-  std::unique_ptr<base::Value> result_a =
-      GetBaseValuePropertyFromObject(context_a->Global(), context_a, "result");
-  ASSERT_TRUE(result_a);
-  EXPECT_EQ(ReplaceSingleQuotes("'response_a:alpha'"),
-            ValueToString(*result_a));
+  EXPECT_EQ(
+      ReplaceSingleQuotes("'response_a:alpha'"),
+      GetStringPropertyFromObject(context_a->Global(), context_a, "result"));
 
   std::unique_ptr<base::ListValue> response_b =
       ListValueFromString("['response_b:']");
@@ -167,10 +156,40 @@ TEST_F(APIRequestHandlerTest, MultipleRequestsAndContexts) {
   request_handler.CompleteRequest(request_b, *response_b);
   EXPECT_TRUE(request_handler.GetPendingRequestIdsForTesting().empty());
 
-  std::unique_ptr<base::Value> result_b =
-      GetBaseValuePropertyFromObject(context_b->Global(), context_b, "result");
-  ASSERT_TRUE(result_b);
-  EXPECT_EQ(ReplaceSingleQuotes("'response_b:beta'"), ValueToString(*result_b));
+  EXPECT_EQ(
+      ReplaceSingleQuotes("'response_b:beta'"),
+      GetStringPropertyFromObject(context_b->Global(), context_b, "result"));
+}
+
+TEST_F(APIRequestHandlerTest, CustomCallbackArguments) {
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = ContextLocal();
+
+  APIRequestHandler request_handler(
+      base::Bind(&APIRequestHandlerTest::RunJS, base::Unretained(this)));
+
+  ArgumentList custom_callback_args = {
+      gin::StringToV8(isolate(), "to"), gin::StringToV8(isolate(), "be"),
+  };
+
+  v8::Local<v8::Function> function = FunctionFromString(context, kEchoArgs);
+  ASSERT_FALSE(function.IsEmpty());
+
+  int request_id = request_handler.AddPendingRequest(
+      isolate(), function, context, custom_callback_args);
+  EXPECT_THAT(request_handler.GetPendingRequestIdsForTesting(),
+              testing::UnorderedElementsAre(request_id));
+
+  std::unique_ptr<base::ListValue> response_arguments =
+      ListValueFromString("['or','not','to','be']");
+  ASSERT_TRUE(response_arguments);
+  request_handler.CompleteRequest(request_id, *response_arguments);
+
+  EXPECT_TRUE(did_run_js());
+  EXPECT_EQ(ReplaceSingleQuotes("['to','be','or','not','to','be']"),
+            GetStringPropertyFromObject(context->Global(), context, "result"));
+
+  EXPECT_TRUE(request_handler.GetPendingRequestIdsForTesting().empty());
 }
 
 }  // namespace extensions

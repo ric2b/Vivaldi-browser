@@ -35,4 +35,37 @@ public interface DropdownItem {
      * Returns whether the label should be displayed over multiple lines.
      */
     boolean isMultilineLabel();
+    /**
+     * Returns whether the label should be displayed in bold.
+     */
+    boolean isBoldLabel();
+    /**
+     * Returns resource ID of label's font color.
+     */
+    int getLabelFontColorResId();
+    /**
+     * Returns resource ID of label's font size.
+     */
+    int getLabelFontSizeResId();
+    /**
+     * Returns resource ID of sublabel's font size.
+     */
+    int getSublabelFontSizeResId();
+    /**
+     * Returns whether label and sublabel should be on the same line.
+     */
+    boolean isLabelAndSublabelOnSameLine();
+    /**
+     * Returns whether the icon should be displayed at the start, before label
+     * and sublabel.
+     */
+    boolean isIconAtStart();
+    /**
+     * Returns the resource ID of the icon's size, or 0 to use WRAP_CONTENT.
+     */
+    int getIconSizeResId();
+    /**
+     * Returns the resource ID of the icon's margin size.
+     */
+    int getIconMarginResId();
 }

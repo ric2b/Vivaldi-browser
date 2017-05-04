@@ -49,11 +49,6 @@ class WebContents;
 struct TextInputState;
 }
 
-namespace ui {
-class Compositor;
-class Layer;
-}
-
 @class FullscreenWindowManager;
 @protocol RenderWidgetHostViewMacDelegate;
 

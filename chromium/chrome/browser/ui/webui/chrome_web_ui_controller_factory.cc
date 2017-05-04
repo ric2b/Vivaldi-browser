@@ -41,17 +41,17 @@
 #include "chrome/browser/ui/webui/log_web_ui_url.h"
 #include "chrome/browser/ui/webui/net_export_ui.h"
 #include "chrome/browser/ui/webui/net_internals/net_internals_ui.h"
+#include "chrome/browser/ui/webui/ntp_tiles_internals_ui.h"
 #include "chrome/browser/ui/webui/omnibox/omnibox_ui.h"
 #include "chrome/browser/ui/webui/options/options_ui.h"
 #include "chrome/browser/ui/webui/password_manager_internals/password_manager_internals_ui.h"
-#include "chrome/browser/ui/webui/plugins/plugins_ui.h"
+#include "chrome/browser/ui/webui/physical_web/physical_web_ui.h"
 #include "chrome/browser/ui/webui/policy_material_design_ui.h"
 #include "chrome/browser/ui/webui/policy_ui.h"
 #include "chrome/browser/ui/webui/predictors/predictors_ui.h"
 #include "chrome/browser/ui/webui/profiler_ui.h"
 #include "chrome/browser/ui/webui/settings/md_settings_ui.h"
 #include "chrome/browser/ui/webui/settings_utils.h"
-#include "chrome/browser/ui/webui/signin/profile_signin_confirmation_ui.h"
 #include "chrome/browser/ui/webui/signin_internals_ui.h"
 #include "chrome/browser/ui/webui/supervised_user_internals_ui.h"
 #include "chrome/browser/ui/webui/sync_internals_ui.h"
@@ -81,6 +81,8 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/url_utils.h"
 #include "extensions/features/features.h"
+#include "media/media_features.h"
+#include "ppapi/features/features.h"
 #include "printing/features/features.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/web_dialogs/web_dialog_ui.h"
@@ -90,7 +92,7 @@
 #include "chrome/browser/ui/webui/nacl_ui.h"
 #endif
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 #include "chrome/browser/ui/webui/media/webrtc_logs_ui.h"
 #endif
 
@@ -166,6 +168,7 @@
 #include "chrome/browser/ui/sync/sync_promo_ui.h"
 #include "chrome/browser/ui/webui/signin/inline_login_ui.h"
 #include "chrome/browser/ui/webui/signin/md_user_manager_ui.h"
+#include "chrome/browser/ui/webui/signin/signin_email_confirmation_ui.h"
 #include "chrome/browser/ui/webui/signin/signin_error_ui.h"
 #include "chrome/browser/ui/webui/signin/sync_confirmation_ui.h"
 #include "chrome/browser/ui/webui/welcome_ui.h"
@@ -351,10 +354,14 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<NetExportUI>;
   if (url.host_piece() == chrome::kChromeUINetInternalsHost)
     return &NewWebUI<NetInternalsUI>;
+  if (url.host_piece() == chrome::kChromeUINTPTilesInternalsHost)
+    return &NewWebUI<NTPTilesInternalsUI>;
   if (url.host_piece() == chrome::kChromeUIOmniboxHost)
     return &NewWebUI<OmniboxUI>;
   if (url.host_piece() == chrome::kChromeUIPasswordManagerInternalsHost)
     return &NewWebUI<PasswordManagerInternalsUI>;
+  if (url.host_piece() == chrome::kChromeUIPhysicalWebHost)
+    return &NewWebUI<PhysicalWebUI>;
   if (url.host_piece() == chrome::kChromeUIPredictorsHost)
     return &NewWebUI<PredictorsUI>;
   if (url.host_piece() == chrome::kChromeUIProfilerHost)
@@ -534,12 +541,15 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<InlineLoginUI>;
   if (url.host_piece() == chrome::kChromeUIMdUserManagerHost)
     return &NewWebUI<MDUserManagerUI>;
-  if (url.host_piece() == chrome::kChromeUISigninErrorHost)
+  if (url.host_piece() == chrome::kChromeUISigninErrorHost &&
+      !profile->IsOffTheRecord())
     return &NewWebUI<SigninErrorUI>;
-  if (url.host_piece() == chrome::kChromeUISyncConfirmationHost)
+  if (url.host_piece() == chrome::kChromeUISyncConfirmationHost &&
+      !profile->IsOffTheRecord())
     return &NewWebUI<SyncConfirmationUI>;
-  if (url.host_piece() == chrome::kChromeUIProfileSigninConfirmationHost)
-    return &NewWebUI<ProfileSigninConfirmationUI>;
+  if (url.host_piece() == chrome::kChromeUISigninEmailConfirmationHost &&
+      !profile->IsOffTheRecord())
+    return &NewWebUI<SigninEmailConfirmationUI>;
   if (url.host_piece() == chrome::kChromeUIWelcomeHost)
     return &NewWebUI<WelcomeUI>;
 #endif
@@ -584,11 +594,9 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   if (url.host_piece() == chrome::kChromeUIExtensionsFrameHost)
     return &NewWebUI<extensions::ExtensionsUI>;
 #endif
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
   if (url.host_piece() == chrome::kChromeUIFlashHost)
     return &NewWebUI<FlashUI>;
-  if (url.host_piece() == chrome::kChromeUIPluginsHost)
-    return &NewWebUI<PluginsUI>;
 #endif
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   if (url.host_piece() == chrome::kChromeUIPrintHost &&
@@ -601,7 +609,7 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<LocalDiscoveryUI>;
   }
 #endif
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   if (url.host_piece() == chrome::kChromeUIWebRtcLogsHost)
     return &NewWebUI<WebRtcLogsUI>;
 #endif
@@ -793,7 +801,7 @@ base::RefCountedMemory* ChromeWebUIControllerFactory::GetFaviconResourceBytes(
   // The Apps launcher page is not available on android or ChromeOS.
   if (page_url.host_piece() == chrome::kChromeUIAppLauncherPageHost)
     return AppLauncherPageUI::GetFaviconResourceBytes(scale_factor);
-#endif
+#endif  // !defined(OS_CHROMEOS)
 
   // Flash is not available on android.
   if (page_url.host_piece() == chrome::kChromeUIFlashHost)
@@ -813,13 +821,8 @@ base::RefCountedMemory* ChromeWebUIControllerFactory::GetFaviconResourceBytes(
   if (page_url.host_piece() == chrome::kChromeUIExtensionsHost ||
       page_url.host_piece() == chrome::kChromeUIExtensionsFrameHost)
     return extensions::ExtensionsUI::GetFaviconResourceBytes(scale_factor);
-#endif
-
-  // Android doesn't use the plugins pages.
-  if (page_url.host_piece() == chrome::kChromeUIPluginsHost)
-    return PluginsUI::GetFaviconResourceBytes(scale_factor);
-
-#endif
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+#endif  // !defined(OS_ANDROID)
 
   return NULL;
 }

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="fy">
+<translation id="1152921474424827756">In eksimplaar yn it <ph name="BEGIN_LINK" />lytsûnthâld<ph name="END_LINK" /> fan <ph name="URL" /> iepenje</translation>
+<translation id="1158211211994409885"><ph name="HOST_NAME" /> hat de ferbining ûnferwachts ferbrutsen.</translation>
+<translation id="1375198122581997741">Oer dizze ferzje</translation>
+<translation id="139305205187523129"><ph name="HOST_NAME" /> hat gjin gegevens stjoerd.</translation>
+<translation id="1506687042165942984">In bewarre (ferâldere) kopy fan dizze side sjen litte.</translation>
+<translation id="1559528461873125649">Triem of triemtafel bestiet net</translation>
+<translation id="1710259589646384581">Bestjoeringssysteem</translation>
+<translation id="1838667051080421715">Jo besjogge de boarne fan in webstee.</translation>
+<translation id="194030505837763158">Gean nei <ph name="LINK" /></translation>
+<translation id="2030481566774242610">Bedoele jo <ph name="LINK" />?</translation>
+<translation id="2089090684895656482">Minder</translation>
+<translation id="2166378884831602661">De webstee kin gjin feilige ferbining ferskaffe</translation>
+<translation id="2292556288342944218">Jo ynternet tagong is tsjinkeard</translation>
+<translation id="255002559098805027"><ph name="HOST_NAME" /> stjoerde in ûnjildige reaksje.</translation>
+<translation id="2609632851001447353">Farianten</translation>
+<translation id="2650446666397867134">Tagong ta de triem is wegere</translation>
+<translation id="2705137772291741111">De bewarre kopy yn it lytsûnthâld fan dizze webstee is net te berikken.</translation>
+<translation id="2784949926578158345">De ferbining is reset.</translation>
+<translation id="284702764277384724">It sertifikaat fan de tsjinner op <ph name="HOST_NAME" /> liket falsk te wêzen.</translation>
+<translation id="2909946352844186028">In netwurk feroaring is ûntdutsen.</translation>
+<translation id="3005723025932146533">Bewarre kopy sjen litte</translation>
+<translation id="3093245981617870298">Jo ha gjin ferbining.</translation>
+<translation id="3109728660330352905">Jo ha gjin tastimming om dizze side te besjen.</translation>
+<translation id="3176929007561373547">Kontrolearje jo proksy ynstellings of nim kontakt op mei jo netwurkbehearder
+ om te hifkjen dat de proksy tsjinner wurket. As jo tinke dat jo gjin proksy tsjinner
+nedich ha: <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673"><ph name="HOST_NAME" /> is op it stuit net berikber.</translation>
+<translation id="3447661539832366887">De eigner fan dit apparaat hat it spultsje dinosaurus útskeakele.</translation>
+<translation id="3586931643579894722">Details ferbergje</translation>
+<translation id="3630155396527302611">As dit programma al op de list stiet as in programma dat tagong hat ta
+      it netwurk, helje it dan út de list en heakje it op 'e nij ta.</translation>
+<translation id="3658742229777143148">Revysje</translation>
+<translation id="382518646247711829">As jo in proksy tsjinner brûke...</translation>
+<translation id="3973234410852337861"><ph name="HOST_NAME" /> is tsjinkeard</translation>
+<translation id="4021036232240155012">DNS is in netwurk tsjinst dat in webstee namme omset nei syn ynternet adres.</translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" /> hat jo ynloch sertifikaat net akseptearre, of der is net ien ferskaft.</translation>
+<translation id="4522570452068850558">Details</translation>
+<translation id="4670097147947922288">Jo besjogge in tafoegings side.</translation>
+<translation id="4708268264240856090">Jo ferbining wie ûnderbrutsen</translation>
+<translation id="4744603770635761495">Utfierber paad</translation>
+<translation id="4764776831041365478">De webstee op <ph name="URL" /> is mooglik tydlik út de loft of permanint ferpleatst nei in oar webadres.</translation>
+<translation id="5023310440958281426">Kontrolearje it belied fan jo behearder</translation>
+<translation id="5115563688576182185">(64-bit)</translation>
+<translation id="5431657950005405462">Jo triem is net fûn</translation>
+<translation id="5452270690849572955">Dizze <ph name="HOST_NAME" /> side koe net fûn wurde</translation>
+<translation id="5492298309214877701">Dizze webstee op it yntranet dan it bedriuw, de organisaasje of skoalle hat itselde URL-adres as in eksterne webstee.
+    <ph name="LINE_BREAK" />
+    Nim kontakt op mei jo netwurkbehearder.</translation>
+<translation id="5510766032865166053">De triem is mooglik ferpleatst of wiske.</translation>
+<translation id="5556459405103347317">Ferfarskje</translation>
+<translation id="5617949217645503996"><ph name="HOST_NAME" /> hat jo tefolle omlaat.</translation>
+<translation id="5675650730144413517">Dizze webstee wurket net</translation>
+<translation id="5869405914158311789">Dizze webstee is net berikber</translation>
+<translation id="5990559369517809815">Fersiken nei de tsjinner binne tsjinkeard troch in tafoeging.</translation>
+<translation id="6042308850641462728">Mear</translation>
+<translation id="6146055958333702838">Kontrolearje de kabels en werstart de routers,modems of oare netwurk
+    apparaten dy jo brûke op 'e nij op.</translation>
+<translation id="6165508094623778733">Mear ynformaasje</translation>
+<translation id="6203231073485539293">Kontrolearje jo ynternet ferbining</translation>
+<translation id="6305205051461490394"><ph name="URL" /> is net te berikken.</translation>
+<translation id="6321917430147971392">Kontrolearje jo DNS ynstellings</translation>
+<translation id="6328639280570009161">Besykje netwurk foarsizzing út te skeakeljen</translation>
+<translation id="6433595998831338502"><ph name="HOST_NAME" /> wegeret te ferbinen.</translation>
+<translation id="6711464428925977395">Der is iet fout mei de proksy tsjinner,of it adres is net goed.</translation>
+<translation id="6757797048963528358">Jo apparaat is gean sliepen.</translation>
+<translation id="6830600606572693159">De webstee op <ph name="URL" /> is op it stuit net beskikber. It kin oerladen of efkes foar ûnderhâld der út wêze.</translation>
+<translation id="6897140037006041989">Brûkers agint</translation>
+<translation id="7210863904660874423"><ph name="HOST_NAME" /> foldocht net oan de feiligens standerts.</translation>
+<translation id="7269802741830436641">Dizze webstee hat in omlaat lus</translation>
+<translation id="7353601530677266744">Opdracht rigel</translation>
+<translation id="7419106976560586862">Profyl paad</translation>
+<translation id="7518003948725431193">Der is gjin webstee fûn foar it webadres: <ph name="URL" /></translation>
+<translation id="7549584377607005141">De webstee fereasket gegevens dy't jo earder ynfierd ha, om goed wurkje te kinnen. Jo kinne de gegevens op 'e nij stjoere, mar hjirtroch sille de aksje werhelle wurde dy earder op dizze side dien binne.</translation>
+<translation id="759889825892636187"><ph name="HOST_NAME" /> is op it stuit net yn steat om dit fersyk te ferwurkjen.</translation>
+<translation id="7716424297397655342">Dizze webstee koe net laden wurde út it lytsûnthâld</translation>
+<translation id="7758069387465995638">Software fan  de brânmoarre of antyfirus software hat mooglik de ferbining tsjinkeard.</translation>
+<translation id="778579833039460630">Gjin gegevens ûntfongen</translation>
+<translation id="7951415247503192394">(32-bit)</translation>
+<translation id="8134994873729925007">It <ph name="BEGIN_ABBR" />DNS adres<ph name="END_ABBR" /> fan de tsjinner fan <ph name="HOST_NAME" />koe net fûn wurde.</translation>
+<translation id="8142868475871995937">Gean nei &lt;strong&gt;vivaldi://policy&lt;/strong&gt; om de list fan URL-adressen op de swarte list te sjen en oare betingsten dy't twongen wurde troch de systeembehearder.</translation>
+<translation id="8149426793427495338">Jo kompjûter is gien sliepen.</translation>
+<translation id="8150722005171944719">De triem op <ph name="URL" /> is net te berikken. It is miskien wol wiske, ferpleatst, of de triem foech beheind de tagong.</translation>
+<translation id="8225771182978767009">De persoan dy't dizze kompjûter opsetten hat, hat dizze webstee tsjinkeard.</translation>
+<translation id="8289355894181816810">Nim kontakt op mei jo netwurkbehearder as jo net wis binne wat dit ynhâld.</translation>
+<translation id="8332188693563227489">Tagong ta <ph name="HOST_NAME" /> is wegere</translation>
+<translation id="8498891568109133222">It reagearjen fan <ph name="HOST_NAME" /> naam tefolle tiid.</translation>
+<translation id="8740359287975076522">It &lt;abbr id="dnsDefinition"&gt;DNS adres&lt;/abbr&gt; fan <ph name="HOST_NAME" /> koe net fûn wurde. De swierigens wurdt ûndersocht.</translation>
+<translation id="9183425211371246419"><ph name="HOST_NAME" /> brûkt in net stipe protokol.</translation>
+<translation id="933612690413056017">Der is gjin ynternet ferbining</translation>
+<translation id="969892804517981540">Offisjele bou</translation>
+<translation id="988159990683914416">Untwikkelders bou</translation>
+</translationbundle>

@@ -13,7 +13,7 @@ static_library("prefs") {
   ]
 }
 
-source_set("browser_prefs") {
+static_library("browser_prefs") {
   sources = [
     "native_settings_observer.cc",
     "native_settings_observer.h",

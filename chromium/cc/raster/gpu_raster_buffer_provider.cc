@@ -26,17 +26,32 @@
 namespace cc {
 namespace {
 
-static sk_sp<SkPicture> PlaybackToPicture(
+static void RasterizeSource(
     const RasterSource* raster_source,
     bool resource_has_previous_content,
     const gfx::Size& resource_size,
     const gfx::Rect& raster_full_rect,
     const gfx::Rect& raster_dirty_rect,
-    const gfx::SizeF& scales,
-    const RasterSource::PlaybackSettings& playback_settings) {
-  // GPU raster doesn't do low res tiles, so should always include images.
-  DCHECK(!playback_settings.skip_images);
+    float scale,
+    const RasterSource::PlaybackSettings& playback_settings,
+    ContextProvider* context_provider,
+    ResourceProvider::ScopedWriteLockGL* resource_lock,
+    bool async_worker_context_enabled,
+    bool use_distance_field_text,
+    int msaa_sample_count) {
+  ScopedGpuRaster gpu_raster(context_provider);
 
+  ResourceProvider::ScopedSkSurfaceProvider scoped_surface(
+      context_provider, resource_lock, async_worker_context_enabled,
+      use_distance_field_text, raster_source->CanUseLCDText(),
+      raster_source->HasImpliedColorSpace(), msaa_sample_count);
+  SkSurface* sk_surface = scoped_surface.sk_surface();
+  // Allocating an SkSurface will fail after a lost context.  Pretend we
+  // rasterized, as the contents of the resource don't matter anymore.
+  if (!sk_surface)
+    return;
+
+  // Playback
   gfx::Rect playback_rect = raster_full_rect;
   if (resource_has_previous_content) {
     playback_rect.Intersect(raster_dirty_rect);
@@ -58,69 +73,8 @@ static sk_sp<SkPicture> PlaybackToPicture(
         100.0f * fraction_saved);
   }
 
-  // Play back raster_source into temp SkPicture.
-  SkPictureRecorder recorder;
-  sk_sp<SkCanvas> canvas = sk_ref_sp(
-      recorder.beginRecording(resource_size.width(), resource_size.height()));
-  canvas->save();
-
-  // The GPU image decode controller assumes that Skia is done with an image
-  // when playback is complete. However, in this case, where we play back to a
-  // picture, we don't actually finish with the images until the picture is
-  // rasterized later. This can cause lifetime issues in the GPU image decode
-  // controller. To avoid this, we disable the image hijack canvas (and image
-  // decode controller) for this playback step, instead enabling it for the
-  // later picture rasterization.
-  RasterSource::PlaybackSettings settings = playback_settings;
-  settings.use_image_hijack_canvas = false;
-  raster_source->PlaybackToCanvas(canvas.get(), raster_full_rect, playback_rect,
-                                  scales, settings);
-  canvas->restore();
-  return recorder.finishRecordingAsPicture();
-}
-
-static void RasterizePicture(SkPicture* picture,
-                             ContextProvider* context_provider,
-                             ResourceProvider::ScopedWriteLockGL* resource_lock,
-                             bool async_worker_context_enabled,
-                             bool use_distance_field_text,
-                             bool can_use_lcd_text,
-                             int msaa_sample_count,
-                             ImageDecodeController* image_decode_controller,
-                             bool use_image_hijack_canvas) {
-  ScopedGpuRaster gpu_raster(context_provider);
-
-  ResourceProvider::ScopedSkSurfaceProvider scoped_surface(
-      context_provider, resource_lock, async_worker_context_enabled,
-      use_distance_field_text, can_use_lcd_text, msaa_sample_count);
-  SkSurface* sk_surface = scoped_surface.sk_surface();
-  // Allocating an SkSurface will fail after a lost context.  Pretend we
-  // rasterized, as the contents of the resource don't matter anymore.
-  if (!sk_surface)
-    return;
-
-  // As we did not use the image hijack canvas during the initial playback to
-  // |picture| (see PlaybackToPicture), we must enable it here if requested.
-  SkCanvas* canvas = sk_surface->getCanvas();
-  std::unique_ptr<ImageHijackCanvas> hijack_canvas;
-  if (use_image_hijack_canvas) {
-    DCHECK(image_decode_controller);
-    const SkImageInfo& info = canvas->imageInfo();
-    hijack_canvas.reset(new ImageHijackCanvas(info.width(), info.height(),
-                                              image_decode_controller));
-    SkIRect raster_bounds;
-    canvas->getClipDeviceBounds(&raster_bounds);
-    hijack_canvas->clipRect(SkRect::MakeFromIRect(raster_bounds));
-    hijack_canvas->setMatrix(canvas->getTotalMatrix());
-    hijack_canvas->addCanvas(canvas);
-
-    // Replace canvas with our ImageHijackCanvas which is wrapping it.
-    canvas = hijack_canvas.get();
-  }
-
-  SkMultiPictureDraw multi_picture_draw;
-  multi_picture_draw.add(canvas, picture);
-  multi_picture_draw.draw(false);
+  raster_source->PlaybackToCanvas(sk_surface->getCanvas(), raster_full_rect,
+                                  playback_rect, scale, playback_settings);
 }
 
 }  // namespace
@@ -146,13 +100,13 @@ void GpuRasterBufferProvider::RasterBufferImpl::Playback(
     const gfx::Rect& raster_full_rect,
     const gfx::Rect& raster_dirty_rect,
     uint64_t new_content_id,
-    const gfx::SizeF& scales,
+    float scale,
     const RasterSource::PlaybackSettings& playback_settings) {
   TRACE_EVENT0("cc", "GpuRasterBuffer::Playback");
   client_->PlaybackOnWorkerThread(&lock_, sync_token_,
                                   resource_has_previous_content_, raster_source,
                                   raster_full_rect, raster_dirty_rect,
-                                  new_content_id, scales, playback_settings);
+                                  new_content_id, scale, playback_settings);
 }
 
 GpuRasterBufferProvider::GpuRasterBufferProvider(
@@ -244,7 +198,7 @@ void GpuRasterBufferProvider::PlaybackOnWorkerThread(
     const gfx::Rect& raster_full_rect,
     const gfx::Rect& raster_dirty_rect,
     uint64_t new_content_id,
-    const gfx::SizeF& scales,
+    float scale,
     const RasterSource::PlaybackSettings& playback_settings) {
   ContextProvider::ScopedContextLock scoped_context(worker_context_provider_);
   gpu::gles2::GLES2Interface* gl = scoped_context.ContextGL();
@@ -259,15 +213,11 @@ void GpuRasterBufferProvider::PlaybackOnWorkerThread(
     gl->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
   }
 
-  sk_sp<SkPicture> picture = PlaybackToPicture(
-      raster_source, resource_has_previous_content, resource_lock->size(),
-      raster_full_rect, raster_dirty_rect, scales, playback_settings);
-
-  RasterizePicture(picture.get(), worker_context_provider_, resource_lock,
-                   async_worker_context_enabled_, use_distance_field_text_,
-                   raster_source->CanUseLCDText(), msaa_sample_count_,
-                   raster_source->image_decode_controller(),
-                   playback_settings.use_image_hijack_canvas);
+  RasterizeSource(raster_source, resource_has_previous_content,
+                  resource_lock->size(), raster_full_rect, raster_dirty_rect,
+                  scale, playback_settings, worker_context_provider_,
+                  resource_lock, async_worker_context_enabled_,
+                  use_distance_field_text_, msaa_sample_count_);
 
   const uint64_t fence_sync = gl->InsertFenceSyncCHROMIUM();
 

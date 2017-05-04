@@ -61,7 +61,7 @@ class InputDeviceCapabilities;
 class Locale;
 class MutableStylePropertySet;
 class NamedNodeMap;
-class NodeIntersectionObserverData;
+class ElementIntersectionObserverData;
 class PseudoElement;
 class ResizeObservation;
 class ResizeObserver;
@@ -356,16 +356,35 @@ class CORE_EXPORT Element : public ContainerNode {
   // For exposing to DOM only.
   NamedNodeMap* attributesForBindings() const;
 
-  enum AttributeModificationReason { ModifiedDirectly, ModifiedByCloning };
-
-  // This method is called whenever an attribute is added, changed or removed.
-  virtual void attributeChanged(const QualifiedName&,
+  enum class AttributeModificationReason { kDirectly, kByParser, kByCloning };
+  struct AttributeModificationParams {
+    STACK_ALLOCATED();
+    AttributeModificationParams(const QualifiedName& qname,
                                 const AtomicString& oldValue,
                                 const AtomicString& newValue,
-                                AttributeModificationReason = ModifiedDirectly);
-  virtual void parseAttribute(const QualifiedName&,
-                              const AtomicString& oldValue,
-                              const AtomicString& newValue);
+                                AttributeModificationReason reason)
+        : name(qname), oldValue(oldValue), newValue(newValue), reason(reason) {}
+
+    const QualifiedName& name;
+    const AtomicString& oldValue;
+    const AtomicString& newValue;
+    const AttributeModificationReason reason;
+  };
+
+  // |attributeChanged| is called whenever an attribute is added, changed or
+  // removed. It handles very common attributes such as id, class, name, style,
+  // and slot.
+  //
+  // While the owner document is parsed, this function is called after all
+  // attributes in a start tag were added to the element.
+  virtual void attributeChanged(const AttributeModificationParams&);
+
+  // |parseAttribute| is called by |attributeChanged|. If an element
+  // implementation needs to check an attribute update, override this function.
+  //
+  // While the owner document is parsed, this function is called after all
+  // attributes in a start tag were added to the element.
+  virtual void parseAttribute(const AttributeModificationParams&);
 
   virtual bool hasLegalLinkAttribute(const QualifiedName&) const;
   virtual const QualifiedName& subResourceAttributeName() const;
@@ -474,6 +493,7 @@ class CORE_EXPORT Element : public ContainerNode {
       const Attribute&) const {
     return false;
   }
+  bool isScriptingAttribute(const Attribute&) const;
 
   virtual bool isLiveLink() const { return false; }
   KURL hrefURL() const;
@@ -578,9 +598,6 @@ class CORE_EXPORT Element : public ContainerNode {
 
   LayoutSize minimumSizeForResizing() const;
   void setMinimumSizeForResizing(const LayoutSize&);
-
-  virtual void didBecomeFullscreenElement() {}
-  virtual void willStopBeingFullscreenElement() {}
 
   // Called by the parser when this element's close tag is reached, signaling
   // that all child tags have been parsed and added.  This is needed for
@@ -709,9 +726,7 @@ class CORE_EXPORT Element : public ContainerNode {
                                                  const QualifiedName& attr3);
   void logUpdateAttributeIfIsolatedWorldAndInDocument(
       const char element[],
-      const QualifiedName& attributeName,
-      const AtomicString& oldValue,
-      const AtomicString& newValue);
+      const AttributeModificationParams&);
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -719,8 +734,8 @@ class CORE_EXPORT Element : public ContainerNode {
 
   SpellcheckAttributeState spellcheckAttributeState() const;
 
-  NodeIntersectionObserverData* intersectionObserverData() const;
-  NodeIntersectionObserverData& ensureIntersectionObserverData();
+  ElementIntersectionObserverData* intersectionObserverData() const;
+  ElementIntersectionObserverData& ensureIntersectionObserverData();
 
   HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>*
   resizeObserverData() const;

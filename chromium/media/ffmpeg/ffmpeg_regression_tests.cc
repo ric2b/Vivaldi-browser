@@ -31,14 +31,21 @@ const char kRegressionTestDataPathPrefix[] = "internal/";
 struct RegressionTestData {
   RegressionTestData(const char* filename,
                      PipelineStatus init_status,
-                     PipelineStatus end_status)
+                     PipelineStatus end_status,
+                     base::TimeDelta seek_time)
       : filename(std::string(kRegressionTestDataPathPrefix) + filename),
         init_status(init_status),
-        end_status(end_status) {}
+        end_status(end_status),
+        seek_time(seek_time) {}
 
   std::string filename;
   PipelineStatus init_status;
   PipelineStatus end_status;
+
+  // |seek_time| is the time to seek to at the end of the test if the pipeline
+  // successfully reaches that point in the test. If kNoTimestamp, the actual
+  // seek time will be GetStartTime().
+  base::TimeDelta seek_time;
 };
 
 // Used for tests which just need to run without crashing or tooling errors, but
@@ -61,10 +68,13 @@ class FlakyFFmpegRegressionTest
       public PipelineIntegrationTestBase {
 };
 
+#define FFMPEG_TEST_CASE_SEEKING(name, fn, init_status, end_status, seek_time) \
+  INSTANTIATE_TEST_CASE_P(name, FFmpegRegressionTest,                          \
+                          testing::Values(RegressionTestData(                  \
+                              fn, init_status, end_status, seek_time)));
+
 #define FFMPEG_TEST_CASE(name, fn, init_status, end_status) \
-  INSTANTIATE_TEST_CASE_P(                                  \
-      name, FFmpegRegressionTest,                           \
-      testing::Values(RegressionTestData(fn, init_status, end_status)));
+  FFMPEG_TEST_CASE_SEEKING(name, fn, init_status, end_status, kNoTimestamp)
 
 #define FLAKY_FFMPEG_TEST_CASE(name, fn) \
     INSTANTIATE_TEST_CASE_P(FLAKY_##name, FlakyFFmpegRegressionTest, \
@@ -91,7 +101,10 @@ FFMPEG_TEST_CASE(Cr112384,
                  "security/112384.webm",
                  DEMUXER_ERROR_COULD_NOT_PARSE,
                  DEMUXER_ERROR_COULD_NOT_PARSE);
-FFMPEG_TEST_CASE(Cr112976, "security/112976.ogg", PIPELINE_OK, PIPELINE_OK);
+FFMPEG_TEST_CASE(Cr112976,
+                 "security/112976.ogg",
+                 PIPELINE_OK,
+                 DEMUXER_ERROR_COULD_NOT_PARSE);
 FFMPEG_TEST_CASE(Cr116927,
                  "security/116927.ogv",
                  DEMUXER_ERROR_NO_SUPPORTED_STREAMS,
@@ -100,17 +113,26 @@ FFMPEG_TEST_CASE(Cr117912,
                  "security/117912.webm",
                  DEMUXER_ERROR_COULD_NOT_OPEN,
                  DEMUXER_ERROR_COULD_NOT_OPEN);
-FFMPEG_TEST_CASE(Cr123481, "security/123481.ogv", PIPELINE_OK, PIPELINE_OK);
+FFMPEG_TEST_CASE(Cr123481,
+                 "security/123481.ogv",
+                 PIPELINE_OK,
+                 DEMUXER_ERROR_COULD_NOT_PARSE);
 FFMPEG_TEST_CASE(Cr132779,
                  "security/132779.webm",
                  DEMUXER_ERROR_COULD_NOT_PARSE,
                  DEMUXER_ERROR_COULD_NOT_PARSE);
-FFMPEG_TEST_CASE(Cr140165, "security/140165.ogg", PIPELINE_OK, PIPELINE_OK);
+FFMPEG_TEST_CASE(Cr140165,
+                 "security/140165.ogg",
+                 PIPELINE_OK,
+                 DEMUXER_ERROR_COULD_NOT_PARSE);
 FFMPEG_TEST_CASE(Cr140647,
                  "security/140647.ogv",
                  DEMUXER_ERROR_COULD_NOT_OPEN,
                  DEMUXER_ERROR_COULD_NOT_OPEN);
-FFMPEG_TEST_CASE(Cr142738, "crbug142738.ogg", PIPELINE_OK, PIPELINE_OK);
+FFMPEG_TEST_CASE(Cr142738,
+                 "crbug142738.ogg",
+                 PIPELINE_OK,
+                 DEMUXER_ERROR_COULD_NOT_PARSE);
 FFMPEG_TEST_CASE(Cr152691,
                  "security/152691.mp3",
                  PIPELINE_OK,
@@ -118,13 +140,13 @@ FFMPEG_TEST_CASE(Cr152691,
 FFMPEG_TEST_CASE(Cr161639, "security/161639.m4a", PIPELINE_OK, PIPELINE_OK);
 FFMPEG_TEST_CASE(Cr222754,
                  "security/222754.mp4",
-                 PIPELINE_OK,
-                 PIPELINE_ERROR_DECODE);
+                 DEMUXER_ERROR_NO_SUPPORTED_STREAMS,
+                 DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
 FFMPEG_TEST_CASE(Cr234630a, "security/234630a.mov", PIPELINE_OK, PIPELINE_OK);
 FFMPEG_TEST_CASE(Cr234630b,
                  "security/234630b.mov",
-                 PIPELINE_OK,
-                 PIPELINE_ERROR_DECODE);
+                 DEMUXER_ERROR_NO_SUPPORTED_STREAMS,
+                 DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
 FFMPEG_TEST_CASE(Cr242786, "security/242786.webm", PIPELINE_OK, PIPELINE_OK);
 // Test for out-of-bounds access with slightly corrupt file (detection logic
 // thinks it's a MONO file, but actually contains STEREO audio).
@@ -163,10 +185,46 @@ FFMPEG_TEST_CASE(Cr599625,
                  "security/599625.mp4",
                  PIPELINE_OK,
                  PIPELINE_ERROR_DECODE);
+FFMPEG_TEST_CASE(Cr635422,
+                 "security/635422.ogg",
+                 DEMUXER_ERROR_COULD_NOT_OPEN,
+                 DEMUXER_ERROR_COULD_NOT_OPEN);
+FFMPEG_TEST_CASE(Cr637428,
+                 "security/637428.ogg",
+                 PIPELINE_ERROR_DECODE,
+                 PIPELINE_ERROR_DECODE);
+FFMPEG_TEST_CASE(Cr639961,
+                 "security/639961.flac",
+                 PIPELINE_ERROR_INITIALIZATION_FAILED,
+                 PIPELINE_ERROR_INITIALIZATION_FAILED);
+FFMPEG_TEST_CASE(Cr640889, "security/640889.flac", PIPELINE_OK, PIPELINE_OK);
+FFMPEG_TEST_CASE(Cr640912, "security/640912.flac", PIPELINE_OK, PIPELINE_OK);
 // TODO(liberato): before crbug.com/658440 was fixed, this would fail if run
 // twice under ASAN.  If run once, then it doesn't.  However, it still catches
 // issues in crbug.com/662118, so it's included anyway.
 FFMPEG_TEST_CASE(Cr658440, "security/658440.flac", PIPELINE_OK, PIPELINE_OK);
+FFMPEG_TEST_CASE(Cr665305,
+                 "crbug665305.flac",
+                 PIPELINE_OK,
+                 DEMUXER_ERROR_COULD_NOT_PARSE);
+FFMPEG_TEST_CASE_SEEKING(Cr666770,
+                         "security/666770.mp4",
+                         PIPELINE_OK,
+                         PIPELINE_OK,
+                         base::TimeDelta::FromSecondsD(0.0843));
+FFMPEG_TEST_CASE(Cr666874,
+                 "security/666874.mp3",
+                 DEMUXER_ERROR_COULD_NOT_OPEN,
+                 DEMUXER_ERROR_COULD_NOT_OPEN);
+FFMPEG_TEST_CASE(Cr667063, "security/667063.mp4", PIPELINE_OK, PIPELINE_OK);
+FFMPEG_TEST_CASE(Cr668346,
+                 "security/668346.flac",
+                 PIPELINE_ERROR_INITIALIZATION_FAILED,
+                 PIPELINE_ERROR_INITIALIZATION_FAILED);
+FFMPEG_TEST_CASE(Cr670190,
+                 "security/670190.ogg",
+                 DECODER_ERROR_NOT_SUPPORTED,
+                 DECODER_ERROR_NOT_SUPPORTED);
 
 // General MP4 test cases.
 FFMPEG_TEST_CASE(MP4_0,
@@ -206,7 +264,10 @@ FFMPEG_TEST_CASE(MP4_16,
                  "security/looping2.mov",
                  DEMUXER_ERROR_COULD_NOT_OPEN,
                  DEMUXER_ERROR_COULD_NOT_OPEN);
-FFMPEG_TEST_CASE(MP4_17, "security/assert2.mov", PIPELINE_OK, PIPELINE_OK);
+FFMPEG_TEST_CASE(MP4_17,
+                 "security/assert2.mov",
+                 DEMUXER_ERROR_COULD_NOT_OPEN,
+                 PIPELINE_OK);
 
 // General OGV test cases.
 FFMPEG_TEST_CASE(OGV_1,
@@ -342,6 +403,10 @@ FLAKY_FFMPEG_TEST_CASE(MP4_4, "security/clockh264aac_301350139.mp4");
 FLAKY_FFMPEG_TEST_CASE(MP4_12, "security/assert1.mov");
 FLAKY_FFMPEG_TEST_CASE(WEBM_3, "security/out.webm.139771.2965");
 
+// Init status flakes between PIPELINE_OK and PIPELINE_ERROR_DECODE, and gives
+// PIPELINE_ERROR_DECODE later if initialization was PIPELINE_OK.
+FLAKY_FFMPEG_TEST_CASE(Cr666794, "security/666794.webm");
+
 // Not really flaky, but can't pass the seek test.
 FLAKY_FFMPEG_TEST_CASE(MP4_10, "security/null1.m4a");
 FLAKY_FFMPEG_TEST_CASE(Cr112670, "security/112670.mp4");
@@ -358,7 +423,8 @@ TEST_P(FFmpegRegressionTest, BasicPlayback) {
       ASSERT_TRUE(ended_);
 
       // Tack a seek on the end to catch any seeking issues.
-      Seek(GetStartTime());
+      Seek(GetParam().seek_time == kNoTimestamp ? GetStartTime()
+                                                : GetParam().seek_time);
     }
   } else {
     // Don't bother checking the exact status as we only care that the

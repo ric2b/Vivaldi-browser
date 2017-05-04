@@ -21,11 +21,9 @@ component("bindings") {
     "$interfaces_bindings_gen_dir/pipe_control_messages.mojom-shared.h",
     "$interfaces_bindings_gen_dir/pipe_control_messages.mojom.cc",
     "$interfaces_bindings_gen_dir/pipe_control_messages.mojom.h",
-    "array.h",
     "array_data_view.h",
     "array_traits.h",
     "array_traits_carray.h",
-    "array_traits_standard.h",
     "array_traits_stl.h",
     "associated_binding.h",
     "associated_binding_set.h",
@@ -93,8 +91,6 @@ component("bindings") {
     "lib/no_interface.cc",
     "lib/pipe_control_message_handler.cc",
     "lib/pipe_control_message_proxy.cc",
-    "lib/router.cc",
-    "lib/router.h",
     "lib/scoped_interface_endpoint_handle.cc",
     "lib/serialization.h",
     "lib/serialization_context.cc",
@@ -118,7 +114,6 @@ component("bindings") {
     "map.h",
     "map_data_view.h",
     "map_traits.h",
-    "map_traits_standard.h",
     "map_traits_stl.h",
     "message.h",
     "message_header_validator.h",
@@ -130,11 +125,8 @@ component("bindings") {
     "pipe_control_message_handler_delegate.h",
     "pipe_control_message_proxy.h",
     "scoped_interface_endpoint_handle.h",
-    "stl_converters.h",
-    "string.h",
     "string_data_view.h",
     "string_traits.h",
-    "string_traits_standard.h",
     "string_traits_stl.h",
     "string_traits_string16.h",
     "string_traits_string_piece.h",
@@ -176,17 +168,13 @@ if (!is_ios) {
   # TODO(yzshen): crbug.com/617718 Consider moving this into blink.
   source_set("wtf_support") {
     sources = [
-      "array_traits_wtf.h",
       "array_traits_wtf_vector.h",
       "lib/string_traits_wtf.cc",
       "lib/wtf_clone_equals_util.h",
       "lib/wtf_hash_util.h",
       "lib/wtf_serialization.h",
-      "map_traits_wtf.h",
       "map_traits_wtf_hash_map.h",
       "string_traits_wtf.h",
-      "wtf_array.h",
-      "wtf_map.h",
     ]
 
     public_deps = [

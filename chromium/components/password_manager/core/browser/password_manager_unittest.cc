@@ -33,6 +33,7 @@ using base::ASCIIToUTF16;
 using testing::_;
 using testing::AnyNumber;
 using testing::Return;
+using testing::ReturnRef;
 using testing::SaveArg;
 using testing::WithArg;
 
@@ -67,6 +68,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
                void(const autofill::PasswordForm&));
   MOCK_METHOD0(AutomaticPasswordSaveIndicator, void());
   MOCK_METHOD0(GetPrefs, PrefService*());
+  MOCK_CONST_METHOD0(GetMainFrameURL, const GURL&());
   MOCK_METHOD0(GetDriver, PasswordManagerDriver*());
   MOCK_CONST_METHOD0(GetStoreResultFilter, const MockStoreResultFilter*());
 
@@ -122,7 +124,7 @@ class PasswordManagerTest : public testing::Test {
 
     EXPECT_CALL(client_, GetPasswordStore())
         .WillRepeatedly(Return(store_.get()));
-    EXPECT_CALL(*store_, GetSiteStatsMock(_)).Times(AnyNumber());
+    EXPECT_CALL(*store_, GetSiteStatsImpl(_)).Times(AnyNumber());
     EXPECT_CALL(client_, GetDriver()).WillRepeatedly(Return(&driver_));
 
     manager_.reset(new PasswordManager(&client_));
@@ -135,6 +137,9 @@ class PasswordManagerTest : public testing::Test {
         .WillRepeatedly(Return(password_autofill_manager_.get()));
     EXPECT_CALL(client_, DidLastPageLoadEncounterSSLErrors())
         .WillRepeatedly(Return(false));
+
+    ON_CALL(client_, GetMainFrameURL())
+        .WillByDefault(ReturnRef(GURL::EmptyGURL()));
   }
 
   void TearDown() override {
@@ -386,7 +391,9 @@ TEST_F(PasswordManagerTest, FormSubmit) {
   observed.push_back(form);
   EXPECT_CALL(*store_, GetLogins(_, _))
       .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+  EXPECT_FALSE(manager()->IsPasswordFieldDetectedOnPage());
   manager()->OnPasswordFormsParsed(&driver_, observed);
+  EXPECT_TRUE(manager()->IsPasswordFieldDetectedOnPage());
   manager()->OnPasswordFormsRendered(&driver_, observed, true);
 
   EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
@@ -402,6 +409,7 @@ TEST_F(PasswordManagerTest, FormSubmit) {
   observed.clear();
   manager()->OnPasswordFormsParsed(&driver_, observed);
   manager()->OnPasswordFormsRendered(&driver_, observed, true);
+  EXPECT_FALSE(manager()->IsPasswordFieldDetectedOnPage());
 
   // Simulate saving the form, as if the info bar was accepted.
   EXPECT_CALL(*store_, AddLogin(FormMatches(form)));
@@ -588,16 +596,21 @@ TEST_F(PasswordManagerTest, SyncCredentialsNotSaved) {
 }
 
 // On a successful login with an updated password,
-// CredentialsFilter::ReportFormLoginSuccess should be called.
-TEST_F(PasswordManagerTest, ReportFormLoginSuccessCalled) {
-  PasswordForm form(MakeSimpleForm());
+// CredentialsFilter::ReportFormLoginSuccess and CredentialsFilter::ShouldSave
+// should be called. The argument of ShouldSave shold be the submitted form.
+TEST_F(PasswordManagerTest, ReportFormLoginSuccessAndShouldSaveCalled) {
+  PasswordForm stored_form(MakeSimpleForm());
 
   std::vector<PasswordForm> observed;
-  observed.push_back(form);
+  PasswordForm observed_form = stored_form;
+  // Different values of |username_element| needed to ensure that it is the
+  // |observed_form| and not the |stored_form| what is passed to ShouldSave.
+  observed_form.username_element += ASCIIToUTF16("1");
+  observed.push_back(observed_form);
   EXPECT_CALL(driver_, FillPasswordForm(_)).Times(2);
   // Simulate that |form| is already in the store, making this an update.
   EXPECT_CALL(*store_, GetLogins(_, _))
-      .WillRepeatedly(WithArg<1>(InvokeConsumer(form)));
+      .WillRepeatedly(WithArg<1>(InvokeConsumer(stored_form)));
   manager()->OnPasswordFormsParsed(&driver_, observed);
   manager()->OnPasswordFormsRendered(&driver_, observed, true);
 
@@ -605,11 +618,16 @@ TEST_F(PasswordManagerTest, ReportFormLoginSuccessCalled) {
   EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
       .WillRepeatedly(Return(true));
   EXPECT_CALL(client_, GetPrefs()).WillRepeatedly(Return(nullptr));
-  manager()->ProvisionallySavePassword(form);
+
+  manager()->ProvisionallySavePassword(observed_form);
 
   // Chrome should recognise the successful login and call
   // ReportFormLoginSuccess.
   EXPECT_CALL(*client_.GetStoreResultFilter(), ReportFormLoginSuccess(_));
+
+  PasswordForm submitted_form = observed_form;
+  submitted_form.preferred = true;
+  EXPECT_CALL(*client_.GetStoreResultFilter(), ShouldSave(submitted_form));
   EXPECT_CALL(*store_, UpdateLogin(_));
   observed.clear();
   manager()->OnPasswordFormsParsed(&driver_, observed);
@@ -736,6 +754,104 @@ TEST_F(PasswordManagerTest,
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_, _)).Times(0);
   manager()->OnPasswordFormsParsed(&driver_, observed);
   manager()->OnPasswordFormsRendered(&driver_, observed, true);
+}
+
+TEST_F(PasswordManagerTest,
+       ShouldBlockPasswordForSameOriginButDifferentSchemeTest) {
+  constexpr struct {
+    const char* old_origin;
+    const char* new_origin;
+    bool result;
+  } kTestData[] = {
+      // Same origin and same scheme.
+      {"https://example.com/login", "https://example.com/login", false},
+      // Same host and same scheme, different port.
+      {"https://example.com:443/login", "https://example.com:444/login", false},
+      // Same host but different scheme (https to http).
+      {"https://example.com/login", "http://example.com/login", true},
+      // Same host but different scheme (http to https).
+      {"http://example.com/login", "https://example.com/login", false},
+      // Different TLD, same schemes.
+      {"https://example.com/login", "https://example.org/login", false},
+      // Different TLD, different schemes.
+      {"https://example.com/login", "http://example.org/login", false},
+      // Different subdomains, same schemes.
+      {"https://sub1.example.com/login", "https://sub2.example.org/login",
+       false},
+  };
+
+  PasswordForm form = MakeSimpleForm();
+  for (const auto& test_case : kTestData) {
+    SCOPED_TRACE(testing::Message("#test_case = ") << (&test_case - kTestData));
+    manager()->main_frame_url_ = GURL(test_case.old_origin);
+    form.origin = GURL(test_case.new_origin);
+    EXPECT_EQ(
+        test_case.result,
+        manager()->ShouldBlockPasswordForSameOriginButDifferentScheme(form));
+  }
+}
+
+// Tests whether two submissions to the same origin but different schemes
+// result in only saving the first submission, which has a secure scheme.
+TEST_F(PasswordManagerTest, AttemptedSavePasswordSameOriginInsecureScheme) {
+  PasswordForm secure_form(MakeSimpleForm());
+  secure_form.origin = GURL("https://example.com/login");
+  secure_form.action = GURL("https://example.com/login");
+  secure_form.signon_realm = secure_form.origin.spec();
+
+  PasswordForm insecure_form(MakeSimpleForm());
+  insecure_form.username_value = ASCIIToUTF16("compromised_user");
+  insecure_form.password_value = ASCIIToUTF16("C0mpr0m1s3d_P4ss");
+  insecure_form.origin = GURL("http://example.com/home");
+  insecure_form.action = GURL("http://example.com/home");
+  insecure_form.signon_realm = insecure_form.origin.spec();
+
+  EXPECT_CALL(*store_, GetLogins(_, _))
+      .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+
+  EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
+      .WillRepeatedly(Return(true));
+
+  EXPECT_CALL(client_, GetMainFrameURL())
+      .WillRepeatedly(ReturnRef(secure_form.origin));
+
+  // Parse, render and submit the secure form.
+  std::vector<PasswordForm> observed = {secure_form};
+  manager()->OnPasswordFormsParsed(&driver_, observed);
+  manager()->OnPasswordFormsRendered(&driver_, observed, true);
+  OnPasswordFormSubmitted(secure_form);
+
+  // Make sure |PromptUserToSaveOrUpdatePassword| gets called, and the resulting
+  // form manager is saved.
+  std::unique_ptr<PasswordFormManager> form_manager_to_save;
+  EXPECT_CALL(client_,
+              PromptUserToSaveOrUpdatePasswordPtr(
+                  _, CredentialSourceType::CREDENTIAL_SOURCE_PASSWORD_MANAGER))
+      .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
+
+  EXPECT_CALL(client_, GetMainFrameURL())
+      .WillRepeatedly(ReturnRef(insecure_form.origin));
+
+  // Parse, render and submit the insecure form.
+  observed = {insecure_form};
+  manager()->OnPasswordFormsParsed(&driver_, observed);
+  manager()->OnPasswordFormsRendered(&driver_, observed, true);
+  OnPasswordFormSubmitted(insecure_form);
+
+  // Expect no further calls to |ProptUserToSaveOrUpdatePassword| due to
+  // insecure origin.
+  EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_, _)).Times(0);
+
+  // Trigger call to |ProvisionalSavePassword| by rendering a page without
+  // forms.
+  observed.clear();
+  manager()->OnPasswordFormsParsed(&driver_, observed);
+  manager()->OnPasswordFormsRendered(&driver_, observed, true);
+
+  // Make sure that the form saved by the user is indeed the secure form.
+  ASSERT_TRUE(form_manager_to_save);
+  EXPECT_THAT(form_manager_to_save->pending_credentials(),
+              FormMatches(secure_form));
 }
 
 // Create a form with both a new and current password element. Let the current
@@ -1083,12 +1199,14 @@ TEST_F(PasswordManagerTest, SaveFormFetchedAfterSubmit) {
   PasswordForm form(MakeSimpleForm());
   observed.push_back(form);
 
-  PasswordStoreConsumer* form_manager = nullptr;
   // No call-back from store after GetLogins is called emulates that
   // PasswordStore did not fetch a form in time before submission.
-  EXPECT_CALL(*store_, GetLogins(_, _)).WillOnce(SaveArg<1>(&form_manager));
+  EXPECT_CALL(*store_, GetLogins(_, _));
   manager()->OnPasswordFormsParsed(&driver_, observed);
   manager()->OnPasswordFormsRendered(&driver_, observed, true);
+  ASSERT_EQ(1u, manager()->pending_login_managers().size());
+  PasswordFormManager* form_manager =
+      manager()->pending_login_managers().front().get();
 
   EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
       .WillRepeatedly(Return(true));
@@ -1097,8 +1215,8 @@ TEST_F(PasswordManagerTest, SaveFormFetchedAfterSubmit) {
   // Emulate fetching password form from PasswordStore after submission but
   // before post-navigation load.
   ASSERT_TRUE(form_manager);
-  form_manager->OnGetPasswordStoreResults(
-      std::vector<std::unique_ptr<PasswordForm>>());
+  static_cast<FormFetcherImpl*>(form_manager->form_fetcher())
+      ->OnGetPasswordStoreResults(std::vector<std::unique_ptr<PasswordForm>>());
 
   std::unique_ptr<PasswordFormManager> form_manager_to_save;
   EXPECT_CALL(client_,
@@ -1373,13 +1491,13 @@ TEST_F(PasswordManagerTest,
   manager()->OnPasswordFormsParsed(&driver_, observed);
   manager()->OnPasswordFormsRendered(&driver_, observed, true);
 
-  PasswordStoreConsumer* consumer = nullptr;
-  EXPECT_CALL(*store_, GetLogins(PasswordStore::FormDigest(form), _))
-      .WillOnce(SaveArg<1>(&consumer));
+  EXPECT_CALL(*store_, GetLogins(PasswordStore::FormDigest(form), _));
   manager()->SetGenerationElementAndReasonForForm(&driver_, form,
                                                   base::string16(), false);
+  ASSERT_EQ(1u, manager()->pending_login_managers().size());
   PasswordFormManager* form_manager =
-      static_cast<PasswordFormManager*>(consumer);
+      manager()->pending_login_managers().front().get();
+
   EXPECT_FALSE(form_manager->has_generated_password());
 }
 
@@ -1436,19 +1554,20 @@ TEST_F(PasswordManagerTest, UpdateFormManagers) {
   // Seeing some forms should result in creating PasswordFormManagers and
   // querying PasswordStore. Calling UpdateFormManagers should result in
   // querying the store again.
-  PasswordStoreConsumer* consumer = nullptr;
-  EXPECT_CALL(*store_, GetLogins(_, _)).WillOnce(SaveArg<1>(&consumer));
+  EXPECT_CALL(*store_, GetLogins(_, _));
 
   PasswordForm form;
   std::vector<PasswordForm> observed;
   observed.push_back(form);
   manager()->OnPasswordFormsParsed(&driver_, observed);
+  ASSERT_EQ(1u, manager()->pending_login_managers().size());
+  PasswordFormManager* form_manager =
+      manager()->pending_login_managers().front().get();
 
   // The first GetLogins should have fired, but to unblock the second, we need
   // to first send a response from the store (to be ignored).
-  ASSERT_TRUE(consumer);
-  consumer->OnGetPasswordStoreResults(
-      std::vector<std::unique_ptr<PasswordForm>>());
+  static_cast<FormFetcherImpl*>(form_manager->form_fetcher())
+      ->OnGetPasswordStoreResults(std::vector<std::unique_ptr<PasswordForm>>());
   EXPECT_CALL(*store_, GetLogins(_, _));
   manager()->UpdateFormManagers();
 }

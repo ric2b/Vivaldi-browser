@@ -8,9 +8,9 @@
 #include "core/dom/Node.h"
 #include "core/dom/StyleEngine.h"
 #include "core/fetch/ResourceOwner.h"
-#include "core/fetch/StyleSheetResource.h"
-#include "core/fetch/StyleSheetResourceClient.h"
 #include "core/html/LinkResource.h"
+#include "core/loader/resource/StyleSheetResource.h"
+#include "core/loader/resource/StyleSheetResourceClient.h"
 
 namespace blink {
 
@@ -45,9 +45,7 @@ class LinkStyle final : public LinkResource, ResourceOwner<StyleSheetResource> {
   bool sheetLoaded();
 
   void setDisabledState(bool);
-  void setSheetTitle(
-      const String&,
-      StyleEngine::ActiveSheetsUpdate = StyleEngine::DontUpdateActiveSheets);
+  void setSheetTitle(const String&);
 
   bool styleSheetIsLoading() const;
   bool hasSheet() const { return m_sheet; }

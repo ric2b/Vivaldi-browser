@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "content/public/common/content_switches.h"
+#include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/events/blink/web_input_event_traits.h"
 
@@ -36,12 +37,12 @@ void InputEventStreamValidator::Validate(const WebInputEvent& event) {
 bool InputEventStreamValidator::ValidateImpl(const blink::WebInputEvent& event,
                                              std::string* error_msg) {
   DCHECK(error_msg);
-  if (WebInputEvent::isGestureEventType(event.type)) {
+  if (WebInputEvent::isGestureEventType(event.type())) {
     const WebGestureEvent& gesture = static_cast<const WebGestureEvent&>(event);
     // TODO(jdduke): Validate touchpad gesture streams.
     if (gesture.sourceDevice == blink::WebGestureDeviceTouchscreen)
       return gesture_validator_.Validate(gesture, error_msg);
-  } else if (WebInputEvent::isTouchEventType(event.type)) {
+  } else if (WebInputEvent::isTouchEventType(event.type())) {
     const WebTouchEvent& touch = static_cast<const WebTouchEvent&>(event);
     return touch_validator_.Validate(touch, error_msg);
   }

@@ -14,7 +14,6 @@
 #include "base/task_scheduler/sequence_sort_key.h"
 #include "base/task_scheduler/task.h"
 #include "base/task_scheduler/task_tracker.h"
-#include "base/time/time.h"
 #include "build/build_config.h"
 
 #if defined(OS_POSIX) && !defined(OS_NACL_SFI)
@@ -41,13 +40,14 @@ TaskSchedulerImpl::~TaskSchedulerImpl() {
 #endif
 }
 
-void TaskSchedulerImpl::PostTaskWithTraits(
+void TaskSchedulerImpl::PostDelayedTaskWithTraits(
     const tracked_objects::Location& from_here,
     const TaskTraits& traits,
-    const Closure& task) {
+    const Closure& task,
+    TimeDelta delay) {
   // Post |task| as part of a one-off single-task Sequence.
   GetWorkerPoolForTraits(traits)->PostTaskWithSequence(
-      MakeUnique<Task>(from_here, task, traits, TimeDelta()),
+      MakeUnique<Task>(from_here, task, traits, delay),
       make_scoped_refptr(new Sequence), nullptr);
 }
 
@@ -116,15 +116,15 @@ void TaskSchedulerImpl::Initialize(
   // Start the service thread. On platforms that support it (POSIX except NaCL
   // SFI), the service thread runs a MessageLoopForIO which is used to support
   // FileDescriptorWatcher in the scope in which tasks run.
-  constexpr MessageLoop::Type kServiceThreadMessageLoopType =
+  Thread::Options service_thread_options;
+  service_thread_options.message_loop_type =
 #if defined(OS_POSIX) && !defined(OS_NACL_SFI)
       MessageLoop::TYPE_IO;
 #else
       MessageLoop::TYPE_DEFAULT;
 #endif
-  constexpr size_t kDefaultStackSize = 0;
-  CHECK(service_thread_.StartWithOptions(
-      Thread::Options(kServiceThreadMessageLoopType, kDefaultStackSize)));
+  service_thread_options.timer_slack = TIMER_SLACK_MAXIMUM;
+  CHECK(service_thread_.StartWithOptions(service_thread_options));
 
   // Instantiate TaskTracker. Needs to happen after starting the service thread
   // to get its message_loop().

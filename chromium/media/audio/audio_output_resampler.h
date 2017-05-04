@@ -8,7 +8,6 @@
 #include <map>
 
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "media/audio/audio_io.h"
@@ -37,19 +36,20 @@ class MEDIA_EXPORT AudioOutputResampler : public AudioOutputDispatcher {
                        const AudioParameters& output_params,
                        const std::string& output_device_id,
                        const base::TimeDelta& close_delay);
+  ~AudioOutputResampler() override;
 
   // AudioOutputDispatcher interface.
+  AudioOutputProxy* CreateStreamProxy() override;
   bool OpenStream() override;
   bool StartStream(AudioOutputStream::AudioSourceCallback* callback,
                    AudioOutputProxy* stream_proxy) override;
   void StopStream(AudioOutputProxy* stream_proxy) override;
   void StreamVolumeSet(AudioOutputProxy* stream_proxy, double volume) override;
   void CloseStream(AudioOutputProxy* stream_proxy) override;
-  void Shutdown() override;
 
  private:
-  friend class base::RefCountedThreadSafe<AudioOutputResampler>;
-  ~AudioOutputResampler() override;
+  using CallbackMap =
+      std::map<AudioOutputProxy*, std::unique_ptr<OnMoreDataConverter>>;
 
   // Converts low latency based output parameters into high latency
   // appropriate output parameters in error situations.
@@ -61,12 +61,14 @@ class MEDIA_EXPORT AudioOutputResampler : public AudioOutputDispatcher {
   // Used to initialize |dispatcher_|.
   void Initialize();
 
+  // Stops the stream corresponding to the |item| in |callbacks_|.
+  void StopStreamInternal(const CallbackMap::value_type& item);
+
   // Dispatcher to proxy all AudioOutputDispatcher calls too.
-  scoped_refptr<AudioOutputDispatcherImpl> dispatcher_;
+  std::unique_ptr<AudioOutputDispatcherImpl> dispatcher_;
 
   // Map of outstanding OnMoreDataConverter objects.  A new object is created
   // on every StartStream() call and destroyed on CloseStream().
-  typedef std::map<AudioOutputProxy*, OnMoreDataConverter*> CallbackMap;
   CallbackMap callbacks_;
 
   // Used by AudioOutputDispatcherImpl; kept so we can reinitialize on the fly.
@@ -88,6 +90,7 @@ class MEDIA_EXPORT AudioOutputResampler : public AudioOutputDispatcher {
   // to a fake stream indefinitely for transient errors.
   base::Timer reinitialize_timer_;
 
+  base::WeakPtrFactory<AudioOutputResampler> weak_factory_;
   DISALLOW_COPY_AND_ASSIGN(AudioOutputResampler);
 };
 

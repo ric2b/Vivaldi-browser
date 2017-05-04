@@ -69,8 +69,8 @@ class CONTENT_EXPORT BrowserChildProcessHostImpl
 
   // BrowserChildProcessHost implementation:
   bool Send(IPC::Message* message) override;
-  void Launch(SandboxedProcessLauncherDelegate* delegate,
-              base::CommandLine* cmd_line,
+  void Launch(std::unique_ptr<SandboxedProcessLauncherDelegate> delegate,
+              std::unique_ptr<base::CommandLine> cmd_line,
               bool terminate_on_shutdown) override;
   const ChildProcessData& GetData() const override;
   ChildProcessHost* GetHost() const override;
@@ -80,9 +80,11 @@ class CONTENT_EXPORT BrowserChildProcessHostImpl
       override;
   void SetName(const base::string16& name) override;
   void SetHandle(base::ProcessHandle handle) override;
+  std::string GetServiceRequestChannelToken() override;
 
   // ChildProcessHostDelegate implementation:
   bool CanShutdown() override;
+  void OnChannelInitialized(IPC::Channel* channel) override;
   void OnChildDisconnected() override;
   const base::Process& GetProcess() const override;
   service_manager::InterfaceProvider* GetRemoteInterfaces() override;
@@ -91,9 +93,9 @@ class CONTENT_EXPORT BrowserChildProcessHostImpl
   void OnChannelError() override;
   void OnBadMessageReceived(const IPC::Message& message) override;
 
-  // Terminates the process and logs an error after a bad message was received
-  // from the child process.
-  void TerminateOnBadMessageReceived(uint32_t type);
+  // Terminates the process and logs a stack trace after a bad message was
+  // received from the child process.
+  void TerminateOnBadMessageReceived(const std::string& error);
 
   // Removes this host from the host list. Calls ChildProcessHost::ForceShutdown
   void ForceShutdown();
@@ -111,6 +113,8 @@ class CONTENT_EXPORT BrowserChildProcessHostImpl
   ChildConnection* child_connection() const {
     return child_connection_.get();
   }
+
+  IPC::Channel* child_channel() const { return channel_; }
 
   typedef std::list<BrowserChildProcessHostImpl*> BrowserChildProcessList;
  private:
@@ -167,6 +171,7 @@ class CONTENT_EXPORT BrowserChildProcessHostImpl
   // The memory allocator, if any, in which the process will write its metrics.
   std::unique_ptr<base::SharedPersistentMemoryAllocator> metrics_allocator_;
 
+  IPC::Channel* channel_ = nullptr;
   bool is_channel_connected_;
   bool notify_child_disconnected_;
 

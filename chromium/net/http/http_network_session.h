@@ -28,11 +28,15 @@
 #include "net/http/http_stream_factory.h"
 #include "net/quic/chromium/quic_stream_factory.h"
 #include "net/socket/next_proto.h"
+#include "net/spdy/spdy_protocol.h"
 #include "net/spdy/spdy_session_pool.h"
 #include "net/ssl/ssl_client_auth_cache.h"
 
 namespace base {
 class Value;
+namespace trace_event {
+class ProcessMemoryDump;
+}
 }
 
 namespace net {
@@ -55,13 +59,18 @@ class ProxyDelegate;
 class ProxyService;
 class QuicClock;
 class QuicCryptoClientStreamFactory;
-class QuicServerInfoFactory;
 class SocketPerformanceWatcherFactory;
 class SOCKSClientSocketPool;
 class SSLClientSocketPool;
 class SSLConfigService;
 class TransportClientSocketPool;
 class TransportSecurityState;
+
+// Specifies the maximum HPACK dynamic table size the server is allowed to set.
+const uint32_t kSpdyMaxHeaderTableSize = 64 * 1024;
+
+// Specifies the maximum concurrent streams server could send (via push).
+const uint32_t kSpdyMaxConcurrentPushedStreams = 1000;
 
 // This class holds session objects used by HttpNetworkTransaction objects.
 class NET_EXPORT HttpNetworkSession
@@ -96,7 +105,9 @@ class NET_EXPORT HttpNetworkSession
     bool enable_spdy_ping_based_connection_checking;
     bool enable_http2;
     size_t spdy_session_max_recv_window_size;
-    size_t spdy_stream_max_recv_window_size;
+    // HTTP/2 connection settings.
+    // Unknown settings will still be sent to the server.
+    SettingsMap http2_settings;
     // Source of time for SPDY connections.
     SpdySessionPool::TimeFunc time_func;
     // Whether to enable HTTP/2 Alt-Svc entries with hostname different than
@@ -110,9 +121,6 @@ class NET_EXPORT HttpNetworkSession
     bool enable_quic;
     // Disable QUIC if a connection times out with open streams.
     bool disable_quic_on_timeout_with_open_streams;
-    // Instruct QUIC to use consistent ephemeral ports when talking to
-    // the same server.
-    bool enable_quic_port_selection;
     // Disables QUIC's 0-RTT behavior.
     bool quic_always_require_handshake_confirmation;
     // Disables QUIC connection pooling.
@@ -195,6 +203,10 @@ class NET_EXPORT HttpNetworkSession
     // Enable HTTP/0.9 for HTTP/HTTPS on ports other than the default one for
     // each protocol.
     bool http_09_on_non_default_ports_enabled;
+
+    // If true, only one pending preconnect is allowed to proxies that support
+    // request priorities.
+    bool restrict_to_one_preconnect_for_proxies;
   };
 
   enum SocketPoolType {
@@ -270,6 +282,8 @@ class NET_EXPORT HttpNetworkSession
 
   bool IsProtocolEnabled(NextProto protocol) const;
 
+  void SetServerPushDelegate(std::unique_ptr<ServerPushDelegate> push_delegate);
+
   // Populates |*alpn_protos| with protocols to be used with ALPN.
   void GetAlpnProtos(NextProtoVector* alpn_protos) const;
 
@@ -278,6 +292,17 @@ class NET_EXPORT HttpNetworkSession
   void GetSSLConfig(const HttpRequestInfo& request,
                     SSLConfig* server_config,
                     SSLConfig* proxy_config) const;
+
+  // Dumps memory allocation stats. |parent_dump_absolute_name| is the name
+  // used by the parent MemoryAllocatorDump in the memory dump hierarchy.
+  void DumpMemoryStats(base::trace_event::ProcessMemoryDump* pmd,
+                       const std::string& parent_absolute_name) const;
+
+  // Evaluates if QUIC is enabled for new streams.
+  bool IsQuicEnabled() const;
+
+  // Disable QUIC for new streams.
+  void DisableQuic();
 
  private:
   friend class HttpNetworkSessionPeer;
@@ -304,6 +329,7 @@ class NET_EXPORT HttpNetworkSession
   SSLClientAuthCache ssl_client_auth_cache_;
   std::unique_ptr<ClientSocketPoolManager> normal_socket_pool_manager_;
   std::unique_ptr<ClientSocketPoolManager> websocket_socket_pool_manager_;
+  std::unique_ptr<ServerPushDelegate> push_delegate_;
   QuicStreamFactory quic_stream_factory_;
   SpdySessionPool spdy_session_pool_;
   std::unique_ptr<HttpStreamFactory> http_stream_factory_;

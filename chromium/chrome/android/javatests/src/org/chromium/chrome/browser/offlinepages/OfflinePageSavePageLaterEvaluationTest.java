@@ -15,6 +15,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Manual;
+import org.chromium.base.test.util.TimeoutScale;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.offlinepages.evaluation.OfflinePageEvaluationBridge;
 import org.chromium.chrome.browser.offlinepages.evaluation.OfflinePageEvaluationBridge.OfflinePageEvaluationObserver;
@@ -35,6 +36,7 @@ import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
@@ -73,6 +75,7 @@ public class OfflinePageSavePageLaterEvaluationTest
     }
 
     private static final String TAG = "OPSPLEvaluation";
+    private static final String TAG_PROGRESS = "EvalProgress@@@@@@";
     private static final String NAMESPACE = "async_loading";
     private static final String NEW_LINE = System.getProperty("line.separator");
     private static final String DELIMITER = ";";
@@ -88,16 +91,14 @@ public class OfflinePageSavePageLaterEvaluationTest
     private OfflinePageEvaluationBridge mBridge;
     private OfflinePageEvaluationObserver mObserver;
 
-    private Semaphore mDoneSemaphore;
+    private CountDownLatch mCompletionLatch;
     private List<String> mUrls;
     private int mCount;
     private boolean mIsUserRequested;
     private boolean mUseTestScheduler;
+    private int mScheduleBatchSize;
 
     private LongSparseArray<RequestMetadata> mRequestMetadata;
-    // TODO(romax): Use actual policy to determine the timeout.
-    private Long mTimeoutPerUrlInSeconds = 0L;
-    private OutputStreamWriter mLogOutput;
 
     public OfflinePageSavePageLaterEvaluationTest() {
         super(ChromeActivity.class);
@@ -120,6 +121,7 @@ public class OfflinePageSavePageLaterEvaluationTest
         ThreadUtils.runOnUiThread(new Runnable() {
             @Override
             public void run() {
+                assert mBridge != null;
                 mBridge.getRequestsInQueue(new Callback<SavePageRequest[]>() {
                     @Override
                     public void onResult(SavePageRequest[] results) {
@@ -139,6 +141,7 @@ public class OfflinePageSavePageLaterEvaluationTest
         });
         checkTrue(mClearingSemaphore.tryAcquire(REMOVE_REQUESTS_TIMEOUT_MS, TimeUnit.MILLISECONDS),
                 "Timed out when clearing remaining requests!");
+        mBridge.closeLog();
         super.tearDown();
     }
 
@@ -179,33 +182,24 @@ public class OfflinePageSavePageLaterEvaluationTest
                     for (String file : files) {
                         File currentFile = new File(externalArchiveDir.getPath(), file);
                         if (!currentFile.delete()) {
-                            logError(file + " cannot be deleted when clearing previous archives.");
+                            log(TAG, file + " cannot be deleted when clearing previous archives.");
                         }
                     }
                 }
-            }
-            if (!externalArchiveDir.mkdir()) {
-                logError("Cannot create directory on external storage to store saved pages.");
+            } else if (!externalArchiveDir.mkdir()) {
+                log(TAG, "Cannot create directory on external storage to store saved pages.");
             }
         } catch (SecurityException e) {
-            logError("Failed to delete or create external archive folder!");
+            log(TAG, "Failed to delete or create external archive folder!");
         }
         return externalArchiveDir;
     }
 
     /**
-     * Logs error in both console and output file.
+     * Print log message in output file through evaluation bridge.
      */
-    private void logError(String error) {
-        Log.e(TAG, error);
-        if (mLogOutput != null) {
-            try {
-                mLogOutput.write(error + NEW_LINE);
-                mLogOutput.flush();
-            } catch (Exception e) {
-                Log.e(TAG, e.getMessage(), e);
-            }
-        }
+    private void log(String tag, String format, Object... args) {
+        mBridge.log(tag, String.format(format, args));
     }
 
     /**
@@ -213,14 +207,7 @@ public class OfflinePageSavePageLaterEvaluationTest
      */
     private void checkTrue(boolean condition, String message) {
         if (!condition) {
-            logError(message);
-            if (mLogOutput != null) {
-                try {
-                    mLogOutput.close();
-                } catch (IOException e) {
-                    Log.e(TAG, e.getMessage(), e);
-                }
-            }
+            log(TAG, message);
             fail();
         }
     }
@@ -239,7 +226,7 @@ public class OfflinePageSavePageLaterEvaluationTest
                 Profile profile = Profile.getLastUsedProfile();
                 mBridge = OfflinePageEvaluationBridge.getForProfile(profile, useTestingScheduler);
                 if (mBridge == null) {
-                    logError("OfflinePageEvaluationBridge initialization failed!");
+                    fail("OfflinePageEvaluationBridge initialization failed!");
                     return;
                 }
                 if (mBridge.isOfflinePageModelLoaded()) {
@@ -266,19 +253,16 @@ public class OfflinePageSavePageLaterEvaluationTest
      */
     protected void setUpIOAndBridge(final boolean useCustomScheduler) throws InterruptedException {
         try {
-            mLogOutput = getOutputStream(LOG_OUTPUT_FILE_PATH);
-        } catch (IOException e) {
-            Log.wtf(TAG, "Cannot set output file!");
-            Log.wtf(TAG, e.getMessage(), e);
-        }
-        try {
             getUrlListFromInputFile(INPUT_FILE_PATH);
         } catch (IOException e) {
-            Log.wtf(TAG, "Cannot read input file!");
-            Log.wtf(TAG, e.getMessage(), e);
+            Log.wtf(TAG, "Cannot read input file!", e);
         }
         checkTrue(mUrls != null, "URLs weren't loaded.");
         checkTrue(mUrls.size() > 0, "No valid URLs in the input file.");
+
+        if (mScheduleBatchSize == 0) {
+            mScheduleBatchSize = mUrls.size();
+        }
 
         initializeBridgeForProfile(useCustomScheduler);
         mObserver = new OfflinePageEvaluationObserver() {
@@ -291,22 +275,36 @@ public class OfflinePageSavePageLaterEvaluationTest
                 timeDelta.setStartTime(System.currentTimeMillis());
                 metadata.mTimeDelta = timeDelta;
                 mRequestMetadata.put(request.getRequestId(), metadata);
+                log(TAG, "SavePageRequest Added for %s with id %d.", metadata.mUrl, metadata.mId);
             }
             public void savePageRequestCompleted(SavePageRequest request, int status) {
                 RequestMetadata metadata = mRequestMetadata.get(request.getRequestId());
                 metadata.mTimeDelta.setEndTime(System.currentTimeMillis());
                 if (metadata.mStatus == -1) {
                     mCount++;
+                    log(TAG_PROGRESS, "%s is saved with result: %s. (%d/%d)", metadata.mUrl,
+                            statusToString(status), mCount, mUrls.size());
+                } else {
+                    log(TAG, "The request for url: " + metadata.mUrl
+                                    + " has more than one completion callbacks!");
+                    log(TAG, "Previous status: " + metadata.mStatus + ". Current: " + status);
                 }
                 metadata.mStatus = status;
-                if (mCount == mUrls.size()) {
-                    mDoneSemaphore.release();
+                if (mCount == mUrls.size() || mCount % mScheduleBatchSize == 0) {
+                    mCompletionLatch.countDown();
                     return;
                 }
             }
             public void savePageRequestChanged(SavePageRequest request) {}
         };
         mBridge.addObserver(mObserver);
+        try {
+            File logOutputFile =
+                    new File(Environment.getExternalStorageDirectory(), LOG_OUTPUT_FILE_PATH);
+            mBridge.setLogOutputFile(logOutputFile);
+        } catch (IOException e) {
+            Log.wtf(TAG, "Cannot set log output file!", e);
+        }
     }
 
     /**
@@ -326,19 +324,22 @@ public class OfflinePageSavePageLaterEvaluationTest
 
     private void processUrls(List<String> urls) throws InterruptedException, IOException {
         if (mBridge == null) {
-            logError("Test initialization error, aborting. No results would be written.");
+            fail("Test initialization error, aborting. No results would be written.");
             return;
         }
-        mDoneSemaphore = new Semaphore(0);
-        for (String url : mUrls) {
-            savePageLater(url, NAMESPACE);
+        int count = 0;
+        log(TAG_PROGRESS, "# of Urls in file: " + mUrls.size());
+        for (int i = 0; i < mUrls.size(); i++) {
+            savePageLater(mUrls.get(i), NAMESPACE);
+            count++;
+            if (count == mScheduleBatchSize || i == mUrls.size() - 1) {
+                count = 0;
+                mCompletionLatch = new CountDownLatch(1);
+                mCompletionLatch.await();
+            }
         }
-
-        if (!mDoneSemaphore.tryAcquire(urls.size() * mTimeoutPerUrlInSeconds, TimeUnit.SECONDS)) {
-            writeResults(false);
-        } else {
-            writeResults(true);
-        }
+        writeResults();
+        log(TAG_PROGRESS, "Urls processing DONE.");
     }
 
     private void getUrlListFromInputFile(String inputFilePath)
@@ -369,10 +370,10 @@ public class OfflinePageSavePageLaterEvaluationTest
         switch (status) {
             case BackgroundSavePageResult.SUCCESS:
                 return "SUCCESS";
-            case BackgroundSavePageResult.PRERENDER_FAILURE:
-                return "PRERENDER_FAILURE";
-            case BackgroundSavePageResult.PRERENDER_CANCELED:
-                return "PRERENDER_CANCELED";
+            case BackgroundSavePageResult.LOADING_FAILURE:
+                return "LOADING_FAILURE";
+            case BackgroundSavePageResult.LOADING_CANCELED:
+                return "LOADING_CANCELED";
             case BackgroundSavePageResult.FOREGROUND_CANCELED:
                 return "FOREGROUND_CANCELED";
             case BackgroundSavePageResult.SAVE_FAILED:
@@ -426,13 +427,13 @@ public class OfflinePageSavePageLaterEvaluationTest
      * At the end of the file there will be a summary:
      * Total requested URLs: XX, Completed: XX, Failed: XX, Failure Rate: XX.XX%
      */
-    private void writeResults(boolean completed) throws IOException, InterruptedException {
+    private void writeResults() throws IOException, InterruptedException {
         loadSavedPages();
         OutputStreamWriter output = getOutputStream(RESULT_OUTPUT_FILE_PATH);
         try {
             int failedCount = 0;
-            if (!completed) {
-                logError("Test terminated before all requests completed.");
+            if (mCount < mUrls.size()) {
+                log(TAG, "Test terminated before all requests completed.");
             }
             File externalArchiveDir = getExternalArchiveDir();
             for (int i = 0; i < mRequestMetadata.size(); i++) {
@@ -455,7 +456,7 @@ public class OfflinePageSavePageLaterEvaluationTest
                 File originalPage = new File(page.getFilePath());
                 File externalPage = new File(externalArchiveDir, originalPage.getName());
                 if (!OfflinePageUtils.copyToShareableLocation(originalPage, externalPage)) {
-                    logError("Saved page for url " + page.getUrl() + " cannot be moved.");
+                    log(TAG, "Saved page for url " + page.getUrl() + " cannot be moved.");
                 }
             }
             output.write(String.format(
@@ -467,9 +468,6 @@ public class OfflinePageSavePageLaterEvaluationTest
         } finally {
             if (output != null) {
                 output.close();
-            }
-            if (mLogOutput != null) {
-                mLogOutput.close();
             }
         }
     }
@@ -485,13 +483,15 @@ public class OfflinePageSavePageLaterEvaluationTest
             inputStream = new FileInputStream(configFile);
             properties.load(inputStream);
             mIsUserRequested = Boolean.parseBoolean(properties.getProperty("IsUserRequested"));
-            mTimeoutPerUrlInSeconds =
-                    Long.parseLong(properties.getProperty("TimeoutPerUrlInSeconds"));
             mUseTestScheduler = Boolean.parseBoolean(properties.getProperty("UseTestScheduler"));
+            mScheduleBatchSize = Integer.parseInt(properties.getProperty("ScheduleBatchSize"));
         } catch (FileNotFoundException e) {
             Log.e(TAG, e.getMessage(), e);
             fail(String.format(
                     "Config file %s is not found, aborting the test.", CONFIG_FILE_PATH));
+        } catch (NumberFormatException e) {
+            Log.e(TAG, e.getMessage(), e);
+            fail("Error parsing config file, aborting test.");
         } finally {
             if (inputStream != null) {
                 inputStream.close();
@@ -502,9 +502,12 @@ public class OfflinePageSavePageLaterEvaluationTest
     /**
      * The test is the entry point for all kinds of testing of SavePageLater.
      * It is encouraged to use run_offline_page_evaluation_test.py to run this test.
+     * TimeoutScale is set to 4, in case we hit the hard limit for @Manual tests(10 hours)
+     * and gets killed. It expand the timeout to 10 * 4 hours.
      */
     @Manual
-    public void testFailureRateWithTimeout() throws IOException, InterruptedException {
+    @TimeoutScale(4)
+    public void testFailureRate() throws IOException, InterruptedException {
         parseConfigFile();
         setUpIOAndBridge(mUseTestScheduler);
         processUrls(mUrls);

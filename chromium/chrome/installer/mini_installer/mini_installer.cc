@@ -15,7 +15,7 @@
 //   BufferSecurityCheck="false" compiler: /GS-
 //   EntryPointSymbol="MainEntryPoint" linker: /ENTRY
 //   IgnoreAllDefaultLibraries="true" linker: /NODEFAULTLIB
-//   OptimizeForWindows98="1"  liker: /OPT:NOWIN98
+//   OptimizeForWindows98="1" linker: /OPT:NOWIN98
 //   linker: /SAFESEH:NO
 
 // have the linker merge the sections, saving us ~500 bytes.
@@ -406,9 +406,7 @@ ProcessExitResult UnpackBinaryResources(const Configuration& configuration,
     }
 
     // Get any command line option specified for mini_installer and pass them
-    // on to setup.exe.  This is important since switches such as
-    // --multi-install and --chrome-frame affect where setup.exe will write
-    // installer results for consumption by Google Update.
+    // on to setup.exe.
     AppendCommandLineFlags(configuration, &cmd_line);
 
     if (exit_code.IsSuccess())
@@ -846,7 +844,12 @@ ProcessExitResult WMain(HMODULE module) {
   // Parse configuration from the command line and resources.
   Configuration configuration;
   if (!configuration.Initialize(module))
-    return ProcessExitResult(GENERIC_INITIALIZATION_FAILURE);
+    return ProcessExitResult(GENERIC_INITIALIZATION_FAILURE, ::GetLastError());
+
+  // Exit early if an invalid switch (e.g., "--chrome-frame") was found on the
+  // command line.
+  if (configuration.has_invalid_switch())
+    return ProcessExitResult(INVALID_OPTION);
 
   // If the --cleanup switch was specified on the command line, then that means
   // we should only do the cleanup and then exit.
@@ -901,6 +904,19 @@ int MainEntryPoint() {
   ::ExitProcess(result.exit_code);
 }
 }
+
+#if defined(ADDRESS_SANITIZER)
+// Executables instrumented with ASAN need CRT functions. We do not use
+// the /ENTRY switch for ASAN instrumented executable and a "main" function
+// is required.
+int WINAPI WinMain(HINSTANCE hInstance,
+                   HINSTANCE hPrevInstance,
+                   LPSTR lpCmdLine,
+                   int nCmdShow) {
+  MainEntryPoint();
+  return 0;
+}
+#endif
 
 // VC Express editions don't come with the memset CRT obj file and linking to
 // the obj files between versions becomes a bit problematic. Therefore,

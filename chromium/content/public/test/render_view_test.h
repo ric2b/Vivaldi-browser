@@ -19,17 +19,22 @@
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/page_state.h"
 #include "content/public/test/mock_render_thread.h"
-#include "mojo/edk/test/scoped_ipc_support.h"
+#include "mojo/edk/embedder/scoped_ipc_support.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebLeakDetector.h"
+
+namespace base {
+class FieldTrialList;
+}
 
 namespace blink {
 namespace scheduler {
 class RendererScheduler;
 }
 class WebInputElement;
+class WebMouseEvent;
 class WebWidget;
 }
 
@@ -201,10 +206,11 @@ class RenderViewTest : public testing::Test, blink::WebLeakDetectorClient {
   std::unique_ptr<RendererMainPlatformDelegate> platform_;
   std::unique_ptr<MainFunctionParams> params_;
   std::unique_ptr<base::CommandLine> command_line_;
+  std::unique_ptr<base::FieldTrialList> field_trial_list_;
 
   // For Mojo.
   std::unique_ptr<base::TestIOThread> test_io_thread_;
-  std::unique_ptr<mojo::edk::test::ScopedIPCSupport> ipc_support_;
+  std::unique_ptr<mojo::edk::ScopedIPCSupport> ipc_support_;
 
 #if defined(OS_MACOSX)
   std::unique_ptr<base::mac::ScopedNSAutoreleasePool> autorelease_pool_;

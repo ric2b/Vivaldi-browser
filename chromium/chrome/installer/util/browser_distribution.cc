@@ -21,9 +21,6 @@
 #include "chrome/common/chrome_icon_resources_win.h"
 #include "chrome/common/env_vars.h"
 #include "chrome/installer/util/app_registration_data.h"
-#include "chrome/installer/util/chrome_frame_distribution.h"
-#include "chrome/installer/util/chromium_binaries_distribution.h"
-#include "chrome/installer/util/google_chrome_binaries_distribution.h"
 #include "chrome/installer/util/google_chrome_distribution.h"
 #include "chrome/installer/util/google_chrome_sxs_distribution.h"
 #include "chrome/installer/util/install_util.h"
@@ -33,6 +30,8 @@
 #include "chrome/installer/util/non_updating_app_registration_data.h"
 
 #include "chrome/installer/util/util_constants.h"
+
+#include "installer/util/vivaldi_install_util.h"
 
 using installer::MasterPreferences;
 
@@ -46,18 +45,11 @@ const wchar_t kCommandExecuteImplUuid[] =
 
 // The BrowserDistribution objects are never freed.
 BrowserDistribution* g_browser_distribution = NULL;
-BrowserDistribution* g_chrome_frame_distribution = NULL;
-BrowserDistribution* g_binaries_distribution = NULL;
-
-BrowserDistribution::Type GetCurrentDistributionType() {
-  return BrowserDistribution::CHROME_BROWSER;
-}
 
 }  // namespace
 
 BrowserDistribution::BrowserDistribution()
-    : type_(CHROME_BROWSER),
-      app_reg_data_(base::MakeUnique<NonUpdatingAppRegistrationData>(
+    : app_reg_data_(base::MakeUnique<NonUpdatingAppRegistrationData>(
 #if defined(VIVALDI_BUILD)
           L"Software\\Vivaldi"
 #else
@@ -66,9 +58,8 @@ BrowserDistribution::BrowserDistribution()
           )) {}
 
 BrowserDistribution::BrowserDistribution(
-    Type type,
     std::unique_ptr<AppRegistrationData> app_reg_data)
-    : type_(type), app_reg_data_(std::move(app_reg_data)) {}
+    : app_reg_data_(std::move(app_reg_data)) {}
 
 BrowserDistribution::~BrowserDistribution() {}
 
@@ -86,48 +77,22 @@ BrowserDistribution* BrowserDistribution::GetOrCreateBrowserDistribution(
   return *dist;
 }
 
-BrowserDistribution* BrowserDistribution::GetDistribution() {
-  return GetSpecificDistribution(GetCurrentDistributionType());
-}
-
 // static
-BrowserDistribution* BrowserDistribution::GetSpecificDistribution(
-    BrowserDistribution::Type type) {
+BrowserDistribution* BrowserDistribution::GetDistribution() {
   BrowserDistribution* dist = NULL;
 
-  switch (type) {
-    case CHROME_BROWSER:
 #if defined(GOOGLE_CHROME_BUILD)
-      if (InstallUtil::IsChromeSxSProcess()) {
-        dist = GetOrCreateBrowserDistribution<GoogleChromeSxSDistribution>(
-            &g_browser_distribution);
-      } else {
-        dist = GetOrCreateBrowserDistribution<GoogleChromeDistribution>(
-            &g_browser_distribution);
-      }
-#else
-      dist = GetOrCreateBrowserDistribution<BrowserDistribution>(
-          &g_browser_distribution);
-#endif
-      break;
-
-#ifndef OMIT_CHROME_FRAME
-    case CHROME_FRAME:
-      dist = GetOrCreateBrowserDistribution<ChromeFrameDistribution>(
-          &g_chrome_frame_distribution);
-      break;
-#endif
-
-    default:
-      DCHECK_EQ(CHROME_BINARIES, type);
-#if defined(GOOGLE_CHROME_BUILD)
-      dist = GetOrCreateBrowserDistribution<GoogleChromeBinariesDistribution>(
-          &g_binaries_distribution);
-#else
-      dist = GetOrCreateBrowserDistribution<ChromiumBinariesDistribution>(
-          &g_binaries_distribution);
-#endif
+  if (InstallUtil::IsChromeSxSProcess()) {
+    dist = GetOrCreateBrowserDistribution<GoogleChromeSxSDistribution>(
+        &g_browser_distribution);
+  } else {
+    dist = GetOrCreateBrowserDistribution<GoogleChromeDistribution>(
+        &g_browser_distribution);
   }
+#else
+  dist = GetOrCreateBrowserDistribution<BrowserDistribution>(
+      &g_browser_distribution);
+#endif
 
   return dist;
 }
@@ -155,6 +120,9 @@ base::string16 BrowserDistribution::GetVersionKey() const {
 void BrowserDistribution::DoPostUninstallOperations(
     const base::Version& version, const base::FilePath& local_data_path,
     const base::string16& distribution_data) {
+#if defined(VIVALDI_BUILD)
+  vivaldi::DoPostUninstallOperations(version);
+#endif
 }
 
 base::string16 BrowserDistribution::GetActiveSetupGuid() {

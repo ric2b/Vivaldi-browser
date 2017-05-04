@@ -226,11 +226,20 @@ Press Ctrl+Alt+Z to disable.
       <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_DESKTOP" desc="The label used in the tray popup to tell the user we are casting the desktop.">
         Casting screen to <ph name="RECEIVER_NAME">$1<ex>Living Room</ex></ph>
       </message>
+      <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_DESKTOP_ACCESSIBILITY_STOP" desc="Stop button accessibility label used in the tray popup to tell the user to stop a cast to the desktop.">
+        Stop casting screen to <ph name="RECEIVER_NAME">$1<ex>Living Room</ex></ph>
+      </message>
       <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_TAB" desc="The title label used in the tray popup to tell the user we are casting a tab.">
         Casting <ph name="TAB_NAME">$1<ex>YouTube</ex></ph> to <ph name="RECEIVER_NAME">$2<ex>Living Room</ex></ph>
       </message>
+      <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_TAB_ACCESSIBILITY_STOP" desc="Stop button accessibility label used in the tray popup to tell the user to stop a tab cast.">
+        Stop casting <ph name="TAB_NAME">$1<ex>YouTube</ex></ph> to <ph name="RECEIVER_NAME">$2<ex>Living Room</ex></ph>
+      </message>
       <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_UNKNOWN" desc="The label used when we have detected we are casting but do not know what we are casting or who we are casting to.">
         Casting to an unknown receiver
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_UNKNOWN_ACCESSIBILITY_STOP" desc="Stop button accessibility label used in the tray popup to tell the user to stop a cast, but we do not know what we are casting or who we are casting to.">
+        Stop casting to an unknown receiver
       </message>
       <message name="IDS_ASH_STATUS_TRAY_CAST_DESKTOP" desc="The label used in the tray popup to notify that desktop may be cast.">
         Cast devices available
@@ -285,9 +294,6 @@ Press Ctrl+Alt+Z to disable.
         Mute
       </message>
 
-      <message name="IDS_ASH_STATUS_TRAY_UNKNOWN_DISPLAY_NAME" desc="Label shown in tray for a display whose name is unknown.">
-        Unknown Display
-      </message>
       <message name="IDS_ASH_STATUS_TRAY_DRIVE" desc="The label used for Google Drive tray details header.">
         Google Drive
       </message>
@@ -402,12 +408,6 @@ Press Ctrl+Alt+Z to disable.
       <message name="IDS_ASH_NOTIFICATION_UNREAD_COUNT_NINE_PLUS" desc="The text shown in the notification icon for the unread count when the count is more than 9.">
         9+
       </message>
-      <message name="IDS_ASH_INTERNAL_DISPLAY_NAME" desc="The name used for internal displays, which is shown in the display settings.">
-        Internal Display
-      </message>
-      <message name="IDS_ASH_VIRTUAL_DISPLAY_NAME" desc="The name used for virtual displays, which is shown in the display settings. Virtual displays are not associated with a physical monitor.">
-        Virtual Display
-      </message>
       <message name="IDS_ASH_EXIT_WARNING_POPUP_TEXT" desc="The text of the popup when the user preses the exit shortcut.">
         Press Ctrl+Shift+Q twice to quit.
       </message>
@@ -437,9 +437,6 @@ Press Ctrl+Alt+Z to disable.
       <!-- Overview Mode -->
       <message name="IDS_ASH_OVERVIEW_BUTTON_ACCESSIBLE_NAME" desc="The accessible name for the Overview button in the system tray.">
         Toggle window overview
-      </message>
-      <message name="IDS_ASH_OVERVIEW_CLOSE_ITEM_BUTTON_ACCESSIBLE_NAME" desc="The accessible name for the close button on windows while in Overview mode.">
-        Close <ph name="WINDOW_TITLE">$1</ph>
       </message>
 
       <!-- ChromeOS-specific strings -->

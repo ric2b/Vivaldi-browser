@@ -121,6 +121,53 @@ class SystemDisplayOverscanCalibrationCompleteFunction
   ResponseAction Run() override;
 };
 
+class SystemDisplayShowNativeTouchCalibrationFunction
+    : public SystemDisplayFunction {
+ public:
+  static const char kTouchCalibrationError[];
+  DECLARE_EXTENSION_FUNCTION("system.display.showNativeTouchCalibration",
+                             SYSTEM_DISPLAY_SHOWNATIVETOUCHCALIBRATION);
+
+ protected:
+  ~SystemDisplayShowNativeTouchCalibrationFunction() override {}
+  ResponseAction Run() override;
+
+  void OnCalibrationComplete(bool success);
+};
+
+class SystemDisplayStartCustomTouchCalibrationFunction
+    : public SystemDisplayFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("system.display.startCustomTouchCalibration",
+                             SYSTEM_DISPLAY_STARTCUSTOMTOUCHCALIBRATION);
+
+ protected:
+  ~SystemDisplayStartCustomTouchCalibrationFunction() override {}
+  ResponseAction Run() override;
+};
+
+class SystemDisplayCompleteCustomTouchCalibrationFunction
+    : public SystemDisplayFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("system.display.completeCustomTouchCalibration",
+                             SYSTEM_DISPLAY_COMPLETECUSTOMTOUCHCALIBRATION);
+
+ protected:
+  ~SystemDisplayCompleteCustomTouchCalibrationFunction() override {}
+  ResponseAction Run() override;
+};
+
+class SystemDisplayClearTouchCalibrationFunction
+    : public SystemDisplayFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("system.display.clearTouchCalibration",
+                             SYSTEM_DISPLAY_CLEARTOUCHCALIBRATION);
+
+ protected:
+  ~SystemDisplayClearTouchCalibrationFunction() override {}
+  ResponseAction Run() override;
+};
+
 }  // namespace extensions
 
 #endif  // EXTENSIONS_BROWSER_API_SYSTEM_DISPLAY_SYSTEM_DISPLAY_API_H_

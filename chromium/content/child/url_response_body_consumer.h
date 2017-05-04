@@ -37,9 +37,6 @@ class CONTENT_EXPORT URLResponseBodyConsumer final
       mojo::ScopedDataPipeConsumerHandle handle,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
-  // Starts watching the handle.
-  void Start(base::SingleThreadTaskRunner* task_runner);
-
   // Sets the completion status. The completion status is dispatched to the
   // ResourceDispatcher when the both following conditions hold:
   //  1) This function has been called and the completion status is set, and
@@ -50,6 +47,9 @@ class CONTENT_EXPORT URLResponseBodyConsumer final
   // ResourceDispatcher. This function does nothing if the reading is already
   // cancelled or done.
   void Cancel();
+
+  void SetDefersLoading();
+  void UnsetDefersLoading();
 
  private:
   friend class base::RefCounted<URLResponseBodyConsumer>;
@@ -66,10 +66,13 @@ class CONTENT_EXPORT URLResponseBodyConsumer final
   mojo::ScopedDataPipeConsumerHandle handle_;
   mojo::Watcher handle_watcher_;
   ResourceRequestCompletionStatus completion_status_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   bool has_received_completion_ = false;
   bool has_been_cancelled_ = false;
   bool has_seen_end_of_data_;
+  bool is_deferred_ = false;
+  bool is_in_on_readable_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(URLResponseBodyConsumer);
 };

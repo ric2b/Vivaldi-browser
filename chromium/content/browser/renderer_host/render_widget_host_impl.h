@@ -174,7 +174,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   void RemoveInputEventObserver(
       RenderWidgetHost::InputEventObserver* observer) override;
   void GetScreenInfo(content::ScreenInfo* result) override;
-  void HandleCompositorProto(const std::vector<uint8_t>& proto) override;
   // |drop_data| must have been filtered. The embedder should call
   // FilterDropData before passing the drop data to RWHI.
   void DragTargetDragEnter(const DropData& drop_data,
@@ -339,6 +338,12 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // yet.
   void OnFirstPaintAfterLoad();
 
+  // Forwards the keyboard event with optional commands to the renderer. If
+  // |key_event| is not forwarded for any reason, then |commands| are ignored.
+  void ForwardKeyboardEventWithCommands(
+      const NativeWebKeyboardEvent& key_event,
+      const std::vector<EditCommand>* commands);
+
   // Forwards the given message to the renderer. These are called by the view
   // when it has received a message.
   void ForwardGestureEventWithLatencyInfo(
@@ -403,9 +408,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   //   (on Windows);
   // * when it receives a "commit" signal of GtkIMContext (on Linux);
   // * when insertText of NSTextInput is called (on Mac).
-  void ImeCommitText(const base::string16& text,
-                     const gfx::Range& replacement_range,
-                     int relative_cursor_pos);
+  void ImeCommitText(
+      const base::string16& text,
+      const std::vector<blink::WebCompositionUnderline>& underlines,
+      const gfx::Range& replacement_range,
+      int relative_cursor_pos);
 
   // Finishes an ongoing composition.
   // A browser should call this function or ImeCommitText:
@@ -475,10 +482,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   // Update the renderer's cache of the screen rect of the view and window.
   void SendScreenRects();
-
-  // Suppresses Char and KeyUp events until the next (Raw)KeyDown. See
-  // suppress_events_until_keydown_.
-  void SuppressEventsUntilKeyDown();
 
   // Called by the view in response to a flush request.
   void FlushInput();
@@ -642,7 +645,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
                                  const cc::SharedBitmapId& id);
   void OnSelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params);
-  void OnForwardCompositorProto(const std::vector<uint8_t>& proto);
   void OnSetNeedsBeginFrames(bool needs_begin_frames);
   void OnHittestData(const FrameHostMsg_HittestData_Params& params);
   void OnFocusedNodeTouched(bool editable);

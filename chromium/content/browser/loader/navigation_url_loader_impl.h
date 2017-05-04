@@ -19,10 +19,12 @@ struct RedirectInfo;
 
 namespace content {
 
+class AppCacheNavigationHandle;
 class NavigationURLLoaderImplCore;
 class NavigationData;
 class ServiceWorkerNavigationHandle;
 class StreamHandle;
+struct GlobalRequestID;
 struct ResourceResponse;
 struct SSLStatus;
 
@@ -33,6 +35,7 @@ class NavigationURLLoaderImpl : public NavigationURLLoader {
                           std::unique_ptr<NavigationRequestInfo> request_info,
                           std::unique_ptr<NavigationUIData> navigation_ui_data,
                           ServiceWorkerNavigationHandle* service_worker_handle,
+                          AppCacheNavigationHandle* appcache_handle,
                           NavigationURLLoaderDelegate* delegate);
   ~NavigationURLLoaderImpl() override;
 
@@ -51,7 +54,10 @@ class NavigationURLLoaderImpl : public NavigationURLLoader {
   void NotifyResponseStarted(const scoped_refptr<ResourceResponse>& response,
                              std::unique_ptr<StreamHandle> body,
                              const SSLStatus& ssl_status,
-                             std::unique_ptr<NavigationData> navigation_data);
+                             std::unique_ptr<NavigationData> navigation_data,
+                             const GlobalRequestID& request_id,
+                             bool is_download,
+                             bool is_stream);
 
   // Notifies the delegate the request failed to return a response.
   void NotifyRequestFailed(bool in_cache, int net_error);

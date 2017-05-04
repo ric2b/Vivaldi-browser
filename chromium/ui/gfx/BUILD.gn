@@ -23,14 +23,10 @@ source_set("gfx_export") {
 
 component("gfx") {
   sources = [
-    "android/device_display_info.cc",
-    "android/device_display_info.h",
     "android/gfx_jni_registrar.cc",
     "android/gfx_jni_registrar.h",
     "android/java_bitmap.cc",
     "android/java_bitmap.h",
-    "android/shared_device_display_info.cc",
-    "android/shared_device_display_info.h",
     "android/view_configuration.cc",
     "android/view_configuration.h",
     "animation/animation.cc",
@@ -57,11 +53,14 @@ component("gfx") {
     "codec/jpeg_codec.h",
     "codec/png_codec.cc",
     "codec/png_codec.h",
+    "codec/skia_image_encoder_adapter.cc",
+    "codec/skia_image_encoder_adapter.h",
     "color_analysis.cc",
     "color_analysis.h",
     "color_palette.h",
     "color_space.cc",
-    "color_space.h",
+    "color_space_win.cc",
+    "color_space_win.h",
     "color_transform.cc",
     "color_transform.h",
     "color_utils.cc",
@@ -164,6 +163,8 @@ component("gfx") {
     "selection_model.h",
     "sequential_id_generator.cc",
     "sequential_id_generator.h",
+    "shadow_util.cc",
+    "shadow_util.h",
     "shadow_value.cc",
     "shadow_value.h",
     "skbitmap_operations.cc",
@@ -243,6 +244,7 @@ component("gfx") {
   defines = [ "GFX_IMPLEMENTATION" ]
 
   public_deps = [
+    ":color_space",
     ":memory_buffer_sources",
     ":native_widget_types",
     ":selection_bound_sources",
@@ -259,7 +261,6 @@ component("gfx") {
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
     "//skia",
-    "//third_party/harfbuzz-ng",
     "//third_party/libpng",
     "//third_party/qcms",
     "//third_party/zlib",
@@ -308,7 +309,10 @@ component("gfx") {
     sources += [ "scoped_cg_context_save_gstate_mac.h" ]
     set_sources_assignment_filter(sources_assignment_filter)
   } else {
-    deps += [ "//third_party:jpeg" ]
+    deps += [
+      "//third_party:jpeg",
+      "//third_party/harfbuzz-ng",
+    ]
   }
 
   # Android.
@@ -419,6 +423,21 @@ component("gfx") {
   }
 }
 
+# Depend on this to use color_space.h without pulling in all of gfx.
+source_set("color_space") {
+  sources = [
+    "color_space.h",
+  ]
+
+  defines = [ "GFX_IMPLEMENTATION" ]
+
+  public_deps = [
+    ":gfx_export",
+    "//base",
+    "//skia",
+  ]
+}
+
 # Depend on this to use native_widget_types.h without pulling in all of gfx.
 source_set("native_widget_types") {
   public = [
@@ -526,6 +545,8 @@ static_library("test_support") {
     "test/fontconfig_util_linux.h",
     "test/gfx_util.cc",
     "test/gfx_util.h",
+    "test/icc_profiles.cc",
+    "test/icc_profiles.h",
     "test/ui_cocoa_test_helper.h",
     "test/ui_cocoa_test_helper.mm",
   ]
@@ -608,6 +629,7 @@ test("gfx_unittests") {
       "geometry/size_unittest.cc",
       "geometry/vector2d_unittest.cc",
       "geometry/vector3d_unittest.cc",
+      "icc_profile_unittest.cc",
       "image/image_mac_unittest.mm",
       "image/image_util_unittest.cc",
       "mac/coordinate_conversion_unittest.mm",
@@ -704,6 +726,7 @@ test("gfx_unittests") {
       "//mojo/public/cpp/bindings",
       "//ui/gfx/geometry/mojo:unit_test",
       "//ui/gfx/mojo:test_interfaces",
+      "//ui/gfx/range/mojo:unit_test",
     ]
   }
 }
@@ -712,7 +735,6 @@ if (is_android) {
   generate_jni("gfx_jni_headers") {
     sources = [
       "../android/java/src/org/chromium/ui/gfx/BitmapHelper.java",
-      "../android/java/src/org/chromium/ui/gfx/DeviceDisplayInfo.java",
       "../android/java/src/org/chromium/ui/gfx/ViewConfigurationHelper.java",
     ]
     jni_package = "gfx"

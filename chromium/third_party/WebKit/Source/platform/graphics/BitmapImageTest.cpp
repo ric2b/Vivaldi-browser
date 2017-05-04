@@ -57,7 +57,6 @@ class BitmapImageTest : public ::testing::Test {
           safeCast<int>(newSize) - safeCast<int>(m_lastDecodedSize);
       m_lastDecodedSize = newSize;
     }
-    void didDraw(const Image*) override {}
     bool shouldPauseAnimation(const Image*) override { return false; }
     void animationAdvanced(const Image*) override {}
 
@@ -77,7 +76,7 @@ class BitmapImageTest : public ::testing::Test {
   void destroyDecodedData() { m_image->destroyDecodedData(); }
   size_t frameCount() { return m_image->frameCount(); }
   sk_sp<SkImage> frameAtIndex(size_t index) {
-    return m_image->frameAtIndex(index);
+    return m_image->frameAtIndex(index, m_image->m_cachedFrameColorBehavior);
   }
   void setCurrentFrame(size_t frame) { m_image->m_currentFrame = frame; }
   size_t frameDecodedSize(size_t frame) {
@@ -252,7 +251,7 @@ TEST_F(BitmapImageTest, recachingFrameAfterDataChanged) {
   m_image->dataChanged(true);
   EXPECT_EQ(0, lastDecodedSizeChange());
   // Recaching the first frame also shouldn't affect decoded size.
-  m_image->imageForCurrentFrame();
+  m_image->imageForCurrentFrame(ColorBehavior::transformToTargetForTesting());
   EXPECT_EQ(0, lastDecodedSizeChange());
 }
 

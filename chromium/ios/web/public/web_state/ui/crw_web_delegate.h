@@ -9,23 +9,17 @@
 #import <UIKit/UIKit.h>
 #include <vector>
 
-#include "base/ios/block_types.h"
+#import "base/ios/block_types.h"
 #include "ios/web/public/favicon_url.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/ssl_status.h"
 #import "ios/web/public/web_state/ui/crw_native_content.h"
-#include "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
 @class CRWSessionEntry;
 @class CRWWebController;
-
-namespace net {
-class HttpResponseHeaders;
-class SSLInfo;
-class X509Certificate;
-}
 
 namespace web {
 class BlockedPopupInfo;
@@ -33,6 +27,9 @@ struct Referrer;
 }
 
 // Methods implemented by the delegate of the CRWWebController.
+// DEPRECATED, do not conform to this protocol and do not add any methods to it.
+// Use web::WebStateDelegate instead.
+// TODO(crbug.com/674991): Remove this protocol.
 @protocol CRWWebDelegate<NSObject>
 
 // Called when the page wants to open a new window by DOM (e.g. with
@@ -53,8 +50,6 @@ struct Referrer;
 // Called when the page calls window.close() on itself. Begin the shut-down
 // sequence for this controller.
 - (void)webPageOrderedClose;
-// Opens a URL with the given parameters.
-- (void)openURLWithParams:(const web::WebState::OpenURLParams&)params;
 // Called when an external app needs to be opened, it also passes |linkClicked|
 // to track if this call was a result of user action or not. Returns YES iff
 // |URL| is launched in an external app.
@@ -66,13 +61,6 @@ struct Referrer;
 // Phase will be LOAD_REQUESTED.
 - (void)webWillAddPendingURL:(const GURL&)url
                   transition:(ui::PageTransition)transition;
-// This method is invoked after an update to the navigation manager's pending
-// URL, triggered whenever the system believes the URL is about to
-// change, or immediately after any unexpected change of the URL.
-// This can be followed by a call to webDidStartLoading (phase PAGE_LOADING) or
-// another call to webWillAddPendingURL and webDidAddPendingURL (phase still
-// LOAD_REQUESTED).
-- (void)webDidAddPendingURL;
 // Called when webWillStartLoadingURL was called, but something went wrong, and
 // webDidStartLoadingURL will now never be called.
 - (void)webCancelStartLoadingRequest;
@@ -83,12 +71,6 @@ struct Referrer;
 // isn't a web concept, so this shoud be expressed differently.
 - (void)webDidStartLoadingURL:(const GURL&)url
           shouldUpdateHistory:(BOOL)updateHistory;
-// Called when the page finishes loading, with the URL, page title and load
-// success status. Phase will be PAGE_LOADED.
-// On the next navigation event, this will be followed by a call to
-// webWillStartLoadingURL.
-- (void)webDidFinishWithURL:(const GURL&)url
-                loadSuccess:(BOOL)loadSuccess;
 // Called when the page load was cancelled by page activity (before a success /
 // failure state is known). Phase will be PAGE_LOADED.
 - (void)webLoadCancelled:(const GURL&)url;
@@ -109,11 +91,6 @@ struct Referrer;
     onFormResubmissionForRequest:(NSURLRequest*)request
                    continueBlock:(ProceduralBlock)continueBlock
                      cancelBlock:(ProceduralBlock)cancelBlock;
-// Returns the unique id of the download request and starts downloading the
-// image at |url| without sending the cookies. Invokes |callback| on completion.
-- (int)downloadImageAtUrl:(const GURL&)url
-    maxBitmapSize:(uint32_t)maxBitmapSize
-         callback:(const web::WebState::ImageDownloadCallback&)callback;
 
 // ---------------------------------------------------------------------
 // TODO(rohitrao): Eliminate as many of the following delegate methods as
@@ -202,9 +179,6 @@ struct Referrer;
 // NagivationItem.
 - (void)webControllerDidUpdateSSLStatusForCurrentNavigationItem:
     (CRWWebController*)webController;
-
-// Called when web view process has been terminated.
-- (void)webControllerWebProcessDidCrash:(CRWWebController*)webController;
 
 // Called when a PassKit file is downloaded. |data| should be the data from a
 // PassKit file, but this is not guaranteed, and the delegate is responsible for

@@ -32,13 +32,13 @@
 #define Animation_h
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseProperty.h"
 #include "core/CSSPropertyNames.h"
 #include "core/CoreExport.h"
 #include "core/animation/AnimationEffectReadOnly.h"
-#include "core/dom/ActiveDOMObject.h"
+#include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMException.h"
 #include "core/events/EventTarget.h"
 #include "platform/animation/CompositorAnimationDelegate.h"
@@ -56,13 +56,12 @@ class ExceptionState;
 class TreeScope;
 
 class CORE_EXPORT Animation final : public EventTargetWithInlineData,
-                                    public ActiveScriptWrappable,
-                                    public ActiveDOMObject,
+                                    public ActiveScriptWrappable<Animation>,
+                                    public ContextLifecycleObserver,
                                     public CompositorAnimationDelegate,
                                     public CompositorAnimationPlayerClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(Animation);
-  USING_PRE_FINALIZER(Animation, dispose);
 
  public:
   enum AnimationPlayState { Unset, Idle, Pending, Running, Paused, Finished };
@@ -117,7 +116,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
   const AtomicString& interfaceName() const override;
   ExecutionContext* getExecutionContext() const override;
   bool hasPendingActivity() const final;
-  void contextDestroyed() override;
+  void contextDestroyed(ExecutionContext*) override;
 
   double playbackRate() const;
   void setPlaybackRate(double);
@@ -162,7 +161,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
   void notifyStartTime(double timelineTime);
   // CompositorAnimationPlayerClient implementation.
   CompositorAnimationPlayer* compositorPlayer() const override {
-    return m_compositorPlayer.get();
+    return m_compositorPlayer ? m_compositorPlayer->player() : nullptr;
   }
 
   bool affects(const Element&, CSSPropertyID) const;
@@ -196,6 +195,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
   Animation(ExecutionContext*, AnimationTimeline&, AnimationEffectReadOnly*);
 
   void clearOutdated();
+  void forceServiceOnNextFrame();
 
   double effectEnd() const;
   bool limited(double currentTime) const;
@@ -221,6 +221,11 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
   void notifyAnimationFinished(double monotonicTime, int group) override {}
   void notifyAnimationAborted(double monotonicTime, int group) override {}
 
+  using AnimationPromise = ScriptPromiseProperty<Member<Animation>,
+                                                 Member<Animation>,
+                                                 Member<DOMException>>;
+  void resolvePromiseAsync(AnimationPromise*);
+
   String m_id;
 
   AnimationPlayState m_playState;
@@ -230,10 +235,6 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
 
   unsigned m_sequenceNumber;
 
-  typedef ScriptPromiseProperty<Member<Animation>,
-                                Member<Animation>,
-                                Member<DOMException>>
-      AnimationPromise;
   Member<AnimationPromise> m_finishedPromise;
   Member<AnimationPromise> m_readyPromise;
 
@@ -299,6 +300,33 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
     CompositorPendingChange m_compositorPendingChange;
   };
 
+  // CompositorAnimationPlayer objects need to eagerly sever
+  // their connection to their Animation delegate; use a separate
+  // 'holder' on-heap object to accomplish that.
+  class CompositorAnimationPlayerHolder
+      : public GarbageCollectedFinalized<CompositorAnimationPlayerHolder> {
+    USING_PRE_FINALIZER(CompositorAnimationPlayerHolder, dispose);
+
+   public:
+    static CompositorAnimationPlayerHolder* create(Animation*);
+
+    void detach();
+
+    DEFINE_INLINE_TRACE() { visitor->trace(m_animation); }
+
+    CompositorAnimationPlayer* player() const {
+      return m_compositorPlayer.get();
+    }
+
+   private:
+    explicit CompositorAnimationPlayerHolder(Animation*);
+
+    void dispose();
+
+    std::unique_ptr<CompositorAnimationPlayer> m_compositorPlayer;
+    Member<Animation> m_animation;
+  };
+
   // This mirrors the known compositor state. It is created when a compositor
   // animation is started. Updated once the start time is known and each time
   // modifications are pushed to the compositor.
@@ -306,8 +334,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
   bool m_compositorPending;
   int m_compositorGroup;
 
-  std::unique_ptr<CompositorAnimationPlayer> m_compositorPlayer;
-  bool m_preFinalizerRegistered;
+  Member<CompositorAnimationPlayerHolder> m_compositorPlayer;
 
   bool m_currentTimePending;
   bool m_stateIsBeingUpdated;

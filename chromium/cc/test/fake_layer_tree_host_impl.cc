@@ -31,7 +31,8 @@ FakeLayerTreeHostImpl::FakeLayerTreeHostImpl(
                         &stats_instrumentation_,
                         task_graph_runner,
                         AnimationHost::CreateForTesting(ThreadInstance::IMPL),
-                        0),
+                        0,
+                        nullptr),
       notify_tile_state_changed_called_(false) {
   // Explicitly clear all debug settings.
   SetDebugState(LayerTreeDebugState());
@@ -40,7 +41,7 @@ FakeLayerTreeHostImpl::FakeLayerTreeHostImpl(
   // Start an impl frame so tests have a valid frame_time to work with.
   base::TimeTicks time_ticks = base::TimeTicks::FromInternalValue(1);
   WillBeginImplFrame(
-      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, time_ticks));
+      CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, 0, 1, time_ticks));
 }
 
 FakeLayerTreeHostImpl::~FakeLayerTreeHostImpl() {

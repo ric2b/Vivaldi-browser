@@ -11,7 +11,10 @@
 // Stub implementation for CRWWebStateDelegate protocol.
 @interface CRWWebStateDelegateStub
     : OCMockComplexTypeHelper<CRWWebStateDelegate>
-// web::WebState received in delegate method calls..
+// web::WebState::OpenURLParams in |webState:openURLWithParams:| call.
+@property(nonatomic, readonly)
+    const web::WebState::OpenURLParams* openURLParams;
+// web::WebState received in delegate method calls.
 @property(nonatomic, readonly) web::WebState* webState;
 // Progress received in |webState:didChangeProgress| call.
 @property(nonatomic, readonly) double changedProgress;
@@ -20,6 +23,9 @@
 @property(nonatomic, readonly) web::ContextMenuParams* contextMenuParams;
 // Whether |javaScriptDialogPresenterForWebState:| has been called or not.
 @property(nonatomic, readonly) BOOL javaScriptDialogPresenterRequested;
+// Whether |authenticationRequested| has been called or not.
+@property(nonatomic, readonly) BOOL authenticationRequested;
+
 @end
 
 #endif  // IOS_WEB_WEB_STATE_WEB_STATE_DELEGATE_STUB_H_

@@ -4,6 +4,9 @@
 
 #include "modules/indexeddb/IDBValue.h"
 
+#include <v8.h>
+
+#include "bindings/core/v8/SerializedScriptValue.h"
 #include "platform/blob/BlobData.h"
 #include "public/platform/WebBlobInfo.h"
 #include "public/platform/modules/indexeddb/WebIDBValue.h"
@@ -15,6 +18,11 @@ IDBValue::IDBValue() = default;
 
 IDBValue::IDBValue(const WebIDBValue& value)
     : IDBValue(value.data, value.webBlobInfo, value.primaryKey, value.keyPath) {
+  m_externalAllocatedSize = m_data ? static_cast<int64_t>(m_data->size()) : 0l;
+  if (m_externalAllocatedSize) {
+    v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(
+        m_externalAllocatedSize);
+  }
 }
 
 IDBValue::IDBValue(PassRefPtr<SharedBuffer> data,
@@ -22,13 +30,13 @@ IDBValue::IDBValue(PassRefPtr<SharedBuffer> data,
                    IDBKey* primaryKey,
                    const IDBKeyPath& keyPath)
     : m_data(data),
-      m_blobData(makeUnique<Vector<RefPtr<BlobDataHandle>>>()),
-      m_blobInfo(wrapUnique(new Vector<WebBlobInfo>(webBlobInfo.size()))),
+      m_blobData(WTF::makeUnique<Vector<RefPtr<BlobDataHandle>>>()),
+      m_blobInfo(WTF::wrapUnique(new Vector<WebBlobInfo>(webBlobInfo.size()))),
       m_primaryKey(primaryKey && primaryKey->isValid() ? primaryKey : nullptr),
       m_keyPath(keyPath) {
   for (size_t i = 0; i < webBlobInfo.size(); ++i) {
     const WebBlobInfo& info = (*m_blobInfo)[i] = webBlobInfo[i];
-    m_blobData->append(
+    m_blobData->push_back(
         BlobDataHandle::create(info.uuid(), info.type(), info.size()));
   }
 }
@@ -37,19 +45,24 @@ IDBValue::IDBValue(const IDBValue* value,
                    IDBKey* primaryKey,
                    const IDBKeyPath& keyPath)
     : m_data(value->m_data),
-      m_blobData(makeUnique<Vector<RefPtr<BlobDataHandle>>>()),
+      m_blobData(WTF::makeUnique<Vector<RefPtr<BlobDataHandle>>>()),
       m_blobInfo(
-          wrapUnique(new Vector<WebBlobInfo>(value->m_blobInfo->size()))),
+          WTF::wrapUnique(new Vector<WebBlobInfo>(value->m_blobInfo->size()))),
       m_primaryKey(primaryKey),
       m_keyPath(keyPath) {
   for (size_t i = 0; i < value->m_blobInfo->size(); ++i) {
     const WebBlobInfo& info = (*m_blobInfo)[i] = value->m_blobInfo->at(i);
-    m_blobData->append(
+    m_blobData->push_back(
         BlobDataHandle::create(info.uuid(), info.type(), info.size()));
   }
 }
 
-IDBValue::~IDBValue() {}
+IDBValue::~IDBValue() {
+  if (m_externalAllocatedSize) {
+    v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(
+        -m_externalAllocatedSize);
+  }
+}
 
 PassRefPtr<IDBValue> IDBValue::create() {
   return adoptRef(new IDBValue());
@@ -69,12 +82,12 @@ Vector<String> IDBValue::getUUIDs() const {
   Vector<String> uuids;
   uuids.reserveCapacity(m_blobInfo->size());
   for (const auto& info : *m_blobInfo)
-    uuids.append(info.uuid());
+    uuids.push_back(info.uuid());
   return uuids;
 }
 
-const SharedBuffer* IDBValue::data() const {
-  return m_data.get();
+RefPtr<SerializedScriptValue> IDBValue::createSerializedValue() const {
+  return SerializedScriptValue::create(m_data->data(), m_data->size());
 }
 
 bool IDBValue::isNull() const {

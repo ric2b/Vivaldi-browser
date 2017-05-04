@@ -11,6 +11,13 @@
 
 namespace blink {
 
+// static
+{{cpp_class}}* {{cpp_class}}::create(ScriptState* scriptState, v8::Local<v8::Value> callback){
+  if (isUndefinedOrNull(callback))
+    return nullptr;
+  return new {{cpp_class}}(scriptState, v8::Local<v8::Function>::Cast(callback));
+}
+
 {{cpp_class}}::{{cpp_class}}(ScriptState* scriptState, v8::Local<v8::Function> callback)
     : m_scriptState(scriptState),
     m_callback(scriptState->isolate(), this, callback) {
@@ -29,22 +36,22 @@ bool {{cpp_class}}::call({{argument_declarations | join(', ')}}) {
 
   ExecutionContext* context = m_scriptState->getExecutionContext();
   DCHECK(context);
-  if (context->activeDOMObjectsAreSuspended() || context->activeDOMObjectsAreStopped())
+  if (context->isContextSuspended() || context->isContextDestroyed())
     return false;
 
   if (m_callback.isEmpty())
     return false;
 
-  // TODO(bashi): Make sure that using TrackExceptionState is OK.
+  // TODO(bashi): Make sure that using DummyExceptionStateForTesting is OK.
   // crbug.com/653769
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   ScriptState::Scope scope(m_scriptState.get());
 
   {% for argument in arguments %}
   v8::Local<v8::Value> {{argument.argument_name}} = {{argument.cpp_value_to_v8_value}};
   {% endfor %}
 
-  v8::Local<v8::Value> thisValue = toV8(scriptWrappable, m_scriptState->context()->Global(), m_scriptState->isolate());
+  v8::Local<v8::Value> thisValue = ToV8(scriptWrappable, m_scriptState->context()->Global(), m_scriptState->isolate());
 
   {% if arguments %}
   v8::Local<v8::Value> argv[] = { {{arguments | join(', ', 'argument_name')}} };

@@ -439,10 +439,15 @@ void TextureManager::Destroy(bool have_context) {
 }
 
 TextureBase::TextureBase(GLuint service_id)
-    : service_id_(service_id), mailbox_manager_(nullptr) {}
+    : service_id_(service_id), target_(GL_NONE), mailbox_manager_(nullptr) {}
 
 TextureBase::~TextureBase() {
   DCHECK_EQ(nullptr, mailbox_manager_);
+}
+
+void TextureBase::SetTarget(GLenum target) {
+  DCHECK_EQ(0u, target_);  // you can only set this once.
+  target_ = target;
 }
 
 void TextureBase::DeleteFromMailboxManager() {
@@ -457,8 +462,10 @@ void TextureBase::SetMailboxManager(MailboxManager* mailbox_manager) {
   mailbox_manager_ = mailbox_manager;
 }
 
-TexturePassthrough::TexturePassthrough(GLuint service_id)
-    : TextureBase(service_id), have_context_(true) {}
+TexturePassthrough::TexturePassthrough(GLuint service_id, GLenum target)
+    : TextureBase(service_id), have_context_(true) {
+  TextureBase::SetTarget(target);
+}
 
 TexturePassthrough::~TexturePassthrough() {
   DeleteFromMailboxManager();
@@ -478,7 +485,6 @@ Texture::Texture(GLuint service_id)
       cleared_(true),
       num_uncleared_mips_(0),
       num_npot_faces_(0),
-      target_(0),
       usage_(GL_NONE),
       base_level_(0),
       max_level_(1000),
@@ -746,8 +752,7 @@ void Texture::MarkMipmapsGenerated() {
 }
 
 void Texture::SetTarget(GLenum target, GLint max_levels) {
-  DCHECK_EQ(0u, target_);  // you can only set this once.
-  target_ = target;
+  TextureBase::SetTarget(target);
   size_t num_faces = (target == GL_TEXTURE_CUBE_MAP) ? 6 : 1;
   face_infos_.resize(num_faces);
   for (size_t ii = 0; ii < num_faces; ++ii) {
@@ -785,11 +790,15 @@ bool Texture::CanGenerateMipmaps(const FeatureInfo* feature_info) const {
     return false;
   }
 
-  if (!Texture::ColorRenderable(feature_info, base.internal_format,
-                                immutable_) ||
-      !Texture::TextureFilterable(feature_info, base.internal_format, base.type,
-                                  immutable_)) {
-    return false;
+  if (!feature_info->validators()->texture_unsized_internal_format.IsValid(
+      base.internal_format)) {
+    if (!Texture::ColorRenderable(feature_info, base.internal_format,
+                                  immutable_) ||
+        !Texture::TextureFilterable(feature_info, base.internal_format,
+                                    base.type,
+                                    immutable_)) {
+      return false;
+    }
   }
 
   for (size_t ii = 0; ii < face_infos_.size(); ++ii) {
@@ -869,7 +878,9 @@ bool Texture::ColorRenderable(const FeatureInfo* feature_info,
                               bool immutable) {
   if (feature_info->validators()->texture_unsized_internal_format.IsValid(
       internal_format)) {
-    return true;
+    return internal_format != GL_ALPHA && internal_format != GL_LUMINANCE &&
+           internal_format != GL_LUMINANCE_ALPHA &&
+           internal_format != GL_SRGB_EXT;
   }
 
   return SizedFormatAvailable(feature_info, immutable, internal_format) &&
@@ -1342,6 +1353,11 @@ GLenum Texture::SetParameteri(
       }
       swizzle_a_ = param;
       break;
+    case GL_TEXTURE_SRGB_DECODE_EXT:
+      if (!feature_info->validators()->texture_srgb_decode_ext.IsValid(param)) {
+        return GL_INVALID_ENUM;
+      }
+      break;
     case GL_TEXTURE_IMMUTABLE_FORMAT:
     case GL_TEXTURE_IMMUTABLE_LEVELS:
       return GL_INVALID_ENUM;
@@ -1772,16 +1788,8 @@ bool Texture::CanRenderTo(const FeatureInfo* feature_info, GLint level) const {
   DCHECK(level >= 0 &&
          level < static_cast<GLint>(face_infos_[0].level_infos.size()));
   GLenum internal_format = face_infos_[0].level_infos[level].internal_format;
-  bool color_renderable =
-      ((feature_info->validators()->texture_unsized_internal_format.IsValid(
-            internal_format) &&
-        internal_format != GL_ALPHA && internal_format != GL_LUMINANCE &&
-        internal_format != GL_LUMINANCE_ALPHA &&
-        internal_format != GL_SRGB_EXT) ||
-       (SizedFormatAvailable(feature_info, immutable_, internal_format) &&
-        feature_info->validators()
-            ->texture_sized_color_renderable_internal_format.IsValid(
-                internal_format)));
+  bool color_renderable = ColorRenderable(feature_info, internal_format,
+                                          immutable_);
   bool depth_renderable = feature_info->validators()->
       texture_depth_renderable_internal_format.IsValid(internal_format);
   bool stencil_renderable = feature_info->validators()->
@@ -3458,6 +3466,7 @@ GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
     case GL_RGBA32I:
       return GL_RGBA_INTEGER;
     case GL_BGRA_EXT:
+    case GL_BGRA8_EXT:
       return GL_BGRA_EXT;
     case GL_DEPTH_COMPONENT16:
     case GL_DEPTH_COMPONENT24:
@@ -3487,8 +3496,6 @@ GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
       return GL_LUMINANCE;
     case GL_LUMINANCE_ALPHA16F_EXT:
       return GL_LUMINANCE_ALPHA;
-    case GL_BGRA8_EXT:
-      return GL_BGRA_EXT;
     default:
       return GL_NONE;
   }

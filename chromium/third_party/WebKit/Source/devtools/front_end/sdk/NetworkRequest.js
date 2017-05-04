@@ -44,10 +44,9 @@ SDK.NetworkRequest = class extends SDK.SDKObject {
   constructor(target, requestId, url, documentURL, frameId, loaderId, initiator) {
     super(target);
 
-    this._networkLog = /** @type {!SDK.NetworkLog} */ (SDK.NetworkLog.fromTarget(target));
     this._networkManager = /** @type {!SDK.NetworkManager} */ (SDK.NetworkManager.fromTarget(target));
     this._requestId = requestId;
-    this.url = url;
+    this.setUrl(url);
     this._documentURL = documentURL;
     this._frameId = frameId;
     this._loaderId = loaderId;
@@ -85,6 +84,9 @@ SDK.NetworkRequest = class extends SDK.SDKObject {
 
     this._remoteAddress = '';
 
+    /** @type {?Protocol.Network.RequestReferrerPolicy} */
+    this._referrerPolicy = null;
+
     /** @type {!Protocol.Security.SecurityState} */
     this._securityState = Protocol.Security.SecurityState.Unknown;
     /** @type {?Protocol.Network.SecurityDetails} */
@@ -109,28 +111,28 @@ SDK.NetworkRequest = class extends SDK.SDKObject {
   /**
    * @return {!Protocol.Network.RequestId}
    */
-  get requestId() {
+  requestId() {
     return this._requestId;
   }
 
   /**
    * @param {!Protocol.Network.RequestId} requestId
    */
-  set requestId(requestId) {
+  setRequestId(requestId) {
     this._requestId = requestId;
   }
 
   /**
    * @return {string}
    */
-  get url() {
+  url() {
     return this._url;
   }
 
   /**
    * @param {string} x
    */
-  set url(x) {
+  setUrl(x) {
     if (this._url === x)
       return;
 
@@ -181,6 +183,20 @@ SDK.NetworkRequest = class extends SDK.SDKObject {
    */
   remoteAddress() {
     return this._remoteAddress;
+  }
+
+  /**
+   * @param {!Protocol.Network.RequestReferrerPolicy} referrerPolicy
+   */
+  setReferrerPolicy(referrerPolicy) {
+    this._referrerPolicy = referrerPolicy;
+  }
+
+  /**
+   * @return {?Protocol.Network.RequestReferrerPolicy}
+   */
+  referrerPolicy() {
+    return this._referrerPolicy;
   }
 
   /**
@@ -586,7 +602,6 @@ SDK.NetworkRequest = class extends SDK.SDKObject {
    */
   set redirectSource(x) {
     this._redirectSource = x;
-    delete this._initiatorInfo;
   }
 
   /**
@@ -762,7 +777,7 @@ SDK.NetworkRequest = class extends SDK.SDKObject {
       return this._queryString;
 
     var queryString = null;
-    var url = this.url;
+    var url = this.url();
     var questionMarkPosition = url.indexOf('?');
     if (questionMarkPosition !== -1) {
       queryString = url.substring(questionMarkPosition + 1);
@@ -922,7 +937,7 @@ SDK.NetworkRequest = class extends SDK.SDKObject {
    * @return {boolean}
    */
   isHttpFamily() {
-    return !!this.url.match(/^https?:/i);
+    return !!this.url().match(/^https?:/i);
   }
 
   /**
@@ -1030,86 +1045,6 @@ SDK.NetworkRequest = class extends SDK.SDKObject {
   }
 
   /**
-   * @return {!{type: !SDK.NetworkRequest.InitiatorType, url: string, lineNumber: number, columnNumber: number, scriptId: ?string}}
-   */
-  initiatorInfo() {
-    if (this._initiatorInfo)
-      return this._initiatorInfo;
-
-    var type = SDK.NetworkRequest.InitiatorType.Other;
-    var url = '';
-    var lineNumber = -Infinity;
-    var columnNumber = -Infinity;
-    var scriptId = null;
-    var initiator = this._initiator;
-
-    if (this.redirectSource) {
-      type = SDK.NetworkRequest.InitiatorType.Redirect;
-      url = this.redirectSource.url;
-    } else if (initiator) {
-      if (initiator.type === Protocol.Network.InitiatorType.Parser) {
-        type = SDK.NetworkRequest.InitiatorType.Parser;
-        url = initiator.url ? initiator.url : url;
-        lineNumber = initiator.lineNumber ? initiator.lineNumber : lineNumber;
-      } else if (initiator.type === Protocol.Network.InitiatorType.Script) {
-        for (var stack = initiator.stack; stack; stack = stack.parent) {
-          var topFrame = stack.callFrames.length ? stack.callFrames[0] : null;
-          if (!topFrame)
-            continue;
-          type = SDK.NetworkRequest.InitiatorType.Script;
-          url = topFrame.url || Common.UIString('<anonymous>');
-          lineNumber = topFrame.lineNumber;
-          columnNumber = topFrame.columnNumber;
-          scriptId = topFrame.scriptId;
-          break;
-        }
-      }
-    }
-
-    this._initiatorInfo =
-        {type: type, url: url, lineNumber: lineNumber, columnNumber: columnNumber, scriptId: scriptId};
-    return this._initiatorInfo;
-  }
-
-  /**
-   * @return {?SDK.NetworkRequest}
-   */
-  initiatorRequest() {
-    if (this._initiatorRequest === undefined)
-      this._initiatorRequest = this._networkLog.requestForURL(this.initiatorInfo().url);
-    return this._initiatorRequest;
-  }
-
-  /**
-   * @return {!SDK.NetworkRequest.InitiatorGraph}
-   */
-  initiatorGraph() {
-    var initiated = new Set();
-    var requests = this._networkLog.requests();
-    for (var request of requests) {
-      var localInitiators = request._initiatorChain();
-      if (localInitiators.has(this))
-        initiated.add(request);
-    }
-    return {initiators: this._initiatorChain(), initiated: initiated};
-  }
-
-  /**
-   * @return {!Set<!SDK.NetworkRequest>}
-   */
-  _initiatorChain() {
-    if (this._initiatorChainCache)
-      return this._initiatorChainCache;
-    this._initiatorChainCache = new Set();
-    var request = this;
-    while (request) {
-      this._initiatorChainCache.add(request);
-      request = request.initiatorRequest();
-    }
-    return this._initiatorChainCache;
-  }
-
-  /**
    * @return {!Array.<!SDK.NetworkRequest.WebSocketFrame>}
    */
   frames() {
@@ -1174,14 +1109,7 @@ SDK.NetworkRequest = class extends SDK.SDKObject {
   }
 
   replayXHR() {
-    this.target().networkAgent().replayXHR(this.requestId);
-  }
-
-  /**
-   * @return {!SDK.NetworkLog}
-   */
-  networkLog() {
-    return this._networkLog;
+    this.target().networkAgent().replayXHR(this._requestId);
   }
 
   /**
@@ -1226,6 +1154,3 @@ SDK.NetworkRequest.WebSocketFrame;
 
 /** @typedef {!{time: number, eventName: string, eventId: string, data: string}} */
 SDK.NetworkRequest.EventSourceMessage;
-
-/** @typedef {!{initiators: !Set<!SDK.NetworkRequest>, initiated: !Set<!SDK.NetworkRequest>}} */
-SDK.NetworkRequest.InitiatorGraph;

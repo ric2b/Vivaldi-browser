@@ -256,12 +256,12 @@ void AesDecryptor::SetServerCertificate(
 }
 
 void AesDecryptor::CreateSessionAndGenerateRequest(
-    SessionType session_type,
+    CdmSessionType session_type,
     EmeInitDataType init_data_type,
     const std::vector<uint8_t>& init_data,
     std::unique_ptr<NewSessionCdmPromise> promise) {
   std::string session_id(base::UintToString(next_session_id_++));
-  valid_sessions_.insert(session_id);
+  open_sessions_.insert(session_id);
 
   // For now, the AesDecryptor does not care about |session_type|.
   // TODO(jrummell): Validate |session_type|.
@@ -315,7 +315,7 @@ void AesDecryptor::CreateSessionAndGenerateRequest(
   session_message_cb_.Run(session_id, LICENSE_REQUEST, message);
 }
 
-void AesDecryptor::LoadSession(SessionType session_type,
+void AesDecryptor::LoadSession(CdmSessionType session_type,
                                const std::string& session_id,
                                std::unique_ptr<NewSessionCdmPromise> promise) {
   // TODO(xhwang): Change this to NOTREACHED() when blink checks for key systems
@@ -329,8 +329,11 @@ void AesDecryptor::UpdateSession(const std::string& session_id,
                                  std::unique_ptr<SimpleCdmPromise> promise) {
   CHECK(!response.empty());
 
-  // TODO(jrummell): Convert back to a DCHECK once prefixed EME is removed.
-  if (valid_sessions_.find(session_id) == valid_sessions_.end()) {
+  // Currently the EME spec has blink check for session closed synchronously,
+  // but then this is called asynchronously. So it is possible that update()
+  // could get called on a closed session.
+  // https://github.com/w3c/encrypted-media/issues/365
+  if (open_sessions_.find(session_id) == open_sessions_.end()) {
     promise->reject(CdmPromise::INVALID_ACCESS_ERROR, 0,
                     "Session does not exist.");
     return;
@@ -339,7 +342,7 @@ void AesDecryptor::UpdateSession(const std::string& session_id,
   std::string key_string(response.begin(), response.end());
 
   KeyIdAndKeyPairs keys;
-  SessionType session_type = MediaKeys::TEMPORARY_SESSION;
+  CdmSessionType session_type = CdmSessionType::TEMPORARY_SESSION;
   if (!ExtractKeysFromJWKSet(key_string, &keys, &session_type)) {
     promise->reject(CdmPromise::INVALID_ACCESS_ERROR, 0,
                     "Response is not a valid JSON Web Key Set.");
@@ -405,14 +408,25 @@ void AesDecryptor::UpdateSession(const std::string& session_id,
 // Runs the parallel steps from https://w3c.github.io/encrypted-media/#close.
 void AesDecryptor::CloseSession(const std::string& session_id,
                                 std::unique_ptr<SimpleCdmPromise> promise) {
-  // Validate that this is a reference to an active session and then forget it.
-  std::set<std::string>::iterator it = valid_sessions_.find(session_id);
-  DCHECK(it != valid_sessions_.end());
+  // Validate that this is a reference to an open session. close() shouldn't
+  // be called if the session is already closed. However, the operation is
+  // asynchronous, so there is a window where close() was called a second time
+  // just before the closed event arrives. As a result it is possible that the
+  // session is already closed, so assume that the session is closed if it
+  // doesn't exist. https://github.com/w3c/encrypted-media/issues/365.
+  //
+  // close() is called from a MediaKeySession object, so it is unlikely that
+  // this method will be called with a previously unseen |session_id|.
+  std::set<std::string>::iterator it = open_sessions_.find(session_id);
+  if (it == open_sessions_.end()) {
+    promise->resolve();
+    return;
+  }
 
   // 5.1. Let cdm be the CDM instance represented by session's cdm instance
   //      value.
   // 5.2. Use cdm to close the session associated with session.
-  valid_sessions_.erase(it);
+  open_sessions_.erase(it);
   DeleteKeysForSession(session_id);
 
   // 5.3. Queue a task to run the following steps:
@@ -547,7 +561,7 @@ bool AesDecryptor::AddDecryptionKey(const std::string& session_id,
   std::unique_ptr<SessionIdDecryptionKeyMap> inner_map(
       new SessionIdDecryptionKeyMap());
   inner_map->Insert(session_id, std::move(decryption_key));
-  key_map_.add(key_id, std::move(inner_map));
+  key_map_[key_id] = std::move(inner_map);
   return true;
 }
 

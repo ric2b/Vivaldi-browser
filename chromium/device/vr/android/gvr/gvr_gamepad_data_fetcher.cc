@@ -4,6 +4,7 @@
 
 #include "device/vr/android/gvr/gvr_gamepad_data_fetcher.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 
 #include "device/vr/android/gvr/gvr_delegate.h"
@@ -28,9 +29,8 @@ void CopyToWebUString(blink::WebUChar* dest,
 
 using namespace blink;
 
-GvrGamepadDataFetcher::Factory::Factory(
-    const base::WeakPtr<GvrDelegate>& delegate,
-    unsigned int display_id)
+GvrGamepadDataFetcher::Factory::Factory(GvrDelegate* delegate,
+                                        unsigned int display_id)
     : delegate_(delegate), display_id_(display_id) {}
 
 GvrGamepadDataFetcher::Factory::~Factory() {}
@@ -39,7 +39,7 @@ std::unique_ptr<GamepadDataFetcher>
 GvrGamepadDataFetcher::Factory::CreateDataFetcher() {
   if (!delegate_)
     return nullptr;
-  return base::MakeUnique<GvrGamepadDataFetcher>(delegate_.get(), display_id_);
+  return base::MakeUnique<GvrGamepadDataFetcher>(delegate_, display_id_);
 }
 
 GamepadSource GvrGamepadDataFetcher::Factory::source() {

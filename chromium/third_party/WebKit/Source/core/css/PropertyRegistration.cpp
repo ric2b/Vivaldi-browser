@@ -4,13 +4,18 @@
 
 #include "core/css/PropertyRegistration.h"
 
+#include "core/animation/CSSValueInterpolationType.h"
+#include "core/css/CSSStyleSheet.h"
 #include "core/css/CSSSyntaxDescriptor.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/CSSVariableReferenceValue.h"
 #include "core/css/PropertyDescriptor.h"
 #include "core/css/PropertyRegistry.h"
+#include "core/css/StyleSheetContents.h"
+#include "core/css/parser/CSSParserContext.h"
 #include "core/css/parser/CSSTokenizer.h"
 #include "core/css/parser/CSSVariableParser.h"
+#include "core/css/resolver/StyleBuilderConverter.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/StyleChangeReason.h"
@@ -56,6 +61,17 @@ static bool computationallyIndependent(const CSSValue& value) {
   return true;
 }
 
+InterpolationTypes interpolationTypesForSyntax(const AtomicString& propertyName,
+                                               const CSSSyntaxDescriptor&) {
+  PropertyHandle property(propertyName);
+  InterpolationTypes interpolationTypes;
+  // TODO(alancutter): Read the syntax descriptor and add the appropriate
+  // CSSInterpolationType subclasses.
+  interpolationTypes.push_back(
+      WTF::makeUnique<CSSValueInterpolationType>(property));
+  return interpolationTypes;
+}
+
 void PropertyRegistration::registerProperty(
     ExecutionContext* executionContext,
     const PropertyDescriptor& descriptor,
@@ -68,7 +84,7 @@ void PropertyRegistration::registerProperty(
   String name = descriptor.name();
   if (!CSSVariableParser::isValidVariableName(name)) {
     exceptionState.throwDOMException(
-        SyntaxError, "The name provided is not a valid custom property name.");
+        SyntaxError, "Custom property names must start with '--'.");
     return;
   }
   AtomicString atomicName(name);
@@ -89,11 +105,16 @@ void PropertyRegistration::registerProperty(
     return;
   }
 
+  InterpolationTypes interpolationTypes =
+      interpolationTypesForSyntax(atomicName, syntaxDescriptor);
+
   if (descriptor.hasInitialValue()) {
     CSSTokenizer tokenizer(descriptor.initialValue());
     bool isAnimationTainted = false;
-    const CSSValue* initial =
-        syntaxDescriptor.parse(tokenizer.tokenRange(), isAnimationTainted);
+    const CSSValue* initial = syntaxDescriptor.parse(
+        tokenizer.tokenRange(),
+        document->elementSheet().contents()->parserContext(),
+        isAnimationTainted);
     if (!initial) {
       exceptionState.throwDOMException(
           SyntaxError,
@@ -106,11 +127,13 @@ void PropertyRegistration::registerProperty(
           "The initial value provided is not computationally independent.");
       return;
     }
+    initial =
+        &StyleBuilderConverter::convertRegisteredPropertyInitialValue(*initial);
     RefPtr<CSSVariableData> initialVariableData = CSSVariableData::create(
         tokenizer.tokenRange(), isAnimationTainted, false);
-    registry.registerProperty(atomicName, syntaxDescriptor,
-                              descriptor.inherits(), initial,
-                              initialVariableData.release());
+    registry.registerProperty(
+        atomicName, syntaxDescriptor, descriptor.inherits(), initial,
+        std::move(initialVariableData), std::move(interpolationTypes));
   } else {
     if (!syntaxDescriptor.isTokenStream()) {
       exceptionState.throwDOMException(
@@ -119,7 +142,8 @@ void PropertyRegistration::registerProperty(
       return;
     }
     registry.registerProperty(atomicName, syntaxDescriptor,
-                              descriptor.inherits(), nullptr, nullptr);
+                              descriptor.inherits(), nullptr, nullptr,
+                              std::move(interpolationTypes));
   }
 
   // TODO(timloh): Invalidate only elements with this custom property set

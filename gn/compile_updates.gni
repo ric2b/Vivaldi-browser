@@ -1,7 +1,6 @@
 if (is_win) {
   foreach(_target,
           [
-            "//ash:ash_unittests",
             "//chrome/test:browser_tests",
             "//chrome/test:interactive_ui_tests",
             "//chrome/test:sync_integration_tests",
@@ -26,7 +25,6 @@ if (is_win) {
 
   foreach(_target,
           [
-            "//ash:ash_unittests",
             "//chrome/test:browser_tests",
             "//components:components_unittests",
             "//content/test:content_browsertests",

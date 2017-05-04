@@ -25,7 +25,6 @@
 
 #include "core/svg/animation/SVGSMILElement.h"
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "core/XLinkNames.h"
 #include "core/dom/Document.h"
@@ -225,34 +224,6 @@ void SVGSMILElement::buildPendingResource() {
   connectEventBaseConditions();
 }
 
-static inline QualifiedName constructQualifiedName(
-    const SVGElement* svgElement,
-    const AtomicString& attributeName) {
-  ASSERT(svgElement);
-  if (attributeName.isEmpty())
-    return anyQName();
-  if (!attributeName.contains(':'))
-    return QualifiedName(nullAtom, attributeName, nullAtom);
-
-  AtomicString prefix;
-  AtomicString localName;
-  if (!Document::parseQualifiedName(attributeName, prefix, localName,
-                                    IGNORE_EXCEPTION))
-    return anyQName();
-
-  const AtomicString& namespaceURI = svgElement->lookupNamespaceURI(prefix);
-  if (namespaceURI.isEmpty())
-    return anyQName();
-
-  QualifiedName resolvedAttrName(nullAtom, localName, namespaceURI);
-  // "Animation elements treat attributeName='xlink:href' as being an alias
-  //  for targetting the 'href' attribute."
-  // https://svgwg.org/svg2-draft/types.html#__svg__SVGURIReference__href
-  if (resolvedAttrName == XLinkNames::hrefAttr)
-    return SVGNames::hrefAttr;
-  return resolvedAttrName;
-}
-
 static inline void clearTimesWithDynamicOrigins(
     Vector<SMILTimeWithOrigin>& timeList) {
   for (int i = timeList.size() - 1; i >= 0; --i) {
@@ -286,8 +257,6 @@ Node::InsertionNotificationRequest SVGSMILElement::insertedInto(
   if (document().isLoadCompleted())
     UseCounter::count(&document(), UseCounter::SVGSMILElementInsertedAfterLoad);
 
-  setAttributeName(constructQualifiedName(
-      this, fastGetAttribute(SVGNames::attributeNameAttr)));
   SVGSVGElement* owner = ownerSVGElement();
   if (!owner)
     return InsertionDone;
@@ -299,7 +268,7 @@ Node::InsertionNotificationRequest SVGSMILElement::insertedInto(
   // "If no attribute is present, the default begin value (an offset-value of 0)
   // must be evaluated."
   if (!fastHasAttribute(SVGNames::beginAttr))
-    m_beginTimes.append(SMILTimeWithOrigin());
+    m_beginTimes.push_back(SMILTimeWithOrigin());
 
   if (m_isWaitingForFirstInterval)
     resolveFirstInterval();
@@ -317,7 +286,6 @@ void SVGSMILElement::removedFrom(ContainerNode* rootParent) {
     clearResourceAndEventBaseReferences();
     clearConditions();
     setTargetElement(nullptr);
-    setAttributeName(anyQName());
     animationAttributeChanged();
     m_timeContainer = nullptr;
   }
@@ -444,7 +412,7 @@ bool SVGSMILElement::parseCondition(const String& value,
     type = Condition::EventBase;
   }
 
-  m_conditions.append(
+  m_conditions.push_back(
       Condition::create(type, beginOrEnd, baseID, nameString, offset, repeat));
 
   if (type == Condition::EventBase && beginOrEnd == End)
@@ -471,15 +439,15 @@ void SVGSMILElement::parseBeginOrEnd(const String& parseString,
     if (value.isUnresolved())
       parseCondition(splitString[n], beginOrEnd);
     else if (!existing.contains(value.value()))
-      timeList.append(
+      timeList.push_back(
           SMILTimeWithOrigin(value, SMILTimeWithOrigin::ParserOrigin));
   }
   sortTimeList(timeList);
 }
 
-void SVGSMILElement::parseAttribute(const QualifiedName& name,
-                                    const AtomicString& oldValue,
-                                    const AtomicString& value) {
+void SVGSMILElement::parseAttribute(const AttributeModificationParams& params) {
+  const QualifiedName& name = params.name;
+  const AtomicString& value = params.newValue;
   if (name == SVGNames::beginAttr) {
     if (!m_conditions.isEmpty()) {
       clearConditions();
@@ -509,7 +477,7 @@ void SVGSMILElement::parseAttribute(const QualifiedName& name,
         EventTypeNames::repeatEvent,
         createAttributeEventListener(this, name, value, eventParameterName()));
   } else {
-    SVGElement::parseAttribute(name, oldValue, value);
+    SVGElement::parseAttribute(params);
   }
 }
 
@@ -524,9 +492,6 @@ void SVGSMILElement::svgAttributeChanged(const QualifiedName& attrName) {
     m_cachedMin = invalidCachedTime;
   } else if (attrName == SVGNames::maxAttr) {
     m_cachedMax = invalidCachedTime;
-  } else if (attrName == SVGNames::attributeNameAttr) {
-    setAttributeName(constructQualifiedName(
-        this, fastGetAttribute(SVGNames::attributeNameAttr)));
   } else if (attrName.matches(SVGNames::hrefAttr) ||
              attrName.matches(XLinkNames::hrefAttr)) {
     // TODO(fs): Could be smarter here when 'href' is specified and 'xlink:href'
@@ -643,14 +608,6 @@ void SVGSMILElement::disconnectEventBaseConditions() {
   }
 }
 
-void SVGSMILElement::setAttributeName(const QualifiedName& attributeName) {
-  unscheduleIfScheduled();
-  if (m_targetElement)
-    clearAnimatedType();
-  m_attributeName = attributeName;
-  schedule();
-}
-
 void SVGSMILElement::setTargetElement(SVGElement* target) {
   unscheduleIfScheduled();
 
@@ -757,7 +714,7 @@ SMILTime SVGSMILElement::simpleDuration() const {
 void SVGSMILElement::addBeginTime(SMILTime eventTime,
                                   SMILTime beginTime,
                                   SMILTimeWithOrigin::Origin origin) {
-  m_beginTimes.append(SMILTimeWithOrigin(beginTime, origin));
+  m_beginTimes.push_back(SMILTimeWithOrigin(beginTime, origin));
   sortTimeList(m_beginTimes);
   beginListChanged(eventTime);
 }
@@ -765,7 +722,7 @@ void SVGSMILElement::addBeginTime(SMILTime eventTime,
 void SVGSMILElement::addEndTime(SMILTime eventTime,
                                 SMILTime endTime,
                                 SMILTimeWithOrigin::Origin origin) {
-  m_endTimes.append(SMILTimeWithOrigin(endTime, origin));
+  m_endTimes.push_back(SMILTimeWithOrigin(endTime, origin));
   sortTimeList(m_endTimes);
   endListChanged(eventTime);
 }
@@ -862,8 +819,8 @@ SMILTime SVGSMILElement::resolveActiveEnd(SMILTime resolvedBegin,
 }
 
 SMILInterval SVGSMILElement::resolveInterval(
-    ResolveInterval resolveIntervalType) const {
-  bool first = resolveIntervalType == FirstInterval;
+    IntervalSelector intervalSelector) const {
+  bool first = intervalSelector == FirstInterval;
   // See the pseudocode in http://www.w3.org/TR/SMIL3/smil-timing.html#q90.
   SMILTime beginAfter =
       first ? -std::numeric_limits<double>::infinity() : m_interval.end;
@@ -982,9 +939,9 @@ void SVGSMILElement::endListChanged(SMILTime) {
 }
 
 SVGSMILElement::RestartedInterval SVGSMILElement::maybeRestartInterval(
-    SMILTime elapsed) {
-  ASSERT(!m_isWaitingForFirstInterval);
-  ASSERT(elapsed >= m_interval.begin);
+    double elapsed) {
+  DCHECK(!m_isWaitingForFirstInterval);
+  DCHECK(elapsed >= m_interval.begin);
 
   Restart restart = this->getRestart();
   if (restart == RestartNever)
@@ -1007,9 +964,9 @@ SVGSMILElement::RestartedInterval SVGSMILElement::maybeRestartInterval(
   return DidNotRestartInterval;
 }
 
-void SVGSMILElement::seekToIntervalCorrespondingToTime(SMILTime elapsed) {
-  ASSERT(!m_isWaitingForFirstInterval);
-  ASSERT(elapsed >= m_interval.begin);
+void SVGSMILElement::seekToIntervalCorrespondingToTime(double elapsed) {
+  DCHECK(!m_isWaitingForFirstInterval);
+  DCHECK(elapsed >= m_interval.begin);
 
   // Manually seek from interval to interval, just as if the animation would run
   // regulary.
@@ -1048,7 +1005,7 @@ void SVGSMILElement::seekToIntervalCorrespondingToTime(SMILTime elapsed) {
 }
 
 float SVGSMILElement::calculateAnimationPercentAndRepeat(
-    SMILTime elapsed,
+    double elapsed,
     unsigned& repeat) const {
   SMILTime simpleDuration = this->simpleDuration();
   repeat = 0;
@@ -1060,9 +1017,9 @@ float SVGSMILElement::calculateAnimationPercentAndRepeat(
     repeat = 0;
     return 1.f;
   }
-  ASSERT(m_interval.begin.isFinite());
-  ASSERT(simpleDuration.isFinite());
-  SMILTime activeTime = elapsed - m_interval.begin;
+  DCHECK(m_interval.begin.isFinite());
+  DCHECK(simpleDuration.isFinite());
+  double activeTime = elapsed - m_interval.begin.value();
   SMILTime repeatingDuration = this->repeatingDuration();
   if (elapsed >= m_interval.end || activeTime > repeatingDuration) {
     repeat = static_cast<unsigned>(repeatingDuration.value() /
@@ -1078,12 +1035,12 @@ float SVGSMILElement::calculateAnimationPercentAndRepeat(
       return 1.0f;
     return clampTo<float>(percent);
   }
-  repeat = static_cast<unsigned>(activeTime.value() / simpleDuration.value());
-  SMILTime simpleTime = fmod(activeTime.value(), simpleDuration.value());
-  return clampTo<float>(simpleTime.value() / simpleDuration.value());
+  repeat = static_cast<unsigned>(activeTime / simpleDuration.value());
+  double simpleTime = fmod(activeTime, simpleDuration.value());
+  return clampTo<float>(simpleTime / simpleDuration.value());
 }
 
-SMILTime SVGSMILElement::calculateNextProgressTime(SMILTime elapsed) const {
+SMILTime SVGSMILElement::calculateNextProgressTime(double elapsed) const {
   if (m_activeState == Active) {
     // If duration is indefinite the value does not actually change over time.
     // Same is true for <set>.
@@ -1113,7 +1070,7 @@ SVGSMILElement::ActiveState SVGSMILElement::determineActiveState(
   return fill() == FillFreeze ? Frozen : Inactive;
 }
 
-bool SVGSMILElement::isContributing(SMILTime elapsed) const {
+bool SVGSMILElement::isContributing(double elapsed) const {
   // Animation does not contribute during the active time if it is past its
   // repeating duration and has fill=remove.
   return (m_activeState == Active &&
@@ -1122,7 +1079,7 @@ bool SVGSMILElement::isContributing(SMILTime elapsed) const {
          m_activeState == Frozen;
 }
 
-bool SVGSMILElement::progress(SMILTime elapsed, bool seekToTime) {
+bool SVGSMILElement::progress(double elapsed, bool seekToTime) {
   ASSERT(m_timeContainer);
   ASSERT(m_isWaitingForFirstInterval || m_interval.begin.isFinite());
 
@@ -1293,7 +1250,7 @@ void SVGSMILElement::endedActiveInterval() {
 }
 
 void SVGSMILElement::scheduleRepeatEvents(unsigned count) {
-  m_repeatEventCountList.append(count);
+  m_repeatEventCountList.push_back(count);
   scheduleEvent(EventTypeNames::repeatEvent);
   scheduleEvent(AtomicString("repeatn"));
 }
@@ -1310,7 +1267,7 @@ void SVGSMILElement::dispatchPendingEvent(const AtomicString& eventType) {
          eventType == EventTypeNames::beginEvent ||
          eventType == EventTypeNames::repeatEvent || eventType == "repeatn");
   if (eventType == "repeatn") {
-    unsigned repeatEventCount = m_repeatEventCountList.first();
+    unsigned repeatEventCount = m_repeatEventCountList.front();
     m_repeatEventCountList.remove(0);
     dispatchEvent(RepeatEvent::create(eventType, repeatEventCount));
   } else {

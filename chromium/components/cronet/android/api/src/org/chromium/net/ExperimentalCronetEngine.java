@@ -89,6 +89,19 @@ public abstract class ExperimentalCronetEngine extends CronetEngine {
         }
 
         /**
+         * Constructs {@link Builder} with a given delegate that provides the actual implementation
+         * of the {@code Builder} methods. This constructor is used only by the internal
+         * implementation.
+         *
+         * @param builderDelegate delegate that provides the actual implementation.
+         *
+         * {@hide}
+         */
+        public Builder(ICronetEngineBuilder builderDelegate) {
+            super(builderDelegate);
+        }
+
+        /**
          * Enables the network quality estimator, which collects and reports
          * measurements of round trip time (RTT) and downstream throughput at
          * various layers of the network stack. After enabling the estimator,
@@ -138,27 +151,6 @@ public abstract class ExperimentalCronetEngine extends CronetEngine {
         }
 
         /**
-         * Sets whether the resulting {@link CronetEngine} uses an
-         * implementation based on the system's
-         * {@link java.net.HttpURLConnection} implementation, or if this is
-         * only done as a backup if the native implementation fails to load.
-         * Defaults to disabled.
-         * @param value {@code true} makes the resulting {@link CronetEngine}
-         *              use an implementation based on the system's
-         *              {@link java.net.HttpURLConnection} implementation
-         *              without trying to load the native implementation.
-         *              {@code false} makes the resulting {@code CronetEngine}
-         *              use the native implementation, or if that fails to load,
-         *              falls back to an implementation based on the system's
-         *              {@link java.net.HttpURLConnection} implementation.
-         * @return the builder to facilitate chaining.
-         */
-        public Builder enableLegacyMode(boolean value) {
-            mBuilderDelegate.enableLegacyMode(value);
-            return this;
-        }
-
-        /**
          * Enables
          * <a href="https://developer.chrome.com/multidevice/data-compression">Data
          * Reduction Proxy</a>. Defaults to disabled.
@@ -170,8 +162,23 @@ public abstract class ExperimentalCronetEngine extends CronetEngine {
             return this;
         }
 
+        /**
+         * Sets experimental options to be used in Cronet.
+         *
+         * @param options JSON formatted experimental options.
+         * @return the builder to facilitate chaining.
+         */
+        public Builder setExperimentalOptions(String options) {
+            mBuilderDelegate.setExperimentalOptions(options);
+            return this;
+        }
+
+        /**
+         * Returns delegate, only for testing.
+         * @hide
+         */
         @VisibleForTesting
-        ICronetEngineBuilder getBuilderDelegate() {
+        public ICronetEngineBuilder getBuilderDelegate() {
             return mBuilderDelegate;
         }
 
@@ -240,12 +247,6 @@ public abstract class ExperimentalCronetEngine extends CronetEngine {
         }
 
         @Override
-        public Builder setExperimentalOptions(String options) {
-            super.setExperimentalOptions(options);
-            return this;
-        }
-
-        @Override
         public ExperimentalCronetEngine build() {
             return mBuilderDelegate.build();
         }
@@ -307,11 +308,12 @@ public abstract class ExperimentalCronetEngine extends CronetEngine {
      * before round trip time and throughput listeners are added, and after the
      * network quality estimator has been enabled.
      * @param useLocalHostRequests include requests to localhost in estimates.
-     * @param useSmallerResponses include small responses in throughput
-     * estimates.
+     * @param useSmallerResponses include small responses in throughput estimates.
+     * @param disableOfflineCheck when set to true, disables the device offline checks when
+     *        computing the effective connection type or when writing the prefs.
      */
-    public void configureNetworkQualityEstimatorForTesting(
-            boolean useLocalHostRequests, boolean useSmallerResponses) {}
+    public void configureNetworkQualityEstimatorForTesting(boolean useLocalHostRequests,
+            boolean useSmallerResponses, boolean disableOfflineCheck) {}
 
     /**
      * Registers a listener that gets called whenever the network quality

@@ -18,13 +18,14 @@
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
 #include "components/bookmarks/browser/bookmark_expanded_state_tracker.h"
-#include "components/bookmarks/browser/bookmark_index.h"
-#include "components/bookmarks/browser/bookmark_match.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "components/bookmarks/browser/bookmark_node_data.h"
 #include "components/bookmarks/browser/bookmark_storage.h"
 #include "components/bookmarks/browser/bookmark_undo_delegate.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
+#include "components/bookmarks/browser/titled_url_index.h"
+#include "components/bookmarks/browser/titled_url_match.h"
+#include "components/bookmarks/browser/typed_count_sorter.h"
 #include "components/favicon_base/favicon_types.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -797,7 +798,7 @@ void BookmarkModel::ResetDateFolderModified(const BookmarkNode* node) {
 
 void BookmarkModel::GetBookmarksMatching(const base::string16& text,
                                          size_t max_count,
-                                         std::vector<BookmarkMatch>* matches) {
+                                         std::vector<TitledUrlMatch>* matches) {
   GetBookmarksMatching(text, max_count,
                        query_parser::MatchingAlgorithm::DEFAULT, matches);
 }
@@ -806,11 +807,11 @@ void BookmarkModel::GetBookmarksMatching(
     const base::string16& text,
     size_t max_count,
     query_parser::MatchingAlgorithm matching_algorithm,
-    std::vector<BookmarkMatch>* matches) {
+    std::vector<TitledUrlMatch>* matches) {
   if (!loaded_)
     return;
 
-  index_->GetBookmarksMatching(text, max_count, matching_algorithm, matches);
+  index_->GetResultsMatching(text, max_count, matching_algorithm, matches);
 }
 
 void BookmarkModel::ClearStore() {
@@ -1203,12 +1204,14 @@ std::unique_ptr<BookmarkLoadDetails> BookmarkModel::CreateLoadDetails() {
   BookmarkPermanentNode* mobile_node =
       CreatePermanentNode(BookmarkNode::MOBILE);
   BookmarkPermanentNode* trash_node =
-       (vivaldi::IsVivaldiRunning() ?
+       (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning() ?
           CreatePermanentNode(BookmarkNode::TRASH):
           NULL);
+  std::unique_ptr<TitledUrlNodeSorter> node_sorter =
+      base::MakeUnique<TypedCountSorter>(client_.get());
   return std::unique_ptr<BookmarkLoadDetails>(new BookmarkLoadDetails(
       bb_node, other_node, mobile_node, trash_node, client_->GetLoadExtraNodesCallback(),
-      new BookmarkIndex(client_.get()), next_node_id_));
+      new TitledUrlIndex(std::move(node_sorter)), next_node_id_));
 }
 
 void BookmarkModel::SetUndoDelegate(BookmarkUndoDelegate* undo_delegate) {

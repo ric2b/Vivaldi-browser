@@ -4,10 +4,8 @@
 
 module content.mojom;
 
-import "gpu/ipc/common/sync_token.mojom";
 import "media/mojo/interfaces/media_types.mojom";
 import "media/capture/mojo/video_capture_types.mojom";
-import "mojo/common/common_custom_types.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 
 // This file decribes the communication between a given Renderer Host interface
@@ -51,15 +49,6 @@ import "ui/gfx/geometry/mojo/geometry.mojom";
 //      | ---> StopCapture                                      |
 //      |                        OnStateChanged(STOPPED) <---   |
 
-struct VideoFrameInfo{
-  mojo.common.mojom.TimeDelta timestamp;
-  mojo.common.mojom.DictionaryValue metadata;
-  media.mojom.VideoPixelFormat pixel_format;
-  media.mojom.VideoPixelStorage storage_type;
-  gfx.mojom.Size coded_size;
-  gfx.mojom.Rect visible_rect;
-};
-
 enum VideoCaptureState {
   STARTED,
   PAUSED,
@@ -80,7 +69,7 @@ interface VideoCaptureObserver {
 
   // |buffer_id| has video capture data with |info| containing the associated
   // VideoFrame constituent parts.
-  OnBufferReady(int32 buffer_id, VideoFrameInfo info);
+  OnBufferReady(int32 buffer_id, media.mojom.VideoFrameInfo info);
 
   // |buffer_id| has been released by VideoCaptureHost and must not be used.
   OnBufferDestroyed(int32 buffer_id);
@@ -108,7 +97,6 @@ interface VideoCaptureHost {
 
   // Indicates that a renderer has finished using a previously shared buffer.
   ReleaseBuffer(int32 device_id, int32 buffer_id,
-                gpu.mojom.SyncToken sync_token,
                 double consumer_resource_utilization);
 
   // Get the formats supported by a device referenced by |session_id|.

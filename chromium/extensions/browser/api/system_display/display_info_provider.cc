@@ -70,6 +70,8 @@ api::system_display::DisplayUnitInfo DisplayInfoProvider::CreateDisplayUnitInfo(
   unit.work_area.top = work_area.y();
   unit.work_area.width = work_area.width();
   unit.work_area.height = work_area.height();
+  unit.has_touch_support =
+      display.touch_support() == display::Display::TOUCH_SUPPORT_AVAILABLE;
   return unit;
 }
 
@@ -116,6 +118,39 @@ bool DisplayInfoProvider::OverscanCalibrationReset(const std::string& id) {
 
 bool DisplayInfoProvider::OverscanCalibrationComplete(const std::string& id) {
   return false;
+}
+
+bool DisplayInfoProvider::ShowNativeTouchCalibration(
+    const std::string& id,
+    std::string* error,
+    const TouchCalibrationCallback& callback) {
+  NOTREACHED();  // Implemented on Chrome OS only in override.
+  return false;
+}
+
+bool DisplayInfoProvider::StartCustomTouchCalibration(const std::string& id,
+                                                      std::string* error) {
+  NOTREACHED();  // Implemented on Chrome OS only in override.
+  return false;
+}
+
+bool DisplayInfoProvider::CompleteCustomTouchCalibration(
+    const api::system_display::TouchCalibrationPairQuad& pairs,
+    const api::system_display::Bounds& bounds,
+    std::string* error) {
+  NOTREACHED();  // Implemented on Chrome OS only in override.
+  return false;
+}
+
+bool DisplayInfoProvider::ClearTouchCalibration(const std::string& id,
+                                                std::string* error) {
+  NOTREACHED();  // Implemented on Chrome OS only in override.
+  return false;
+}
+
+bool DisplayInfoProvider::IsNativeTouchCalibrationActive(std::string* error) {
+  NOTREACHED();  // Implemented on Chrome OS only in override.
+  return true;
 }
 
 DisplayInfoProvider::DisplayInfoProvider() {

@@ -53,9 +53,21 @@ class WTF_EXPORT WTFThreadData {
 
   ICUConverterWrapper& cachedConverterICU() { return *m_cachedConverterICU; }
 
+  ThreadIdentifier threadId() const { return m_threadId; }
+
+#if OS(WIN) && COMPILER(MSVC)
+  static size_t threadStackSize();
+#endif
+
  private:
   std::unique_ptr<AtomicStringTable> m_atomicStringTable;
   std::unique_ptr<ICUConverterWrapper> m_cachedConverterICU;
+
+  ThreadIdentifier m_threadId;
+
+#if OS(WIN) && COMPILER(MSVC)
+  size_t m_threadStackSize = 0u;
+#endif
 
   static ThreadSpecific<WTFThreadData>* staticData;
   friend WTFThreadData& wtfThreadData();

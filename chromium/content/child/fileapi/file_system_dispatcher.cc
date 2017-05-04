@@ -4,9 +4,12 @@
 
 #include "content/child/fileapi/file_system_dispatcher.h"
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/process/process.h"
 #include "content/child/child_thread_impl.h"
 #include "content/common/fileapi/file_system_messages.h"
@@ -25,50 +28,57 @@ class FileSystemDispatcher::CallbackDispatcher {
   typedef FileSystemDispatcher::WriteCallback WriteCallback;
   typedef FileSystemDispatcher::OpenFileCallback OpenFileCallback;
 
-  static CallbackDispatcher* Create(const StatusCallback& callback) {
-    CallbackDispatcher* dispatcher = new CallbackDispatcher;
+  static std::unique_ptr<CallbackDispatcher> Create(
+      const StatusCallback& callback) {
+    auto dispatcher = base::WrapUnique(new CallbackDispatcher);
     dispatcher->status_callback_ = callback;
     dispatcher->error_callback_ = callback;
     return dispatcher;
   }
-  static CallbackDispatcher* Create(const MetadataCallback& callback,
-                                    const StatusCallback& error_callback) {
-    CallbackDispatcher* dispatcher = new CallbackDispatcher;
+  static std::unique_ptr<CallbackDispatcher> Create(
+      const MetadataCallback& callback,
+      const StatusCallback& error_callback) {
+    auto dispatcher = base::WrapUnique(new CallbackDispatcher);
     dispatcher->metadata_callback_ = callback;
     dispatcher->error_callback_ = error_callback;
     return dispatcher;
   }
-  static CallbackDispatcher* Create(const CreateSnapshotFileCallback& callback,
-                                    const StatusCallback& error_callback) {
-    CallbackDispatcher* dispatcher = new CallbackDispatcher;
+  static std::unique_ptr<CallbackDispatcher> Create(
+      const CreateSnapshotFileCallback& callback,
+      const StatusCallback& error_callback) {
+    auto dispatcher = base::WrapUnique(new CallbackDispatcher);
     dispatcher->snapshot_callback_ = callback;
     dispatcher->error_callback_ = error_callback;
     return dispatcher;
   }
-  static CallbackDispatcher* Create(const ReadDirectoryCallback& callback,
-                                    const StatusCallback& error_callback) {
-    CallbackDispatcher* dispatcher = new CallbackDispatcher;
+  static std::unique_ptr<CallbackDispatcher> Create(
+      const ReadDirectoryCallback& callback,
+      const StatusCallback& error_callback) {
+    auto dispatcher = base::WrapUnique(new CallbackDispatcher);
     dispatcher->directory_callback_ = callback;
     dispatcher->error_callback_ = error_callback;
     return dispatcher;
   }
-  static CallbackDispatcher* Create(const OpenFileSystemCallback& callback,
-                                    const StatusCallback& error_callback) {
-    CallbackDispatcher* dispatcher = new CallbackDispatcher;
+  static std::unique_ptr<CallbackDispatcher> Create(
+      const OpenFileSystemCallback& callback,
+      const StatusCallback& error_callback) {
+    auto dispatcher = base::WrapUnique(new CallbackDispatcher);
     dispatcher->filesystem_callback_ = callback;
     dispatcher->error_callback_ = error_callback;
     return dispatcher;
   }
-  static CallbackDispatcher* Create(const ResolveURLCallback& callback,
-                                    const StatusCallback& error_callback) {
-    CallbackDispatcher* dispatcher = new CallbackDispatcher;
+  static std::unique_ptr<CallbackDispatcher> Create(
+      const ResolveURLCallback& callback,
+      const StatusCallback& error_callback) {
+    auto dispatcher = base::WrapUnique(new CallbackDispatcher);
     dispatcher->resolve_callback_ = callback;
     dispatcher->error_callback_ = error_callback;
     return dispatcher;
   }
-  static CallbackDispatcher* Create(const WriteCallback& callback,
-                                    const StatusCallback& error_callback) {
-    CallbackDispatcher* dispatcher = new CallbackDispatcher;
+  static std::unique_ptr<CallbackDispatcher> Create(
+      const WriteCallback& callback,
+      const StatusCallback& error_callback) {
+    auto dispatcher = base::WrapUnique(new CallbackDispatcher);
     dispatcher->write_callback_ = callback;
     dispatcher->error_callback_ = error_callback;
     return dispatcher;
@@ -137,8 +147,8 @@ FileSystemDispatcher::FileSystemDispatcher() {
 
 FileSystemDispatcher::~FileSystemDispatcher() {
   // Make sure we fire all the remaining callbacks.
-  for (IDMap<CallbackDispatcher, IDMapOwnPointer>::iterator
-           iter(&dispatchers_); !iter.IsAtEnd(); iter.Advance()) {
+  for (IDMap<std::unique_ptr<CallbackDispatcher>>::iterator iter(&dispatchers_);
+       !iter.IsAtEnd(); iter.Advance()) {
     int request_id = iter.GetCurrentKey();
     CallbackDispatcher* dispatcher = iter.GetCurrentValue();
     DCHECK(dispatcher);
@@ -183,14 +193,6 @@ void FileSystemDispatcher::ResolveURL(
       CallbackDispatcher::Create(success_callback, error_callback));
   ChildThreadImpl::current()->Send(new FileSystemHostMsg_ResolveURL(
           request_id, filesystem_url));
-}
-
-void FileSystemDispatcher::DeleteFileSystem(const GURL& origin_url,
-                                            storage::FileSystemType type,
-                                            const StatusCallback& callback) {
-  int request_id = dispatchers_.Add(CallbackDispatcher::Create(callback));
-  ChildThreadImpl::current()->Send(new FileSystemHostMsg_DeleteFileSystem(
-          request_id, origin_url, type));
 }
 
 void FileSystemDispatcher::Move(

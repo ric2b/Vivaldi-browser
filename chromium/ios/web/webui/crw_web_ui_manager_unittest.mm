@@ -17,16 +17,16 @@
 #import "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "ios/web/public/test/fakes/test_browser_state.h"
+#import "ios/web/public/test/fakes/test_web_client.h"
 #include "ios/web/public/test/scoped_testing_web_client.h"
-#include "ios/web/public/test/test_browser_state.h"
-#import "ios/web/public/test/test_web_client.h"
 #include "ios/web/public/test/web_test.h"
-#include "ios/web/web_state/web_state_impl.h"
+#import "ios/web/web_state/web_state_impl.h"
 #import "ios/web/webui/crw_web_ui_page_builder.h"
-#include "ios/web/webui/url_fetcher_block_adapter.h"
+#import "ios/web/webui/url_fetcher_block_adapter.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "testing/gtest_mac.h"
+#import "testing/gtest_mac.h"
 
 namespace web {
 
@@ -146,36 +146,6 @@ TEST_F(CRWWebUIManagerTest, LoadWebUI) {
   GURL url(kTestWebUIUrl);
   EXPECT_CALL(*web_state_impl_, LoadWebUIHtml(html, url));
   web_state_impl_->OnProvisionalNavigationStarted(url);
-}
-
-// Tests that CRWWebUIManager responds to OnScriptCommandReceieved call and runs
-// JavaScript to set favicon background.
-TEST_F(CRWWebUIManagerTest, HandleFaviconRequest) {
-  GURL test_url(kTestWebUIUrl);
-  std::string favicon_url_string(kFaviconUrl);
-
-  // Create mock JavaScript message to request favicon.
-  base::ListValue* arguments(new base::ListValue());
-  arguments->AppendString(favicon_url_string);
-  std::unique_ptr<base::DictionaryValue> message(new base::DictionaryValue());
-  message->SetString("message", "webui.requestFavicon");
-  message->Set("arguments", arguments);
-
-  // Create expected JavaScript to call.
-  base::FilePath favicon_path;
-  ASSERT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &favicon_path));
-  favicon_path = favicon_path.AppendASCII(kFaviconPath);
-  NSData* expected_data = [NSData
-      dataWithContentsOfFile:base::SysUTF8ToNSString(favicon_path.value())];
-  base::string16 expected_javascript = base::SysNSStringToUTF16([NSString
-      stringWithFormat:
-          @"chrome.setFaviconBackground('%s', 'data:image/png;base64,%@');",
-          favicon_url_string.c_str(),
-          [expected_data base64EncodedStringWithOptions:0]]);
-
-  EXPECT_CALL(*web_state_impl_, ExecuteJavaScript(expected_javascript));
-  web_state_impl_->OnScriptCommandReceived("webui.requestFavicon", *message,
-                                           test_url, false);
 }
 
 // Tests that CRWWebUIManager responds to OnScriptCommandReceieved call and runs

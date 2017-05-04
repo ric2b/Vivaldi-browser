@@ -154,11 +154,7 @@ class BookmarkBarView : public views::AccessiblePaneView,
       int max_tooltip_width,
       const gfx::FontList& font_list,
       const GURL& url,
-      const base::string16& title,
-      const base::string16 *nickname=NULL,
-      const base::string16 *description=NULL,
-      const base::Time *created_time=NULL,
-      const base::Time *visited_time=NULL);
+      const base::string16& title);
 
   // Returns true if Bookmarks Bar is currently detached from the Toolbar.
   bool IsDetached() const;

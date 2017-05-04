@@ -6,6 +6,8 @@
 #define CONTENT_CHILD_PUSH_MESSAGING_PUSH_PROVIDER_H_
 
 #include <stdint.h>
+
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -50,17 +52,18 @@ class PushProvider : public blink::WebPushProvider,
   void subscribe(
       blink::WebServiceWorkerRegistration* service_worker_registration,
       const blink::WebPushSubscriptionOptions& options,
-      blink::WebPushSubscriptionCallbacks* callbacks) override;
+      std::unique_ptr<blink::WebPushSubscriptionCallbacks> callbacks) override;
   void unsubscribe(
       blink::WebServiceWorkerRegistration* service_worker_registration,
-      blink::WebPushUnsubscribeCallbacks* callbacks) override;
+      std::unique_ptr<blink::WebPushUnsubscribeCallbacks> callbacks) override;
   void getSubscription(
       blink::WebServiceWorkerRegistration* service_worker_registration,
-      blink::WebPushSubscriptionCallbacks* callbacks) override;
+      std::unique_ptr<blink::WebPushSubscriptionCallbacks> callbacks) override;
   void getPermissionStatus(
       blink::WebServiceWorkerRegistration* service_worker_registration,
       const blink::WebPushSubscriptionOptions& options,
-      blink::WebPushPermissionStatusCallbacks* callbacks) override;
+      std::unique_ptr<blink::WebPushPermissionStatusCallbacks> callbacks)
+      override;
 
   // Called by the PushDispatcher.
   bool OnMessageReceived(const IPC::Message& message);
@@ -97,17 +100,17 @@ class PushProvider : public blink::WebPushProvider,
 
   // Stores the subscription callbacks with their request ids. This class owns
   // the callbacks.
-  IDMap<blink::WebPushSubscriptionCallbacks, IDMapOwnPointer>
+  IDMap<std::unique_ptr<blink::WebPushSubscriptionCallbacks>>
       subscription_callbacks_;
 
   // Stores the permission status callbacks with their request ids. This class
   // owns the callbacks.
-  IDMap<blink::WebPushPermissionStatusCallbacks, IDMapOwnPointer>
+  IDMap<std::unique_ptr<blink::WebPushPermissionStatusCallbacks>>
       permission_status_callbacks_;
 
   // Stores the unsubscription callbacks with their request ids. This class owns
   // the callbacks.
-  IDMap<blink::WebPushUnsubscribeCallbacks, IDMapOwnPointer>
+  IDMap<std::unique_ptr<blink::WebPushUnsubscribeCallbacks>>
       unsubscribe_callbacks_;
 
   DISALLOW_COPY_AND_ASSIGN(PushProvider);

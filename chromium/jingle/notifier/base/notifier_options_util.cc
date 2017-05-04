@@ -7,8 +7,10 @@
 #include "base/logging.h"
 #include "jingle/notifier/base/const_communicator.h"
 #include "jingle/notifier/base/notifier_options.h"
-#include "webrtc/libjingle/xmpp/constants.h"
-#include "webrtc/libjingle/xmpp/jid.h"
+#include "third_party/libjingle_xmpp/xmpp/constants.h"
+#include "third_party/libjingle_xmpp/xmpp/jid.h"
+
+#include "sync/vivaldi_sync_urls.h"
 
 namespace notifier {
 
@@ -51,14 +53,14 @@ ServerList GetServerList(
     // The default servers support SSLTCP.
     servers.push_back(
         ServerInformation(
-            net::HostPortPair("talk.google.com",
+            net::HostPortPair(SYNC_NOTIFIER_SERVER1,
                               notifier::kDefaultXmppPort),
-            SUPPORTS_SSLTCP));
+            SYNC_SECURE_NOTIFIER_SERVER));
     servers.push_back(
         ServerInformation(
-            net::HostPortPair("talkx.l.google.com",
+            net::HostPortPair(SYNC_NOTIFIER_SERVER2,
                               notifier::kDefaultXmppPort),
-            SUPPORTS_SSLTCP));
+            SYNC_SECURE_NOTIFIER_SERVER));
   }
   return servers;
 }

@@ -108,12 +108,12 @@ class FloatingObject {
     return m_frameRect;
   }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   bool isInPlacedTree() const { return m_isInPlacedTree; }
   void setIsInPlacedTree(bool value) { m_isInPlacedTree = value; }
 #endif
 
-  bool shouldPaint() const;
+  bool shouldPaint() const { return m_shouldPaint; }
   void setShouldPaint(bool shouldPaint) { m_shouldPaint = shouldPaint; }
   bool isDescendant() const { return m_isDescendant; }
   void setIsDescendant(bool isDescendant) { m_isDescendant = isDescendant; }
@@ -139,8 +139,6 @@ class FloatingObject {
                  bool isDescendant,
                  bool isLowestNonOverhangingFloatInChild);
 
-  bool shouldPaintForCompositedLayoutPart();
-
   LayoutBox* m_layoutObject;
   RootInlineBox* m_originatingLine;
   LayoutRect m_frameRect;
@@ -150,7 +148,7 @@ class FloatingObject {
   unsigned m_isDescendant : 1;
   unsigned m_isPlaced : 1;
   unsigned m_isLowestNonOverhangingFloatInChild : 1;
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   unsigned m_isInPlacedTree : 1;
 #endif
 };

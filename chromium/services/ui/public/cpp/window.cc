@@ -14,7 +14,6 @@
 #include "base/macros.h"
 #include "services/ui/common/transient_window_utils.h"
 #include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/cpp/surface_id_handler.h"
 #include "services/ui/public/cpp/window_compositor_frame_sink.h"
 #include "services/ui/public/cpp/window_observer.h"
 #include "services/ui/public/cpp/window_private.h"
@@ -23,6 +22,7 @@
 #include "services/ui/public/cpp/window_tree_client.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/display/display.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -270,25 +270,23 @@ bool Window::IsDrawn() const {
 }
 
 std::unique_ptr<WindowCompositorFrameSink> Window::RequestCompositorFrameSink(
-    mojom::CompositorFrameSinkType type,
     scoped_refptr<cc::ContextProvider> context_provider,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager) {
   std::unique_ptr<WindowCompositorFrameSinkBinding>
       compositor_frame_sink_binding;
   std::unique_ptr<WindowCompositorFrameSink> compositor_frame_sink =
-      WindowCompositorFrameSink::Create(std::move(context_provider),
-                                        gpu_memory_buffer_manager,
-                                        &compositor_frame_sink_binding);
-  AttachCompositorFrameSink(type, std::move(compositor_frame_sink_binding));
+      WindowCompositorFrameSink::Create(
+          cc::FrameSinkId(server_id(), 0), std::move(context_provider),
+          gpu_memory_buffer_manager, &compositor_frame_sink_binding);
+  AttachCompositorFrameSink(std::move(compositor_frame_sink_binding));
   return compositor_frame_sink;
 }
 
 void Window::AttachCompositorFrameSink(
-    mojom::CompositorFrameSinkType type,
     std::unique_ptr<WindowCompositorFrameSinkBinding>
         compositor_frame_sink_binding) {
   window_tree()->AttachCompositorFrameSink(
-      server_id_, type,
+      server_id_,
       std::move(compositor_frame_sink_binding->compositor_frame_sink_request_),
       mojo::MakeProxy(std::move(
           compositor_frame_sink_binding->compositor_frame_sink_client_)));
@@ -543,8 +541,8 @@ Window::~Window() {
     transient_parent_->LocalRemoveTransientWindow(this);
 
   // Return the surface reference if there is one.
-  if (surface_info_)
-    LocalSetSurfaceId(nullptr);
+  if (surface_info_.id().is_valid())
+    LocalSetSurfaceInfo(cc::SurfaceInfo());
 
   // Remove transient children.
   while (!transient_children_.empty()) {
@@ -596,10 +594,9 @@ Window::Window(WindowTreeClient* client, Id id)
       // Matches aura, see aura::Window for details.
       observers_(base::ObserverList<WindowObserver>::NOTIFY_EXISTING_ONLY),
       input_event_handler_(nullptr),
-      surface_id_handler_(nullptr),
       visible_(false),
       opacity_(1.0f),
-      display_id_(display::Display::kInvalidDisplayID),
+      display_id_(display::kInvalidDisplayId),
       cursor_id_(mojom::Cursor::CURSOR_NULL),
       parent_drawn_(false) {}
 
@@ -609,11 +606,12 @@ void Window::SetSharedPropertyInternal(const std::string& name,
     return;
 
   if (client_) {
-    mojo::Array<uint8_t> transport_value(nullptr);
+    base::Optional<std::vector<uint8_t>> transport_value;
     if (value) {
-      transport_value.resize(value->size());
+      transport_value.emplace(value->size());
       if (value->size())
-        memcpy(&transport_value.front(), &(value->front()), value->size());
+        memcpy(&transport_value.value().front(), &(value->front()),
+               value->size());
     }
     // TODO: add test coverage of this (450303).
     client_->SetProperty(this, name, std::move(transport_value));
@@ -807,21 +805,16 @@ void Window::LocalSetSharedProperty(const std::string& name,
     observer.OnWindowSharedPropertyChanged(this, name, old_value_ptr, value);
 }
 
-void Window::LocalSetSurfaceId(std::unique_ptr<SurfaceInfo> surface_info) {
-  if (surface_info_) {
-    const cc::SurfaceId& existing_surface_id = surface_info_->surface_id;
-    cc::SurfaceId new_surface_id =
-        surface_info ? surface_info->surface_id : cc::SurfaceId();
+void Window::LocalSetSurfaceInfo(const cc::SurfaceInfo& surface_info) {
+  if (surface_info_.id().is_valid()) {
+    const cc::SurfaceId& existing_surface_id = surface_info_.id();
+    const cc::SurfaceId& new_surface_id = surface_info.id();
     if (existing_surface_id.is_valid() &&
         existing_surface_id != new_surface_id) {
       // TODO(kylechar): Start return reference here?
     }
   }
-  if (parent_ && parent_->surface_id_handler_) {
-    parent_->surface_id_handler_->OnChildWindowSurfaceChanged(this,
-                                                              &surface_info);
-  }
-  surface_info_ = std::move(surface_info);
+  surface_info_ = surface_info;
 }
 
 void Window::NotifyWindowStackingChanged() {

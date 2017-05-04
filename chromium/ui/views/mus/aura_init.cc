@@ -8,6 +8,7 @@
 
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "build/build_config.h"
 #include "services/catalog/public/cpp/resource_loader.h"
@@ -55,9 +56,10 @@ AuraInit::AuraInit(service_manager::Connector* connector,
                    Mode mode)
     : resource_file_(resource_file),
       resource_file_200_(resource_file_200),
-      env_(aura::Env::CreateInstance(mode == Mode::AURA_MUS
-                                         ? aura::Env::Mode::MUS
-                                         : aura::Env::Mode::LOCAL)),
+      env_(aura::Env::CreateInstance(
+          (mode == Mode::AURA_MUS || mode == Mode::AURA_MUS_WINDOW_MANAGER)
+              ? aura::Env::Mode::MUS
+              : aura::Env::Mode::LOCAL)),
       views_delegate_(new MusViewsDelegate) {
   if (mode == Mode::AURA_MUS) {
     mus_client_ =
@@ -103,7 +105,7 @@ void AuraInit::InitializeResources(service_manager::Connector* connector) {
 
   catalog::ResourceLoader loader;
   filesystem::mojom::DirectoryPtr directory;
-  connector->ConnectToInterface(catalog::mojom::kServiceName, &directory);
+  connector->BindInterface(catalog::mojom::kServiceName, &directory);
   CHECK(loader.OpenFiles(std::move(directory), resource_paths));
   ui::RegisterPathProvider();
   base::File pak_file = loader.TakeFile(resource_file_);

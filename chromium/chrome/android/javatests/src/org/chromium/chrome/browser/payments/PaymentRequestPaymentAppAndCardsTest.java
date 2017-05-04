@@ -5,7 +5,7 @@
 package org.chromium.chrome.browser.payments;
 
 import android.content.DialogInterface;
-import android.test.suitebuilder.annotation.MediumTest;
+import android.support.test.filters.MediumTest;
 
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
@@ -85,6 +85,40 @@ public class PaymentRequestPaymentAppAndCardsTest extends PaymentRequestTestBase
         runTest(HAVE_INSTRUMENTS, DELAYED_RESPONSE);
     }
 
+    /** Test that going into the editor and cancelling will leave the row checked. */
+    @MediumTest
+    @Feature({"Payments"})
+    public void testEditPaymentMethodAndCancelEditorShouldKeepCardSelected()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        triggerUIAndWait(mReadyToPay);
+        clickInPaymentMethodAndWait(R.id.payments_section, mReadyForInput);
+        expectPaymentMethodRowIsSelected(0);
+        clickInPaymentMethodAndWait(R.id.payments_add_option_button, mReadyToEdit);
+
+        // Cancel the editor.
+        clickInCardEditorAndWait(R.id.payments_edit_cancel_button, mReadyToPay);
+
+        // Expect the existing row to still be selected in the Shipping Address section.
+        expectPaymentMethodRowIsSelected(0);
+    }
+
+    /** Test that going into "add" flow editor and cancelling will leave existing row checked. */
+    @MediumTest
+    @Feature({"Payments"})
+    public void testAddPaymentMethodAndCancelEditorShouldKeepExistingCardSelected()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        triggerUIAndWait(mReadyToPay);
+        clickInPaymentMethodAndWait(R.id.payments_section, mReadyForInput);
+        expectPaymentMethodRowIsSelected(0);
+        clickInPaymentMethodAndWait(R.id.payments_open_editor_pencil_button, mReadyToEdit);
+
+        // Cancel the editor.
+        clickInCardEditorAndWait(R.id.payments_edit_cancel_button, mReadyToPay);
+
+        // Expect the row to still be selected in the Shipping Address section.
+        expectPaymentMethodRowIsSelected(0);
+    }
+
     private void runTest(int instrumentPresence, int responseSpeed) throws InterruptedException,
             ExecutionException, TimeoutException  {
         installPaymentApp(instrumentPresence, responseSpeed);
@@ -100,9 +134,13 @@ public class PaymentRequestPaymentAppAndCardsTest extends PaymentRequestTestBase
         if (instrumentPresence == HAVE_INSTRUMENTS) {
             assertEquals("Test Pay", getPaymentInstrumentLabel(i++));
         }
-        // \u00A0\u22EF is a non-breaking space followed by a midline ellipsis.
-        assertEquals("Visa\u00A0\u22EF1111\nJon Doe", getPaymentInstrumentLabel(i++));
-        assertEquals("MasterCard\u00A0\u22EF5454\nJon Doe\nBilling address required",
+        // \u0020\...\u2006 is four dots ellipsis.
+        assertEquals(
+                "Visa\u0020\u0020\u2022\u2006\u2022\u2006\u2022\u2006\u2022\u20061111\nJon Doe",
+                getPaymentInstrumentLabel(i++));
+        assertEquals(
+                "MasterCard\u0020\u0020\u2022\u2006\u2022\u2006\u2022\u2006\u2022\u20065454\n"
+                + "Jon Doe\nBilling address required",
                 getPaymentInstrumentLabel(i++));
 
         // Check the output of the selected instrument.

@@ -157,10 +157,7 @@ bool InsertionPoint::isActive() const {
 
   // Slow path only when there are more than one shadow elements in a shadow
   // tree. That should be a rare case.
-  const HeapVector<Member<InsertionPoint>>& insertionPoints =
-      shadowRoot->descendantInsertionPoints();
-  for (size_t i = 0; i < insertionPoints.size(); ++i) {
-    InsertionPoint* point = insertionPoints[i].get();
+  for (const auto& point : shadowRoot->descendantInsertionPoints()) {
     if (isHTMLShadowElement(*point))
       return point == this;
   }
@@ -296,9 +293,9 @@ void collectDestinationInsertionPoints(
     if (!insertionPoints)
       return;
     for (size_t i = 0; i < insertionPoints->size(); ++i)
-      results.append(insertionPoints->at(i).get());
-    DCHECK_NE(current, insertionPoints->last().get());
-    current = insertionPoints->last().get();
+      results.push_back(insertionPoints->at(i).get());
+    DCHECK_NE(current, insertionPoints->back().get());
+    current = insertionPoints->back().get();
   }
 }
 

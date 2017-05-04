@@ -51,8 +51,9 @@
 #include "core/page/Page.h"
 #include "core/page/PointerLockController.h"
 #include "platform/KeyboardCodes.h"
+#include "platform/WebFrameScheduler.h"
+#include "platform/animation/CompositorAnimationHost.h"
 #include "platform/graphics/CompositorMutatorClient.h"
-#include "public/platform/WebFrameScheduler.h"
 #include "public/web/WebAutofillClient.h"
 #include "public/web/WebPlugin.h"
 #include "public/web/WebRange.h"
@@ -98,12 +99,6 @@ WebFrameWidgetImpl* WebFrameWidgetImpl::create(WebWidgetClient* client,
       client, localRoot);  // SelfKeepAlive is set in constructor.
 }
 
-// static
-WebFrameWidgetsSet& WebFrameWidgetImpl::allInstances() {
-  DEFINE_STATIC_LOCAL(WebFrameWidgetsSet, allInstances, ());
-  return allInstances;
-}
-
 WebFrameWidgetImpl::WebFrameWidgetImpl(WebWidgetClient* client,
                                        WebLocalFrame* localRoot)
     : m_client(client),
@@ -115,14 +110,12 @@ WebFrameWidgetImpl::WebFrameWidgetImpl(WebWidgetClient* client,
       m_isAcceleratedCompositingActive(false),
       m_layerTreeViewClosed(false),
       m_suppressNextKeypressEvent(false),
-      m_ignoreInputEvents(false),
       m_isTransparent(false),
       m_imeAcceptEvents(true),
       m_selfKeepAlive(this) {
   DCHECK(m_localRoot->frame()->isLocalRoot());
   initializeLayerTreeView();
   m_localRoot->setFrameWidget(this);
-  allInstances().add(this);
 
   if (localRoot->parent())
     setIsTransparent(true);
@@ -138,10 +131,6 @@ DEFINE_TRACE(WebFrameWidgetImpl) {
 // WebWidget ------------------------------------------------------------------
 
 void WebFrameWidgetImpl::close() {
-  WebDevToolsAgentImpl::webFrameWidgetImplClosed(this);
-  DCHECK(allInstances().contains(this));
-  allInstances().remove(this);
-
   m_localRoot->setFrameWidget(nullptr);
   m_localRoot = nullptr;
   // Reset the delegate to prevent notifications being sent as we're being
@@ -152,6 +141,7 @@ void WebFrameWidgetImpl::close() {
   m_layerTreeView = nullptr;
   m_rootLayer = nullptr;
   m_rootGraphicsLayer = nullptr;
+  m_animationHost = nullptr;
 
   m_selfKeepAlive.clear();
 }
@@ -226,10 +216,6 @@ void WebFrameWidgetImpl::updateMainFrameLayoutSize() {
   view->setLayoutSize(layoutSize);
 }
 
-void WebFrameWidgetImpl::setIgnoreInputEvents(bool newValue) {
-  DCHECK_NE(m_ignoreInputEvents, newValue);
-  m_ignoreInputEvents = newValue;
-}
 
 void WebFrameWidgetImpl::didEnterFullscreen() {
   view()->didEnterFullscreen();
@@ -324,7 +310,7 @@ const WebInputEvent* WebFrameWidgetImpl::m_currentInputEvent = nullptr;
 WebInputEventResult WebFrameWidgetImpl::handleInputEvent(
     const WebInputEvent& inputEvent) {
   TRACE_EVENT1("input", "WebFrameWidgetImpl::handleInputEvent", "type",
-               WebInputEvent::GetName(inputEvent.type));
+               WebInputEvent::GetName(inputEvent.type()));
 
   // If a drag-and-drop operation is in progress, ignore input events.
   if (m_doingDragAndDrop)
@@ -341,7 +327,7 @@ WebInputEventResult WebFrameWidgetImpl::handleInputEvent(
 
   // Report the event to be NOT processed by WebKit, so that the browser can
   // handle it appropriately.
-  if (m_ignoreInputEvents)
+  if (ignoreInputEvents())
     return WebInputEventResult::NotHandled;
 
   // FIXME: pass event to m_localRoot's WebDevToolsAgentImpl once available.
@@ -349,19 +335,20 @@ WebInputEventResult WebFrameWidgetImpl::handleInputEvent(
   AutoReset<const WebInputEvent*> currentEventChange(&m_currentInputEvent,
                                                      &inputEvent);
 
-  if (m_mouseCaptureNode && WebInputEvent::isMouseEventType(inputEvent.type)) {
-    TRACE_EVENT1("input", "captured mouse event", "type", inputEvent.type);
+  if (m_mouseCaptureNode &&
+      WebInputEvent::isMouseEventType(inputEvent.type())) {
+    TRACE_EVENT1("input", "captured mouse event", "type", inputEvent.type());
     // Save m_mouseCaptureNode since mouseCaptureLost() will clear it.
     Node* node = m_mouseCaptureNode;
 
     // Not all platforms call mouseCaptureLost() directly.
-    if (inputEvent.type == WebInputEvent::MouseUp)
+    if (inputEvent.type() == WebInputEvent::MouseUp)
       mouseCaptureLost();
 
     std::unique_ptr<UserGestureIndicator> gestureIndicator;
 
     AtomicString eventType;
-    switch (inputEvent.type) {
+    switch (inputEvent.type()) {
       case WebInputEvent::MouseMove:
         eventType = EventTypeNames::mousemove;
         break;
@@ -370,14 +357,14 @@ WebInputEventResult WebFrameWidgetImpl::handleInputEvent(
         break;
       case WebInputEvent::MouseDown:
         eventType = EventTypeNames::mousedown;
-        gestureIndicator = wrapUnique(
+        gestureIndicator = WTF::wrapUnique(
             new UserGestureIndicator(DocumentUserGestureToken::create(
                 &node->document(), UserGestureToken::NewGesture)));
         m_mouseCaptureGestureToken = gestureIndicator->currentToken();
         break;
       case WebInputEvent::MouseUp:
         eventType = EventTypeNames::mouseup;
-        gestureIndicator = wrapUnique(
+        gestureIndicator = WTF::wrapUnique(
             new UserGestureIndicator(m_mouseCaptureGestureToken.release()));
         break;
       default:
@@ -392,8 +379,8 @@ WebInputEventResult WebFrameWidgetImpl::handleInputEvent(
     return WebInputEventResult::HandledSystem;
   }
 
-  return PageWidgetDelegate::handleInputEvent(*this, inputEvent,
-                                              m_localRoot->frame());
+  return PageWidgetDelegate::handleInputEvent(
+      *this, WebCoalescedInputEvent(inputEvent), m_localRoot->frame());
 }
 
 void WebFrameWidgetImpl::setCursorVisibilityState(bool isVisible) {
@@ -417,8 +404,7 @@ void WebFrameWidgetImpl::setBaseBackgroundColor(WebColor color) {
 
 WebInputMethodControllerImpl*
 WebFrameWidgetImpl::getActiveWebInputMethodController() const {
-  return WebInputMethodControllerImpl::fromFrame(
-      focusedLocalFrameAvailableForIme());
+  return WebInputMethodControllerImpl::fromFrame(focusedLocalFrameInWidget());
 }
 
 void WebFrameWidgetImpl::scheduleAnimation() {
@@ -479,17 +465,12 @@ void WebFrameWidgetImpl::setFocus(bool enable) {
         }
       }
     }
+    m_imeAcceptEvents = true;
   } else {
     LocalFrame* focusedFrame = focusedLocalFrameInWidget();
     if (focusedFrame) {
       // Finish an ongoing composition to delete the composition node.
       if (focusedFrame->inputMethodController().hasComposition()) {
-        WebAutofillClient* autofillClient =
-            WebLocalFrameImpl::fromFrame(focusedFrame)->autofillClient();
-
-        if (autofillClient)
-          autofillClient->setIgnoreTextChanges(true);
-
         // TODO(xiaochengh): The use of
         // updateStyleAndLayoutIgnorePendingStylesheets needs to be audited.
         // See http://crbug.com/590369 for more details.
@@ -498,9 +479,6 @@ void WebFrameWidgetImpl::setFocus(bool enable) {
 
         focusedFrame->inputMethodController().finishComposingText(
             InputMethodController::KeepSelection);
-
-        if (autofillClient)
-          autofillClient->setIgnoreTextChanges(false);
       }
       m_imeAcceptEvents = false;
     }
@@ -528,20 +506,6 @@ WebRange WebFrameWidgetImpl::compositionRange() {
   editable->document().updateStyleAndLayoutIgnorePendingStylesheets();
 
   return PlainTextRange::create(*editable, range);
-}
-
-WebTextInputInfo WebFrameWidgetImpl::textInputInfo() {
-  LocalFrame* focused = focusedLocalFrameInWidget();
-  if (!focused)
-    return WebTextInputInfo();
-  return focused->inputMethodController().textInputInfo();
-}
-
-WebTextInputType WebFrameWidgetImpl::textInputType() {
-  LocalFrame* focused = focusedLocalFrameInWidget();
-  if (!focused)
-    return WebTextInputTypeNone;
-  return focused->inputMethodController().textInputType();
 }
 
 WebColor WebFrameWidgetImpl::backgroundColor() const {
@@ -678,12 +642,15 @@ bool WebFrameWidgetImpl::isAcceleratedCompositingActive() const {
 }
 
 void WebFrameWidgetImpl::willCloseLayerTreeView() {
-  if (m_layerTreeView)
-    page()->willCloseLayerTreeView(*m_layerTreeView);
+  if (m_layerTreeView) {
+    page()->willCloseLayerTreeView(*m_layerTreeView,
+                                   m_localRoot->frame()->view());
+  }
 
   setIsAcceleratedCompositingActive(false);
   m_mutator = nullptr;
   m_layerTreeView = nullptr;
+  m_animationHost = nullptr;
   m_layerTreeViewClosed = true;
 }
 
@@ -738,6 +705,17 @@ void WebFrameWidgetImpl::applyReplacementRange(const WebRange& range) {
   }
 }
 
+void WebFrameWidgetImpl::setRemoteViewportIntersection(
+    const WebRect& viewportIntersection) {
+  // Remote viewports are only applicable to local frames with remote ancestors.
+  DCHECK(m_localRoot->parent() && m_localRoot->parent()->isWebRemoteFrame());
+
+  if (m_localRoot->frameView()) {
+    m_localRoot->frameView()->setViewportIntersectionFromParent(
+        viewportIntersection);
+  }
+}
+
 void WebFrameWidgetImpl::handleMouseLeave(LocalFrame& mainFrame,
                                           const WebMouseEvent& event) {
   // FIXME: WebWidget doesn't have the method below.
@@ -772,11 +750,11 @@ void WebFrameWidgetImpl::handleMouseDown(LocalFrame& mainFrame,
         mainFrame.eventHandler().takeLastMouseDownGestureToken();
 
   // Dispatch the contextmenu event regardless of if the click was swallowed.
-  if (!page()->settings().showContextMenuOnMouseUp()) {
+  if (!page()->settings().getShowContextMenuOnMouseUp()) {
 #if OS(MACOSX)
     if (event.button == WebMouseEvent::Button::Right ||
         (event.button == WebMouseEvent::Button::Left &&
-         event.modifiers & WebMouseEvent::ControlKey))
+         event.modifiers() & WebMouseEvent::ControlKey))
       mouseContextMenu(event);
 #else
     if (event.button == WebMouseEvent::Button::Right)
@@ -823,7 +801,7 @@ void WebFrameWidgetImpl::handleMouseUp(LocalFrame& mainFrame,
                                        const WebMouseEvent& event) {
   PageWidgetEventHandler::handleMouseUp(mainFrame, event);
 
-  if (page()->settings().showContextMenuOnMouseUp()) {
+  if (page()->settings().getShowContextMenuOnMouseUp()) {
     // Dispatch the contextmenu event regardless of if the click was swallowed.
     // On Mac/Linux, we handle it on mouse down, not up.
     if (event.button == WebMouseEvent::Button::Right)
@@ -841,7 +819,7 @@ WebInputEventResult WebFrameWidgetImpl::handleGestureEvent(
     const WebGestureEvent& event) {
   WebInputEventResult eventResult = WebInputEventResult::NotHandled;
   bool eventCancelled = false;
-  switch (event.type) {
+  switch (event.type()) {
     case WebInputEvent::GestureScrollBegin:
     case WebInputEvent::GestureScrollEnd:
     case WebInputEvent::GestureScrollUpdate:
@@ -863,17 +841,17 @@ WebInputEventResult WebFrameWidgetImpl::handleGestureEvent(
       NOTREACHED();
   }
   LocalFrame* frame = m_localRoot->frame();
-  eventResult = frame->eventHandler().handleGestureEvent(
-      PlatformGestureEventBuilder(frame->view(), event));
+  WebGestureEvent scaledEvent = TransformWebGestureEvent(frame->view(), event);
+  eventResult = frame->eventHandler().handleGestureEvent(scaledEvent);
   m_client->didHandleGestureEvent(event, eventCancelled);
   return eventResult;
 }
 
 WebInputEventResult WebFrameWidgetImpl::handleKeyEvent(
     const WebKeyboardEvent& event) {
-  DCHECK((event.type == WebInputEvent::RawKeyDown) ||
-         (event.type == WebInputEvent::KeyDown) ||
-         (event.type == WebInputEvent::KeyUp));
+  DCHECK((event.type() == WebInputEvent::RawKeyDown) ||
+         (event.type() == WebInputEvent::KeyDown) ||
+         (event.type() == WebInputEvent::KeyUp));
 
   // Please refer to the comments explaining the m_suppressNextKeypressEvent
   // member.
@@ -898,7 +876,7 @@ WebInputEventResult WebFrameWidgetImpl::handleKeyEvent(
 
   WebInputEventResult result = frame->eventHandler().keyEvent(event);
   if (result != WebInputEventResult::NotHandled) {
-    if (WebInputEvent::RawKeyDown == event.type) {
+    if (WebInputEvent::RawKeyDown == event.type()) {
       // Suppress the next keypress event unless the focused node is a plugin
       // node.  (Flash needs these keypress events to handle non-US keyboards.)
       Element* element = focusedElement();
@@ -920,14 +898,14 @@ WebInputEventResult WebFrameWidgetImpl::handleKeyEvent(
       WebInputEvent::RawKeyDown;
 
   bool isUnmodifiedMenuKey =
-      !(event.modifiers & WebInputEvent::InputModifiers) &&
+      !(event.modifiers() & WebInputEvent::InputModifiers) &&
       event.windowsKeyCode == VKEY_APPS;
-  bool isShiftF10 = (event.modifiers & WebInputEvent::InputModifiers) ==
+  bool isShiftF10 = (event.modifiers() & WebInputEvent::InputModifiers) ==
                         WebInputEvent::ShiftKey &&
                     event.windowsKeyCode == VKEY_F10;
   if ((isUnmodifiedMenuKey &&
-       event.type == contextMenuKeyTriggeringEventType) ||
-      (isShiftF10 && event.type == shiftF10TriggeringEventType)) {
+       event.type() == contextMenuKeyTriggeringEventType) ||
+      (isShiftF10 && event.type() == shiftF10TriggeringEventType)) {
     view()->sendContextMenuEvent(event);
     return WebInputEventResult::HandledSystem;
   }
@@ -938,7 +916,7 @@ WebInputEventResult WebFrameWidgetImpl::handleKeyEvent(
 
 WebInputEventResult WebFrameWidgetImpl::handleCharEvent(
     const WebKeyboardEvent& event) {
-  DCHECK_EQ(event.type, WebInputEvent::Char);
+  DCHECK_EQ(event.type(), WebInputEvent::Char);
 
   // Please refer to the comments explaining the m_suppressNextKeypressEvent
   // member.  The m_suppressNextKeypressEvent is set if the KeyDown is
@@ -1000,16 +978,21 @@ Element* WebFrameWidgetImpl::focusedElement() const {
 void WebFrameWidgetImpl::initializeLayerTreeView() {
   if (m_client) {
     DCHECK(!m_mutator);
-    m_client->initializeLayerTreeView();
-    m_layerTreeView = m_client->layerTreeView();
+    m_layerTreeView = m_client->initializeLayerTreeView();
+    if (m_layerTreeView && m_layerTreeView->compositorAnimationHost()) {
+      m_animationHost = WTF::makeUnique<CompositorAnimationHost>(
+          m_layerTreeView->compositorAnimationHost());
+    }
   }
 
   if (WebDevToolsAgentImpl* devTools = m_localRoot->devToolsAgentImpl())
     devTools->layerTreeViewChanged(m_layerTreeView);
 
   page()->settings().setAcceleratedCompositingEnabled(m_layerTreeView);
-  if (m_layerTreeView)
-    page()->layerTreeViewInitialized(*m_layerTreeView);
+  if (m_layerTreeView) {
+    page()->layerTreeViewInitialized(*m_layerTreeView,
+                                     m_localRoot->frame()->view());
+  }
 
   // FIXME: only unittests, click to play, Android priting, and printing (for
   // headers and footers) make this assert necessary. We should make them not
@@ -1085,18 +1068,12 @@ void WebFrameWidgetImpl::setRootLayer(WebLayer* layer) {
     m_layerTreeView->clearRootLayer();
 }
 
-void WebFrameWidgetImpl::attachCompositorAnimationTimeline(
-    CompositorAnimationTimeline* compositorTimeline) {
-  if (m_layerTreeView)
-    m_layerTreeView->attachCompositorAnimationTimeline(
-        compositorTimeline->animationTimeline());
+WebLayerTreeView* WebFrameWidgetImpl::getLayerTreeView() const {
+  return m_layerTreeView;
 }
 
-void WebFrameWidgetImpl::detachCompositorAnimationTimeline(
-    CompositorAnimationTimeline* compositorTimeline) {
-  if (m_layerTreeView)
-    m_layerTreeView->detachCompositorAnimationTimeline(
-        compositorTimeline->animationTimeline());
+CompositorAnimationHost* WebFrameWidgetImpl::animationHost() const {
+  return m_animationHost.get();
 }
 
 HitTestResult WebFrameWidgetImpl::coreHitTestResultAt(

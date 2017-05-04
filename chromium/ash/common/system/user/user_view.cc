@@ -25,12 +25,12 @@
 #include "ash/common/system/user/rounded_image_view.h"
 #include "ash/common/system/user/user_card_view.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
-#include "base/optional.h"
+#include "ash/root_window_controller.h"
+#include "base/memory/ptr_util.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
 #include "grit/ash_resources.h"
@@ -106,9 +106,8 @@ bool IsMultiProfileSupportedAndUserActive() {
 }
 
 // Creates the view shown in the user switcher popup ("AddUserMenuOption").
-views::View* CreateAddUserView(
-    base::Optional<SessionStateDelegate::AddUserError> error,
-    views::ButtonListener* listener) {
+views::View* CreateAddUserView(AddUserSessionPolicy policy,
+                               views::ButtonListener* listener) {
   DCHECK(UseMd());
   auto view = new views::View;
   const int icon_padding = (kMenuButtonSize - kMenuIconSize) / 2;
@@ -121,26 +120,26 @@ views::View* CreateAddUserView(
   view->set_background(
       views::Background::CreateSolidBackground(kBackgroundColor));
 
-  if (!error) {
-    auto icon = new views::ImageView();
-    icon->SetImage(
-        gfx::CreateVectorIcon(kSystemMenuNewUserIcon, kMenuIconColor));
-    view->AddChildView(icon);
-  }
+  int message_id = 0;
+  switch (policy) {
+    case AddUserSessionPolicy::ALLOWED: {
+      message_id = IDS_ASH_STATUS_TRAY_SIGN_IN_ANOTHER_ACCOUNT;
 
-  int message_id = IDS_ASH_STATUS_TRAY_SIGN_IN_ANOTHER_ACCOUNT;
-  if (error) {
-    switch (*error) {
-      case SessionStateDelegate::ADD_USER_ERROR_NOT_ALLOWED_PRIMARY_USER:
-        message_id = IDS_ASH_STATUS_TRAY_MESSAGE_NOT_ALLOWED_PRIMARY_USER;
-        break;
-      case SessionStateDelegate::ADD_USER_ERROR_MAXIMUM_USERS_REACHED:
-        message_id = IDS_ASH_STATUS_TRAY_MESSAGE_CANNOT_ADD_USER;
-        break;
-      case SessionStateDelegate::ADD_USER_ERROR_OUT_OF_USERS:
-        message_id = IDS_ASH_STATUS_TRAY_MESSAGE_OUT_OF_USERS;
-        break;
+      auto icon = new views::ImageView();
+      icon->SetImage(
+          gfx::CreateVectorIcon(kSystemMenuNewUserIcon, kMenuIconColor));
+      view->AddChildView(icon);
+      break;
     }
+    case AddUserSessionPolicy::ERROR_NOT_ALLOWED_PRIMARY_USER:
+      message_id = IDS_ASH_STATUS_TRAY_MESSAGE_NOT_ALLOWED_PRIMARY_USER;
+      break;
+    case AddUserSessionPolicy::ERROR_MAXIMUM_USERS_REACHED:
+      message_id = IDS_ASH_STATUS_TRAY_MESSAGE_CANNOT_ADD_USER;
+      break;
+    case AddUserSessionPolicy::ERROR_NO_ELIGIBLE_USERS:
+      message_id = IDS_ASH_STATUS_TRAY_MESSAGE_OUT_OF_USERS;
+      break;
   }
 
   auto command_label = new views::Label(l10n_util::GetStringUTF16(message_id));
@@ -150,7 +149,7 @@ views::View* CreateAddUserView(
   TrayPopupItemStyle label_style(
       TrayPopupItemStyle::FontStyle::DETAILED_VIEW_LABEL);
   int vertical_padding = kMenuSeparatorVerticalPadding;
-  if (error) {
+  if (policy != AddUserSessionPolicy::ALLOWED) {
     label_style.set_font_style(TrayPopupItemStyle::FontStyle::CAPTION);
     label_style.set_color_style(TrayPopupItemStyle::ColorStyle::INACTIVE);
     vertical_padding += kMenuSeparatorVerticalPadding;
@@ -160,7 +159,7 @@ views::View* CreateAddUserView(
   view->SetBorder(views::CreateEmptyBorder(vertical_padding, icon_padding,
                                            vertical_padding,
                                            kTrayPopupLabelHorizontalPadding));
-  if (!error) {
+  if (policy == AddUserSessionPolicy::ALLOWED) {
     auto button =
         new ButtonFromView(view, listener, TrayPopupInkDropStyle::INSET_BOUNDS,
                            false, gfx::Insets());
@@ -626,14 +625,11 @@ void UserView::ToggleAddUserMenuOption() {
 
   const SessionStateDelegate* delegate =
       WmShell::Get()->GetSessionStateDelegate();
-  SessionStateDelegate::AddUserError add_user_error;
-  add_user_enabled_ = delegate->CanAddUserToMultiProfile(&add_user_error);
+  const AddUserSessionPolicy add_user_policy =
+      delegate->GetAddUserSessionPolicy();
+  add_user_enabled_ = add_user_policy == AddUserSessionPolicy::ALLOWED;
 
   if (UseMd()) {
-    base::Optional<SessionStateDelegate::AddUserError> error;
-    if (!add_user_enabled_)
-      error = add_user_error;
-
     // Position the widget on top of the user card view (which is still in the
     // system menu). The top half of the widget will be transparent to allow
     // the active user to show through.
@@ -650,7 +646,7 @@ void UserView::ToggleAddUserMenuOption() {
     views::View* add_user_padding = new views::View();
     add_user_padding->SetBorder(views::CreateSolidSidedBorder(
         kMenuSeparatorVerticalPadding, 0, 0, 0, kBackgroundColor));
-    views::View* add_user_view = CreateAddUserView(error, this);
+    views::View* add_user_view = CreateAddUserView(add_user_policy, this);
     add_user_padding->AddChildView(add_user_view);
     add_user_padding->SetLayoutManager(new views::FillLayout());
     container->AddChildView(add_user_padding);
@@ -663,12 +659,6 @@ void UserView::ToggleAddUserMenuOption() {
     // Show the content.
     add_menu_option_->SetAlwaysOnTop(true);
     add_menu_option_->Show();
-
-    // We activate the entry automatically if invoked with focus.
-    if (add_user_enabled_ && user_card_view_->HasFocus()) {
-      add_user_view->GetFocusManager()->SetFocusedView(add_user_view);
-      user_card_view_->GetFocusManager()->SetFocusedView(add_user_view);
-    }
   } else {
     AddUserView* add_user_view =
         new AddUserView(static_cast<ButtonFromView*>(user_card_view_));
@@ -691,27 +681,22 @@ void UserView::ToggleAddUserMenuOption() {
     add_menu_option_->SetAlwaysOnTop(true);
     add_menu_option_->Show();
 
-    if (add_user_enabled_) {
-      // We activate the entry automatically if invoked with focus.
-      if (user_card_view_->HasFocus()) {
-        button->GetFocusManager()->SetFocusedView(button);
-        user_card_view_->GetFocusManager()->SetFocusedView(button);
-      }
-    } else {
+    if (!add_user_enabled_) {
       ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
       int message_id = 0;
-      switch (add_user_error) {
-        case SessionStateDelegate::ADD_USER_ERROR_NOT_ALLOWED_PRIMARY_USER:
+      switch (add_user_policy) {
+        case AddUserSessionPolicy::ERROR_NOT_ALLOWED_PRIMARY_USER:
           message_id = IDS_ASH_STATUS_TRAY_MESSAGE_NOT_ALLOWED_PRIMARY_USER;
           break;
-        case SessionStateDelegate::ADD_USER_ERROR_MAXIMUM_USERS_REACHED:
+        case AddUserSessionPolicy::ERROR_MAXIMUM_USERS_REACHED:
           message_id = IDS_ASH_STATUS_TRAY_MESSAGE_CANNOT_ADD_USER;
           break;
-        case SessionStateDelegate::ADD_USER_ERROR_OUT_OF_USERS:
+        case AddUserSessionPolicy::ERROR_NO_ELIGIBLE_USERS:
           message_id = IDS_ASH_STATUS_TRAY_MESSAGE_OUT_OF_USERS;
           break;
         default:
-          NOTREACHED() << "Unknown adding user error " << add_user_error;
+          NOTREACHED() << "Unknown adding user policy "
+                       << static_cast<int>(add_user_policy);
       }
 
       popup_message_.reset(new PopupMessage(

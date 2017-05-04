@@ -21,12 +21,12 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "extensions/features/features.h"
+#include "media/media_features.h"
 #include "printing/features/features.h"
 
 class BackgroundModeManager;
 class CRLSetFetcher;
 class IOThread;
-class MHTMLGenerationManager;
 class NotificationPlatformBridge;
 class NotificationUIManager;
 class PrefService;
@@ -66,7 +66,7 @@ class TestingBrowserProcess : public BrowserProcess {
   metrics_services_manager::MetricsServicesManager* GetMetricsServicesManager()
       override;
   metrics::MetricsService* metrics_service() override;
-  rappor::RapporService* rappor_service() override;
+  rappor::RapporServiceImpl* rappor_service() override;
   IOThread* io_thread() override;
   WatchDogThread* watchdog_thread() override;
   ProfileManager* profile_manager() override;
@@ -121,7 +121,7 @@ class TestingBrowserProcess : public BrowserProcess {
   MediaFileSystemRegistry* media_file_system_registry() override;
   bool created_local_state() const override;
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   WebRtcLogUploader* webrtc_log_uploader() override;
 #endif
 
@@ -131,7 +131,7 @@ class TestingBrowserProcess : public BrowserProcess {
   memory::TabManager* GetTabManager() override;
   shell_integration::DefaultWebClientState CachedDefaultWebClientState()
       override;
-  PhysicalWebDataSource* GetPhysicalWebDataSource() override;
+  physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() override;
 
   // Set the local state for tests. Consumer is responsible for cleaning it up
   // afterwards (using ScopedTestingLocalState, for example).
@@ -146,7 +146,7 @@ class TestingBrowserProcess : public BrowserProcess {
       std::unique_ptr<NotificationUIManager> notification_ui_manager);
   void SetNotificationPlatformBridge(
       std::unique_ptr<NotificationPlatformBridge> notification_platform_bridge);
-  void SetRapporService(rappor::RapporService* rappor_service);
+  void SetRapporServiceImpl(rappor::RapporServiceImpl* rappor_service);
   void SetShuttingDown(bool is_shutting_down);
   void ShutdownBrowserPolicyConnector();
 
@@ -192,7 +192,7 @@ class TestingBrowserProcess : public BrowserProcess {
   PrefService* local_state_;
   IOThread* io_thread_;
   net::URLRequestContextGetter* system_request_context_;
-  rappor::RapporService* rappor_service_;
+  rappor::RapporServiceImpl* rappor_service_;
 
   std::unique_ptr<BrowserProcessPlatformPart> platform_part_;
 

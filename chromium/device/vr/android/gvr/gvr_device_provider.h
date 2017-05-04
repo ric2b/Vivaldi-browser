@@ -7,19 +7,15 @@
 
 #include <memory>
 
+#include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/weak_ptr.h"
-#include "base/single_thread_task_runner.h"
-#include "device/vr/vr_device.h"
 #include "device/vr/vr_device_provider.h"
 #include "device/vr/vr_export.h"
 
 namespace device {
 
-class GvrDelegateProvider;
 class GvrDelegate;
 class GvrDevice;
-class VRServiceImpl;
 
 class DEVICE_VR_EXPORT GvrDeviceProvider : public VRDeviceProvider {
  public:
@@ -35,8 +31,12 @@ class DEVICE_VR_EXPORT GvrDeviceProvider : public VRDeviceProvider {
   void RequestPresent(const base::Callback<void(bool)>& callback);
   void ExitPresent();
 
-  void OnGvrDelegateReady(const base::WeakPtr<GvrDelegate>& delegate);
+  void OnGvrDelegateReady(GvrDelegate* delegate);
   void OnGvrDelegateRemoved();
+
+  // TODO(mthiesse): Make the NonPresentingDelegate owned by this class so that
+  // it cannot be removed.
+  void OnNonPresentingDelegateRemoved();
   void OnDisplayBlur();
   void OnDisplayFocus();
   void OnDisplayActivate();
@@ -45,8 +45,6 @@ class DEVICE_VR_EXPORT GvrDeviceProvider : public VRDeviceProvider {
   void SwitchToNonPresentingDelegate();
 
   std::unique_ptr<GvrDevice> vr_device_;
-
-  base::WeakPtrFactory<GvrDeviceProvider> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(GvrDeviceProvider);
 };

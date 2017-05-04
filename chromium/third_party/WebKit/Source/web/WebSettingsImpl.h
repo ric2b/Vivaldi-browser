@@ -41,8 +41,7 @@ namespace blink {
 class DevToolsEmulator;
 class Settings;
 
-class WEB_EXPORT WebSettingsImpl final
-    : WTF_NON_EXPORTED_BASE(public WebSettings) {
+class WEB_EXPORT WebSettingsImpl final : NON_EXPORTED_BASE(public WebSettings) {
  public:
   WebSettingsImpl(Settings*, DevToolsEmulator*);
   virtual ~WebSettingsImpl() {}
@@ -65,11 +64,11 @@ class WEB_EXPORT WebSettingsImpl final
   void setAlwaysShowContextMenuOnTouch(bool) override;
   void setAntialiased2dCanvasEnabled(bool) override;
   void setAntialiasedClips2dCanvasEnabled(bool) override;
-  void setAutoplayExperimentMode(const WebString&) override;
   void setAutoZoomFocusedNodeToLegibleScale(bool) override;
   void setBrowserSideNavigationEnabled(bool) override;
   void setClobberUserAgentInitialScaleQuirk(bool) override;
   void setCookieEnabled(bool) override;
+  void setCrossOriginMediaPlaybackRequiresUserGesture(bool) override;
   void setNavigateOnDragDrop(bool) override;
   void setCursiveFontFamily(const WebString&,
                             UScriptCode = USCRIPT_COMMON) override;
@@ -82,8 +81,7 @@ class WEB_EXPORT WebSettingsImpl final
   void setDefaultVideoPosterURL(const WebString&) override;
   void setDeviceScaleAdjustment(float) override;
 
-  // FIXME: Replace these two with pointer/hover queries? crbug.com/441813
-  void setDeviceSupportsMouse(bool) override;
+  // FIXME: Replace this with pointer/hover queries? crbug.com/441813
   void setDeviceSupportsTouch(bool) override;
 
   void setDisableReadingFromCanvas(bool) override;
@@ -103,6 +101,7 @@ class WEB_EXPORT WebSettingsImpl final
   void setForceZeroLayoutHeight(bool) override;
   void setFullscreenSupported(bool) override;
   void setHideDownloadUI(bool) override;
+  void setPresentationReceiver(bool) override;
   void setHistoryEntryRequiresUserGesture(bool) override;
   void setHyperlinkAuditingEnabled(bool) override;
   void setIgnoreMainFrameOverflowHiddenQuirk(bool) override;
@@ -137,6 +136,7 @@ class WEB_EXPORT WebSettingsImpl final
   void setPictographFontFamily(const WebString&,
                                UScriptCode = USCRIPT_COMMON) override;
   void setPluginsEnabled(bool) override;
+  void setEncryptedMediaEnabled(bool) override;
   void setAvailablePointerTypes(int) override;
   void setPrimaryPointerType(PointerType) override;
   void setAvailableHoverTypes(int) override;

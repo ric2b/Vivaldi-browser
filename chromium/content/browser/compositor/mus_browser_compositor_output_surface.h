@@ -42,23 +42,23 @@ class MusBrowserCompositorOutputSurface
   // Aura-Mus.
   MusBrowserCompositorOutputSurface(
       ui::Window* window,
-      scoped_refptr<ContextProviderCommandBuffer> context,
+      scoped_refptr<ui::ContextProviderCommandBuffer> context,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-      cc::SyntheticBeginFrameSource* begin_frame_source,
+      const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
       std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
           overlay_candidate_validator);
 
   MusBrowserCompositorOutputSurface(
       aura::Window* window,
-      scoped_refptr<ContextProviderCommandBuffer> context,
+      scoped_refptr<ui::ContextProviderCommandBuffer> context,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-      cc::SyntheticBeginFrameSource* begin_frame_source,
+      const UpdateVSyncParametersCallback& update_vsync_parameters_callback,
       std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
           overlay_candidate_validator);
 
   ~MusBrowserCompositorOutputSurface() override;
+
+  cc::BeginFrameSource* GetBeginFrameSource();
 
  protected:
   // cc::OutputSurface implementation.
@@ -91,6 +91,7 @@ class MusBrowserCompositorOutputSurface
   std::unique_ptr<aura::WindowCompositorFrameSink> compositor_frame_sink_;
   std::vector<uint32_t> free_resource_ids_;
   std::vector<gpu::Mailbox> mailboxes_;
+  cc::BeginFrameSource* begin_frame_source_;
 
   DISALLOW_COPY_AND_ASSIGN(MusBrowserCompositorOutputSurface);
 };

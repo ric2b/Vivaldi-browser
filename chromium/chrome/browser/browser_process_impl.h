@@ -26,6 +26,7 @@
 #include "chrome/common/features.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "extensions/features/features.h"
+#include "media/media_features.h"
 #include "printing/features/features.h"
 
 class ChromeChildProcessWatcher;
@@ -94,7 +95,7 @@ class BrowserProcessImpl : public BrowserProcess,
   metrics_services_manager::MetricsServicesManager* GetMetricsServicesManager()
       override;
   metrics::MetricsService* metrics_service() override;
-  rappor::RapporService* rappor_service() override;
+  rappor::RapporServiceImpl* rappor_service() override;
   IOThread* io_thread() override;
   WatchDogThread* watchdog_thread() override;
   ProfileManager* profile_manager() override;
@@ -147,7 +148,7 @@ class BrowserProcessImpl : public BrowserProcess,
   supervised_user_whitelist_installer() override;
   MediaFileSystemRegistry* media_file_system_registry() override;
   bool created_local_state() const override;
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   WebRtcLogUploader* webrtc_log_uploader() override;
 #endif
   network_time::NetworkTimeTracker* network_time_tracker() override;
@@ -155,7 +156,7 @@ class BrowserProcessImpl : public BrowserProcess,
   memory::TabManager* GetTabManager() override;
   shell_integration::DefaultWebClientState CachedDefaultWebClientState()
       override;
-  PhysicalWebDataSource* GetPhysicalWebDataSource() override;
+  physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() override;
 
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
@@ -327,7 +328,7 @@ class BrowserProcessImpl : public BrowserProcess,
   // the callstack which released the final module reference count.
   base::debug::StackTrace release_last_reference_callstack_;
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
   // Lazily initialized.
   std::unique_ptr<WebRtcLogUploader> webrtc_log_uploader_;
 #endif
@@ -348,7 +349,8 @@ class BrowserProcessImpl : public BrowserProcess,
 
   shell_integration::DefaultWebClientState cached_default_web_client_state_;
 
-  std::unique_ptr<PhysicalWebDataSource> physical_web_data_source_;
+  std::unique_ptr<physical_web::PhysicalWebDataSource>
+      physical_web_data_source_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserProcessImpl);
 };

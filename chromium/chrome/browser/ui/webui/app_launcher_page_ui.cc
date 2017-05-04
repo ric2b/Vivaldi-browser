@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/profiles/profile.h"
@@ -14,8 +15,8 @@
 #include "chrome/browser/ui/webui/ntp/app_launcher_handler.h"
 #include "chrome/browser/ui/webui/ntp/app_resource_cache_factory.h"
 #include "chrome/browser/ui/webui/ntp/core_app_launcher_handler.h"
-#include "chrome/browser/ui/webui/ntp/favicon_webui_handler.h"
 #include "chrome/browser/ui/webui/ntp/ntp_resource_cache.h"
+#include "chrome/browser/ui/webui/theme_handler.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
@@ -26,10 +27,6 @@
 #include "extensions/browser/extension_system.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
-
-#if defined(ENABLE_THEMES)
-#include "chrome/browser/ui/webui/theme_handler.h"
-#endif
 
 class ExtensionService;
 
@@ -47,18 +44,15 @@ AppLauncherPageUI::AppLauncherPageUI(content::WebUI* web_ui)
         extensions::ExtensionSystem::Get(GetProfile())->extension_service();
     // We should not be launched without an ExtensionService.
     DCHECK(service);
-    web_ui->AddMessageHandler(new AppLauncherHandler(service));
-    web_ui->AddMessageHandler(new CoreAppLauncherHandler());
-    web_ui->AddMessageHandler(new FaviconWebUIHandler());
-    web_ui->AddMessageHandler(new MetricsHandler());
+    web_ui->AddMessageHandler(base::MakeUnique<AppLauncherHandler>(service));
+    web_ui->AddMessageHandler(base::MakeUnique<CoreAppLauncherHandler>());
+    web_ui->AddMessageHandler(base::MakeUnique<MetricsHandler>());
   }
 
-#if defined(ENABLE_THEMES)
   // The theme handler can require some CPU, so do it after hooking up the most
   // visited handler. This allows the DB query for the new tab thumbs to happen
   // earlier.
-  web_ui->AddMessageHandler(new ThemeHandler());
-#endif
+  web_ui->AddMessageHandler(base::MakeUnique<ThemeHandler>());
 
   std::unique_ptr<HTMLSource> html_source(
       new HTMLSource(GetProfile()->GetOriginalProfile()));
@@ -82,7 +76,7 @@ bool AppLauncherPageUI::OverrideHandleWebUIMessage(
     const base::ListValue& args) {
   if (message == "getApps" &&
       AppLauncherLoginHandler::ShouldShow(GetProfile())) {
-    web_ui()->AddMessageHandler(new AppLauncherLoginHandler());
+    web_ui()->AddMessageHandler(base::MakeUnique<AppLauncherLoginHandler>());
   }
   return false;
 }

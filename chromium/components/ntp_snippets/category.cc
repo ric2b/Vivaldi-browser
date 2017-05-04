@@ -8,6 +8,31 @@
 
 namespace ntp_snippets {
 
+// static
+Category Category::FromKnownCategory(KnownCategories known_category) {
+  return FromIDValue(static_cast<int>(known_category));
+}
+
+// static
+Category Category::FromRemoteCategory(int remote_category) {
+  DCHECK_GT(remote_category, 0);
+  return Category(static_cast<int>(KnownCategories::REMOTE_CATEGORIES_OFFSET) +
+                  remote_category);
+}
+
+// static
+Category Category::FromIDValue(int id) {
+  DCHECK(IsValidIDValue(id)) << "Not a valid ID: " << id;
+  return Category(id);
+}
+
+// static
+bool Category::IsValidIDValue(int id) {
+  return (id >= 0) &&
+         ((id < static_cast<int>(KnownCategories::LOCAL_CATEGORIES_COUNT) ||
+           id > static_cast<int>(KnownCategories::REMOTE_CATEGORIES_OFFSET)));
+}
+
 Category::Category(int id) : id_(id) {}
 
 bool Category::IsKnownCategory(KnownCategories known_category) const {

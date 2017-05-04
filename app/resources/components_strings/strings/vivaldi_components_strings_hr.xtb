@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="hr">
+<translation id="1152921474424827756">Pristupite <ph name="BEGIN_LINK" />predmemoriranoj kopiji<ph name="END_LINK" /> stranice <ph name="URL" /></translation>
+<translation id="1158211211994409885">Host <ph name="HOST_NAME" /> neočekivano je prekinuo vezu.</translation>
+<translation id="1375198122581997741">O verziji</translation>
+<translation id="139305205187523129">Host <ph name="HOST_NAME" /> nije poslao nikakve podatke.</translation>
+<translation id="1506687042165942984">Prikaži spremljenu kopiju te stranice (tj., onu za koju se zna da je zastarjela).</translation>
+<translation id="1559528461873125649">Nema takve datoteke ili direktorija</translation>
+<translation id="1710259589646384581">OS</translation>
+<translation id="1838667051080421715">Gledate izvor web-stranice.</translation>
+<translation id="194030505837763158">Posjetite <ph name="LINK" /></translation>
+<translation id="2030481566774242610">Jeste li mislili <ph name="LINK" />?</translation>
+<translation id="2089090684895656482">Manje</translation>
+<translation id="2166378884831602661">Web-lokacija ne može pružiti sigurnu vezu</translation>
+<translation id="2292556288342944218">Internetski je pristup blokiran</translation>
+<translation id="255002559098805027">Host <ph name="HOST_NAME" /> poslao je nevažeći odgovor.</translation>
+<translation id="2609632851001447353">Varijacije</translation>
+<translation id="2650446666397867134">Pristup datoteci nije dopušten</translation>
+<translation id="2705137772291741111">Spremljena (predmemorirana) kopija web-lokacije nije čitljiva.</translation>
+<translation id="2784949926578158345">Veza je ponovo uspostavljena.</translation>
+<translation id="284702764277384724">Certifikat poslužitelja na hostu <ph name="HOST_NAME" /> izgleda kao falsifikat.</translation>
+<translation id="2909946352844186028">Otkrivena je promjena mreže.</translation>
+<translation id="3005723025932146533">Prikaži spremljenu kopiju</translation>
+<translation id="3109728660330352905">Nemate ovlaštenje za prikaz te stranice.</translation>
+<translation id="3176929007561373547">Provjerite postavke proxyja ili se obratite mrežnom administratoru da
+      biste provjerili je li proxy poslužitelj u funkciji. Ako mislite da ne
+      biste trebali upotrebljavati proxy poslužitelj:
+      <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673">Host <ph name="HOST_NAME" /> trenutačno nije dostupan.</translation>
+<translation id="3447661539832366887">Vlasnik tog uređaja isključio je igru s dinosaurima.</translation>
+<translation id="3586931643579894722">Sakrij detalje</translation>
+<translation id="3630155396527302611">Ako je već navedena kao program koji smije pristupiti mreži, pokušajte je ukloniti s popisa pa je ponovo dodati.</translation>
+<translation id="3658742229777143148">Izmjena</translation>
+<translation id="382518646247711829">Ako upotrebljavate proxy poslužitelj...</translation>
+<translation id="3973234410852337861">Host <ph name="HOST_NAME" /> je blokiran</translation>
+<translation id="4021036232240155012">DNS je mrežna usluga koja prevodi naziv web-lokacije u njezinu internetsku adresu.</translation>
+<translation id="4432688616882109544">Host <ph name="HOST_NAME" /> nije prihvatio vaš certifikat za prijavu ili certifikat nije poslan.</translation>
+<translation id="4522570452068850558">Detalji</translation>
+<translation id="4670097147947922288">Gledate stranicu proširenja.</translation>
+<translation id="4708268264240856090">Veza je prekinuta</translation>
+<translation id="4744603770635761495">Izvršna putanja</translation>
+<translation id="4764776831041365478">Web-stranica na adresi <ph name="URL" /> možda privremeno nije dostupna ili je trajno preseljena na novu web-adresu.</translation>
+<translation id="5023310440958281426">Provjerite pravila svojeg administratora</translation>
+<translation id="5115563688576182185">(64-bitni)</translation>
+<translation id="5431657950005405462">Datoteka nije pronađena</translation>
+<translation id="5452270690849572955">Tu stranicu na <ph name="HOST_NAME" /> nije moguće pronaći</translation>
+<translation id="5492298309214877701">Web-lokacija na intranetu tvrtke, organizacije ili škole ima isti URL kao i vanjska web-lokacija.
+    <ph name="LINE_BREAK" />
+    Pokušajte se obratiti administratoru sustava.</translation>
+<translation id="5510766032865166053">Datoteka je možda premještena ili izbrisana.</translation>
+<translation id="5556459405103347317">Ponovno učitaj</translation>
+<translation id="5617949217645503996">Host <ph name="HOST_NAME" /> preusmjerio vas je previše puta.</translation>
+<translation id="5675650730144413517">Stranica ne funkcionira</translation>
+<translation id="5869405914158311789">Web-lokacija ne može se dohvatiti</translation>
+<translation id="5990559369517809815">Zahtjevi poslužitelju blokirani su proširenjem.</translation>
+<translation id="6042308850641462728">Više</translation>
+<translation id="6146055958333702838">Provjerite kabele i ponovo pokrenite usmjerivače, modeme ili druge mrežne
+        uređaje koje možda upotrebljavate.</translation>
+<translation id="6165508094623778733">Saznajte više</translation>
+<translation id="6203231073485539293">Provjerite internetsku vezu</translation>
+<translation id="6305205051461490394">Web-lokacija <ph name="URL" /> nije dostupna.</translation>
+<translation id="6321917430147971392">Provjerite postavke DNS-a</translation>
+<translation id="6328639280570009161">Pokušajte onemogućiti predviđanja mreže</translation>
+<translation id="6433595998831338502">Host <ph name="HOST_NAME" /> odbio je povezivanje.</translation>
+<translation id="6711464428925977395">Nešto nije u redu s proxy poslužiteljem ili adresa nije točna.</translation>
+<translation id="6830600606572693159">Web-stranica na <ph name="URL" /> trenutno nije dostupna.  Možda je preopterećena ili isključena zbog održavanja.</translation>
+<translation id="6897140037006041989">Korisnički agent</translation>
+<translation id="7210863904660874423">Host <ph name="HOST_NAME" /> ne pridržava se sigurnosnih standarda.</translation>
+<translation id="7269802741830436641">Ova web-stranica ima petlju za preusmjeravanje</translation>
+<translation id="7353601530677266744">Naredbeni redak</translation>
+<translation id="7419106976560586862">Putanja profila</translation>
+<translation id="7518003948725431193">Za web-adresu nije pronađena web-stranica:<ph name="URL" /></translation>
+<translation id="7549584377607005141">Ova web-stranica zahtijeva podatke koje ste ranije unijeli da bi se pravilno prikazala. Te podatke možete poslati ponovo, ali time ćete ponoviti sve radnje koje je ta stranica prethodno izvela.</translation>
+<translation id="759889825892636187">Host <ph name="HOST_NAME" /> trenutačno ne može obraditi zahtjev.</translation>
+<translation id="7716424297397655342">Web-lokacija se ne može učitati iz predmemorije</translation>
+<translation id="7758069387465995638">Vezu možda blokira vatrozid ili antivirusni softver.</translation>
+<translation id="778579833039460630">Nema primljenih podataka</translation>
+<translation id="7951415247503192394">(32-bitni)</translation>
+<translation id="8134994873729925007"><ph name="BEGIN_ABBR" />DNS adresa<ph name="END_ABBR" /> poslužitelja hosta <ph name="HOST_NAME" /> nije pronađena.</translation>
+<translation id="8142868475871995937">Posjetite &lt;strong&gt;vivaldi://policy&lt;/strong&gt; da biste vidjeli popis nedopuštenih URL-ova i druga pravila koja je nametnuo vaš administrator sustava.</translation>
+<translation id="8149426793427495338">Računalo je u stanju mirovanja.</translation>
+<translation id="8150722005171944719">Datoteka na adresi <ph name="URL" /> nije čitljiva. Možda je uklonjena ili premještena ili dozvole datoteka sprječavaju pristup.</translation>
+<translation id="8225771182978767009">Osoba koja je postavila računalo blokirala je tu web-lokaciju.</translation>
+<translation id="8289355894181816810">Obratite se svojem mrežnom administratoru ako niste sigurni što to znači.</translation>
+<translation id="8332188693563227489">Pristup hostu <ph name="HOST_NAME" /> je odbijen</translation>
+<translation id="8498891568109133222">Hostu <ph name="HOST_NAME" /> bilo je potrebno previše vremena za odgovor.</translation>
+<translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;DNS adresa&lt;/abbr&gt; hosta <ph name="HOST_NAME" /> nije pronađena. U tijeku je dijagnosticiranje problema.</translation>
+<translation id="9183425211371246419">Host <ph name="HOST_NAME" /> upotrebljava nepodržane protokole.</translation>
+<translation id="933612690413056017">Nema internetske veze</translation>
+<translation id="969892804517981540">Službeni sastavak</translation>
+<translation id="988159990683914416">Sastavak razvojnog programera</translation>
+</translationbundle>

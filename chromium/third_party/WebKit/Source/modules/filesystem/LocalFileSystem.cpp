@@ -33,6 +33,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/fileapi/FileError.h"
 #include "core/frame/LocalFrame.h"
 #include "core/workers/WorkerGlobalScope.h"
@@ -71,11 +72,6 @@ class CallbackWrapper final
   std::unique_ptr<AsyncFileSystemCallbacks> m_callbacks;
 };
 
-LocalFileSystem* LocalFileSystem::create(
-    std::unique_ptr<FileSystemClient> client) {
-  return new LocalFileSystem(std::move(client));
-}
-
 LocalFileSystem::~LocalFileSystem() {}
 
 void LocalFileSystem::resolveURL(
@@ -102,24 +98,6 @@ void LocalFileSystem::requestFileSystem(
   requestFileSystemAccessInternal(
       context,
       WTF::bind(&LocalFileSystem::fileSystemAllowedInternal,
-                wrapCrossThreadPersistent(this), wrapPersistent(context), type,
-                wrapPersistent(wrapper)),
-      WTF::bind(&LocalFileSystem::fileSystemNotAllowedInternal,
-                wrapCrossThreadPersistent(this), wrapPersistent(context),
-                wrapPersistent(wrapper)));
-}
-
-void LocalFileSystem::deleteFileSystem(
-    ExecutionContext* context,
-    FileSystemType type,
-    std::unique_ptr<AsyncFileSystemCallbacks> callbacks) {
-  ASSERT(context);
-  SECURITY_DCHECK(context->isDocument());
-
-  CallbackWrapper* wrapper = new CallbackWrapper(std::move(callbacks));
-  requestFileSystemAccessInternal(
-      context,
-      WTF::bind(&LocalFileSystem::deleteFileSystemInternal,
                 wrapCrossThreadPersistent(this), wrapPersistent(context), type,
                 wrapPersistent(wrapper)),
       WTF::bind(&LocalFileSystem::fileSystemNotAllowedInternal,
@@ -159,16 +137,16 @@ void LocalFileSystem::requestFileSystemAccessInternal(
 void LocalFileSystem::fileSystemNotAvailable(ExecutionContext* context,
                                              CallbackWrapper* callbacks) {
   context->postTask(
-      BLINK_FROM_HERE,
-      createSameThreadTask(&reportFailure, passed(callbacks->release()),
+      TaskType::FileReading, BLINK_FROM_HERE,
+      createSameThreadTask(&reportFailure, WTF::passed(callbacks->release()),
                            FileError::kAbortErr));
 }
 
 void LocalFileSystem::fileSystemNotAllowedInternal(ExecutionContext* context,
                                                    CallbackWrapper* callbacks) {
   context->postTask(
-      BLINK_FROM_HERE,
-      createSameThreadTask(&reportFailure, passed(callbacks->release()),
+      TaskType::FileReading, BLINK_FROM_HERE,
+      createSameThreadTask(&reportFailure, WTF::passed(callbacks->release()),
                            FileError::kAbortErr));
 }
 
@@ -198,23 +176,13 @@ void LocalFileSystem::resolveURLInternal(ExecutionContext* context,
   fileSystem->resolveURL(fileSystemURL, callbacks->release());
 }
 
-void LocalFileSystem::deleteFileSystemInternal(ExecutionContext* context,
-                                               FileSystemType type,
-                                               CallbackWrapper* callbacks) {
-  WebFileSystem* fileSystem = getFileSystem();
-  if (!fileSystem) {
-    fileSystemNotAvailable(context, callbacks);
-    return;
-  }
-  KURL storagePartition =
-      KURL(KURL(), context->getSecurityOrigin()->toString());
-  fileSystem->deleteFileSystem(storagePartition,
-                               static_cast<WebFileSystemType>(type),
-                               callbacks->release());
-}
+LocalFileSystem::LocalFileSystem(LocalFrame& frame,
+                                 std::unique_ptr<FileSystemClient> client)
+    : Supplement<LocalFrame>(frame), m_client(std::move(client)) {}
 
-LocalFileSystem::LocalFileSystem(std::unique_ptr<FileSystemClient> client)
-    : m_client(std::move(client)) {}
+LocalFileSystem::LocalFileSystem(WorkerClients& workerClients,
+                                 std::unique_ptr<FileSystemClient> client)
+    : Supplement<WorkerClients>(workerClients), m_client(std::move(client)) {}
 
 DEFINE_TRACE(LocalFileSystem) {
   Supplement<LocalFrame>::trace(visitor);
@@ -226,26 +194,33 @@ const char* LocalFileSystem::supplementName() {
 }
 
 LocalFileSystem* LocalFileSystem::from(ExecutionContext& context) {
-  if (context.isDocument())
-    return static_cast<LocalFileSystem*>(Supplement<LocalFrame>::from(
-        toDocument(context).frame(), supplementName()));
+  if (context.isDocument()) {
+    LocalFileSystem* fileSystem =
+        static_cast<LocalFileSystem*>(Supplement<LocalFrame>::from(
+            toDocument(context).frame(), supplementName()));
+    DCHECK(fileSystem);
+    return fileSystem;
+  }
 
   WorkerClients* clients = toWorkerGlobalScope(context).clients();
   ASSERT(clients);
-  return static_cast<LocalFileSystem*>(
+  LocalFileSystem* fileSystem = static_cast<LocalFileSystem*>(
       Supplement<WorkerClients>::from(clients, supplementName()));
+  DCHECK(fileSystem);
+  return fileSystem;
 }
 
 void provideLocalFileSystemTo(LocalFrame& frame,
                               std::unique_ptr<FileSystemClient> client) {
   frame.provideSupplement(LocalFileSystem::supplementName(),
-                          LocalFileSystem::create(std::move(client)));
+                          new LocalFileSystem(frame, std::move(client)));
 }
 
-void provideLocalFileSystemToWorker(WorkerClients* clients,
+void provideLocalFileSystemToWorker(WorkerClients* workerClients,
                                     std::unique_ptr<FileSystemClient> client) {
-  clients->provideSupplement(LocalFileSystem::supplementName(),
-                             LocalFileSystem::create(std::move(client)));
+  Supplement<WorkerClients>::provideTo(
+      *workerClients, LocalFileSystem::supplementName(),
+      new LocalFileSystem(*workerClients, std::move(client)));
 }
 
 }  // namespace blink

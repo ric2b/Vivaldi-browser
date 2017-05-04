@@ -131,6 +131,11 @@ const char* const kSafeManifestEntries[] = {
     // Special-cased in IsSafeForPublicSession().
     // emk::kApp,
 
+    // Not a real manifest entry (doesn't show up in code search). All legacy
+    // ARC apps have this dictionary (data is stuffed there to be consumed by
+    // the ARC runtime).
+    "arc_metadata",
+
     // Documented in https://developer.chrome.com/extensions/manifest but not
     // implemented anywhere.  Still, a lot of apps use it.
     "author",
@@ -409,9 +414,9 @@ const char* const kSafePermissionStrings[] = {
     // Risk of listening attack.
     // "audio",
 
-    // Need to surface notification to the user. Check what existing UI we have
-    // and whether that's sufficient for PS.
-    // "audioCapture",
+    // User is prompted (allow/deny) when an extension requests audioCapture.
+    // The request is done via the getUserMedia API.
+    "audioCapture",
 
     // Just resource management, probably doesn't even apply to Chrome OS.
     "background",
@@ -451,9 +456,10 @@ const char* const kSafePermissionStrings[] = {
     // access to page content, which we can't allow.
     // "declarativeContent",
 
-    // Allow, but either (1) ask user for confirmation or (2) return blank
-    // capture.
-    // "desktopCapture",
+    // User is prompted when an extension requests desktopCapture whether they
+    // want to allow it. The request is made through
+    // chrome.desktopCapture.chooseDesktopMedia call.
+    "desktopCapture",
 
     // Haven't checked in detail what this does, but messing with devtools
     // usually comes with the ability to access page content.
@@ -626,9 +632,9 @@ const char* const kSafePermissionStrings[] = {
     // Enumerates removable storage.
     "system.storage",
 
-    // Provides access to screen contents, so block. Alternatively, (1) prompt
-    // for user consent or (2) return blank capture.
-    // "tabCapture",
+    // User is prompted (allow/deny) when an extension requests tabCapture. The
+    // request is made via chrome.tabCapture.capture call.
+    "tabCapture",
 
     // Privacy sensitive URL access.
     // "tabs",
@@ -651,9 +657,9 @@ const char* const kSafePermissionStrings[] = {
     // Belongs to the USB API.
     "usbDevices",
 
-    // Need to surface notification to the user. Check what existing UI we have
-    // and whether that's sufficient for PS.
-    // "videoCapture",
+    // User is prompted (allow/deny) when an extension requests videoCapture.
+    // The request is done via the getUserMedia API.
+    "videoCapture",
 
     // Admin controls network config anyways.
     "vpnProvider",
@@ -682,11 +688,11 @@ const char* const kSafePermissionStrings[] = {
 // Some permissions take the form of a dictionary.  See |kSafePermissionStrings|
 // for permission strings (and for more documentation).
 const char* const kSafePermissionDicts[] = {
-    // TBD
-    // "fileSystem",
-
-    // Just another type of connectivity.
+    // Dictionary forms of the above permission strings.
+    "fileSystem",
+    "mediaGalleries",
     "socket",
+    "usbDevices",
 };
 
 // List of safe entries for the "app" dict in manifest.

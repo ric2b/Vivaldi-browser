@@ -8,62 +8,24 @@
 
 #include <memory>
 
-#include "net/quic/core/crypto/aes_128_gcm_12_encrypter.h"
 #include "net/quic/core/crypto/cert_compressor.h"
 #include "net/quic/core/crypto/chacha20_poly1305_encrypter.h"
 #include "net/quic/core/crypto/crypto_handshake_message.h"
 #include "net/quic/core/crypto/crypto_secret_boxer.h"
 #include "net/quic/core/crypto/crypto_server_config_protobuf.h"
 #include "net/quic/core/crypto/quic_random.h"
-#include "net/quic/core/crypto/strike_register_client.h"
-#include "net/quic/core/quic_flags.h"
 #include "net/quic/core/quic_time.h"
+#include "net/quic/platform/api/quic_socket_address.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "net/quic/test_tools/quic_crypto_server_config_peer.h"
-#include "net/quic/test_tools/quic_test_utils.h"
-#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::StringPiece;
-using std::map;
-using std::pair;
 using std::string;
-using std::vector;
 
 namespace net {
 namespace test {
-
-class TestStrikeRegisterClient : public StrikeRegisterClient {
- public:
-  explicit TestStrikeRegisterClient(QuicCryptoServerConfig* config)
-      : config_(config), is_known_orbit_called_(false) {}
-
-  bool IsKnownOrbit(StringPiece orbit) const override {
-    // Ensure that the strike register client lock is not held.
-    QuicCryptoServerConfigPeer peer(config_);
-    base::Lock* m = peer.GetStrikeRegisterClientLock();
-    // In Chromium, we will dead lock if the lock is held by the current thread.
-    // Chromium doesn't have AssertNotHeld API call.
-    // m->AssertNotHeld();
-    base::AutoLock lock(*m);
-
-    is_known_orbit_called_ = true;
-    return true;
-  }
-
-  void VerifyNonceIsValidAndUnique(StringPiece nonce,
-                                   QuicWallTime now,
-                                   ResultCallback* cb) override {
-    LOG(FATAL) << "Not implemented";
-  }
-
-  bool is_known_orbit_called() { return is_known_orbit_called_; }
-
- private:
-  QuicCryptoServerConfig* config_;
-  mutable bool is_known_orbit_called_;
-};
 
 TEST(QuicCryptoServerConfigTest, ServerConfig) {
   QuicRandom* rand = QuicRandom::GetInstance();
@@ -79,25 +41,9 @@ TEST(QuicCryptoServerConfigTest, ServerConfig) {
   const QuicTag* aead_tags;
   size_t aead_len;
   ASSERT_EQ(QUIC_NO_ERROR, message->GetTaglist(kAEAD, &aead_tags, &aead_len));
-  vector<QuicTag> aead(aead_tags, aead_tags + aead_len);
+  std::vector<QuicTag> aead(aead_tags, aead_tags + aead_len);
   EXPECT_THAT(aead, ::testing::Contains(kAESG));
   EXPECT_LE(1u, aead.size());
-}
-
-TEST(QuicCryptoServerConfigTest, GetOrbitIsCalledWithoutTheStrikeRegisterLock) {
-  QuicRandom* rand = QuicRandom::GetInstance();
-  QuicCryptoServerConfig server(QuicCryptoServerConfig::TESTING, rand,
-                                CryptoTestUtils::ProofSourceForTesting());
-  MockClock clock;
-
-  TestStrikeRegisterClient* strike_register =
-      new TestStrikeRegisterClient(&server);
-  server.SetStrikeRegisterClient(strike_register);
-
-  QuicCryptoServerConfig::ConfigOptions options;
-  std::unique_ptr<CryptoHandshakeMessage> message(
-      server.AddDefaultConfig(rand, &clock, options));
-  EXPECT_TRUE(strike_register->is_known_orbit_called());
 }
 
 TEST(QuicCryptoServerConfigTest, CompressCerts) {
@@ -109,8 +55,9 @@ TEST(QuicCryptoServerConfigTest, CompressCerts) {
                                 CryptoTestUtils::ProofSourceForTesting());
   QuicCryptoServerConfigPeer peer(&server);
 
-  vector<string> certs = {"testcert"};
-  scoped_refptr<ProofSource::Chain> chain(new ProofSource::Chain(certs));
+  std::vector<string> certs = {"testcert"};
+  QuicReferenceCountedPointer<ProofSource::Chain> chain(
+      new ProofSource::Chain(certs));
 
   string compressed = QuicCryptoServerConfigPeer::CompressChain(
       &compressed_certs_cache, chain, "", "", nullptr);
@@ -128,8 +75,9 @@ TEST(QuicCryptoServerConfigTest, CompressSameCertsTwice) {
   QuicCryptoServerConfigPeer peer(&server);
 
   // Compress the certs for the first time.
-  vector<string> certs = {"testcert"};
-  scoped_refptr<ProofSource::Chain> chain(new ProofSource::Chain(certs));
+  std::vector<string> certs = {"testcert"};
+  QuicReferenceCountedPointer<ProofSource::Chain> chain(
+      new ProofSource::Chain(certs));
   string common_certs = "";
   string cached_certs = "";
 
@@ -155,8 +103,9 @@ TEST(QuicCryptoServerConfigTest, CompressDifferentCerts) {
                                 CryptoTestUtils::ProofSourceForTesting());
   QuicCryptoServerConfigPeer peer(&server);
 
-  vector<string> certs = {"testcert"};
-  scoped_refptr<ProofSource::Chain> chain(new ProofSource::Chain(certs));
+  std::vector<string> certs = {"testcert"};
+  QuicReferenceCountedPointer<ProofSource::Chain> chain(
+      new ProofSource::Chain(certs));
   string common_certs = "";
   string cached_certs = "";
 
@@ -165,7 +114,8 @@ TEST(QuicCryptoServerConfigTest, CompressDifferentCerts) {
   EXPECT_EQ(compressed_certs_cache.Size(), 1u);
 
   // Compress a similar certs which only differs in the chain.
-  scoped_refptr<ProofSource::Chain> chain2(new ProofSource::Chain(certs));
+  QuicReferenceCountedPointer<ProofSource::Chain> chain2(
+      new ProofSource::Chain(certs));
 
   string compressed2 = QuicCryptoServerConfigPeer::CompressChain(
       &compressed_certs_cache, chain2, common_certs, cached_certs, nullptr);
@@ -186,9 +136,9 @@ TEST(QuicCryptoServerConfigTest, CompressDifferentCerts) {
 class SourceAddressTokenTest : public ::testing::Test {
  public:
   SourceAddressTokenTest()
-      : ip4_(Loopback4()),
-        ip4_dual_(ConvertIPv4ToIPv4MappedIPv6(ip4_)),
-        ip6_(Loopback6()),
+      : ip4_(QuicIpAddress::Loopback4()),
+        ip4_dual_(ip4_.DualStacked()),
+        ip6_(QuicIpAddress::Loopback6()),
         original_time_(QuicWallTime::Zero()),
         rand_(QuicRandom::GetInstance()),
         server_(QuicCryptoServerConfig::TESTING,
@@ -203,19 +153,19 @@ class SourceAddressTokenTest : public ::testing::Test {
         rand_, &clock_, QuicCryptoServerConfig::ConfigOptions()));
   }
 
-  string NewSourceAddressToken(string config_id, const IPAddress& ip) {
+  string NewSourceAddressToken(string config_id, const QuicIpAddress& ip) {
     return NewSourceAddressToken(config_id, ip, nullptr);
   }
 
   string NewSourceAddressToken(string config_id,
-                               const IPAddress& ip,
+                               const QuicIpAddress& ip,
                                const SourceAddressTokens& previous_tokens) {
     return peer_.NewSourceAddressToken(config_id, previous_tokens, ip, rand_,
                                        clock_.WallNow(), nullptr);
   }
 
   string NewSourceAddressToken(string config_id,
-                               const IPAddress& ip,
+                               const QuicIpAddress& ip,
                                CachedNetworkParameters* cached_network_params) {
     SourceAddressTokens previous_tokens;
     return peer_.NewSourceAddressToken(config_id, previous_tokens, ip, rand_,
@@ -224,14 +174,14 @@ class SourceAddressTokenTest : public ::testing::Test {
 
   HandshakeFailureReason ValidateSourceAddressTokens(string config_id,
                                                      StringPiece srct,
-                                                     const IPAddress& ip) {
+                                                     const QuicIpAddress& ip) {
     return ValidateSourceAddressTokens(config_id, srct, ip, nullptr);
   }
 
   HandshakeFailureReason ValidateSourceAddressTokens(
       string config_id,
       StringPiece srct,
-      const IPAddress& ip,
+      const QuicIpAddress& ip,
       CachedNetworkParameters* cached_network_params) {
     return peer_.ValidateSourceAddressTokens(
         config_id, srct, ip, clock_.WallNow(), cached_network_params);
@@ -240,9 +190,9 @@ class SourceAddressTokenTest : public ::testing::Test {
   const string kPrimary = "<primary>";
   const string kOverride = "Config with custom source address token key";
 
-  IPAddress ip4_;
-  IPAddress ip4_dual_;
-  IPAddress ip6_;
+  QuicIpAddress ip4_;
+  QuicIpAddress ip4_dual_;
+  QuicIpAddress ip6_;
 
   MockClock clock_;
   QuicWallTime original_time_;
@@ -256,7 +206,7 @@ class SourceAddressTokenTest : public ::testing::Test {
 
 // Test basic behavior of source address tokens including being specific
 // to a single IP address and server config.
-TEST_F(SourceAddressTokenTest, NewSourceAddressToken) {
+TEST_F(SourceAddressTokenTest, SourceAddressToken) {
   // Primary config generates configs that validate successfully.
   const string token4 = NewSourceAddressToken(kPrimary, ip4_);
   const string token4d = NewSourceAddressToken(kPrimary, ip4_dual_);
@@ -274,7 +224,7 @@ TEST_F(SourceAddressTokenTest, NewSourceAddressToken) {
   ASSERT_EQ(HANDSHAKE_OK, ValidateSourceAddressTokens(kPrimary, token6, ip6_));
 }
 
-TEST_F(SourceAddressTokenTest, NewSourceAddressTokenExpiration) {
+TEST_F(SourceAddressTokenTest, SourceAddressTokenExpiration) {
   const string token = NewSourceAddressToken(kPrimary, ip4_);
 
   // Validation fails if the token is from the future.
@@ -288,7 +238,7 @@ TEST_F(SourceAddressTokenTest, NewSourceAddressTokenExpiration) {
             ValidateSourceAddressTokens(kPrimary, token, ip4_));
 }
 
-TEST_F(SourceAddressTokenTest, NewSourceAddressTokenWithNetworkParams) {
+TEST_F(SourceAddressTokenTest, SourceAddressTokenWithNetworkParams) {
   // Make sure that if the source address token contains CachedNetworkParameters
   // that this gets written to ValidateSourceAddressToken output argument.
   CachedNetworkParameters cached_network_params_input;
@@ -312,11 +262,7 @@ TEST_F(SourceAddressTokenTest, SourceAddressTokenMultipleAddresses) {
 
   // Now create a token which is usable for both addresses.
   SourceAddressToken previous_token;
-  IPAddress ip_address = ip6_;
-  if (ip6_.IsIPv4()) {
-    ip_address = ConvertIPv4ToIPv4MappedIPv6(ip_address);
-  }
-  previous_token.set_ip(IPAddressToPackedString(ip_address));
+  previous_token.set_ip(ip6_.DualStacked().ToPackedString());
   previous_token.set_timestamp(now.ToUNIXSeconds());
   SourceAddressTokens previous_tokens;
   (*previous_tokens.add_tokens()) = previous_token;
@@ -327,36 +273,6 @@ TEST_F(SourceAddressTokenTest, SourceAddressTokenMultipleAddresses) {
             ValidateSourceAddressTokens(kPrimary, token4or6, ip4_));
   ASSERT_EQ(HANDSHAKE_OK,
             ValidateSourceAddressTokens(kPrimary, token4or6, ip6_));
-}
-
-TEST(QuicCryptoServerConfigTest, ValidateServerNonce) {
-  QuicRandom* rand = QuicRandom::GetInstance();
-  QuicCryptoServerConfig server(QuicCryptoServerConfig::TESTING, rand,
-                                CryptoTestUtils::ProofSourceForTesting());
-  QuicCryptoServerConfigPeer peer(&server);
-
-  StringPiece message("hello world");
-  const size_t key_size = CryptoSecretBoxer::GetKeySize();
-  std::unique_ptr<uint8_t[]> key(new uint8_t[key_size]);
-  memset(key.get(), 0x11, key_size);
-
-  CryptoSecretBoxer boxer;
-  boxer.SetKeys({string(reinterpret_cast<char*>(key.get()), key_size)});
-  const string box = boxer.Box(rand, message);
-  MockClock clock;
-  QuicWallTime now = clock.WallNow();
-  const QuicWallTime original_time = now;
-  EXPECT_EQ(SERVER_NONCE_DECRYPTION_FAILURE,
-            peer.ValidateServerNonce(box, now));
-
-  string server_nonce = peer.NewServerNonce(rand, now);
-  EXPECT_EQ(HANDSHAKE_OK, peer.ValidateServerNonce(server_nonce, now));
-  EXPECT_EQ(SERVER_NONCE_NOT_UNIQUE_FAILURE,
-            peer.ValidateServerNonce(server_nonce, now));
-
-  now = original_time.Add(QuicTime::Delta::FromSeconds(1000 * 7));
-  server_nonce = peer.NewServerNonce(rand, now);
-  EXPECT_EQ(HANDSHAKE_OK, peer.ValidateServerNonce(server_nonce, now));
 }
 
 class CryptoServerConfigsTest : public ::testing::Test {
@@ -398,7 +314,7 @@ class CryptoServerConfigsTest : public ::testing::Test {
     bool has_invalid = false;
     bool is_empty = true;
 
-    vector<std::unique_ptr<QuicServerConfigProtobuf>> protobufs;
+    std::vector<std::unique_ptr<QuicServerConfigProtobuf>> protobufs;
     bool first = true;
     for (;;) {
       const char* server_config_id;

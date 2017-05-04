@@ -9,15 +9,16 @@
 
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/window_state.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "base/command_line.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/gfx/canvas.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/label.h"
@@ -34,16 +35,8 @@ namespace {
 
 bool g_disable_initial_delay = false;
 
-// Returns the window immediately below |window| in the current container.
-WmWindow* GetWindowBelow(WmWindow* window) {
-  WmWindow* parent = window->GetParent();
-  if (!parent)
-    return nullptr;
-  const WmWindow::Windows children = parent->GetChildren();
-  auto iter = std::find(children.begin(), children.end(), window);
-  CHECK(*iter == window);
-  return (iter != children.begin()) ? *(iter - 1) : nullptr;
-}
+// Used for the highlight view and the shield (black background).
+constexpr float kBackgroundCornerRadius = 4.f;
 
 // This background paints a |Painter| but fills the view's layer's size rather
 // than the view's size.
@@ -66,36 +59,6 @@ class LayerFillBackgroundPainter : public views::Background {
 };
 
 }  // namespace
-
-// This class restores and moves a window to the front of the stacking order for
-// the duration of the class's scope.
-class ScopedShowWindow : public WmWindowObserver {
- public:
-  ScopedShowWindow();
-  ~ScopedShowWindow() override;
-
-  // Show |window| at the top of the stacking order.
-  void Show(WmWindow* window);
-
-  // Cancel restoring the window on going out of scope.
-  void CancelRestore();
-
- private:
-  // WmWindowObserver:
-  void OnWindowTreeChanging(WmWindow* window,
-                            const TreeChangeParams& params) override;
-
-  // The window being shown.
-  WmWindow* window_;
-
-  // The window immediately below where window_ belongs.
-  WmWindow* stack_window_above_;
-
-  // If true, minimize window_ on going out of scope.
-  bool minimized_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedShowWindow);
-};
 
 // This view represents a single WmWindow by displaying a title and a thumbnail
 // of the window's contents.
@@ -245,10 +208,8 @@ class WindowPreviewView : public views::View, public WmWindowObserver {
 // A view that shows a collection of windows the user can tab through.
 class WindowCycleView : public views::WidgetDelegateView {
  public:
-  WindowCycleView(const WindowCycleList::WindowList& windows,
-                  WindowCycleController::Direction initial_direction)
-      : initial_direction_(initial_direction),
-        mirror_container_(new views::View()),
+  explicit WindowCycleView(const WindowCycleList::WindowList& windows)
+      : mirror_container_(new views::View()),
         highlight_view_(new views::View()),
         target_window_(nullptr) {
     DCHECK(!windows.empty());
@@ -262,9 +223,6 @@ class WindowCycleView : public views::WidgetDelegateView {
           base::TimeDelta::FromMilliseconds(100));
       layer()->SetOpacity(1.0);
     }
-
-    set_background(views::Background::CreateSolidBackground(
-        SkColorSetA(SK_ColorBLACK, 0xE6)));
 
     const int kInsideBorderPaddingDip = 64;
     const int kBetweenChildPaddingDip = 10;
@@ -284,14 +242,13 @@ class WindowCycleView : public views::WidgetDelegateView {
       mirror_container_->AddChildView(view);
     }
 
-    const float kHighlightCornerRadius = 4;
     // The background needs to be painted to fill the layer, not the View,
     // because the layer animates bounds changes but the View's bounds change
     // immediately.
     highlight_view_->set_background(new LayerFillBackgroundPainter(
-        base::WrapUnique(views::Painter::CreateRoundRectWith1PxBorderPainter(
+        views::Painter::CreateRoundRectWith1PxBorderPainter(
             SkColorSetA(SK_ColorWHITE, 0x4D), SkColorSetA(SK_ColorWHITE, 0x33),
-            kHighlightCornerRadius))));
+            kBackgroundCornerRadius)));
     highlight_view_->SetPaintToLayer(true);
     highlight_view_->layer()->SetFillsBoundsOpaquely(false);
 
@@ -352,22 +309,27 @@ class WindowCycleView : public views::WidgetDelegateView {
     if (first_layout)
       mirror_container_->SizeToPreferredSize();
 
-    // The preview list (|mirror_container_|) starts flush to the left of
-    // the screen but moves to the left (off the edge of the screen) as the use
-    // iterates over the previews. The list will move just enough to ensure the
-    // highlighted preview is at or to the left of the center of the workspace.
     views::View* target_view = window_view_map_[target_window_];
     gfx::RectF target_bounds(target_view->GetLocalBounds());
     views::View::ConvertRectToTarget(target_view, mirror_container_,
                                      &target_bounds);
     gfx::Rect container_bounds(mirror_container_->GetPreferredSize());
-    int x_offset =
-        width() / 2 -
-        mirror_container_->GetMirroredXInView(target_bounds.CenterPoint().x());
-    if (initial_direction_ == WindowCycleController::FORWARD)
+    // Case one: the container is narrower than the screen. Center the
+    // container.
+    int x_offset = (width() - container_bounds.width()) / 2;
+    if (x_offset < 0) {
+      // Case two: the container is wider than the screen. Center the target
+      // view by moving the list just enough to ensure the target view is in the
+      // center.
+      x_offset = width() / 2 -
+                 mirror_container_->GetMirroredXInView(
+                     target_bounds.CenterPoint().x());
+
+      // However, the container must span the screen, i.e. the maximum x is 0
+      // and the minimum for its right boundary is the width of the screen.
       x_offset = std::min(x_offset, 0);
-    else
       x_offset = std::max(x_offset, width() - container_bounds.width());
+    }
     container_bounds.set_x(x_offset);
     mirror_container_->SetBoundsRect(container_bounds);
 
@@ -393,7 +355,22 @@ class WindowCycleView : public views::WidgetDelegateView {
   }
 
   void OnMouseCaptureLost() override {
-    WmShell::Get()->window_cycle_controller()->StopCycling();
+    WmShell::Get()->window_cycle_controller()->CancelCycling();
+  }
+
+  void OnPaintBackground(gfx::Canvas* canvas) override {
+    // We can't set a bg on the mirror container itself because the highlight
+    // view needs to be on top of the bg but behind the target windows.
+    const gfx::RectF shield_bounds(mirror_container_->bounds());
+    SkPaint paint;
+    paint.setColor(SkColorSetA(SK_ColorBLACK, 0xE6));
+    paint.setStyle(SkPaint::kFill_Style);
+    float corner_radius = 0.f;
+    if (shield_bounds.width() < width()) {
+      paint.setAntiAlias(true);
+      corner_radius = kBackgroundCornerRadius;
+    }
+    canvas->DrawRoundRect(shield_bounds, corner_radius, paint);
   }
 
   View* GetInitiallyFocusedView() override {
@@ -403,7 +380,6 @@ class WindowCycleView : public views::WidgetDelegateView {
   WmWindow* target_window() { return target_window_; }
 
  private:
-  WindowCycleController::Direction initial_direction_;
   std::map<WmWindow*, views::View*> window_view_map_;
   views::View* mirror_container_;
   views::View* highlight_view_;
@@ -412,63 +388,8 @@ class WindowCycleView : public views::WidgetDelegateView {
   DISALLOW_COPY_AND_ASSIGN(WindowCycleView);
 };
 
-ScopedShowWindow::ScopedShowWindow()
-    : window_(nullptr), stack_window_above_(nullptr), minimized_(false) {}
-
-ScopedShowWindow::~ScopedShowWindow() {
-  if (window_) {
-    window_->GetParent()->RemoveObserver(this);
-
-    // Restore window's stacking position.
-    if (stack_window_above_)
-      window_->GetParent()->StackChildAbove(window_, stack_window_above_);
-    else
-      window_->GetParent()->StackChildAtBottom(window_);
-
-    // Restore minimized state.
-    if (minimized_)
-      window_->GetWindowState()->Minimize();
-  }
-}
-
-void ScopedShowWindow::Show(WmWindow* window) {
-  DCHECK(!window_);
-  window_ = window;
-  stack_window_above_ = GetWindowBelow(window);
-  minimized_ = window->GetWindowState()->IsMinimized();
-  window_->GetParent()->AddObserver(this);
-  window_->Show();
-  window_->GetWindowState()->Activate();
-}
-
-void ScopedShowWindow::CancelRestore() {
-  if (!window_)
-    return;
-  window_->GetParent()->RemoveObserver(this);
-  window_ = stack_window_above_ = nullptr;
-}
-
-void ScopedShowWindow::OnWindowTreeChanging(WmWindow* window,
-                                            const TreeChangeParams& params) {
-  // Only interested in removal.
-  if (params.new_parent != nullptr)
-    return;
-
-  if (params.target == window_) {
-    CancelRestore();
-  } else if (params.target == stack_window_above_) {
-    // If the window this window was above is removed, use the next window down
-    // as the restore marker.
-    stack_window_above_ = GetWindowBelow(stack_window_above_);
-  }
-}
-
 WindowCycleList::WindowCycleList(const WindowList& windows)
     : windows_(windows),
-      current_index_(0),
-      initial_direction_(WindowCycleController::FORWARD),
-      cycle_view_(nullptr),
-      cycle_ui_widget_(nullptr),
       screen_observer_(this) {
   if (!ShouldShowUi())
     WmShell::Get()->mru_window_tracker()->SetIgnoreActivations(true);
@@ -493,9 +414,7 @@ WindowCycleList::~WindowCycleList() {
   for (WmWindow* window : windows_)
     window->RemoveObserver(this);
 
-  if (showing_window_) {
-    showing_window_->CancelRestore();
-  } else if (!windows_.empty()) {
+  if (!windows_.empty() && user_did_accept_) {
     WmWindow* target_window = windows_[current_index_];
     target_window->Show();
     target_window->GetWindowState()->Activate();
@@ -529,7 +448,6 @@ void WindowCycleList::Step(WindowCycleController::Direction direction) {
   DCHECK(static_cast<size_t>(current_index_) < windows_.size());
 
   if (!cycle_view_ && current_index_ == 0) {
-    initial_direction_ = direction;
     // Special case the situation where we're cycling forward but the MRU window
     // is not active. This occurs when all windows are minimized. The starting
     // window should be the first one rather than the second.
@@ -550,10 +468,6 @@ void WindowCycleList::Step(WindowCycleController::Direction direction) {
 
     if (cycle_view_)
       cycle_view_->SetTargetWindow(windows_[current_index_]);
-  } else {
-    // Make sure the next window is visible.
-    showing_window_.reset(new ScopedShowWindow);
-    showing_window_->Show(windows_[current_index_]);
   }
 }
 
@@ -581,7 +495,7 @@ void WindowCycleList::OnWindowDestroying(WmWindow* window) {
     cycle_view_->HandleWindowDestruction(window, new_target_window);
     if (windows_.empty()) {
       // This deletes us.
-      WmShell::Get()->window_cycle_controller()->StopCycling();
+      WmShell::Get()->window_cycle_controller()->CancelCycling();
       return;
     }
   }
@@ -599,7 +513,7 @@ void WindowCycleList::OnDisplayMetricsChanged(const display::Display& display,
               ->GetDisplayNearestWindow(cycle_ui_widget_->GetNativeView())
               .id() &&
       (changed_metrics & (DISPLAY_METRIC_BOUNDS | DISPLAY_METRIC_ROTATION))) {
-    WmShell::Get()->window_cycle_controller()->StopCycling();
+    WmShell::Get()->window_cycle_controller()->CancelCycling();
     // |this| is deleted.
     return;
   }
@@ -613,7 +527,7 @@ void WindowCycleList::InitWindowCycleView() {
   if (cycle_view_)
     return;
 
-  cycle_view_ = new WindowCycleView(windows_, initial_direction_);
+  cycle_view_ = new WindowCycleView(windows_);
   cycle_view_->SetTargetWindow(windows_[current_index_]);
 
   views::Widget* widget = new views::Widget;
@@ -629,8 +543,9 @@ void WindowCycleList::InitWindowCycleView() {
   root_window->GetRootWindowController()->ConfigureWidgetInitParamsForContainer(
       widget, kShellWindowId_OverlayContainer, &params);
   gfx::Rect widget_rect = root_window->GetDisplayNearestWindow().bounds();
-  int widget_height = cycle_view_->GetPreferredSize().height();
-  widget_rect.set_y((widget_rect.height() - widget_height) / 2);
+  const int widget_height = cycle_view_->GetPreferredSize().height();
+  widget_rect.set_y(widget_rect.y() +
+                    (widget_rect.height() - widget_height) / 2);
   widget_rect.set_height(widget_height);
   params.bounds = widget_rect;
   widget->Init(params);

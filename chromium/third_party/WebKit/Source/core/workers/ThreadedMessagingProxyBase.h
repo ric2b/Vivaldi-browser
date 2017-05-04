@@ -6,6 +6,7 @@
 #define ThreadedMessagingProxyBase_h
 
 #include "core/CoreExport.h"
+#include "core/frame/UseCounter.h"
 #include "core/inspector/ConsoleTypes.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "wtf/Forward.h"
@@ -30,6 +31,9 @@ class CORE_EXPORT ThreadedMessagingProxyBase
   // This method should be called in the destructor of the object which
   // initially created it. This object could either be a Worker or a Worklet.
   virtual void parentObjectDestroyed();
+
+  void countFeature(UseCounter::Feature);
+  void countDeprecation(UseCounter::Feature);
 
   void reportConsoleMessage(MessageSource,
                             MessageLevel,
@@ -78,10 +82,12 @@ class CORE_EXPORT ThreadedMessagingProxyBase
                         std::unique_ptr<ExecutionContextTask>) override;
   void postTaskToWorkerGlobalScope(
       const WebTraceLocation&,
-      std::unique_ptr<ExecutionContextTask>) override;
+      std::unique_ptr<WTF::CrossThreadClosure>) override;
 
  private:
   friend class InProcessWorkerMessagingProxyForTest;
+  friend class ThreadedWorkletMessagingProxyForTest;
+
   void parentObjectDestroyedInternal();
 
   Persistent<ExecutionContext> m_executionContext;

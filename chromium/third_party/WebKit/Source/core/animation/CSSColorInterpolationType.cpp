@@ -157,7 +157,7 @@ class InheritedColorChecker : public InterpolationType::ConversionChecker {
   static std::unique_ptr<InheritedColorChecker> create(
       CSSPropertyID property,
       const StyleColor& color) {
-    return wrapUnique(new InheritedColorChecker(property, color));
+    return WTF::wrapUnique(new InheritedColorChecker(property, color));
   }
 
  private:
@@ -184,9 +184,10 @@ InterpolationValue CSSColorInterpolationType::maybeConvertNeutral(
 InterpolationValue CSSColorInterpolationType::maybeConvertInitial(
     const StyleResolverState&,
     ConversionCheckers& conversionCheckers) const {
-  const StyleColor initialColor =
-      ColorPropertyFunctions::getInitialColor(cssProperty());
-  return convertStyleColorPair(initialColor, initialColor);
+  StyleColor initialColor;
+  if (ColorPropertyFunctions::getInitialColor(cssProperty(), initialColor))
+    return convertStyleColorPair(initialColor, initialColor);
+  return nullptr;
 }
 
 InterpolationValue CSSColorInterpolationType::maybeConvertInherit(
@@ -198,7 +199,7 @@ InterpolationValue CSSColorInterpolationType::maybeConvertInherit(
   // only use the unvisited color.
   const StyleColor inheritedColor = ColorPropertyFunctions::getUnvisitedColor(
       cssProperty(), *state.parentStyle());
-  conversionCheckers.append(
+  conversionCheckers.push_back(
       InheritedColorChecker::create(cssProperty(), inheritedColor));
   return convertStyleColorPair(inheritedColor, inheritedColor);
 }
@@ -238,30 +239,29 @@ InterpolationValue CSSColorInterpolationType::convertStyleColorPair(
   return InterpolationValue(std::move(colorPair));
 }
 
-InterpolationValue CSSColorInterpolationType::maybeConvertUnderlyingValue(
-    const InterpolationEnvironment& environment) const {
+InterpolationValue
+CSSColorInterpolationType::maybeConvertStandardPropertyUnderlyingValue(
+    const StyleResolverState& state) const {
   return convertStyleColorPair(
-      ColorPropertyFunctions::getUnvisitedColor(cssProperty(),
-                                                *environment.state().style()),
-      ColorPropertyFunctions::getVisitedColor(cssProperty(),
-                                              *environment.state().style()));
+      ColorPropertyFunctions::getUnvisitedColor(cssProperty(), *state.style()),
+      ColorPropertyFunctions::getVisitedColor(cssProperty(), *state.style()));
 }
 
-void CSSColorInterpolationType::apply(
+void CSSColorInterpolationType::applyStandardPropertyValue(
     const InterpolableValue& interpolableValue,
     const NonInterpolableValue*,
-    InterpolationEnvironment& environment) const {
+    StyleResolverState& state) const {
   const InterpolableList& colorPair = toInterpolableList(interpolableValue);
   DCHECK_EQ(colorPair.length(), InterpolableColorPairIndexCount);
   ColorPropertyFunctions::setUnvisitedColor(
-      cssProperty(), *environment.state().style(),
+      cssProperty(), *state.style(),
       resolveInterpolableColor(
-          *colorPair.get(Unvisited), environment.state(), false,
+          *colorPair.get(Unvisited), state, false,
           cssProperty() == CSSPropertyTextDecorationColor));
   ColorPropertyFunctions::setVisitedColor(
-      cssProperty(), *environment.state().style(),
+      cssProperty(), *state.style(),
       resolveInterpolableColor(
-          *colorPair.get(Visited), environment.state(), true,
+          *colorPair.get(Visited), state, true,
           cssProperty() == CSSPropertyTextDecorationColor));
 }
 

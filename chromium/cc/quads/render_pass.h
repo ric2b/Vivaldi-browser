@@ -16,10 +16,9 @@
 #include "base/macros.h"
 #include "cc/base/cc_export.h"
 #include "cc/base/list_container.h"
+#include "cc/output/filter_operations.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/largest_draw_quad.h"
-#include "cc/quads/render_pass_id.h"
-#include "cc/surfaces/surface_id.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/transform.h"
@@ -65,7 +64,7 @@ class CC_EXPORT RenderPass {
 
   // A shallow copy of the render pass, which does not include its quads or copy
   // requests.
-  std::unique_ptr<RenderPass> Copy(RenderPassId new_id) const;
+  std::unique_ptr<RenderPass> Copy(int new_id) const;
 
   // A deep copy of the render pass that includes quads.
   std::unique_ptr<RenderPass> DeepCopy() const;
@@ -74,15 +73,17 @@ class CC_EXPORT RenderPass {
   static void CopyAll(const std::vector<std::unique_ptr<RenderPass>>& in,
                       std::vector<std::unique_ptr<RenderPass>>* out);
 
-  void SetNew(RenderPassId id,
+  void SetNew(int id,
               const gfx::Rect& output_rect,
               const gfx::Rect& damage_rect,
               const gfx::Transform& transform_to_root_target);
 
-  void SetAll(RenderPassId id,
+  void SetAll(int id,
               const gfx::Rect& output_rect,
               const gfx::Rect& damage_rect,
               const gfx::Transform& transform_to_root_target,
+              const FilterOperations& filters,
+              const FilterOperations& background_filters,
               bool has_transparent_background);
 
   void AsValueInto(base::trace_event::TracedValue* dict) const;
@@ -97,12 +98,12 @@ class CC_EXPORT RenderPass {
   RenderPassDrawQuad* CopyFromAndAppendRenderPassDrawQuad(
       const RenderPassDrawQuad* quad,
       const SharedQuadState* shared_quad_state,
-      RenderPassId render_pass_id);
+      int render_pass_id);
   DrawQuad* CopyFromAndAppendDrawQuad(const DrawQuad* quad,
                                       const SharedQuadState* shared_quad_state);
 
   // Uniquely identifies the render pass in the compositor's current frame.
-  RenderPassId id;
+  int id = 0;
 
   // These are in the space of the render pass' physical pixels.
   gfx::Rect output_rect;
@@ -112,8 +113,15 @@ class CC_EXPORT RenderPass {
   // render pass' |output_rect|.
   gfx::Transform transform_to_root_target;
 
+  // Post-processing filters, applied to the pixels in the render pass' texture.
+  FilterOperations filters;
+
+  // Post-processing filters, applied to the pixels showing through the
+  // background of the render pass, from behind it.
+  FilterOperations background_filters;
+
   // If false, the pixels in the render pass' texture are all opaque.
-  bool has_transparent_background;
+  bool has_transparent_background = true;
 
   // If non-empty, the renderer should produce a copy of the render pass'
   // contents as a bitmap, and give a copy of the bitmap to each callback in
@@ -139,8 +147,10 @@ class CC_EXPORT RenderPass {
 };
 
 using RenderPassList = std::vector<std::unique_ptr<RenderPass>>;
-using RenderPassIdHashMap =
-    std::unordered_map<RenderPassId, RenderPass*, RenderPassIdHash>;
+
+// List of pairs of render pass id and filter, sorted by render pass id so that
+// it can be searched using std::lower_bound.
+using RenderPassFilterList = std::vector<std::pair<int, FilterOperations*>>;
 
 }  // namespace cc
 

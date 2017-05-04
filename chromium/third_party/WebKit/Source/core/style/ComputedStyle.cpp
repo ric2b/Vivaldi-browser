@@ -77,7 +77,7 @@ struct SameSizeAsComputedStyle : public ComputedStyleBase,
   void* dataRefSvgStyle;
 
   struct InheritedData {
-    unsigned m_bitfields[2];
+    unsigned m_bitfields[1];
   } m_inheritedData;
 
   struct NonInheritedData {
@@ -104,7 +104,7 @@ PassRefPtr<ComputedStyle> ComputedStyle::createAnonymousStyleWithDisplay(
     EDisplay display) {
   RefPtr<ComputedStyle> newStyle = ComputedStyle::create();
   newStyle->inheritFrom(parentStyle);
-  newStyle->inheritUnicodeBidiFrom(parentStyle);
+  newStyle->setUnicodeBidi(parentStyle.getUnicodeBidi());
   newStyle->setDisplay(display);
   return newStyle;
 }
@@ -232,13 +232,9 @@ StyleRecalcChange ComputedStyle::stylePropagationDiff(
   return NoInherit;
 }
 
-// TODO(sashab): Generate this function.
 void ComputedStyle::propagateIndependentInheritedProperties(
     const ComputedStyle& parentStyle) {
-  if (m_nonInheritedData.m_isPointerEventsInherited)
-    setPointerEvents(parentStyle.pointerEvents());
-  if (m_nonInheritedData.m_isVisibilityInherited)
-    setVisibility(parentStyle.visibility());
+  ComputedStyleBase::propagateIndependentInheritedProperties(parentStyle);
 }
 
 StyleSelfAlignmentData resolvedSelfAlignment(
@@ -379,7 +375,6 @@ void ComputedStyle::copyNonInheritedFromCached(const ComputedStyle& other) {
   m_nonInheritedData.m_clear = other.m_nonInheritedData.m_clear;
   m_nonInheritedData.m_position = other.m_nonInheritedData.m_position;
   m_nonInheritedData.m_tableLayout = other.m_nonInheritedData.m_tableLayout;
-  m_nonInheritedData.m_unicodeBidi = other.m_nonInheritedData.m_unicodeBidi;
   m_nonInheritedData.m_hasViewportUnits =
       other.m_nonInheritedData.m_hasViewportUnits;
   m_nonInheritedData.m_breakBefore = other.m_nonInheritedData.m_breakBefore;
@@ -419,13 +414,6 @@ void ComputedStyle::copyNonInheritedFromCached(const ComputedStyle& other) {
   // m_nonInheritedData.m_affectedByActive
   // m_nonInheritedData.m_affectedByDrag
   // m_nonInheritedData.m_isLink
-
-  // Any properties that are inherited on a style are also inherited on elements
-  // that share this style.
-  m_nonInheritedData.m_isPointerEventsInherited =
-      other.m_nonInheritedData.m_isPointerEventsInherited;
-  m_nonInheritedData.m_isVisibilityInherited =
-      other.m_nonInheritedData.m_isVisibilityInherited;
 
   if (m_svgStyle != other.m_svgStyle)
     m_svgStyle.access()->copyNonInheritedFromCached(other.m_svgStyle.get());
@@ -479,9 +467,9 @@ ComputedStyle* ComputedStyle::addCachedPseudoStyle(
   ComputedStyle* result = pseudo.get();
 
   if (!m_cachedPseudoStyles)
-    m_cachedPseudoStyles = wrapUnique(new PseudoStyleCache);
+    m_cachedPseudoStyles = WTF::wrapUnique(new PseudoStyleCache);
 
-  m_cachedPseudoStyles->append(pseudo);
+  m_cachedPseudoStyles->push_back(pseudo);
 
   return result;
 }
@@ -505,14 +493,13 @@ bool ComputedStyle::inheritedEqual(const ComputedStyle& other) const {
 
 bool ComputedStyle::independentInheritedEqual(
     const ComputedStyle& other) const {
-  return ComputedStyleBase::independentInheritedEqual(other) &&
-         m_inheritedData.compareEqualIndependent(other.m_inheritedData);
+  return ComputedStyleBase::independentInheritedEqual(other);
 }
 
 bool ComputedStyle::nonIndependentInheritedEqual(
     const ComputedStyle& other) const {
   return ComputedStyleBase::nonIndependentInheritedEqual(other) &&
-         m_inheritedData.compareEqualNonIndependent(other.m_inheritedData) &&
+         m_inheritedData == other.m_inheritedData &&
          m_styleInheritedData == other.m_styleInheritedData &&
          m_svgStyle->inheritedEqual(*other.m_svgStyle) &&
          m_rareInheritedData == other.m_rareInheritedData;
@@ -598,6 +585,8 @@ StyleDifference ComputedStyle::visualInvalidationDiff(
 
   updatePropertySpecificDifferences(other, diff);
 
+  // The following condition needs to be at last, because it may depend on
+  // conditions in diff computed above.
   if (scrollAnchorDisablingPropertyChanged(other, diff))
     diff.setScrollAnchorDisablingPropertyChanged();
 
@@ -614,7 +603,7 @@ StyleDifference ComputedStyle::visualInvalidationDiff(
 
 bool ComputedStyle::scrollAnchorDisablingPropertyChanged(
     const ComputedStyle& other,
-    StyleDifference& diff) const {
+    const StyleDifference& diff) const {
   if (m_nonInheritedData.m_position != other.m_nonInheritedData.m_position)
     return true;
 
@@ -818,38 +807,34 @@ bool ComputedStyle::diffNeedsFullLayoutAndPaintInvalidation(
       return true;
   }
 
-  if (m_inheritedData.m_boxDirection != other.m_inheritedData.m_boxDirection ||
-      m_inheritedData.m_rtlOrdering != other.m_inheritedData.m_rtlOrdering ||
-      m_inheritedData.m_textAlign != other.m_inheritedData.m_textAlign ||
-      m_inheritedData.m_textTransform !=
-          other.m_inheritedData.m_textTransform ||
-      m_inheritedData.m_direction != other.m_inheritedData.m_direction ||
-      m_inheritedData.m_whiteSpace != other.m_inheritedData.m_whiteSpace ||
-      m_inheritedData.m_writingMode != other.m_inheritedData.m_writingMode)
+  if (boxDirection() != other.boxDirection() ||
+      rtlOrdering() != other.rtlOrdering() ||
+      textAlign() != other.textAlign() ||
+      textTransform() != other.textTransform() ||
+      direction() != other.direction() || whiteSpace() != other.whiteSpace() ||
+      getWritingMode() != other.getWritingMode())
     return true;
 
   if (m_nonInheritedData.m_overflowX != other.m_nonInheritedData.m_overflowX ||
       m_nonInheritedData.m_overflowY != other.m_nonInheritedData.m_overflowY ||
       m_nonInheritedData.m_clear != other.m_nonInheritedData.m_clear ||
-      m_nonInheritedData.m_unicodeBidi !=
-          other.m_nonInheritedData.m_unicodeBidi ||
+      getUnicodeBidi() != other.getUnicodeBidi() ||
       floating() != other.floating() ||
       m_nonInheritedData.m_originalDisplay !=
           other.m_nonInheritedData.m_originalDisplay)
     return true;
 
   if (isDisplayTableType(display())) {
-    if (m_inheritedData.m_borderCollapse !=
-            other.m_inheritedData.m_borderCollapse ||
+    if (borderCollapse() != other.borderCollapse() ||
         emptyCells() != other.emptyCells() ||
-        m_inheritedData.m_captionSide != other.m_inheritedData.m_captionSide ||
+        captionSide() != other.captionSide() ||
         m_nonInheritedData.m_tableLayout !=
             other.m_nonInheritedData.m_tableLayout)
       return true;
 
     // In the collapsing border model, 'hidden' suppresses other borders, while
     // 'none' does not, so these style differences can be width differences.
-    if (m_inheritedData.m_borderCollapse &&
+    if ((borderCollapse() == EBorderCollapse::kCollapse) &&
         ((borderTopStyle() == BorderStyleHidden &&
           other.borderTopStyle() == BorderStyleNone) ||
          (borderTopStyle() == BorderStyleNone &&
@@ -868,15 +853,13 @@ bool ComputedStyle::diffNeedsFullLayoutAndPaintInvalidation(
           other.borderRightStyle() == BorderStyleHidden)))
       return true;
   } else if (display() == EDisplay::ListItem) {
-    if (m_inheritedData.m_listStyleType !=
-            other.m_inheritedData.m_listStyleType ||
-        m_inheritedData.m_listStylePosition !=
-            other.m_inheritedData.m_listStylePosition)
+    if (listStyleType() != other.listStyleType() ||
+        listStylePosition() != other.listStylePosition())
       return true;
   }
 
-  if ((visibility() == EVisibility::Collapse) !=
-      (other.visibility() == EVisibility::Collapse))
+  if ((visibility() == EVisibility::kCollapse) !=
+      (other.visibility() == EVisibility::kCollapse))
     return true;
 
   if (hasPseudoStyle(PseudoIdScrollbar) !=
@@ -939,11 +922,6 @@ bool ComputedStyle::diffNeedsFullLayout(const ComputedStyle& other) const {
 
 bool ComputedStyle::diffNeedsPaintInvalidationSubtree(
     const ComputedStyle& other) const {
-  if (position() != StaticPosition &&
-      (m_visual->clip != other.m_visual->clip ||
-       m_visual->hasAutoClip != other.m_visual->hasAutoClip))
-    return true;
-
   if (m_rareNonInheritedData.get() != other.m_rareNonInheritedData.get()) {
     if (m_rareNonInheritedData->m_effectiveBlendMode !=
             other.m_rareNonInheritedData->m_effectiveBlendMode ||
@@ -964,8 +942,7 @@ bool ComputedStyle::diffNeedsPaintInvalidationSubtree(
 bool ComputedStyle::diffNeedsPaintInvalidationObject(
     const ComputedStyle& other) const {
   if (visibility() != other.visibility() ||
-      m_inheritedData.m_printColorAdjust !=
-          other.m_inheritedData.m_printColorAdjust ||
+      printColorAdjust() != other.printColorAdjust() ||
       m_inheritedData.m_insideLink != other.m_inheritedData.m_insideLink ||
       !m_surround->border.visuallyEqual(other.m_surround->border) ||
       *m_background != *other.m_background)
@@ -1064,7 +1041,11 @@ void ComputedStyle::updatePropertySpecificDifferences(
     diff.setZIndexChanged();
 
   if (m_rareNonInheritedData.get() != other.m_rareNonInheritedData.get()) {
-    if (!transformDataEquivalent(other))
+    if (!transformDataEquivalent(other) ||
+        m_rareNonInheritedData->m_perspective !=
+            other.m_rareNonInheritedData->m_perspective ||
+        m_rareNonInheritedData->m_perspectiveOrigin !=
+            other.m_rareNonInheritedData->m_perspectiveOrigin)
       diff.setTransformChanged();
 
     if (m_rareNonInheritedData->opacity !=
@@ -1099,8 +1080,8 @@ void ComputedStyle::updatePropertySpecificDifferences(
     if (m_styleInheritedData->color != other.m_styleInheritedData->color ||
         m_styleInheritedData->visitedLinkColor !=
             other.m_styleInheritedData->visitedLinkColor ||
-        m_inheritedData.m_textUnderline !=
-            other.m_inheritedData.m_textUnderline ||
+        m_inheritedData.m_hasSimpleUnderline !=
+            other.m_inheritedData.m_hasSimpleUnderline ||
         m_visual->textDecoration != other.m_visual->textDecoration) {
       diff.setTextDecorationOrColorChanged();
     } else if (m_rareNonInheritedData.get() !=
@@ -1131,18 +1112,29 @@ void ComputedStyle::updatePropertySpecificDifferences(
                 m_rareInheritedData->m_textDecorationSkip !=
                     other.m_rareInheritedData->m_textDecorationSkip ||
                 m_rareInheritedData->appliedTextDecorations !=
-                    other.m_rareInheritedData->appliedTextDecorations)) {
+                    other.m_rareInheritedData->appliedTextDecorations ||
+                m_rareInheritedData->caretColor() !=
+                    other.m_rareInheritedData->caretColor() ||
+                m_rareInheritedData->visitedLinkCaretColor() !=
+                    other.m_rareInheritedData->visitedLinkCaretColor())) {
       diff.setTextDecorationOrColorChanged();
     }
   }
+
+  bool hasClip = hasOutOfFlowPosition() && !m_visual->hasAutoClip;
+  bool otherHasClip =
+      other.hasOutOfFlowPosition() && !other.m_visual->hasAutoClip;
+  if (hasClip != otherHasClip ||
+      (hasClip && m_visual->clip != other.m_visual->clip))
+    diff.setCSSClipChanged();
 }
 
 void ComputedStyle::addPaintImage(StyleImage* image) {
   if (!m_rareNonInheritedData.access()->m_paintImages) {
     m_rareNonInheritedData.access()->m_paintImages =
-        makeUnique<Vector<Persistent<StyleImage>>>();
+        WTF::makeUnique<Vector<Persistent<StyleImage>>>();
   }
-  m_rareNonInheritedData.access()->m_paintImages->append(image);
+  m_rareNonInheritedData.access()->m_paintImages->push_back(image);
 }
 
 void ComputedStyle::addCursor(StyleImage* image,
@@ -1150,7 +1142,7 @@ void ComputedStyle::addCursor(StyleImage* image,
                               const IntPoint& hotSpot) {
   if (!m_rareInheritedData.access()->cursorData)
     m_rareInheritedData.access()->cursorData = new CursorList;
-  m_rareInheritedData.access()->cursorData->append(
+  m_rareInheritedData.access()->cursorData->push_back(
       CursorData(image, hotSpotSpecified, hotSpot));
 }
 
@@ -1208,6 +1200,17 @@ void ComputedStyle::updateIsStackingContext(bool isDocumentElement,
   if (isStackingContext())
     return;
 
+  // Force a stacking context for transform-style: preserve-3d. This happens
+  // even if preserves-3d is ignored due to a 'grouping property' being present
+  // which requires flattening. See ComputedStyle::usedTransformStyle3D() and
+  // ComputedStyle::hasGroupingProperty().
+  // This is legacy behavior that is left ambiguous in the official specs.
+  // See crbug.com/663650 for more details."
+  if (transformStyle3D() == TransformStyle3DPreserve3D) {
+    setIsStackingContext(true);
+    return;
+  }
+
   if (isDocumentElement || isInTopLayer || styleType() == PseudoIdBackdrop ||
       hasOpacity() || hasTransformRelatedProperty() || hasMask() ||
       clipPath() || boxReflect() || hasFilterInducingProperty() ||
@@ -1221,7 +1224,7 @@ void ComputedStyle::updateIsStackingContext(bool isDocumentElement,
 
 void ComputedStyle::addCallbackSelector(const String& selector) {
   if (!m_rareNonInheritedData->m_callbackSelectors.contains(selector))
-    m_rareNonInheritedData.access()->m_callbackSelectors.append(selector);
+    m_rareNonInheritedData.access()->m_callbackSelectors.push_back(selector);
 }
 
 void ComputedStyle::setContent(ContentData* contentData) {
@@ -1368,6 +1371,8 @@ void ComputedStyle::applyMotionPathTransform(
   if (!motionData.m_path) {
     return;
   }
+  const LengthPoint& position = offsetPosition();
+  const LengthPoint& anchor = offsetAnchor();
   const StylePath& motionPath = *motionData.m_path;
   float pathLength = motionPath.length();
   float distance = floatValueForLength(motionData.m_distance, pathLength);
@@ -1389,9 +1394,10 @@ void ComputedStyle::applyMotionPathTransform(
 
   float originShiftX = 0;
   float originShiftY = 0;
-  if (RuntimeEnabledFeatures::cssOffsetPositionAnchorEnabled()) {
-    // TODO(ericwilligers): crbug.com/638055 Support offset-anchor: auto.
-    const LengthPoint& anchor = offsetAnchor();
+  // If offset-Position and offset-anchor properties are not yet enabled,
+  // they will have the default value, auto.
+  if (position.x() != Length(Auto) || anchor.x() != Length(Auto)) {
+    // Shift the origin from transform-origin to offset-anchor.
     originShiftX = floatValueForLength(anchor.x(), boundingBox.width()) -
                    floatValueForLength(transformOriginX(), boundingBox.width());
     originShiftY =
@@ -1403,9 +1409,9 @@ void ComputedStyle::applyMotionPathTransform(
                       point.y() - originY + originShiftY);
   transform.rotate(angle + motionData.m_rotation.angle);
 
-  if (RuntimeEnabledFeatures::cssOffsetPositionAnchorEnabled()) {
+  if (position.x() != Length(Auto) || anchor.x() != Length(Auto))
+    // Shift the origin back to transform-origin.
     transform.translate(-originShiftX, -originShiftY);
-  }
 }
 
 void ComputedStyle::setTextShadow(PassRefPtr<ShadowList> s) {
@@ -1509,7 +1515,7 @@ FloatRoundedRect ComputedStyle::getRoundedInnerBorderFor(
 
 FloatRoundedRect ComputedStyle::getRoundedInnerBorderFor(
     const LayoutRect& borderRect,
-    const LayoutRectOutsets insets,
+    const LayoutRectOutsets& insets,
     bool includeLogicalLeftEdge,
     bool includeLogicalRightEdge) const {
   LayoutRect innerRect(borderRect);
@@ -1552,7 +1558,7 @@ CounterDirectiveMap& ComputedStyle::accessCounterDirectives() {
   std::unique_ptr<CounterDirectiveMap>& map =
       m_rareNonInheritedData.access()->m_counterDirectives;
   if (!map)
-    map = wrapUnique(new CounterDirectiveMap);
+    map = WTF::wrapUnique(new CounterDirectiveMap);
   return *map;
 }
 
@@ -1712,27 +1718,38 @@ FontStretch ComputedStyle::fontStretch() const {
 }
 
 TextDecoration ComputedStyle::textDecorationsInEffect() const {
+  if (m_inheritedData.m_hasSimpleUnderline)
+    return TextDecorationUnderline;
+  if (!m_rareInheritedData->appliedTextDecorations)
+    return TextDecorationNone;
+
   int decorations = 0;
 
   const Vector<AppliedTextDecoration>& applied = appliedTextDecorations();
 
   for (size_t i = 0; i < applied.size(); ++i)
-    decorations |= applied[i].line();
+    decorations |= applied[i].lines();
 
   return static_cast<TextDecoration>(decorations);
 }
 
 const Vector<AppliedTextDecoration>& ComputedStyle::appliedTextDecorations()
     const {
-  if (!m_inheritedData.m_textUnderline &&
-      !m_rareInheritedData->appliedTextDecorations) {
+  if (m_inheritedData.m_hasSimpleUnderline) {
+    DEFINE_STATIC_LOCAL(
+        Vector<AppliedTextDecoration>, underline,
+        (1, AppliedTextDecoration(
+                TextDecorationUnderline, TextDecorationStyleSolid,
+                visitedDependentColor(CSSPropertyTextDecorationColor))));
+    // Since we only have one of these in memory, just update the color before
+    // returning.
+    underline.at(0).setColor(
+        visitedDependentColor(CSSPropertyTextDecorationColor));
+    return underline;
+  }
+  if (!m_rareInheritedData->appliedTextDecorations) {
     DEFINE_STATIC_LOCAL(Vector<AppliedTextDecoration>, empty, ());
     return empty;
-  }
-  if (m_inheritedData.m_textUnderline) {
-    DEFINE_STATIC_LOCAL(Vector<AppliedTextDecoration>, underline,
-                        (1, AppliedTextDecoration(TextDecorationUnderline)));
-    return underline;
   }
 
   return m_rareInheritedData->appliedTextDecorations->vector();
@@ -1809,24 +1826,43 @@ void ComputedStyle::setResolvedNonInheritedVariable(
   variables.setRegisteredVariable(name, parsedValue);
 }
 
-void ComputedStyle::removeInheritedVariable(const AtomicString& name) {
-  mutableInheritedVariables().removeVariable(name);
-}
-
-void ComputedStyle::removeNonInheritedVariable(const AtomicString& name) {
-  mutableNonInheritedVariables().removeVariable(name);
+void ComputedStyle::removeVariable(const AtomicString& name,
+                                   bool isInheritedProperty) {
+  if (isInheritedProperty) {
+    mutableInheritedVariables().removeVariable(name);
+  } else {
+    mutableNonInheritedVariables().removeVariable(name);
+  }
 }
 
 CSSVariableData* ComputedStyle::getVariable(const AtomicString& name) const {
-  if (inheritedVariables()) {
-    if (CSSVariableData* variable = inheritedVariables()->getVariable(name))
-      return variable;
+  CSSVariableData* variable = getVariable(name, true);
+  if (variable) {
+    return variable;
   }
-  if (nonInheritedVariables()) {
-    if (CSSVariableData* variable = nonInheritedVariables()->getVariable(name))
-      return variable;
+  return getVariable(name, false);
+}
+
+CSSVariableData* ComputedStyle::getVariable(const AtomicString& name,
+                                            bool isInheritedProperty) const {
+  if (isInheritedProperty) {
+    return inheritedVariables() ? inheritedVariables()->getVariable(name)
+                                : nullptr;
   }
-  return nullptr;
+  return nonInheritedVariables() ? nonInheritedVariables()->getVariable(name)
+                                 : nullptr;
+}
+
+const CSSValue* ComputedStyle::getRegisteredVariable(
+    const AtomicString& name,
+    bool isInheritedProperty) const {
+  if (isInheritedProperty) {
+    return inheritedVariables() ? inheritedVariables()->registeredVariable(name)
+                                : nullptr;
+  }
+  return nonInheritedVariables()
+             ? nonInheritedVariables()->registeredVariable(name)
+             : nullptr;
 }
 
 float ComputedStyle::wordSpacing() const {
@@ -1943,45 +1979,62 @@ void ComputedStyle::addAppliedTextDecoration(
   else if (!list->hasOneRef())
     list = list->copy();
 
-  if (m_inheritedData.m_textUnderline) {
-    m_inheritedData.m_textUnderline = false;
-    list->append(AppliedTextDecoration(TextDecorationUnderline));
-  }
-
   list->append(decoration);
 }
 
-void ComputedStyle::applyTextDecorations() {
-  if (getTextDecoration() == TextDecorationNone)
+void ComputedStyle::overrideTextDecorationColors(Color overrideColor) {
+  RefPtr<AppliedTextDecorationList>& list =
+      m_rareInheritedData.access()->appliedTextDecorations;
+  DCHECK(list);
+  if (!list->hasOneRef())
+    list = list->copy();
+
+  for (size_t i = 0; i < list->size(); ++i)
+    list->at(i).setColor(overrideColor);
+}
+
+void ComputedStyle::applyTextDecorations(const Color& parentTextDecorationColor,
+                                         bool overrideExistingColors) {
+  if (getTextDecoration() == TextDecorationNone &&
+      !m_inheritedData.m_hasSimpleUnderline &&
+      !m_rareInheritedData->appliedTextDecorations)
     return;
 
-  TextDecorationStyle style = getTextDecorationStyle();
-  StyleColor styleColor =
-      decorationColorIncludingFallback(insideLink() == InsideVisitedLink);
-
-  int decorations = getTextDecoration();
-
-  if (decorations & TextDecorationUnderline) {
-    // To save memory, we don't use AppliedTextDecoration objects in the
-    // common case of a single simple underline.
-    AppliedTextDecoration underline(TextDecorationUnderline, style, styleColor);
-
-    if (!m_rareInheritedData->appliedTextDecorations &&
-        underline.isSimpleUnderline())
-      m_inheritedData.m_textUnderline = true;
-    else
-      addAppliedTextDecoration(underline);
+  // If there are any color changes or decorations set by this element, stop
+  // using m_hasSimpleUnderline.
+  Color currentTextDecorationColor =
+      visitedDependentColor(CSSPropertyTextDecorationColor);
+  if (m_inheritedData.m_hasSimpleUnderline &&
+      (getTextDecoration() != TextDecorationNone ||
+       currentTextDecorationColor != parentTextDecorationColor)) {
+    m_inheritedData.m_hasSimpleUnderline = false;
+    addAppliedTextDecoration(AppliedTextDecoration(TextDecorationUnderline,
+                                                   TextDecorationStyleSolid,
+                                                   parentTextDecorationColor));
   }
-  if (decorations & TextDecorationOverline)
-    addAppliedTextDecoration(
-        AppliedTextDecoration(TextDecorationOverline, style, styleColor));
-  if (decorations & TextDecorationLineThrough)
-    addAppliedTextDecoration(
-        AppliedTextDecoration(TextDecorationLineThrough, style, styleColor));
+  if (overrideExistingColors && m_rareInheritedData->appliedTextDecorations)
+    overrideTextDecorationColors(currentTextDecorationColor);
+  if (getTextDecoration() == TextDecorationNone)
+    return;
+  DCHECK(!m_inheritedData.m_hasSimpleUnderline);
+  // To save memory, we don't use AppliedTextDecoration objects in the common
+  // case of a single simple underline of currentColor.
+  TextDecoration decorationLines = getTextDecoration();
+  TextDecorationStyle decorationStyle = getTextDecorationStyle();
+  bool isSimpleUnderline = decorationLines == TextDecorationUnderline &&
+                           decorationStyle == TextDecorationStyleSolid &&
+                           textDecorationColor().isCurrentColor();
+  if (isSimpleUnderline && !m_rareInheritedData->appliedTextDecorations) {
+    m_inheritedData.m_hasSimpleUnderline = true;
+    return;
+  }
+
+  addAppliedTextDecoration(AppliedTextDecoration(
+      decorationLines, decorationStyle, currentTextDecorationColor));
 }
 
 void ComputedStyle::clearAppliedTextDecorations() {
-  m_inheritedData.m_textUnderline = false;
+  m_inheritedData.m_hasSimpleUnderline = false;
 
   if (m_rareInheritedData->appliedTextDecorations)
     m_rareInheritedData.access()->appliedTextDecorations = nullptr;
@@ -1989,7 +2042,8 @@ void ComputedStyle::clearAppliedTextDecorations() {
 
 void ComputedStyle::restoreParentTextDecorations(
     const ComputedStyle& parentStyle) {
-  m_inheritedData.m_textUnderline = parentStyle.m_inheritedData.m_textUnderline;
+  m_inheritedData.m_hasSimpleUnderline =
+      parentStyle.m_inheritedData.m_hasSimpleUnderline;
   if (m_rareInheritedData->appliedTextDecorations !=
       parentStyle.m_rareInheritedData->appliedTextDecorations)
     m_rareInheritedData.access()->appliedTextDecorations =
@@ -2046,6 +2100,15 @@ Color ComputedStyle::colorIncludingFallback(int colorProperty,
           visitedLink ? visitedLinkBorderBottomColor() : borderBottomColor();
       borderStyle = borderBottomStyle();
       break;
+    case CSSPropertyCaretColor: {
+      StyleAutoColor autoColor =
+          visitedLink ? visitedLinkCaretColor() : caretColor();
+      // TODO(rego): We may want to adjust the caret color if it's the same than
+      // the background to ensure good visibility and contrast.
+      result = autoColor.isAutoColor() ? StyleColor::currentColor()
+                                       : autoColor.toStyleColor();
+      break;
+    }
     case CSSPropertyColor:
       result = visitedLink ? visitedLinkColor() : color();
       break;
@@ -2099,7 +2162,7 @@ Color ComputedStyle::colorIncludingFallback(int colorProperty,
 
 Color ComputedStyle::visitedDependentColor(int colorProperty) const {
   Color unvisitedColor = colorIncludingFallback(colorProperty, false);
-  if (insideLink() != InsideVisitedLink)
+  if (insideLink() != EInsideLink::kInsideVisitedLink)
     return unvisitedColor;
 
   Color visitedColor = colorIncludingFallback(colorProperty, true);
@@ -2123,11 +2186,11 @@ Color ComputedStyle::visitedDependentColor(int colorProperty) const {
 
 const BorderValue& ComputedStyle::borderBefore() const {
   switch (getWritingMode()) {
-    case TopToBottomWritingMode:
+    case WritingMode::kHorizontalTb:
       return borderTop();
-    case LeftToRightWritingMode:
+    case WritingMode::kVerticalLr:
       return borderLeft();
-    case RightToLeftWritingMode:
+    case WritingMode::kVerticalRl:
       return borderRight();
   }
   ASSERT_NOT_REACHED();
@@ -2136,11 +2199,11 @@ const BorderValue& ComputedStyle::borderBefore() const {
 
 const BorderValue& ComputedStyle::borderAfter() const {
   switch (getWritingMode()) {
-    case TopToBottomWritingMode:
+    case WritingMode::kHorizontalTb:
       return borderBottom();
-    case LeftToRightWritingMode:
+    case WritingMode::kVerticalLr:
       return borderRight();
-    case RightToLeftWritingMode:
+    case WritingMode::kVerticalRl:
       return borderLeft();
   }
   ASSERT_NOT_REACHED();
@@ -2161,11 +2224,11 @@ const BorderValue& ComputedStyle::borderEnd() const {
 
 int ComputedStyle::borderBeforeWidth() const {
   switch (getWritingMode()) {
-    case TopToBottomWritingMode:
+    case WritingMode::kHorizontalTb:
       return borderTopWidth();
-    case LeftToRightWritingMode:
+    case WritingMode::kVerticalLr:
       return borderLeftWidth();
-    case RightToLeftWritingMode:
+    case WritingMode::kVerticalRl:
       return borderRightWidth();
   }
   ASSERT_NOT_REACHED();
@@ -2174,11 +2237,11 @@ int ComputedStyle::borderBeforeWidth() const {
 
 int ComputedStyle::borderAfterWidth() const {
   switch (getWritingMode()) {
-    case TopToBottomWritingMode:
+    case WritingMode::kHorizontalTb:
       return borderBottomWidth();
-    case LeftToRightWritingMode:
+    case WritingMode::kVerticalLr:
       return borderRightWidth();
-    case RightToLeftWritingMode:
+    case WritingMode::kVerticalRl:
       return borderLeftWidth();
   }
   ASSERT_NOT_REACHED();
@@ -2244,7 +2307,7 @@ int ComputedStyle::outlineOutsetExtent() const {
     return GraphicsContext::focusRingOutsetExtent(
         outlineOffset(), std::ceil(getOutlineStrokeWidthForFocusRing()));
   }
-  return std::max(0, saturatedAddition(outlineWidth(), outlineOffset()));
+  return std::max(0, SaturatedAddition(outlineWidth(), outlineOffset()));
 }
 
 float ComputedStyle::getOutlineStrokeWidthForFocusRing() const {

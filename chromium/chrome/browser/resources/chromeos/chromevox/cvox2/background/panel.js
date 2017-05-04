@@ -36,6 +36,17 @@ Panel.Mode = {
 };
 
 /**
+ * A callback function to be executed to perform the action from selecting
+ * a menu item after the menu has been closed and focus has been restored
+ * to the page or wherever it was previously.
+ * @param {?Function} callback
+ */
+Panel.setPendingCallback = function(callback) {
+  /** @type {?Function} @private */
+  Panel.pendingCallback_ = callback;
+};
+
+/**
  * Initialize the panel.
  */
 Panel.init = function() {
@@ -61,6 +72,17 @@ Panel.init = function() {
   /** @type {Panel.Mode} @private */
   this.mode_ = Panel.Mode.COLLAPSED;
 
+  var blockedSessionQuery = location.search.match(
+      /[?&]?blockedUserSession=(true|false)/);
+  /**
+   * Whether the panel is loaded for blocked user session - e.g. on sign-in or
+   * lock screen.
+   * @type {boolean}
+   * @private @const
+   */
+  this.isUserSessionBlocked_ =
+      !!blockedSessionQuery && blockedSessionQuery[1] == 'true';
+
   /**
    * The array of top-level menus.
    * @type {!Array<PanelMenu>}
@@ -81,16 +103,8 @@ Panel.init = function() {
    * @type {boolean}
    * @private
    */
-  this.menusEnabled_ = localStorage['useNext'] == 'true';
-
-  /**
-   * A callback function to be executed to perform the action from selecting
-   * a menu item after the menu has been closed and focus has been restored
-   * to the page or wherever it was previously.
-   * @type {?Function}
-   * @private
-   */
-  this.pendingCallback_ = null;
+  this.menusEnabled_ =
+      !this.isUserSessionBlocked_ && localStorage['useClassic'] == 'false';
 
   /**
    * True if we're currently in incremental search mode.
@@ -105,6 +119,7 @@ Panel.init = function() {
    */
   this.tutorial_ = new Tutorial();
 
+  Panel.setPendingCallback(null);
   Panel.updateFromPrefs();
 
   Msgs.addTranslatedMessagesToDom(document);
@@ -120,8 +135,16 @@ Panel.init = function() {
     Panel.exec(/** @type {PanelCommand} */(command));
   }, false);
 
-  $('menus_button').addEventListener('mousedown', Panel.onOpenMenus, false);
-  $('options').addEventListener('click', Panel.onOptions, false);
+  if (this.isUserSessionBlocked_) {
+    $('menus_button').disabled = true;
+    $('triangle').hidden = true;
+
+    $('options').disabled = true;
+  } else {
+    $('menus_button').addEventListener('mousedown', Panel.onOpenMenus, false);
+    $('options').addEventListener('click', Panel.onOptions, false);
+  }
+
   $('close').addEventListener('click', Panel.onClose, false);
 
   $('tutorial_next').addEventListener('click', Panel.onTutorialNext, false);
@@ -137,8 +160,6 @@ Panel.init = function() {
 
     Panel.closeMenusAndRestoreFocus();
   }, false);
-
-  Panel.searchInput_.addEventListener('blur', Panel.onSearchInputBlur, false);
 };
 
 /**
@@ -232,6 +253,8 @@ Panel.exec = function(command) {
  * Enable the ChromeVox Menus.
  */
 Panel.onEnableMenus = function() {
+  if (this.isUserSessionBlocked_)
+    return;
   Panel.menusEnabled_ = true;
   $('menus_button').disabled = false;
   $('triangle').hidden = false;
@@ -241,6 +264,8 @@ Panel.onEnableMenus = function() {
  * Disable the ChromeVox Menus.
  */
 Panel.onDisableMenus = function() {
+  if (this.isUserSessionBlocked_)
+    return;
   Panel.menusEnabled_ = false;
   $('menus_button').disabled = true;
   $('triangle').hidden = true;
@@ -255,6 +280,9 @@ Panel.setMode = function(mode) {
   if (this.mode_ == mode)
     return;
 
+  if (this.isUserSessionBlocked_ &&
+      mode != Panel.Mode.COLLAPSED && mode != Panel.Mode.FOCUSED)
+    return;
   this.mode_ = mode;
 
   if (this.mode_ == Panel.Mode.FULLSCREEN_MENUS ||
@@ -432,7 +460,7 @@ Panel.onSearch = function() {
   Panel.updateFromPrefs();
   Panel.setMode(Panel.Mode.FOCUSED);
 
-  ISearchUI.get(Panel.searchInput_);
+  ISearchUI.init(Panel.searchInput_);
 };
 
 /**
@@ -471,17 +499,19 @@ Panel.addMenu = function(menuMsg) {
  */
 Panel.onUpdateBraille = function(data) {
   var groups = data.groups;
-  var cols = parseInt(localStorage['virtualBrailleColumns'], 10);
-  var rows = parseInt(localStorage['virtualBrailleRows'], 10);
+  var cols = data.cols;
+  var rows = data.rows;
   var sideBySide = localStorage['brailleSideBySide'] === 'true';
 
   var addBorders = function(event) {
     var cell = event.target;
     if (cell.tagName == 'TD') {
       cell.className = 'highlighted-cell';
-      var companionID = cell.getAttribute('companionID');
-      var companion = $(companionID);
-      companion.className = 'highlighted-cell';
+      var companionIDs = cell.getAttribute('data-companionIDs');
+      companionIDs.split(' ').map(function(companionID) {
+        var companion = $(companionID);
+        companion.className = 'highlighted-cell';
+      });
     }
   };
 
@@ -489,9 +519,11 @@ Panel.onUpdateBraille = function(data) {
     var cell = event.target;
     if (cell.tagName == 'TD') {
       cell.className = 'unhighlighted-cell';
-      var companionID = cell.getAttribute('companionID');
-      var companion = $(companionID);
-      companion.className = 'unhighlighted-cell';
+      var companionIDs = cell.getAttribute('data-companionIDs');
+      companionIDs.split(' ').map(function(companionID) {
+        var companion = $(companionID);
+        companion.className = 'unhighlighted-cell';
+      });
     }
   };
 
@@ -510,8 +542,10 @@ Panel.onUpdateBraille = function(data) {
 
   var row1, row2;
   rowCount = 0;
+  var cellCount = cols;
   for (var i = 0; i < groups.length; i++) {
-    if (i % cols == 0) {
+    if (cellCount == cols) {
+      cellCount = 0;
       // Check if we reached the limit on the number of rows we can have.
       if (rowCount == rows)
         break;
@@ -529,14 +563,44 @@ Panel.onUpdateBraille = function(data) {
     var topCell = row1.insertCell(-1);
     topCell.innerHTML = groups[i][0];
     topCell.id = i + '-textCell';
-    topCell.setAttribute('companionID', i + '-brailleCell');
+    topCell.setAttribute('data-companionIDs', i + '-brailleCell');
     topCell.className = 'unhighlighted-cell';
 
     var bottomCell = row2.insertCell(-1);
-    bottomCell.innerHTML = groups[i][1];
     bottomCell.id = i + '-brailleCell';
-    bottomCell.setAttribute('companionID', i + '-textCell');
+    bottomCell.setAttribute('data-companionIDs', i + '-textCell');
     bottomCell.className = 'unhighlighted-cell';
+    if (cellCount + groups[i][1].length > cols) {
+      bottomCell.innerHTML = groups[i][1].substring(0, cols - cellCount);
+      if (rowCount == rows)
+        break;
+      rowCount++;
+      row1 = this.brailleTableElement_.insertRow(-1);
+      if (sideBySide) {
+        // Side by side.
+        row2 = this.brailleTableElement2_.insertRow(-1);
+      } else {
+        // Interleaved.
+        row2 = this.brailleTableElement_.insertRow(-1);
+      }
+      var bottomCell2 = row2.insertCell(-1);
+      bottomCell2.id = i + '-brailleCell2';
+      bottomCell2.setAttribute('data-companionIDs',
+          i + '-textCell ' + i + '-brailleCell');
+      bottomCell.setAttribute('data-companionIDs',
+          bottomCell.getAttribute('data-companionIDs') +
+          ' ' + i + '-brailleCell2');
+      topCell.setAttribute('data-companionID2',
+          bottomCell.getAttribute('data-companionIDs') +
+          ' ' + i + '-brailleCell2');
+
+      bottomCell2.className = 'unhighlighted-cell';
+      bottomCell2.innerHTML = groups[i][1].substring(cols - cellCount);
+      cellCount = bottomCell2.innerHTML.length;
+    } else {
+      bottomCell.innerHTML = groups[i][1];
+      cellCount += groups[i][1].length;
+    }
   }
 };
 
@@ -668,6 +732,11 @@ Panel.onKeyDown = function(event) {
     return;
   }
 
+  // Events don't propagate correctly because blur places focus on body.
+  if (Panel.mode_ == Panel.Mode.FULLSCREEN_TUTORIAL &&
+      !Panel.tutorial_.onKeyDown(event))
+    return;
+
   if (!Panel.activeMenu_)
     return;
 
@@ -714,20 +783,6 @@ Panel.onKeyDown = function(event) {
 
   event.preventDefault();
   event.stopPropagation();
-};
-
-/**
- * Called when focus leaves the search input.
- */
-Panel.onSearchInputBlur = function() {
-  if (Panel.searching_) {
-    if (document.activeElement != Panel.searchInput_ || !document.hasFocus()) {
-      Panel.searching_ = false;
-      Panel.setMode(Panel.Mode.COLLAPSED);
-      Panel.updateFromPrefs();
-      Panel.searchInput_.value = '';
-    }
-  }
 };
 
 /**

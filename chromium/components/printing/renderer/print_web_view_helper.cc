@@ -16,6 +16,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
@@ -285,6 +286,7 @@ void ComputeWebKitPrintParamsInDesiredDpi(
     blink::WebPrintParams* webkit_print_params) {
   int dpi = GetDPI(&print_params);
   webkit_print_params->printerDPI = dpi;
+  webkit_print_params->rasterizePDF = print_params.rasterize_pdf;
   webkit_print_params->printScalingOption = print_params.print_scaling_option;
 
   webkit_print_params->printContentArea.width = ConvertUnit(
@@ -345,6 +347,7 @@ bool PrintingFrameHasPageSizeStyle(blink::WebLocalFrame* frame,
 }
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
+#if BUILDFLAG(ENABLE_PRINTING)
 // Disable scaling when either:
 // - The PDF specifies disabling scaling.
 // - All the pages in the PDF are the same size,
@@ -387,6 +390,7 @@ bool PDFShouldDisableScaling(blink::WebLocalFrame* frame,
   return PDFShouldDisableScalingBasedOnPreset(preset_options, params,
                                               ignore_page_size);
 }
+#endif
 
 #if BUILDFLAG(ENABLE_BASIC_PRINTING)
 MarginType GetMarginsForPdf(blink::WebLocalFrame* frame,
@@ -760,7 +764,7 @@ void PrepareFrameAndViewForPrint::ResizeForPrinting() {
   blink::WebView* web_view = frame_.view();
   if (blink::WebFrame* web_frame = web_view->mainFrame()) {
     if (web_frame->isWebLocalFrame())
-      prev_scroll_offset_ = web_frame->scrollOffset();
+      prev_scroll_offset_ = web_frame->getScrollOffset();
   }
   prev_view_size_ = web_view->size();
 
@@ -918,8 +922,9 @@ void PrintWebViewHelper::DisablePreview() {
   g_is_preview_enabled = false;
 }
 
-bool PrintWebViewHelper::IsScriptInitiatedPrintAllowed(blink::WebFrame* frame,
-                                                       bool user_initiated) {
+bool PrintWebViewHelper::IsScriptInitiatedPrintAllowed(
+    blink::WebLocalFrame* frame,
+    bool user_initiated) {
   if (!is_printing_enabled_ || !delegate_->IsScriptedPrintEnabled())
     return false;
 
@@ -1847,11 +1852,16 @@ void PrintWebViewHelper::PrintPageInternal(
   int dpi = static_cast<int>(params.params.dpi);
   // Calculate the actual page size and content area in dpi.
   if (page_size_in_dpi) {
+    // Windows uses this for the actual page size. We have scaled page size
+    // to get blink to reflow the page, so scale it back to the real size
+    // before returning it.
     *page_size_in_dpi =
         gfx::Size(static_cast<int>(ConvertUnitDouble(page_size.width(),
-                                                     kPointsPerInch, dpi)),
+                                                     kPointsPerInch, dpi) *
+                                   css_scale_factor),
                   static_cast<int>(ConvertUnitDouble(page_size.height(),
-                                                     kPointsPerInch, dpi)));
+                                                     kPointsPerInch, dpi) *
+                                   css_scale_factor));
   }
 
   if (content_area_in_dpi) {
@@ -2306,7 +2316,8 @@ void PrintWebViewHelper::SetPrintPagesParams(
 PrintWebViewHelper::ScriptingThrottler::ScriptingThrottler() : count_(0) {
 }
 
-bool PrintWebViewHelper::ScriptingThrottler::IsAllowed(blink::WebFrame* frame) {
+bool PrintWebViewHelper::ScriptingThrottler::IsAllowed(
+    blink::WebLocalFrame* frame) {
   const int kMinSecondsToIgnoreJavascriptInitiatedPrint = 2;
   const int kMaxSecondsToIgnoreJavascriptInitiatedPrint = 32;
   bool too_frequent = false;

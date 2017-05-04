@@ -5,7 +5,10 @@
 import("//build/buildflag_header.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/features.gni")
+import("//build/config/ui.gni")
+import("//media/media_options.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//ppapi/features/features.gni")
 import("//third_party/webrtc/build/webrtc.gni")
 
 # See //content/BUILD.gn for how this works.
@@ -67,6 +70,11 @@ source_set("static_switches") {
   ]
 
   public_configs = [ ":static_switches_defines" ]
+
+  # Deps required by the above headers.
+  deps = [
+    "//media:media_features",
+  ]
 }
 
 # This target allows you to use the content_features constants and statically
@@ -132,6 +140,8 @@ source_set("common_sources") {
     "file_chooser_file_info.h",
     "file_chooser_params.cc",
     "file_chooser_params.h",
+    "form_field_data.cc",
+    "form_field_data.h",
     "frame_navigate_params.cc",
     "frame_navigate_params.h",
     "injection_test_mac.h",
@@ -164,11 +174,17 @@ source_set("common_sources") {
     "persistent_notification_status.h",
     "platform_notification_data.cc",
     "platform_notification_data.h",
+    "presentation_connection_message.cc",
+    "presentation_connection_message.h",
     "presentation_constants.cc",
     "presentation_constants.h",
+    "presentation_session.cc",
+    "presentation_session.h",
+    "previews_state.h",
     "process_type.h",
     "push_messaging_status.cc",
     "push_messaging_status.h",
+    "quarantine.h",
     "referrer.cc",
     "referrer.h",
     "renderer_preferences.cc",
@@ -205,7 +221,6 @@ source_set("common_sources") {
     "stop_find_action.h",
     "storage_quota_params.h",
     "three_d_api_types.h",
-    "transition_element.h",
     "url_constants.cc",
     "url_constants.h",
     "url_fetcher.h",
@@ -244,12 +259,13 @@ source_set("common_sources") {
   deps = [
     # This looks needless as we have //content/common in public_deps, but it's
     # needed because of allow_circular_includes_from.
-    "//content/common:mojo_bindings_cpp_sources",
+    "//content/common:mojo_bindings",
     "//ipc",
     "//media",
     "//mojo/common",
     "//net",
     "//ppapi/c",
+    "//ppapi/features",
     "//services/service_manager/public/cpp",
     "//skia",
     "//storage/common",
@@ -263,10 +279,14 @@ source_set("common_sources") {
     "//ui/gfx/ipc/skia",
   ]
 
+  if (use_aura) {
+    deps += [ "//ui/aura" ]
+  }
+
   # //content/common needs to include public headers.
   allow_circular_includes_from = [
     "//content/common",
-    "//content/common:mojo_bindings_cpp_sources",
+    "//content/common:mojo_bindings",
   ]
 
   if (!enable_plugins) {

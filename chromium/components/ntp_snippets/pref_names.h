@@ -16,18 +16,26 @@ extern const char kEnableSnippets[];
 // and title) are stored.
 extern const char kRemoteSuggestionCategories[];
 
+// The pref name for the last time when a background fetch was attempted.
+extern const char kSnippetLastFetchAttempt[];
+// The pref name for the currently applied minimal interval between two
+// successive soft background fetches that react to user activity (such as
+// opening an NTP).
+extern const char kSnippetSoftFetchingIntervalOnUsageEvent[];
+
 // The pref name for the currently-scheduled background fetching interval when
 // there is WiFi connectivity.
-extern const char kSnippetBackgroundFetchingIntervalWifi[];
+extern const char kSnippetPersistentFetchingIntervalWifi[];
 // The pref name for the currently-scheduled background fetching interval when
 // there is no WiFi connectivity.
-extern const char kSnippetBackgroundFetchingIntervalFallback[];
+extern const char kSnippetPersistentFetchingIntervalFallback[];
 
-// The pref name for today's count of NTPSnippetsFetcher requests, so far.
+// The pref name for today's count of RemoteSuggestionsFetcher requests, so far.
 extern const char kSnippetFetcherRequestCount[];
-// The pref name for today's count of NTPSnippetsFetcher interactive requests.
+// The pref name for today's count of RemoteSuggestionsFetcher interactive
+// requests.
 extern const char kSnippetFetcherInteractiveRequestCount[];
-// The pref name for the current day for the counter of NTPSnippetsFetcher
+// The pref name for the current day for the counter of RemoteSuggestionsFetcher
 // requests.
 extern const char kSnippetFetcherRequestsDay[];
 
@@ -40,14 +48,16 @@ extern const char kSnippetThumbnailsInteractiveRequestCount[];
 // thumbnails.
 extern const char kSnippetThumbnailsRequestsDay[];
 
-extern const char kDismissedAssetDownloadSuggestions[];
-extern const char kDismissedRecentOfflineTabSuggestions[];
-extern const char kDismissedOfflinePageDownloadSuggestions[];
-extern const char kDismissedForeignSessionsSuggestions[];
-extern const char kDismissedCategories[];
+// The pref name for the time of the last successful background fetch.
+extern const char kLastSuccessfulBackgroundFetchTime[];
 
-// The pref name for the time when M54 was first started on the device.
-extern const char kBookmarksFirstM54Start[];
+extern const char kDismissedAssetDownloadSuggestions[];
+extern const char kDismissedForeignSessionsSuggestions[];
+extern const char kDismissedOfflinePageDownloadSuggestions[];
+extern const char kDismissedPhysicalWebPageSuggestions[];
+extern const char kDismissedRecentOfflineTabSuggestions[];
+
+extern const char kDismissedCategories[];
 
 // The pref name for the discounted average number of browsing sessions per hour
 // that involve opening a new NTP.
@@ -66,6 +76,11 @@ extern const char kUserClassifierLastTimeToOpenNTP[];
 extern const char kUserClassifierLastTimeToShowSuggestions[];
 // The pref name for the last time content suggestions were used by the user.
 extern const char kUserClassifierLastTimeToUseSuggestions[];
+
+// The pref name for the current order of categories and their clicks.
+extern const char kClickBasedCategoryRankerOrderWithClicks[];
+// The pref name for the time when last click decay has happened.
+extern const char kClickBasedCategoryRankerLastDecayTime[];
 
 }  // namespace prefs
 }  // namespace ntp_snippets

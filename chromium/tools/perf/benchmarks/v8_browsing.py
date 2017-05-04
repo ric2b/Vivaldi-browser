@@ -105,7 +105,6 @@ class _V8MobileBrowsingBenchmark(_V8BrowsingBenchmark):
     return possible_browser.platform.GetDeviceTypeName() == 'Desktop'
 
 
-@benchmark.Disabled('win')  # http://crbug.com/654209
 class V8DesktopBrowsingBenchmark(_V8DesktopBrowsingBenchmark):
   PLATFORM = 'desktop'
   TEST_SUFFIX = ''
@@ -117,7 +116,6 @@ class V8MobileBrowsingBenchmark(_V8MobileBrowsingBenchmark):
   TEST_SUFFIX = ''
 
 
-@benchmark.Disabled('win')  # http://crbug.com/654209
 class V8DesktopIgnitionBrowsingBenchmark(_V8DesktopBrowsingBenchmark):
   PLATFORM = 'desktop'
   TEST_SUFFIX = '_ignition'
@@ -126,6 +124,16 @@ class V8DesktopIgnitionBrowsingBenchmark(_V8DesktopBrowsingBenchmark):
     super(V8DesktopIgnitionBrowsingBenchmark, self).SetExtraBrowserOptions(
         options)
     v8_helper.EnableIgnition(options)
+
+
+class V8DesktopTurboBrowsingBenchmark(_V8DesktopBrowsingBenchmark):
+  PLATFORM = 'desktop'
+  TEST_SUFFIX = '_turbo'
+
+  def SetExtraBrowserOptions(self, options):
+    super(V8DesktopTurboBrowsingBenchmark, self).SetExtraBrowserOptions(
+        options)
+    v8_helper.EnableTurbo(options)
 
 
 @benchmark.Disabled('reference')  # http://crbug.com/628631
@@ -137,3 +145,14 @@ class V8MobileIgnitionBrowsingBenchmark(_V8MobileBrowsingBenchmark):
     super(V8MobileIgnitionBrowsingBenchmark, self).SetExtraBrowserOptions(
         options)
     v8_helper.EnableIgnition(options)
+
+
+@benchmark.Disabled('reference')  # http://crbug.com/628631
+class V8MobileTurboBrowsingBenchmark(_V8MobileBrowsingBenchmark):
+  PLATFORM = 'mobile'
+  TEST_SUFFIX = '_turbo'
+
+  def SetExtraBrowserOptions(self, options):
+    super(V8MobileTurboBrowsingBenchmark, self).SetExtraBrowserOptions(
+        options)
+    v8_helper.EnableTurbo(options)

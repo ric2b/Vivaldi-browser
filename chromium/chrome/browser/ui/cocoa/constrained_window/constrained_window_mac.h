@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROME_BROWSER_UI_COCOA_CONSTRAINED_WINDOW_CONSTRAINED_WINDOW_MAC_
-#define CHROME_BROWSER_UI_COCOA_CONSTRAINED_WINDOW_CONSTRAINED_WINDOW_MAC_
+#ifndef CHROME_BROWSER_UI_COCOA_CONSTRAINED_WINDOW_CONSTRAINED_WINDOW_MAC_H_
+#define CHROME_BROWSER_UI_COCOA_CONSTRAINED_WINDOW_CONSTRAINED_WINDOW_MAC_H_
 
 #import <Cocoa/Cocoa.h>
 
@@ -65,10 +65,10 @@ class ConstrainedWindowMac {
   // is hidden until its WebContents initially loads.
   bool DialogWasShown();
 
+ private:
   // Gets the dialog manager for |web_contents_|.
   web_modal::WebContentsModalDialogManager* GetDialogManager();
 
- private:
   ConstrainedWindowMacDelegate* delegate_;  // weak, owns us.
   SingleWebContentsDialogManagerCocoa* manager_;  // weak, owned by WCMDM.
   content::WebContents* web_contents_;  // weak, owned by dialog initiator.
@@ -76,4 +76,4 @@ class ConstrainedWindowMac {
   std::unique_ptr<SingleWebContentsDialogManagerCocoa> native_manager_;
 };
 
-#endif  // CHROME_BROWSER_UI_COCOA_CONSTRAINED_WINDOW_CONSTRAINED_WINDOW_MAC_
+#endif  // CHROME_BROWSER_UI_COCOA_CONSTRAINED_WINDOW_CONSTRAINED_WINDOW_MAC_H_

@@ -19,21 +19,12 @@
 #include <map>
 #endif
 
-class GURL;
-class PluginFinder;
-class PluginMetadata;
-
 #if BUILDFLAG(ENABLE_PLUGIN_INSTALLATION)
-class PluginInstaller;
 class PluginPlaceholderHost;
 #endif
 
 namespace content {
 class WebContents;
-}
-
-namespace infobars {
-class InfoBarDelegate;
 }
 
 class PluginObserver : public content::WebContentsObserver,
@@ -65,7 +56,6 @@ class PluginObserver : public content::WebContentsObserver,
   void OnRemovePluginPlaceholderHost(int placeholder_id);
 #endif
   void RemoveComponentObserver(int placeholder_id);
-  void OnOpenAboutPlugins();
   void OnShowFlashPermissionBubble();
   void OnCouldNotLoadPlugin(const base::FilePath& plugin_path);
 

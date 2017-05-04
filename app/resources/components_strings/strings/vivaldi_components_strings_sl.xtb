@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="sl">
+<translation id="1152921474424827756">Odprite <ph name="BEGIN_LINK" />predpomnjeno kopijo<ph name="END_LINK" /> strani na naslovu <ph name="URL" /></translation>
+<translation id="1158211211994409885">Spletno mesto <ph name="HOST_NAME" /> je nepričakovano prekinilo povezavo.</translation>
+<translation id="1375198122581997741">O različici</translation>
+<translation id="139305205187523129">Spletno mesto <ph name="HOST_NAME" /> ni poslalo nobenih podatkov.</translation>
+<translation id="1506687042165942984">Prikaži shranjeno (zastarelo) kopijo te strani.</translation>
+<translation id="1559528461873125649">Taka datoteka ali imenik ne obstaja</translation>
+<translation id="1710259589646384581">Operacijski sistem</translation>
+<translation id="1838667051080421715">Ogledujete si vir spletne strani.</translation>
+<translation id="194030505837763158">Pojdite na <ph name="LINK" /></translation>
+<translation id="2030481566774242610">Ali ste mislili <ph name="LINK" />?</translation>
+<translation id="2089090684895656482">Manj</translation>
+<translation id="2166378884831602661">To spletno mesto ne more zagotoviti varne povezave</translation>
+<translation id="2292556288342944218">Internetni dostop je blokiran</translation>
+<translation id="255002559098805027">Spletno mesto <ph name="HOST_NAME" /> je poslalo neveljaven odgovor.</translation>
+<translation id="2609632851001447353">Različice</translation>
+<translation id="2650446666397867134">Dostop do datoteke je bil zavrnjen</translation>
+<translation id="2705137772291741111">Shranjena (predpomnjena) kopija tega spletnega mesta je bila neberljiva.</translation>
+<translation id="2784949926578158345">Povezava je bila obnovljena.</translation>
+<translation id="284702764277384724">Videti je, da je potrdilo strežnika na <ph name="HOST_NAME" /> ponarejeno.</translation>
+<translation id="2909946352844186028">Zaznana je bila sprememba omrežja.</translation>
+<translation id="3005723025932146533">Pokaži shranjeno kopijo</translation>
+<translation id="3109728660330352905">Nimate dovoljenja za ogled te strani.</translation>
+<translation id="3176929007561373547">Preverite nastavitve strežnika proxy ali se obrnite na skrbnika omrežja in
+      poskrbite za delovanje strežnika proxy. Če menite, da vam strežnika proxy
+      ni treba uporabljati:
+      <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3422472998109090673">Spletno mesto <ph name="HOST_NAME" /> trenutno ni dosegljivo.</translation>
+<translation id="3447661539832366887">Lastnik te naprave je izklopil igro z dinozavri</translation>
+<translation id="3586931643579894722">Skrij podrobnosti</translation>
+<translation id="3630155396527302611">Če je že na seznamu programov, ki jim je dovoljen dostop do omrežja, ga poskusite
+    odstraniti s seznama in znova dodati.</translation>
+<translation id="3658742229777143148">Različica</translation>
+<translation id="382518646247711829">Če uporabite namestniški strežnik ...</translation>
+<translation id="3973234410852337861">Spletno mesto <ph name="HOST_NAME" /> je blokirano</translation>
+<translation id="4021036232240155012">DNS je omrežna storitev, ki ime spletnega mesta prevede v njegov internetni naslov.</translation>
+<translation id="4432688616882109544">Spletno mesto <ph name="HOST_NAME" /> ni sprejelo potrdila za prijavo ali pa to ni bilo posredovano.</translation>
+<translation id="4522570452068850558">Podrobnosti</translation>
+<translation id="4670097147947922288">Ogledujete si stran z razširitvami.</translation>
+<translation id="4708268264240856090">Povezava je bila prekinjena</translation>
+<translation id="4744603770635761495">Pot do izvedljive datoteke</translation>
+<translation id="4764776831041365478">Spletna stran na naslovu <ph name="URL" /> morda začasno ne deluje ali pa je trajno premaknjena na novi spletni naslov.</translation>
+<translation id="5023310440958281426">Preverite skrbnikove pravilnike</translation>
+<translation id="5115563688576182185">(64-bitno)</translation>
+<translation id="5431657950005405462">Datoteke ni bilo mogoče najti</translation>
+<translation id="5452270690849572955">Te strani spletnega mesta <ph name="HOST_NAME" /> ni mogoče najti</translation>
+<translation id="5492298309214877701">To spletno mesto v intranetu podjetja, organizacije ali šole ima enak URL kot zunanje spletno mesto.
+    <ph name="LINE_BREAK" />
+    Poskusite se obrniti na skrbnika sistema.</translation>
+<translation id="5510766032865166053">Morda je premaknjena ali izbrisana.</translation>
+<translation id="5556459405103347317">Ponovno naloži</translation>
+<translation id="5617949217645503996">Spletno mesto <ph name="HOST_NAME" /> vas je prevečkrat preusmerilo.</translation>
+<translation id="5675650730144413517">Ta stran ne deluje</translation>
+<translation id="5869405914158311789">Tega spletnega mesta ni mogoče doseči</translation>
+<translation id="5990559369517809815">Zahteve za strežnik je blokirala razširitev.</translation>
+<translation id="6042308850641462728">Več</translation>
+<translation id="6146055958333702838">Preverite kable in znova zaženite usmerjevalnike, modeme ali druge omrežne 
+    naprave, ki jih uporabljate.</translation>
+<translation id="6165508094623778733">Več o tem</translation>
+<translation id="6203231073485539293">Preverite internetno povezavo</translation>
+<translation id="6305205051461490394">Naslov <ph name="URL" /> je nedosegljiv.</translation>
+<translation id="6321917430147971392">Preverite nastavitve za DNS</translation>
+<translation id="6328639280570009161">Poskusite onemogočiti omrežno predvidevanje</translation>
+<translation id="6433595998831338502">Spletno mesto <ph name="HOST_NAME" /> ni dovolilo povezave.</translation>
+<translation id="6711464428925977395">Nekaj je narobe s strežnikom proxy ali pa naslov ni pravilen.</translation>
+<translation id="6830600606572693159">Spletna stran na naslovu <ph name="URL" /> trenutno ni na voljo. Morda je preobremenjena ali nedosegljiva zaradi vzdrževanja.</translation>
+<translation id="6897140037006041989">Uporabnikov posrednik</translation>
+<translation id="7210863904660874423">Spletno mesto <ph name="HOST_NAME" /> ne upošteva varnostnih standardov.</translation>
+<translation id="7269802741830436641">Ta spletna stran ima preusmeritveno zanko</translation>
+<translation id="7353601530677266744">Ukazna vrstica</translation>
+<translation id="7419106976560586862">Pot profila</translation>
+<translation id="7518003948725431193">Za ta spletni naslov in bilo mogoče najti nobene spletne strani:<ph name="URL" /></translation>
+<translation id="7549584377607005141">Za pravilen prikaz te strani so potrebni podatki, ki ste jih vnesli prej. Podatke lahko pošljete še enkrat, vendar se bodo s tem ponovila vsa prejšnja dejanja strani.</translation>
+<translation id="759889825892636187">Spletno mesto <ph name="HOST_NAME" /> trenutno ne more obdelati te zahteve.</translation>
+<translation id="7716424297397655342">Tega spletnega mesta ni mogoče naložiti iz predpomnilnika</translation>
+<translation id="7758069387465995638">Povezavo je morda blokiral požarni zid ali protivirusni program.</translation>
+<translation id="778579833039460630">Prejeti niso bili nobeni podatki</translation>
+<translation id="7951415247503192394">(32-bitno)</translation>
+<translation id="8134994873729925007"><ph name="BEGIN_ABBR" />Naslova DNS<ph name="END_ABBR" /> strežnika spletnega mesta <ph name="HOST_NAME" /> ni bilo mogoče najti.</translation>
+<translation id="8142868475871995937">Na &lt;strong&gt;vivaldi://policy&lt;/strong&gt; si lahko ogledate seznam blokiranih URL-jev in drugih pravilnikov, ki jih uveljavlja skrbnik sistema.</translation>
+<translation id="8149426793427495338">Računalnik je preklopil v stanje pripravljenosti.</translation>
+<translation id="8150722005171944719">Datoteke na <ph name="URL" /> ni mogoče prebrati. Morda je odstranjena, premaknjena ali pa dostop preprečujejo dovoljenja za datoteke.</translation>
+<translation id="8225771182978767009">Oseba, ki je nastavila ta računalnik, je blokirala to spletno mesto.</translation>
+<translation id="8289355894181816810">Če niste prepričani, kaj to pomeni, se obrnite na skrbnika omrežja.</translation>
+<translation id="8332188693563227489">Dostop do spletnega mesta <ph name="HOST_NAME" /> je bil zavrnjen</translation>
+<translation id="8498891568109133222">Spletno mesto <ph name="HOST_NAME" /> se ni odzvalo v ustreznem času.</translation>
+<translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt;Naslova DNS&lt;/abbr&gt; spletnega mesta <ph name="HOST_NAME" /> ni bilo mogoče najti. Poteka diagnosticiranje težave.</translation>
+<translation id="9183425211371246419">Spletno mesto <ph name="HOST_NAME" /> uporablja nepodprt protokol.</translation>
+<translation id="933612690413056017">Ni internetne povezave</translation>
+<translation id="969892804517981540">Uradna različica</translation>
+<translation id="988159990683914416">Različica za razvijalce</translation>
+</translationbundle>

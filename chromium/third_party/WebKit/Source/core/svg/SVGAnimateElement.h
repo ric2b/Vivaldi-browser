@@ -23,9 +23,9 @@
 #ifndef SVGAnimateElement_h
 #define SVGAnimateElement_h
 
+#include "core/CSSPropertyNames.h"
 #include "core/CoreExport.h"
 #include "core/SVGNames.h"
-#include "core/svg/SVGAnimatedTypeAnimator.h"
 #include "core/svg/SVGAnimationElement.h"
 #include "platform/heap/Handle.h"
 #include <base/gtest_prod_util.h>
@@ -54,6 +54,8 @@ class CORE_EXPORT SVGAnimateElement : public SVGAnimationElement {
  protected:
   SVGAnimateElement(const QualifiedName&, Document&);
 
+  bool hasValidTarget() override;
+
   void resetAnimatedType() final;
   void clearAnimatedType() final;
 
@@ -71,13 +73,11 @@ class CORE_EXPORT SVGAnimateElement : public SVGAnimationElement {
                           const String& toString) final;
   bool isAdditive() final;
 
-  void parseAttribute(const QualifiedName&,
-                      const AtomicString&,
-                      const AtomicString&) override;
+  void parseAttribute(const AttributeModificationParams&) override;
   void svgAttributeChanged(const QualifiedName&) override;
 
   void setTargetElement(SVGElement*) final;
-  void setAttributeName(const QualifiedName&) final;
+  void setAttributeName(const QualifiedName&);
 
   enum AttributeType { AttributeTypeCSS, AttributeTypeXML, AttributeTypeAuto };
   AttributeType getAttributeType() const { return m_attributeType; }
@@ -93,13 +93,18 @@ class CORE_EXPORT SVGAnimateElement : public SVGAnimationElement {
 
   void setAttributeType(const AtomicString&);
 
+  InsertionNotificationRequest insertedInto(ContainerNode*) final;
+  void removedFrom(ContainerNode*) final;
+
   void checkInvalidCSSAttributeType();
-  bool hasInvalidCSSAttributeType() const {
-    return m_hasInvalidCSSAttributeType;
-  }
-  bool hasValidTarget() final;
   bool hasValidAttributeName() const;
-  virtual bool hasValidAttributeType();
+
+  virtual void resolveTargetProperty();
+  void clearTargetProperty();
+
+  virtual SVGPropertyBase* createPropertyForAnimation(const String&) const;
+  SVGPropertyBase* createPropertyForAttributeAnimation(const String&) const;
+  SVGPropertyBase* createPropertyForCSSAnimation(const String&) const;
 
   SVGPropertyBase* adjustForInheritance(SVGPropertyBase*,
                                         AnimatedPropertyValueType) const;
@@ -107,10 +112,19 @@ class CORE_EXPORT SVGAnimateElement : public SVGAnimationElement {
   Member<SVGPropertyBase> m_fromProperty;
   Member<SVGPropertyBase> m_toProperty;
   Member<SVGPropertyBase> m_toAtEndOfDurationProperty;
-  Member<SVGPropertyBase> m_animatedProperty;
+  Member<SVGPropertyBase> m_animatedValue;
 
-  SVGAnimatedTypeAnimator m_animator;
+ protected:
+  Member<SVGAnimatedPropertyBase> m_targetProperty;
+  AnimatedPropertyType m_type;
+  CSSPropertyID m_cssPropertyId;
 
+  bool isAnimatingSVGDom() const { return m_targetProperty; }
+  bool isAnimatingCSSProperty() const {
+    return m_cssPropertyId != CSSPropertyInvalid;
+  }
+
+ private:
   AnimatedPropertyValueType m_fromPropertyValueType;
   AnimatedPropertyValueType m_toPropertyValueType;
   AttributeType m_attributeType;

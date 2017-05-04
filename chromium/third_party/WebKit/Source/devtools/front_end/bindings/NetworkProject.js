@@ -173,7 +173,8 @@ Bindings.NetworkProject = class extends SDK.SDKObject {
     if (project)
       return project;
 
-    project = new Bindings.ContentProviderBasedProject(this._workspace, projectId, projectType, '');
+    project = new Bindings.ContentProviderBasedProject(
+        this._workspace, projectId, projectType, '', false /* isServiceProject */);
     project[Bindings.NetworkProject._targetSymbol] = this.target();
     project[Bindings.NetworkProject._frameSymbol] = frame;
     this._workspaceProjects.set(projectId, project);
@@ -260,6 +261,8 @@ Bindings.NetworkProject = class extends SDK.SDKObject {
   _styleSheetAdded(event) {
     var header = /** @type {!SDK.CSSStyleSheetHeader} */ (event.data);
     if (header.isInline && !header.hasSourceURL && header.origin !== 'inspector')
+      return;
+    if (!header.resourceURL())
       return;
 
     var originalContentProvider = header.originalContentProvider();

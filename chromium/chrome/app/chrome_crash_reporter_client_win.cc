@@ -19,6 +19,7 @@
 #include "chrome/common/chrome_result_codes.h"
 #include "chrome/install_static/install_details.h"
 #include "chrome/install_static/install_util.h"
+#include "chrome/install_static/user_data_dir.h"
 #include "components/crash/content/app/crashpad.h"
 #include "components/crash/core/common/crash_keys.h"
 
@@ -39,6 +40,7 @@ constexpr size_t kExtensionIDMaxCount = 10;
 constexpr char kExtensionID[] = "extension-%" PRIuS;
 
 constexpr char kShutdownType[] = "shutdown-type";
+constexpr char kBrowserUnpinTrace[] = "browser-unpin-trace";
 
 constexpr char kGPUVendorID[] = "gpu-venid";
 constexpr char kGPUDeviceID[] = "gpu-devid";
@@ -57,6 +59,8 @@ constexpr char kInputEventFilterSendFailure[] =
 
 constexpr char kThirdPartyModulesLoaded[] = "third-party-modules-loaded";
 constexpr char kThirdPartyModulesNotLoaded[] = "third-party-modules-not-loaded";
+
+constexpr char kEnrolledToDomain[] = "enrolled-to-domain";
 
 constexpr char kViewCount[] = "view-count";
 constexpr char kZeroEncodeDetails[] = "zero-encode-details";
@@ -84,8 +88,7 @@ size_t RegisterCrashKeysHelper() {
   // but ultimately constitute a single key-value pair.
   //
   // For now these need to be kept relatively up to date with those in
-  // //chrome/common/crash_keys.cc::RegisterChromeCrashKeys() and
-  // //blimp/engine/app/blimp_engine_crash_keys.cc
+  // chrome/common/crash_keys.cc::RegisterChromeCrashKeys().
   constexpr base::debug::CrashKey fixed_keys[] = {
       {kMetricsClientId, kSmallSize},
       {kChannel, kSmallSize},
@@ -94,6 +97,7 @@ size_t RegisterCrashKeysHelper() {
       {kVariations, kLargeSize},
       {kNumExtensionsCount, kSmallSize},
       {kShutdownType, kSmallSize},
+      {kBrowserUnpinTrace, kMediumSize},
       {kGPUVendorID, kSmallSize},
       {kGPUDeviceID, kSmallSize},
       {kGPUDriverVersion, kSmallSize},
@@ -103,12 +107,14 @@ size_t RegisterCrashKeysHelper() {
       // browser/:
       {kThirdPartyModulesLoaded, kSmallSize},
       {kThirdPartyModulesNotLoaded, kSmallSize},
+      {kEnrolledToDomain, kSmallSize},
 
       // content/:
       {"bad_message_reason", kSmallSize},
       {"discardable-memory-allocated", kSmallSize},
       {"discardable-memory-free", kSmallSize},
       {kFontKeyName, kSmallSize},
+      { "mojo-message-error", kMediumSize },
       {"ppapi_path", kMediumSize},
       {"subresource_url", kLargeSize},
       {"total-discardable-memory-allocated", kSmallSize},
@@ -187,18 +193,11 @@ size_t RegisterCrashKeysHelper() {
       // Temporary for https://crbug.com/616149.
       {"existing_extension_pref_value_type", crash_keys::kSmallSize},
 
-      // Temporary for https://crbug.com/630495.
-      {"swdh_register_cannot_host_url", crash_keys::kLargeSize},
-      {"swdh_register_cannot_scope_url", crash_keys::kLargeSize},
-      {"swdh_register_cannot_script_url", crash_keys::kLargeSize},
-
-      // Temporary for https://crbug.com/619294.
-      {"swdh_unregister_cannot_host_url", crash_keys::kLargeSize},
-      {"swdh_unregister_cannot_scope_url", crash_keys::kLargeSize},
-
-      // Temporary for https://crbug.com/630496.
-      {"swdh_get_registration_cannot_host_url", crash_keys::kLargeSize},
-      {"swdh_get_registration_cannot_document_url", crash_keys::kLargeSize},
+      // Temporary for https://crbug.com/668633.
+      {"swdh_set_hosted_version_worker_pid", crash_keys::kSmallSize},
+      {"swdh_set_hosted_version_host_pid", crash_keys::kSmallSize},
+      {"swdh_set_hosted_version_is_new_process", crash_keys::kSmallSize},
+      {"swdh_set_hosted_version_restart_count", crash_keys::kSmallSize},
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering
@@ -252,12 +251,15 @@ void ChromeCrashReporterClient::InitializeCrashReportingForProcess() {
   instance = new ChromeCrashReporterClient();
   ANNOTATE_LEAKING_OBJECT_PTR(instance);
 
-  std::string process_type = install_static::GetSwitchValueFromCommandLine(
-      ::GetCommandLineA(), install_static::kProcessType);
-  if (process_type != install_static::kCrashpadHandler) {
+  std::wstring process_type = install_static::GetSwitchValueFromCommandLine(
+      ::GetCommandLine(), install_static::kProcessType);
+  // Don't set up Crashpad crash reporting in the Crashpad handler itself, nor
+  // in the fallback crash handler for the Crashpad handler process.
+  if (process_type != install_static::kCrashpadHandler &&
+      process_type != install_static::kFallbackHandler) {
     crash_reporter::SetCrashReporterClient(instance);
-    crash_reporter::InitializeCrashpadWithEmbeddedHandler(process_type.empty(),
-                                                          process_type);
+    crash_reporter::InitializeCrashpadWithEmbeddedHandler(
+        process_type.empty(), install_static::UTF16ToUTF8(process_type));
   }
 }
 #endif  // NACL_WIN64
@@ -370,14 +372,13 @@ bool ChromeCrashReporterClient::GetCrashDumpLocation(
   if (GetAlternativeCrashDumpLocation(crash_dir))
     return true;
 
-  // TODO(scottmg): Consider supporting --user-data-dir. See
-  // https://crbug.com/565446.
-  return install_static::GetDefaultCrashDumpLocation(crash_dir);
+  *crash_dir = install_static::GetCrashDumpLocation();
+  return true;
 }
 
 bool ChromeCrashReporterClient::GetCrashMetricsLocation(
     base::string16* metrics_dir) {
-  return install_static::GetDefaultUserDataDirectory(metrics_dir);
+  return install_static::GetUserDataDirectory(metrics_dir, nullptr);
 }
 
 // TODO(ananta)
@@ -401,7 +402,7 @@ bool ChromeCrashReporterClient::GetCollectStatsInSample() {
 
 bool ChromeCrashReporterClient::EnableBreakpadForProcess(
     const std::string& process_type) {
-  return process_type == install_static::kRendererProcess ||
-         process_type == install_static::kPpapiPluginProcess ||
-         process_type == install_static::kGpuProcess;
+  // This is not used by Crashpad (at least on Windows).
+  NOTREACHED();
+  return true;
 }

@@ -27,10 +27,6 @@
 
 namespace blink {
 
-bool SVGImageForContainer::isTextureBacked() {
-  return m_image->isTextureBacked();
-}
-
 IntSize SVGImageForContainer::size() const {
   FloatSize scaledContainerSize(m_containerSize);
   scaledContainerSize.scale(m_zoom);
@@ -42,7 +38,10 @@ void SVGImageForContainer::draw(SkCanvas* canvas,
                                 const FloatRect& dstRect,
                                 const FloatRect& srcRect,
                                 RespectImageOrientationEnum,
-                                ImageClampingMode) {
+                                ImageClampingMode,
+                                const ColorBehavior& colorBehavior) {
+  // TODO(ccameron): This function should not ignore |colorBehavior|.
+  // https://crbug.com/667431
   m_image->drawForContainer(canvas, paint, m_containerSize, m_zoom, dstRect,
                             srcRect, m_url);
 }
@@ -54,12 +53,17 @@ void SVGImageForContainer::drawPattern(GraphicsContext& context,
                                        SkBlendMode op,
                                        const FloatRect& dstRect,
                                        const FloatSize& repeatSpacing) {
+  // TODO(ccameron): This function should not ignore |context|'s color behavior.
+  // https://crbug.com/667431
   m_image->drawPatternForContainer(context, m_containerSize, m_zoom, srcRect,
                                    scale, phase, op, dstRect, repeatSpacing,
                                    m_url);
 }
 
-sk_sp<SkImage> SVGImageForContainer::imageForCurrentFrame() {
+sk_sp<SkImage> SVGImageForContainer::imageForCurrentFrame(
+    const ColorBehavior& colorBehavior) {
+  // TODO(ccameron): This function should not ignore |colorBehavior|.
+  // https://crbug.com/667431
   return m_image->imageForCurrentFrameForContainer(m_url, size());
 }
 

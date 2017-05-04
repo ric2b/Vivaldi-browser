@@ -17,10 +17,6 @@ namespace content {
 class RenderFrameHost;
 }
 
-namespace device {
-class UsbDevice;
-}
-
 // Implementation of the public device::usb::ChooserService interface.
 // This interface can be used by a webpage to request permission from user
 // to access a certain device.
@@ -31,7 +27,7 @@ class WebUsbChooserService : public device::usb::ChooserService {
   ~WebUsbChooserService() override;
 
   // device::usb::ChooserService:
-  void GetPermission(std::vector<device::usb::DeviceFilterPtr> device_filters,
+  void GetPermission(const std::vector<device::UsbDeviceFilter>& device_filters,
                      const GetPermissionCallback& callback) override;
 
   void Bind(mojo::InterfaceRequest<device::usb::ChooserService> request);

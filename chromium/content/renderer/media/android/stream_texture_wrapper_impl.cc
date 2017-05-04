@@ -67,7 +67,7 @@ scoped_refptr<media::VideoFrame> StreamTextureWrapperImpl::GetCurrentFrame() {
 
 void StreamTextureWrapperImpl::ReallocateVideoFrame(
     const gfx::Size& natural_size) {
-  DVLOG(2) << __FUNCTION__;
+  DVLOG(2) << __func__;
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
   GLES2Interface* gl = factory_->ContextGL();
@@ -120,7 +120,7 @@ void StreamTextureWrapperImpl::SetCurrentFrameInternal(
 }
 
 void StreamTextureWrapperImpl::UpdateTextureSize(const gfx::Size& new_size) {
-  DVLOG(2) << __FUNCTION__;
+  DVLOG(2) << __func__;
 
   if (!main_task_runner_->BelongsToCurrentThread()) {
     main_task_runner_->PostTask(
@@ -128,6 +128,10 @@ void StreamTextureWrapperImpl::UpdateTextureSize(const gfx::Size& new_size) {
                               weak_factory_.GetWeakPtr(), new_size));
     return;
   }
+
+  // InitializeOnMainThread() hasn't run, or failed.
+  if (!stream_texture_proxy_)
+    return;
 
   if (natural_size_ == new_size)
     return;
@@ -142,8 +146,8 @@ void StreamTextureWrapperImpl::Initialize(
     const base::Closure& received_frame_cb,
     const gfx::Size& natural_size,
     scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
-    const base::Closure& init_cb) {
-  DVLOG(2) << __FUNCTION__;
+    const StreamTextureWrapperInitCB& init_cb) {
+  DVLOG(2) << __func__;
 
   compositor_task_runner_ = compositor_task_runner;
   natural_size_ = natural_size;
@@ -156,24 +160,23 @@ void StreamTextureWrapperImpl::Initialize(
 
 void StreamTextureWrapperImpl::InitializeOnMainThread(
     const base::Closure& received_frame_cb,
-    const base::Closure& init_cb) {
+    const StreamTextureWrapperInitCB& init_cb) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
-  DVLOG(2) << __FUNCTION__;
+  DVLOG(2) << __func__;
 
   stream_texture_proxy_ = factory_->CreateProxy(
       kGLTextureExternalOES, &texture_id_, &texture_mailbox_);
-  if (!stream_texture_proxy_)
+  if (!stream_texture_proxy_) {
+    init_cb.Run(false);
     return;
+  }
 
   ReallocateVideoFrame(natural_size_);
 
   stream_texture_proxy_->BindToTaskRunner(received_frame_cb,
                                           compositor_task_runner_);
 
-  // TODO(tguilbert): Register the surface properly. See crbug.com/627658.
-
-  // |init_cb| is bound to the thread that originally called Initialize().
-  init_cb.Run();
+  init_cb.Run(true);
 }
 
 void StreamTextureWrapperImpl::Destroy() {

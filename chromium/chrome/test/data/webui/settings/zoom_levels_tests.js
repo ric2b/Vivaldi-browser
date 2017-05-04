@@ -25,12 +25,16 @@ cr.define('zoom_levels', function() {
       var zoomList = [
           {
             origin: 'http://www.google.com',
+            displayName: 'http://www.google.com',
+            originForFavicon: 'http://www.google.com',
             setting: '',
             source: '',
             zoom: '125%',
           },
           {
             origin: 'http://www.chromium.org',
+            displayName: 'http://www.chromium.org',
+            originForFavicon: 'http://www.chromium.org',
             setting: '',
             source: '',
             zoom: '125%',
@@ -92,8 +96,8 @@ cr.define('zoom_levels', function() {
           assert(!!removeButton);
           MockInteractions.tap(removeButton);
           return browserProxy.whenCalled('removeZoomLevel');
-        }).then(function(arguments) {
-          assertEquals("http://www.google.com", arguments[0]);
+        }).then(function(args) {
+          assertEquals("http://www.google.com", args[0]);
         });
       });
     });

@@ -9,9 +9,11 @@
 
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "content/browser/service_worker/service_worker_context_request_handler.h"
 #include "content/browser/service_worker/service_worker_database.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseError.h"
+#include "ui/base/page_transition_types.h"
 
 class GURL;
 
@@ -113,6 +115,7 @@ class ServiceWorkerMetrics {
     // Used when external consumers want to add a request to
     // ServiceWorkerVersion to keep it alive.
     EXTERNAL_REQUEST = 21,
+    PAYMENT_REQUEST = 22,
     // Add new events to record here.
     NUM_TYPES
   };
@@ -136,6 +139,31 @@ class ServiceWorkerMetrics {
     DURING_STARTUP,
     EXISTING_PROCESS,
     NEW_PROCESS
+  };
+
+  // Used for UMA. Append only.
+  // This enum describes how an activated worker was found and prepared (i.e.,
+  // reached the RUNNING status) in order to dispatch a fetch event to.
+  enum class WorkerPreparationType {
+    UNKNOWN,
+    // The worker was already starting up. We waited for it to finish.
+    STARTING,
+    // The worker was already running.
+    RUNNING,
+    // The worker was stopping. We waited for it to stop, and then started it
+    // up.
+    STOPPING,
+    // The worker was in the stopped state. We started it up, and startup
+    // required a new process to be created.
+    START_IN_NEW_PROCESS,
+    // The worker was in the stopped state. We started it up, and it used an
+    // existing process.
+    START_IN_EXISTING_PROCESS,
+    // The worker was in the stopped state. We started it up, and this occurred
+    // during browser startup.
+    START_DURING_STARTUP,
+    // Add new types here.
+    NUM_TYPES
   };
 
   // Not used for UMA.
@@ -173,7 +201,9 @@ class ServiceWorkerMetrics {
   // Counts the number of page loads controlled by a Service Worker.
   static void CountControlledPageLoad(Site site,
                                       const GURL& url,
-                                      bool is_main_frame_load);
+                                      bool is_main_frame_load,
+                                      ui::PageTransition page_transition,
+                                      size_t redirect_chain_length);
 
   // Records the result of trying to start a worker. |is_installed| indicates
   // whether the version has been installed.
@@ -188,12 +218,13 @@ class ServiceWorkerMetrics {
                                     StartSituation start_situation,
                                     EventType purpose);
 
-  // Records the time taken to prepare an activated Service Worker for a main
-  // frame fetch.
-  static void RecordActivatedWorkerPreparationTimeForMainFrame(
+  // Records metrics for the preparation of an activated Service Worker for a
+  // main frame navigation.
+  CONTENT_EXPORT static void RecordActivatedWorkerPreparationForMainFrame(
       base::TimeDelta time,
       EmbeddedWorkerStatus initial_worker_status,
-      StartSituation start_situation);
+      StartSituation start_situation,
+      bool did_navigation_preload);
 
   // Records the result of trying to stop a worker.
   static void RecordWorkerStopped(StopStatus status);
@@ -281,6 +312,30 @@ class ServiceWorkerMetrics {
   // failed |failure_count| consecutive times.
   static void RecordStartStatusAfterFailure(int failure_count,
                                             ServiceWorkerStatusCode status);
+
+  // Records the size of Service-Worker-Navigation-Preload header when the
+  // navigation preload request is to be sent.
+  static void RecordNavigationPreloadRequestHeaderSize(size_t size);
+
+  // Records timings for the navigation preload response and how
+  // it compares to starting the worker.
+  // |worker_start| is the time it took to prepare an activated and running
+  // worker to receive the fetch event. |initial_worker_status| and
+  // |start_situation| describe the preparation needed.
+  // |response_start| is the time it took until the navigation preload response
+  // started.
+  CONTENT_EXPORT static void RecordNavigationPreloadResponse(
+      base::TimeDelta worker_start,
+      base::TimeDelta response_start,
+      EmbeddedWorkerStatus initial_worker_status,
+      StartSituation start_situation);
+
+  // Records the result of trying to handle a request for a service worker
+  // script.
+  static void RecordContextRequestHandlerStatus(
+      ServiceWorkerContextRequestHandler::CreateJobStatus status,
+      bool is_installed,
+      bool is_main_script);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(ServiceWorkerMetrics);

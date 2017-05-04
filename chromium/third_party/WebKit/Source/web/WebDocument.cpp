@@ -79,14 +79,9 @@ WebSecurityOrigin WebDocument::getSecurityOrigin() const {
   return WebSecurityOrigin(constUnwrap<Document>()->getSecurityOrigin());
 }
 
-bool WebDocument::isSecureContext(WebString& errorMessage) const {
+bool WebDocument::isSecureContext() const {
   const Document* document = constUnwrap<Document>();
-  if (!document)
-    return false;
-  String message;
-  bool result = document->isSecureContext(message);
-  errorMessage = message;
-  return result;
+  return document && document->isSecureContext();
 }
 
 WebString WebDocument::encoding() const {
@@ -170,7 +165,7 @@ void WebDocument::forms(WebVector<WebFormElement>& results) const {
     Element* element = forms->item(i);
     // Strange but true, sometimes node can be 0.
     if (element && element->isHTMLElement())
-      temp.append(WebFormElement(toHTMLFormElement(element)));
+      temp.push_back(WebFormElement(toHTMLFormElement(element)));
   }
   results.assign(temp);
 }
@@ -191,7 +186,7 @@ void WebDocument::insertStyleSheet(const WebString& sourceCode) {
   Document* document = unwrap<Document>();
   DCHECK(document);
   StyleSheetContents* parsedSheet =
-      StyleSheetContents::create(CSSParserContext(*document, nullptr));
+      StyleSheetContents::create(CSSParserContext::create(*document));
   parsedSheet->parseString(sourceCode);
   document->styleEngine().injectAuthorSheet(parsedSheet);
 }
@@ -206,15 +201,7 @@ void WebDocument::watchCSSSelectors(const WebVector<WebString>& webSelectors) {
   CSSSelectorWatch::from(*document).watchCSSSelectors(selectors);
 }
 
-bool WebDocument::unloadStartedDoNotUse() const {
-  return constUnwrap<Document>()->unloadStarted();
-}
-
-bool WebDocument::processingBeforeUnloadDoNotUse() const {
-  return constUnwrap<Document>()->processingBeforeUnload();
-}
-
-WebReferrerPolicy WebDocument::referrerPolicy() const {
+WebReferrerPolicy WebDocument::getReferrerPolicy() const {
   return static_cast<WebReferrerPolicy>(
       constUnwrap<Document>()->getReferrerPolicy());
 }
@@ -265,7 +252,7 @@ v8::Local<v8::Value> WebDocument::registerEmbedderCustomElement(
     WebExceptionCode& ec) {
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   Document* document = unwrap<Document>();
-  TrackExceptionState exceptionState;
+  DummyExceptionStateForTesting exceptionState;
   ElementRegistrationOptions registrationOptions;
   V8ElementRegistrationOptions::toImpl(isolate, options, registrationOptions,
                                        exceptionState);

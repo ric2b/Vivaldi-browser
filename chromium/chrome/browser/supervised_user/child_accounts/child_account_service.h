@@ -20,10 +20,6 @@
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "net/base/backoff_entry.h"
 
-namespace base {
-class FilePath;
-}
-
 namespace user_prefs {
 class PrefRegistrySyncable;
 }
@@ -69,6 +65,7 @@ class ChildAccountService : public KeyedService,
 
   // AccountTrackerService::Observer implementation.
   void OnAccountUpdated(const AccountInfo& info) override;
+  void OnAccountRemoved(const AccountInfo& info) override;
 
   // FamilyInfoFetcher::Consumer implementation.
   void OnGetFamilyMembersSuccess(

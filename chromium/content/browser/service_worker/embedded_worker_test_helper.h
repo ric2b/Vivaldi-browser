@@ -14,26 +14,22 @@
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "content/common/service_worker/embedded_worker.mojom.h"
-#include "content/common/service_worker/fetch_event_dispatcher.mojom.h"
+#include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_test_sink.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
-#include "services/service_manager/public/cpp/interface_registry.h"
-#include "services/service_manager/public/interfaces/interface_provider.mojom.h"
-#include "testing/gtest/include/gtest/gtest.h"
+#include "net/http/http_response_info.h"
 #include "url/gurl.h"
 
 class GURL;
-struct ServiceWorkerMsg_ExtendableMessageEvent_Params;
 
 namespace service_manager {
-class InterfaceProvider;
 class InterfaceRegistry;
 }
 
@@ -86,10 +82,11 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
     // Implementation of mojo interfaces.
     void StartWorker(
         const EmbeddedWorkerStartParams& params,
-        service_manager::mojom::InterfaceProviderPtr browser_interfaces,
-        service_manager::mojom::InterfaceProviderRequest renderer_request)
-        override;
+        mojom::ServiceWorkerEventDispatcherRequest dispatcher_request) override;
     void StopWorker(const StopWorkerCallback& callback) override;
+    void ResumeAfterDownload() override;
+    void AddMessageToConsole(blink::WebConsoleMessage::Level level,
+                             const std::string& message) override;
 
     base::WeakPtr<EmbeddedWorkerTestHelper> helper_;
     mojo::Binding<mojom::EmbeddedWorkerInstanceClient> binding_;
@@ -157,48 +154,56 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
     return weak_factory_.GetWeakPtr();
   }
 
+  static net::HttpResponseInfo CreateHttpResponseInfo();
+
  protected:
-  // Called when StartWorker, StopWorker and SendMessageToWorker message
-  // is sent to the embedded worker. Override if necessary. By default
-  // they verify given parameters and:
-  // - OnStartWorker calls SimulateWorkerStarted
-  // - OnStopWorker calls SimulateWorkerStoped
-  // - OnSendMessageToWorker calls the message's respective On*Event handler
-  virtual void OnStartWorker(int embedded_worker_id,
-                             int64_t service_worker_version_id,
-                             const GURL& scope,
-                             const GURL& script_url,
-                             bool pause_after_download);
+  // StartWorker IPC handler routed through MockEmbeddedWorkerInstanceClient.
+  // This simulates each legacy IPC sent from the renderer and binds |request|
+  // to MockServiceWorkerEventDispatcher by default.
+  virtual void OnStartWorker(
+      int embedded_worker_id,
+      int64_t service_worker_version_id,
+      const GURL& scope,
+      const GURL& script_url,
+      bool pause_after_download,
+      mojom::ServiceWorkerEventDispatcherRequest request);
   virtual void OnResumeAfterDownload(int embedded_worker_id);
-  virtual void OnStopWorker(int embedded_worker_id);
+  // StopWorker IPC handler routed through MockEmbeddedWorkerInstanceClient.
+  // This calls StopWorkerCallback by default.
+  virtual void OnStopWorker(
+      const mojom::EmbeddedWorkerInstanceClient::StopWorkerCallback& callback);
+  // The legacy IPC message handler. This passes the messages to their
+  // respective On*Event handler by default.
   virtual bool OnMessageToWorker(int thread_id,
                                  int embedded_worker_id,
                                  const IPC::Message& message);
-
-  // Called to setup mojo for a new embedded worker. Override to register
-  // interfaces the worker should expose to the browser.
-  virtual void OnSetupMojo(
-      int thread_id,
-      service_manager::InterfaceRegistry* interface_registry);
 
   // On*Event handlers. Called by the default implementation of
   // OnMessageToWorker when events are sent to the embedded
   // worker. By default they just return success via
   // SimulateSendReplyToBrowser.
   virtual void OnActivateEvent(int embedded_worker_id, int request_id);
-  virtual void OnExtendableMessageEvent(int embedded_worker_id, int request_id);
+  virtual void OnExtendableMessageEvent(
+      mojom::ExtendableMessageEventPtr event,
+      const mojom::ServiceWorkerEventDispatcher::
+          DispatchExtendableMessageEventCallback& callback);
   virtual void OnInstallEvent(int embedded_worker_id, int request_id);
   virtual void OnFetchEvent(int embedded_worker_id,
                             int fetch_event_id,
                             const ServiceWorkerFetchRequest& request,
                             mojom::FetchEventPreloadHandlePtr preload_handle,
                             const FetchCallback& callback);
-  virtual void OnPushEvent(int embedded_worker_id,
-                           int request_id,
-                           const PushEventPayload& payload);
+  virtual void OnPushEvent(
+      const PushEventPayload& payload,
+      const mojom::ServiceWorkerEventDispatcher::DispatchPushEventCallback&
+          callback);
+  virtual void OnPaymentRequestEvent(
+      payments::mojom::PaymentAppRequestDataPtr data,
+      const mojom::ServiceWorkerEventDispatcher::
+          DispatchPaymentRequestEventCallback& callback);
 
-  // These functions simulate sending an EmbeddedHostMsg message to the
-  // browser.
+  // These functions simulate sending an EmbeddedHostMsg message through the
+  // legacy IPC system to the browser.
   void SimulateWorkerReadyForInspection(int embedded_worker_id);
   void SimulateWorkerScriptCached(int embedded_worker_id);
   void SimulateWorkerScriptLoaded(int embedded_worker_id);
@@ -211,34 +216,35 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
   EmbeddedWorkerRegistry* registry();
 
  private:
-  using InterfaceRegistryAndProvider =
-      std::pair<std::unique_ptr<service_manager::InterfaceRegistry>,
-                std::unique_ptr<service_manager::InterfaceProvider>>;
+  class MockServiceWorkerEventDispatcher;
 
-  class MockEmbeddedWorkerSetup;
-  class MockFetchEventDispatcher;
-
-  void OnStartWorkerStub(const EmbeddedWorkerStartParams& params);
+  void OnStartWorkerStub(const EmbeddedWorkerStartParams& params,
+                         mojom::ServiceWorkerEventDispatcherRequest request);
   void OnResumeAfterDownloadStub(int embedded_worker_id);
-  void OnStopWorkerStub(int embedded_worker_id);
+  void OnStopWorkerStub(
+      const mojom::EmbeddedWorkerInstanceClient::StopWorkerCallback& callback);
   void OnMessageToWorkerStub(int thread_id,
                              int embedded_worker_id,
                              const IPC::Message& message);
   void OnActivateEventStub(int request_id);
   void OnExtendableMessageEventStub(
-      int request_id,
-      const ServiceWorkerMsg_ExtendableMessageEvent_Params& params);
+      mojom::ExtendableMessageEventPtr event,
+      const mojom::ServiceWorkerEventDispatcher::
+          DispatchExtendableMessageEventCallback& callback);
   void OnInstallEventStub(int request_id);
   void OnFetchEventStub(int thread_id,
                         int fetch_event_id,
                         const ServiceWorkerFetchRequest& request,
                         mojom::FetchEventPreloadHandlePtr preload_handle,
                         const FetchCallback& callback);
-  void OnPushEventStub(int request_id, const PushEventPayload& payload);
-  void OnSetupMojoStub(
-      int thread_id,
-      service_manager::mojom::InterfaceProviderRequest services,
-      service_manager::mojom::InterfaceProviderPtr exposed_services);
+  void OnPushEventStub(
+      const PushEventPayload& payload,
+      const mojom::ServiceWorkerEventDispatcher::DispatchPushEventCallback&
+          callback);
+  void OnPaymentRequestEventStub(
+      payments::mojom::PaymentAppRequestDataPtr data,
+      const mojom::ServiceWorkerEventDispatcher::
+          DispatchPaymentRequestEventCallback& callback);
 
   MessagePortMessageFilter* NewMessagePortMessageFilter();
 
@@ -270,11 +276,6 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
   std::map<int, int64_t> embedded_worker_id_service_worker_version_id_map_;
   std::map<int /* thread_id */, int /* embedded_worker_id */>
       thread_id_embedded_worker_id_map_;
-
-  // Stores the InterfaceRegistry/InterfaceProviders that are associated with
-  // each individual service worker.
-  base::hash_map<int, InterfaceRegistryAndProvider>
-      thread_id_service_registry_map_;
 
   // Updated each time MessageToWorker message is received.
   int current_embedded_worker_id_;

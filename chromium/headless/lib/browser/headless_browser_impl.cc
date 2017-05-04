@@ -19,9 +19,11 @@
 #include "headless/lib/browser/headless_browser_main_parts.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
 #include "headless/lib/browser/headless_window_parenting_client.h"
+#include "headless/lib/browser/headless_window_tree_host.h"
 #include "headless/lib/headless_content_main_delegate.h"
 #include "ui/aura/env.h"
-#include "ui/aura/window_tree_host.h"
+#include "ui/aura/window.h"
+#include "ui/events/devices/device_data_manager.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace headless {
@@ -52,6 +54,7 @@ HeadlessBrowserImpl::HeadlessBrowserImpl(
     : on_start_callback_(on_start_callback),
       options_(std::move(options)),
       browser_main_parts_(nullptr),
+      default_browser_context_(nullptr),
       weak_ptr_factory_(this) {}
 
 HeadlessBrowserImpl::~HeadlessBrowserImpl() {}
@@ -119,9 +122,12 @@ void HeadlessBrowserImpl::set_browser_main_parts(
 
 void HeadlessBrowserImpl::RunOnStartCallback() {
   DCHECK(aura::Env::GetInstance());
+  ui::DeviceDataManager::CreateInstance();
+
   window_tree_host_.reset(
-      aura::WindowTreeHost::Create(gfx::Rect(options()->window_size)));
+      new HeadlessWindowTreeHost(gfx::Rect(options()->window_size)));
   window_tree_host_->InitHost();
+  window_tree_host_->window()->Show();
 
   window_parenting_client_.reset(
       new HeadlessWindowParentingClient(window_tree_host_->window()));
@@ -153,6 +159,19 @@ void HeadlessBrowserImpl::DestroyBrowserContext(
   auto it = browser_contexts_.find(browser_context->Id());
   DCHECK(it != browser_contexts_.end());
   browser_contexts_.erase(it);
+  if (default_browser_context_ == browser_context)
+    SetDefaultBrowserContext(nullptr);
+}
+
+void HeadlessBrowserImpl::SetDefaultBrowserContext(
+    HeadlessBrowserContext* browser_context) {
+  DCHECK(!browser_context ||
+         this == HeadlessBrowserContextImpl::From(browser_context)->browser());
+  default_browser_context_ = browser_context;
+}
+
+HeadlessBrowserContext* HeadlessBrowserImpl::GetDefaultBrowserContext() {
+  return default_browser_context_;
 }
 
 base::WeakPtr<HeadlessBrowserImpl> HeadlessBrowserImpl::GetWeakPtr() {

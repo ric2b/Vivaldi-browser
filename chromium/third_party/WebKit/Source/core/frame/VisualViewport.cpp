@@ -50,9 +50,9 @@
 #include "platform/geometry/FloatSize.h"
 #include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/graphics/GraphicsLayer.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/scroll/Scrollbar.h"
 #include "platform/scroll/ScrollbarThemeOverlay.h"
-#include "platform/tracing/TraceEvent.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebScrollbar.h"
 #include "public/platform/WebScrollbarLayer.h"
@@ -157,7 +157,7 @@ FloatSize VisualViewport::visibleSize() const {
 }
 
 FloatRect VisualViewport::visibleRect() const {
-  return FloatRect(FloatPoint(scrollOffset()), visibleSize());
+  return FloatRect(FloatPoint(getScrollOffset()), visibleSize());
 }
 
 FloatRect VisualViewport::visibleRectInDocument() const {
@@ -165,23 +165,15 @@ FloatRect VisualViewport::visibleRectInDocument() const {
     return FloatRect();
 
   FloatPoint viewLocation =
-      FloatPoint(mainFrame()->view()->getScrollableArea()->scrollOffset());
+      FloatPoint(mainFrame()->view()->getScrollableArea()->getScrollOffset());
   return FloatRect(viewLocation, visibleSize());
-}
-
-FloatRect VisualViewport::mainViewToViewportCSSPixels(
-    const FloatRect& rect) const {
-  // Note, this is in CSS Pixels so we don't apply scale.
-  FloatRect rectInViewport = rect;
-  rectInViewport.move(-scrollOffset());
-  return rectInViewport;
 }
 
 FloatPoint VisualViewport::viewportCSSPixelsToRootFrame(
     const FloatPoint& point) const {
   // Note, this is in CSS Pixels so we don't apply scale.
   FloatPoint pointInRootFrame = point;
-  pointInRootFrame.move(scrollOffset());
+  pointInRootFrame.move(getScrollOffset());
   return pointInRootFrame;
 }
 
@@ -277,7 +269,7 @@ bool VisualViewport::didSetScaleOrLocation(float scale,
             frameHost().page().scrollingCoordinator())
       coordinator->scrollableAreaScrollLayerDidChange(this);
 
-    if (!frameHost().settings().inertVisualViewport()) {
+    if (!frameHost().settings().getInertVisualViewport()) {
       if (Document* document = mainFrame()->document())
         document->enqueueScrollEventForNode(document);
     }
@@ -320,7 +312,7 @@ bool VisualViewport::magnifyScaleAroundAnchor(float magnifyDelta,
   FloatSize anchorDeltaUnusedByScroll = anchorDelta;
 
   // Manually bubble any remaining anchor delta up to the visual viewport.
-  FloatPoint newLocation(FloatPoint(scrollOffset()) +
+  FloatPoint newLocation(FloatPoint(getScrollOffset()) +
                          anchorDeltaUnusedByScroll);
   setScaleAndLocation(newPageScale, newLocation);
   return true;
@@ -384,7 +376,7 @@ void VisualViewport::attachToLayerTree(GraphicsLayer* currentLayerTreeRoot) {
     // Set masks to bounds so the compositor doesn't clobber a manually
     // set inner viewport container layer size.
     m_innerViewportContainerLayer->setMasksToBounds(
-        frameHost().settings().mainFrameClipsContent());
+        frameHost().settings().getMainFrameClipsContent());
     m_innerViewportContainerLayer->setSize(FloatSize(m_size));
 
     m_innerViewportScrollLayer->platformLayer()->setScrollClipLayer(
@@ -418,7 +410,7 @@ void VisualViewport::initializeScrollbars() {
     return;
 
   if (visualViewportSuppliesScrollbars() &&
-      !frameHost().settings().hideScrollbars()) {
+      !frameHost().settings().getHideScrollbars()) {
     if (!m_overlayScrollbarHorizontal->parent())
       m_innerViewportContainerLayer->addChild(
           m_overlayScrollbarHorizontal.get());
@@ -494,11 +486,11 @@ void VisualViewport::setScrollLayerOnScrollbars(WebLayer* scrollLayer) const {
 }
 
 bool VisualViewport::visualViewportSuppliesScrollbars() const {
-  return frameHost().settings().viewportEnabled();
+  return frameHost().settings().getViewportEnabled();
 }
 
 bool VisualViewport::scrollAnimatorEnabled() const {
-  return frameHost().settings().scrollAnimatorEnabled();
+  return frameHost().settings().getScrollAnimatorEnabled();
 }
 
 HostWindow* VisualViewport::getHostWindow() const {
@@ -508,7 +500,7 @@ HostWindow* VisualViewport::getHostWindow() const {
 bool VisualViewport::shouldUseIntegerScrollOffset() const {
   LocalFrame* frame = mainFrame();
   if (frame && frame->settings() &&
-      !frame->settings()->preferCompositingToLCDTextEnabled())
+      !frame->settings()->getPreferCompositingToLCDTextEnabled())
     return true;
 
   return ScrollableArea::shouldUseIntegerScrollOffset();
@@ -595,6 +587,10 @@ void VisualViewport::setBrowserControlsAdjustment(float adjustment) {
   m_browserControlsAdjustment = adjustment;
 }
 
+float VisualViewport::browserControlsAdjustment() const {
+  return m_browserControlsAdjustment;
+}
+
 IntRect VisualViewport::scrollableAreaBoundingBox() const {
   // This method should return the bounding box in the parent view's coordinate
   // space; however, VisualViewport technically isn't a child of any Frames.
@@ -614,6 +610,7 @@ IntSize VisualViewport::contentsSize() const {
   if (!frame || !frame->view())
     return IntSize();
 
+  // TODO(bokan): This should be the layout viewport rather than main FrameView.
   return frame->view()->visibleContentRect(IncludeScrollbars).size();
 }
 
@@ -684,7 +681,7 @@ FloatRect VisualViewport::viewportToRootFrame(
     const FloatRect& rectInViewport) const {
   FloatRect rectInRootFrame = rectInViewport;
   rectInRootFrame.scale(1 / scale());
-  rectInRootFrame.move(scrollOffset());
+  rectInRootFrame.move(getScrollOffset());
   return rectInRootFrame;
 }
 
@@ -697,7 +694,7 @@ IntRect VisualViewport::viewportToRootFrame(
 FloatRect VisualViewport::rootFrameToViewport(
     const FloatRect& rectInRootFrame) const {
   FloatRect rectInViewport = rectInRootFrame;
-  rectInViewport.move(-scrollOffset());
+  rectInViewport.move(-getScrollOffset());
   rectInViewport.scale(scale());
   return rectInViewport;
 }
@@ -712,14 +709,14 @@ FloatPoint VisualViewport::viewportToRootFrame(
     const FloatPoint& pointInViewport) const {
   FloatPoint pointInRootFrame = pointInViewport;
   pointInRootFrame.scale(1 / scale(), 1 / scale());
-  pointInRootFrame.move(scrollOffset());
+  pointInRootFrame.move(getScrollOffset());
   return pointInRootFrame;
 }
 
 FloatPoint VisualViewport::rootFrameToViewport(
     const FloatPoint& pointInRootFrame) const {
   FloatPoint pointInViewport = pointInRootFrame;
-  pointInViewport.move(-scrollOffset());
+  pointInViewport.move(-getScrollOffset());
   pointInViewport.scale(scale(), scale());
   return pointInViewport;
 }
@@ -788,7 +785,7 @@ bool VisualViewport::shouldDisableDesktopWorkarounds() const {
   if (!mainFrame() || !mainFrame()->view())
     return false;
 
-  if (!mainFrame()->settings()->viewportEnabled())
+  if (!mainFrame()->settings()->getViewportEnabled())
     return false;
 
   // A document is considered adapted to small screen UAs if one of these holds:
@@ -803,8 +800,15 @@ bool VisualViewport::shouldDisableDesktopWorkarounds() const {
           constraints.minimumScale != -1);
 }
 
+CompositorAnimationHost* VisualViewport::compositorAnimationHost() const {
+  DCHECK(frameHost().page().mainFrame()->isLocalFrame());
+  ScrollingCoordinator* c = frameHost().page().scrollingCoordinator();
+  return c ? c->compositorAnimationHost() : nullptr;
+}
+
 CompositorAnimationTimeline* VisualViewport::compositorAnimationTimeline()
     const {
+  DCHECK(frameHost().page().mainFrame()->isLocalFrame());
   ScrollingCoordinator* c = frameHost().page().scrollingCoordinator();
   return c ? c->compositorAnimationTimeline() : nullptr;
 }

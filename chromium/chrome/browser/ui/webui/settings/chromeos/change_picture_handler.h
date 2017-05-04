@@ -10,14 +10,12 @@
 #include "chrome/browser/chromeos/camera_presence_notifier.h"
 #include "chrome/browser/image_decoder.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
+#include "components/user_manager/user_manager.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
 namespace base {
-class DictionaryValue;
 class ListValue;
 }
 
@@ -32,7 +30,7 @@ namespace settings {
 // ChromeOS user image settings page UI handler.
 class ChangePictureHandler : public ::settings::SettingsPageUIHandler,
                              public ui::SelectFileDialog::Listener,
-                             public content::NotificationObserver,
+                             public user_manager::UserManager::Observer,
                              public ImageDecoder::ImageRequest,
                              public CameraPresenceNotifier::Observer {
  public:
@@ -94,10 +92,10 @@ class ChangePictureHandler : public ::settings::SettingsPageUIHandler,
                     int index,
                     void* params) override;
 
-  // content::NotificationObserver implementation.
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
+  // user_manager::UserManager::Observer implementation.
+  void OnUserImageChanged(const user_manager::User& user) override;
+  void OnUserProfileImageUpdated(const user_manager::User& user,
+                                 const gfx::ImageSkia& profile_image) override;
 
   // Sets user image to photo taken from camera.
   void SetImageFromCamera(const gfx::ImageSkia& photo);
@@ -128,8 +126,8 @@ class ChangePictureHandler : public ::settings::SettingsPageUIHandler,
   // Data URL for |user_photo_|.
   std::string user_photo_data_url_;
 
-  content::NotificationRegistrar registrar_;
-
+  ScopedObserver<user_manager::UserManager, ChangePictureHandler>
+      user_manager_observer_;
   ScopedObserver<CameraPresenceNotifier, ChangePictureHandler> camera_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(ChangePictureHandler);

@@ -15,11 +15,11 @@
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm/wm_screen_util.h"
 #include "ash/common/wm/workspace/workspace_layout_manager_backdrop_delegate.h"
-#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/common/wm_window_property.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "base/command_line.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/layer.h"
@@ -134,7 +134,7 @@ void WorkspaceLayoutManager::OnKeyboardBoundsChanging(
   bool change_work_area =
       (!base::CommandLine::ForCurrentProcess()->HasSwitch(
            ::switches::kUseNewVirtualKeyboardBehavior) ||
-       keyboard::KeyboardController::GetInstance()->get_lock_keyboard());
+       keyboard::KeyboardController::GetInstance()->keyboard_locked());
   if (!change_work_area)
     return;
 

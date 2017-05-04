@@ -6,6 +6,7 @@
     {
       'target_name': 'cr_network_icon',
       'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
         'cr_onc_types',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
@@ -26,9 +27,8 @@
     {
       'target_name': 'cr_network_list_item',
       'dependencies': [
+        '<(DEPTH)/ui/webui/resources/cr_elements/policy/compiled_resources2.gyp:cr_policy_network_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         'cr_network_list_types',
         'cr_onc_types',
       ],
@@ -53,7 +53,6 @@
     {
       'target_name': 'cr_onc_types',
       'dependencies': [
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
         '<(EXTERNS_GYP):networking_private',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],

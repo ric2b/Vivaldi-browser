@@ -25,20 +25,12 @@ namespace content {
 class RenderProcessHost;
 class SynchronousCompositorHost;
 
-class SynchronousCompositorBrowserFilter : public ui::WindowAndroidObserver,
-                                           public BrowserMessageFilter {
+class SynchronousCompositorBrowserFilter : public BrowserMessageFilter {
  public:
   explicit SynchronousCompositorBrowserFilter(int process_id);
 
-  // WindowAndroidObserver overrides.
-  void OnCompositingDidCommit() override;
-  void OnRootWindowVisibilityChanged(bool visible) override;
-  void OnAttachCompositor() override;
-  void OnDetachCompositor() override;
-  void OnVSync(base::TimeTicks frame_time,
-               base::TimeDelta vsync_period) override;
-  void OnActivityStopped() override;
-  void OnActivityStarted() override;
+  // Callback passed to WindowAndroid, runs when the current vsync is completed.
+  void VSyncComplete();
 
   // BrowserMessageFilter overrides.
   bool OnMessageReceived(const IPC::Message& message) override;

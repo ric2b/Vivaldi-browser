@@ -15,7 +15,7 @@
 namespace content {
 
 bool RenderFrameHostDelegate::OnMessageReceived(
-    RenderFrameHost* render_view_host,
+    RenderFrameHostImpl* render_frame_host,
     const IPC::Message& message) {
   return false;
 }
@@ -74,6 +74,11 @@ RenderFrameHostDelegate::GetGeolocationServiceContext() {
 
 device::WakeLockServiceContext*
 RenderFrameHostDelegate::GetWakeLockServiceContext() {
+  return nullptr;
+}
+
+ScreenOrientationProvider*
+RenderFrameHostDelegate::GetScreenOrientationProvider() {
   return nullptr;
 }
 

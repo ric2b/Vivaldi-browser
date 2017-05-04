@@ -5,6 +5,7 @@
 import fnmatch
 import imp
 import logging
+import posixpath
 import signal
 import thread
 import threading
@@ -44,6 +45,15 @@ def IncrementalInstall(device, apk_helper, installer_script):
                     permissions=None)  # Auto-grant permissions from manifest.
 
 
+def SubstituteDeviceRoot(device_path, device_root):
+  if not device_path:
+    return device_root
+  elif isinstance(device_path, list):
+    return posixpath.join(*(p if p else device_root for p in device_path))
+  else:
+    return device_path
+
+
 class LocalDeviceTestRun(test_run.TestRun):
 
   def __init__(self, env, test_instance):
@@ -63,8 +73,9 @@ class LocalDeviceTestRun(test_run.TestRun):
           thread.exit()
 
         result = None
+        rerun = None
         try:
-          result = self._RunTest(dev, test)
+          result, rerun = self._RunTest(dev, test)
           if isinstance(result, base_test_result.BaseTestResult):
             results.AddResult(result)
           elif isinstance(result, list):
@@ -74,12 +85,13 @@ class LocalDeviceTestRun(test_run.TestRun):
                 'Unexpected result type: %s' % type(result).__name__)
         except:
           if isinstance(tests, test_collection.TestCollection):
-            tests.add(test)
+            rerun = test
           raise
         finally:
           if isinstance(tests, test_collection.TestCollection):
+            if rerun:
+              tests.add(rerun)
             tests.test_completed()
-
 
       logging.info('Finished running tests on this device.')
 
@@ -92,7 +104,7 @@ class LocalDeviceTestRun(test_run.TestRun):
       raise TestsTerminated()
 
     try:
-      with signal_handler.AddSignalHandler(signal.SIGTERM, stop_tests):
+      with signal_handler.SignalHandler(signal.SIGTERM, stop_tests):
         tries = 0
         results = []
         while tries < self._env.max_tries and tests:
@@ -107,7 +119,7 @@ class LocalDeviceTestRun(test_run.TestRun):
           test_names = (self._GetUniqueTestName(t) for t in tests)
           try_results.AddResults(
               base_test_result.BaseTestResult(
-                  t, base_test_result.ResultType.UNKNOWN)
+                  t, base_test_result.ResultType.NOTRUN)
               for t in test_names if not t.endswith('*'))
 
           try:

@@ -34,7 +34,7 @@ class HtmlInlineUnittest(unittest.TestCase):
               href="really-long-long-long-long-long-test.css">
         </head>
         <body>
-          <include src="test.html">
+          <include src='test.html'>
           <include
               src="really-long-long-long-long-long-test-file-omg-so-long.html">
           <iron-icon src="[[icon]]"></iron-icon><!-- Should be ignored. -->
@@ -89,6 +89,9 @@ class HtmlInlineUnittest(unittest.TestCase):
       <html>
         <if expr="lang == 'fr'">
           bonjour
+        </if>
+        <if expr='lang == "de"'>
+          hallo
         </if>
         </if>
       </html>
@@ -397,6 +400,8 @@ class HtmlInlineUnittest(unittest.TestCase):
       >
       </include>
       <img src="img1.png">
+      <include src='single-double-quotes.html"></include>
+      <include src="double-single-quotes.html'></include>
       </html>
       ''',
       'style1.css': '''h1 {}''',
@@ -419,6 +424,8 @@ class HtmlInlineUnittest(unittest.TestCase):
       <h2></h2>
       <h2></h2>
       <img src="data:image/png;base64,YWJj">
+      <include src='single-double-quotes.html"></include>
+      <include src="double-single-quotes.html'></include>
       </html>
       '''
 
@@ -436,6 +443,69 @@ class HtmlInlineUnittest(unittest.TestCase):
     self.failUnlessEqual(resources, source_resources)
     self.failUnlessEqual(expected_inlined,
                          util.FixLineEnd(result.inlined_data, '\n'))
+
+  def testCommentedJsInclude(self):
+    '''Tests that <include> works inside a comment.'''
+
+    files = {
+      'include.js': '// <include src="other.js">',
+      'other.js': '// Copyright somebody\nalert(1);',
+    }
+
+    expected_inlined = '// // Copyright somebody\nalert(1);'
+
+    source_resources = set()
+    tmp_dir = util.TempDir(files)
+    for filename in files:
+      source_resources.add(tmp_dir.GetPath(filename))
+
+    result = html_inline.DoInline(tmp_dir.GetPath('include.js'), None)
+    resources = result.inlined_files
+    resources.add(tmp_dir.GetPath('include.js'))
+    self.failUnlessEqual(resources, source_resources)
+    self.failUnlessEqual(expected_inlined,
+                         util.FixLineEnd(result.inlined_data, '\n'))
+
+  def testCommentedJsIf(self):
+    '''Tests that <if> works inside a comment.'''
+
+    files = {
+      'if.js': '''
+      // <if expr="True">
+      yep();
+      // </if>
+
+      // <if expr="False">
+      nope();
+      // </if>
+      ''',
+    }
+
+    expected_inlined = '''
+      // 
+      yep();
+      // 
+
+      // 
+      '''
+
+    source_resources = set()
+    tmp_dir = util.TempDir(files)
+    for filename in files:
+      source_resources.add(tmp_dir.GetPath(filename))
+
+    class FakeGrdNode(object):
+      def EvaluateCondition(self, cond):
+        return eval(cond)
+
+    result = html_inline.DoInline(tmp_dir.GetPath('if.js'), FakeGrdNode())
+    resources = result.inlined_files
+
+    resources.add(tmp_dir.GetPath('if.js'))
+    self.failUnlessEqual(resources, source_resources)
+    self.failUnlessEqual(expected_inlined,
+                         util.FixLineEnd(result.inlined_data, '\n'))
+
 
 if __name__ == '__main__':
   unittest.main()

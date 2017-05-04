@@ -27,14 +27,13 @@
 #ifndef Internals_h
 #define Internals_h
 
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/Iterable.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
-#include "core/dom/ContextLifecycleObserver.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
@@ -67,7 +66,6 @@ class Location;
 class Node;
 class OriginTrialsTest;
 class Page;
-class PrivateScriptTest;
 class Range;
 class SerializedScriptValue;
 class ShadowRoot;
@@ -78,18 +76,15 @@ template <typename NodeType>
 class StaticNodeTypeList;
 using StaticNodeList = StaticNodeTypeList<Node>;
 
-class Internals final : public GarbageCollectedFinalized<Internals>,
+class Internals final : public GarbageCollected<Internals>,
                         public ScriptWrappable,
-                        public ContextLifecycleObserver,
                         public ValueIterable<int> {
   DEFINE_WRAPPERTYPEINFO();
-  USING_GARBAGE_COLLECTED_MIXIN(Internals);
 
  public:
   static Internals* create(ExecutionContext* context) {
     return new Internals(context);
   }
-  virtual ~Internals();
 
   static void resetToConsistentState(Page*);
 
@@ -101,6 +96,7 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
 
   bool isPreloaded(const String& url);
   bool isPreloadedBy(const String& url, Document*);
+  bool isLoading(const String& url);
   bool isLoadingFromMemoryCache(const String& url);
   int getResourcePriority(const String& url, Document*);
   String getResourceHeader(const String& url, const String& header, Document*);
@@ -262,7 +258,9 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
   Vector<AtomicString> userPreferredLanguages() const;
   void setUserPreferredLanguages(const Vector<String>&);
 
-  unsigned activeDOMObjectCount(Document*);
+  unsigned mediaKeysCount();
+  unsigned mediaKeySessionCount();
+  unsigned suspendableObjectCount(Document*);
   unsigned wheelEventHandlerCount(Document*);
   unsigned scrollEventHandlerCount(Document*);
   unsigned touchStartOrMoveEventHandlerCount(Document*);
@@ -382,13 +380,15 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
       const String& scheme);
 
   TypeConversions* typeConversions() const;
-  PrivateScriptTest* privateScriptTest() const;
   DictionaryTest* dictionaryTest() const;
   UnionTypesTest* unionTypesTest() const;
   OriginTrialsTest* originTrialsTest() const;
   CallbackFunctionTest* callbackFunctionTest() const;
 
   Vector<String> getReferencedFilePaths() const;
+
+  void startStoringCompositedLayerDebugInfo(Document*, ExceptionState&);
+  void stopStoringCompositedLayerDebugInfo(Document*, ExceptionState&);
 
   void startTrackingRepaints(Document*, ExceptionState&);
   void stopTrackingRepaints(Document*, ExceptionState&);
@@ -511,9 +511,6 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
 
   void setMediaElementNetworkState(HTMLMediaElement*, int state);
 
-  // TODO(liberato): remove once autoplay gesture override experiment concludes.
-  void triggerAutoplayViewportCheck(HTMLMediaElement*);
-
   // Returns the run state of the node's scroll animator (see
   // ScrollAnimatorCompositorCoordinater::RunState), or -1 if the node does not
   // have a scrollable area.
@@ -545,6 +542,7 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
                            unsigned index,
                            ExceptionState&);
   Member<InternalRuntimeFlags> m_runtimeFlags;
+  Member<Document> m_document;
 
   IterationSource* startIteration(ScriptState*, ExceptionState&) override;
 };

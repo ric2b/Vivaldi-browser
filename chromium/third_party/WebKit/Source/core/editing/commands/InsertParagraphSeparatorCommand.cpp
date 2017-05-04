@@ -141,7 +141,7 @@ void InsertParagraphSeparatorCommand::getAncestorsInsideBlock(
   if (insertionNode != outerBlock) {
     for (Element* n = insertionNode->parentElement(); n && n != outerBlock;
          n = n->parentElement())
-      ancestors.append(n);
+      ancestors.push_back(n);
   }
 }
 
@@ -363,6 +363,8 @@ void InsertParagraphSeparatorCommand::doApply(EditingState* editingState) {
     } else {
       refNode = insertionPosition.anchorNode();
     }
+
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     // find ending selection position easily before inserting the paragraph
     insertionPosition = mostForwardCaretPosition(insertionPosition);

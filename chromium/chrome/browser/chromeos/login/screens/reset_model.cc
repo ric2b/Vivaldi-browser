@@ -26,14 +26,8 @@ const char ResetModel::kContextKeyIsOfficialBuild[] = "is-official-build";
 const char ResetModel::kContextKeyScreenState[] = "screen-state";
 
 ResetModel::ResetModel(BaseScreenDelegate* base_screen_delegate)
-    : BaseScreen(base_screen_delegate) {
-}
+    : BaseScreen(base_screen_delegate, OobeScreen::SCREEN_OOBE_RESET) {}
 
-ResetModel::~ResetModel() {
-}
-
-std::string ResetModel::GetName() const {
-  return WizardController::kResetScreenName;
-}
+ResetModel::~ResetModel() {}
 
 }  // namespace chromeos

@@ -7,6 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "core/css/MediaValues.h"
+#include "platform/CrossThreadCopier.h"
 
 namespace blink {
 
@@ -32,6 +33,7 @@ class CORE_EXPORT MediaValuesCached final : public MediaValues {
     bool strictMode;
     String mediaType;
     WebDisplayMode displayMode;
+    DisplayShape displayShape;
 
     MediaValuesCachedData()
         : viewportWidth(0),
@@ -48,7 +50,8 @@ class CORE_EXPORT MediaValuesCached final : public MediaValues {
           defaultFontSize(16),
           threeDEnabled(false),
           strictMode(true),
-          displayMode(WebDisplayModeBrowser) {}
+          displayMode(WebDisplayModeBrowser),
+          displayShape(DisplayShapeRect) {}
 
     explicit MediaValuesCachedData(Document&);
 
@@ -70,6 +73,7 @@ class CORE_EXPORT MediaValuesCached final : public MediaValues {
       data.strictMode = strictMode;
       data.mediaType = mediaType.isolatedCopy();
       data.displayMode = displayMode;
+      data.displayShape = displayShape;
       return data;
     }
   };
@@ -101,6 +105,7 @@ class CORE_EXPORT MediaValuesCached final : public MediaValues {
   bool hasValues() const override;
   const String mediaType() const override;
   WebDisplayMode displayMode() const override;
+  DisplayShape displayShape() const override;
 
   void overrideViewportDimensions(double width, double height) override;
 

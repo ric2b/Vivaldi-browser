@@ -43,11 +43,11 @@ enum { TagNameSalt = 13, IdAttributeSalt = 17, ClassAttributeSalt = 19 };
 static inline void collectElementIdentifierHashes(
     const Element& element,
     Vector<unsigned, 4>& identifierHashes) {
-  identifierHashes.append(
+  identifierHashes.push_back(
       element.localNameForSelectorMatching().impl()->existingHash() *
       TagNameSalt);
   if (element.hasID())
-    identifierHashes.append(
+    identifierHashes.push_back(
         element.idForStyleResolution().impl()->existingHash() *
         IdAttributeSalt);
   if (element.isStyledElement() && element.hasClass()) {
@@ -57,8 +57,8 @@ static inline void collectElementIdentifierHashes(
       DCHECK(classNames[i].impl());
       // Speculative fix for https://crbug.com/646026
       if (classNames[i].impl())
-        identifierHashes.append(classNames[i].impl()->existingHash() *
-                                ClassAttributeSalt);
+        identifierHashes.push_back(classNames[i].impl()->existingHash() *
+                                   ClassAttributeSalt);
     }
   }
 }
@@ -66,10 +66,10 @@ static inline void collectElementIdentifierHashes(
 void SelectorFilter::pushParentStackFrame(Element& parent) {
   ASSERT(m_ancestorIdentifierFilter);
   ASSERT(m_parentStack.isEmpty() ||
-         m_parentStack.last().element == parent.parentOrShadowHostElement());
+         m_parentStack.back().element == parent.parentOrShadowHostElement());
   ASSERT(!m_parentStack.isEmpty() || !parent.parentOrShadowHostElement());
-  m_parentStack.append(ParentStackFrame(parent));
-  ParentStackFrame& parentFrame = m_parentStack.last();
+  m_parentStack.push_back(ParentStackFrame(parent));
+  ParentStackFrame& parentFrame = m_parentStack.back();
   // Mix tags, class names and ids into some sort of weird bouillabaisse.
   // The filter is used for fast rejection of child and descendant selectors.
   collectElementIdentifierHashes(parent, parentFrame.identifierHashes);
@@ -81,7 +81,7 @@ void SelectorFilter::pushParentStackFrame(Element& parent) {
 void SelectorFilter::popParentStackFrame() {
   ASSERT(!m_parentStack.isEmpty());
   ASSERT(m_ancestorIdentifierFilter);
-  const ParentStackFrame& parentFrame = m_parentStack.last();
+  const ParentStackFrame& parentFrame = m_parentStack.back();
   size_t count = parentFrame.identifierHashes.size();
   for (size_t i = 0; i < count; ++i)
     m_ancestorIdentifierFilter->remove(parentFrame.identifierHashes[i]);
@@ -98,14 +98,14 @@ void SelectorFilter::pushParent(Element& parent) {
   if (m_parentStack.isEmpty()) {
     ASSERT(parent == parent.document().documentElement());
     ASSERT(!m_ancestorIdentifierFilter);
-    m_ancestorIdentifierFilter = wrapUnique(new IdentifierFilter);
+    m_ancestorIdentifierFilter = WTF::wrapUnique(new IdentifierFilter);
     pushParentStackFrame(parent);
     return;
   }
   ASSERT(m_ancestorIdentifierFilter);
   // We may get invoked for some random elements in some wacky cases during
   // style resolve. Pause maintaining the stack in this case.
-  if (m_parentStack.last().element != parent.parentOrShadowHostElement())
+  if (m_parentStack.back().element != parent.parentOrShadowHostElement())
     return;
   pushParentStackFrame(parent);
 }

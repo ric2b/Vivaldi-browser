@@ -8,6 +8,7 @@
 
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "components/sync/protocol/model_type_store_schema_descriptor.pb.h"
 #include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
@@ -27,10 +28,33 @@ const int64_t kInvalidSchemaVersion = -1;
 const int64_t ModelTypeStoreBackend::kLatestSchemaVersion = 1;
 const char ModelTypeStoreBackend::kDBSchemaDescriptorRecordId[] =
     "_mts_schema_descriptor";
+const char ModelTypeStoreBackend::kStoreInitResultHistogramName[] =
+    "Sync.ModelTypeStoreInitResult";
 
 // static
 base::LazyInstance<ModelTypeStoreBackend::BackendMap>
     ModelTypeStoreBackend::backend_map_ = LAZY_INSTANCE_INITIALIZER;
+
+namespace {
+
+StoreInitResultForHistogram LevelDbStatusToStoreInitResult(
+    const leveldb::Status& status) {
+  if (status.ok())
+    return STORE_INIT_RESULT_SUCCESS;
+  if (status.IsNotFound())
+    return STORE_INIT_RESULT_NOT_FOUND;
+  if (status.IsCorruption())
+    return STORE_INIT_RESULT_CORRUPTION;
+  if (status.IsNotSupportedError())
+    return STORE_INIT_RESULT_NOT_SUPPORTED;
+  if (status.IsInvalidArgument())
+    return STORE_INIT_RESULT_INVALID_ARGUMENT;
+  if (status.IsIOError())
+    return STORE_INIT_RESULT_IO_ERROR;
+  return STORE_INIT_RESULT_UNKNOWN;
+}
+
+}  // namespace
 
 ModelTypeStoreBackend::ModelTypeStoreBackend(const std::string& path)
     : path_(path) {}
@@ -71,26 +95,28 @@ ModelTypeStore::Result ModelTypeStoreBackend::Init(
     const std::string& path,
     std::unique_ptr<leveldb::Env> env) {
   DFAKE_SCOPED_LOCK(push_pop_);
-  leveldb::DB* db_raw = nullptr;
 
-  leveldb::Options options;
-  options.create_if_missing = true;
-  options.reuse_logs = leveldb_env::kDefaultLogReuseOptionValue;
-  options.paranoid_checks = true;
-  if (env.get()) {
-    options.env = env.get();
-    env_ = std::move(env);
+  env_ = std::move(env);
+
+  leveldb::Status status = OpenDatabase(path, env_.get());
+  if (status.IsCorruption()) {
+    DCHECK(db_ == nullptr);
+    status = DestroyDatabase(path, env_.get());
+    if (status.ok())
+      status = OpenDatabase(path, env_.get());
+    if (status.ok())
+      RecordStoreInitResultHistogram(
+          STORE_INIT_RESULT_RECOVERED_AFTER_CORRUPTION);
   }
-
-  leveldb::Status status = leveldb::DB::Open(options, path, &db_raw);
   if (!status.ok()) {
-    DCHECK(db_raw == nullptr);
+    DCHECK(db_ == nullptr);
+    RecordStoreInitResultHistogram(LevelDbStatusToStoreInitResult(status));
     return ModelTypeStore::Result::UNSPECIFIED_ERROR;
   }
-  db_.reset(db_raw);
 
   int64_t current_version = GetStoreVersion();
   if (current_version == kInvalidSchemaVersion) {
+    RecordStoreInitResultHistogram(STORE_INIT_RESULT_SCHEMA_DESCRIPTOR_ISSUE);
     return ModelTypeStore::Result::UNSPECIFIED_ERROR;
   }
 
@@ -98,10 +124,37 @@ ModelTypeStore::Result ModelTypeStoreBackend::Init(
     ModelTypeStore::Result result =
         Migrate(current_version, kLatestSchemaVersion);
     if (result != ModelTypeStore::Result::SUCCESS) {
+      RecordStoreInitResultHistogram(STORE_INIT_RESULT_MIGRATION);
       return result;
     }
   }
+  RecordStoreInitResultHistogram(STORE_INIT_RESULT_SUCCESS);
   return ModelTypeStore::Result::SUCCESS;
+}
+
+leveldb::Status ModelTypeStoreBackend::OpenDatabase(const std::string& path,
+                                                    leveldb::Env* env) {
+  leveldb::DB* db_raw = nullptr;
+  leveldb::Options options;
+  options.create_if_missing = true;
+  options.reuse_logs = leveldb_env::kDefaultLogReuseOptionValue;
+  options.paranoid_checks = true;
+  if (env)
+    options.env = env;
+
+  leveldb::Status status = leveldb::DB::Open(options, path, &db_raw);
+  DCHECK(status.ok() != (db_raw == nullptr));
+  if (status.ok())
+    db_.reset(db_raw);
+  return status;
+}
+
+leveldb::Status ModelTypeStoreBackend::DestroyDatabase(const std::string& path,
+                                                       leveldb::Env* env) {
+  leveldb::Options options;
+  if (env)
+    options.env = env;
+  return leveldb::DestroyDB(path, options);
 }
 
 ModelTypeStore::Result ModelTypeStoreBackend::ReadRecordsWithPrefix(
@@ -201,6 +254,13 @@ bool ModelTypeStoreBackend::Migrate0To1() {
       db_->Put(leveldb::WriteOptions(), kDBSchemaDescriptorRecordId,
                schema_descriptor.SerializeAsString());
   return status.ok();
+}
+
+// static
+void ModelTypeStoreBackend::RecordStoreInitResultHistogram(
+    StoreInitResultForHistogram result) {
+  UMA_HISTOGRAM_ENUMERATION(kStoreInitResultHistogramName, result,
+                            STORE_INIT_RESULT_COUNT);
 }
 
 }  // namespace syncer

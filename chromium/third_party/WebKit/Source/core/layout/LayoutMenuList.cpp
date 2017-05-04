@@ -28,6 +28,7 @@
 
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/NodeComputedStyle.h"
+#include "core/frame/FrameView.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/layout/LayoutText.h"
@@ -98,12 +99,15 @@ void LayoutMenuList::adjustInnerStyle() {
 
   Length paddingStart =
       Length(LayoutTheme::theme().popupInternalPaddingStart(styleRef()), Fixed);
-  Length paddingEnd =
-      Length(LayoutTheme::theme().popupInternalPaddingEnd(styleRef()), Fixed);
-  innerStyle.setPaddingLeft(styleRef().direction() == LTR ? paddingStart
-                                                          : paddingEnd);
-  innerStyle.setPaddingRight(styleRef().direction() == LTR ? paddingEnd
-                                                           : paddingStart);
+  Length paddingEnd = Length(LayoutTheme::theme().popupInternalPaddingEnd(
+                                 frameView()->getHostWindow(), styleRef()),
+                             Fixed);
+  innerStyle.setPaddingLeft(styleRef().direction() == TextDirection::kLtr
+                                ? paddingStart
+                                : paddingEnd);
+  innerStyle.setPaddingRight(styleRef().direction() == TextDirection::kLtr
+                                 ? paddingEnd
+                                 : paddingStart);
   innerStyle.setPaddingTop(
       Length(LayoutTheme::theme().popupInternalPaddingTop(styleRef()), Fixed));
   innerStyle.setPaddingBottom(Length(
@@ -111,14 +115,14 @@ void LayoutMenuList::adjustInnerStyle() {
 
   if (m_optionStyle) {
     if ((m_optionStyle->direction() != innerStyle.direction() ||
-         m_optionStyle->unicodeBidi() != innerStyle.unicodeBidi()))
+         m_optionStyle->getUnicodeBidi() != innerStyle.getUnicodeBidi()))
       m_innerBlock->setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
           LayoutInvalidationReason::StyleChange);
     innerStyle.setTextAlign(style()->isLeftToRightDirection()
-                                ? ETextAlign::Left
-                                : ETextAlign::Right);
+                                ? ETextAlign::kLeft
+                                : ETextAlign::kRight);
     innerStyle.setDirection(m_optionStyle->direction());
-    innerStyle.setUnicodeBidi(m_optionStyle->unicodeBidi());
+    innerStyle.setUnicodeBidi(m_optionStyle->getUnicodeBidi());
   }
 }
 

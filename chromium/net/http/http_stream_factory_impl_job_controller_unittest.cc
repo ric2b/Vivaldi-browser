@@ -9,6 +9,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "base/threading/platform_thread.h"
 #include "net/base/test_proxy_delegate.h"
 #include "net/dns/mock_host_resolver.h"
@@ -126,12 +127,12 @@ class HttpStreamFactoryImplJobControllerTest
     test_proxy_delegate->set_alternative_proxy_server(
         ProxyServer::FromPacString("QUIC myproxy.org:443"));
     EXPECT_TRUE(test_proxy_delegate->alternative_proxy_server().is_quic());
-    session_deps_.proxy_delegate.reset(test_proxy_delegate.release());
+    session_deps_.proxy_delegate = std::move(test_proxy_delegate);
 
     if (use_alternative_proxy) {
       std::unique_ptr<ProxyService> proxy_service =
           ProxyService::CreateFixedFromPacResult("HTTPS myproxy.org:443");
-      session_deps_.proxy_service.reset(proxy_service.release());
+      session_deps_.proxy_service = std::move(proxy_service);
     }
     session_ = SpdySessionDependencies::SpdyCreateSession(&session_deps_);
     factory_ =
@@ -239,8 +240,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
 
   EXPECT_CALL(request_delegate_, OnStreamReady(_, _, http_stream))
       .WillOnce(Invoke(DeleteHttpStreamPointer));
-  job_controller_->OnStreamReady(job_factory_.main_job(), SSLConfig(),
-                                 ProxyInfo());
+  job_controller_->OnStreamReady(job_factory_.main_job(), SSLConfig());
 }
 
 // Test we cancel Jobs correctly when the Request is explicitly canceled
@@ -358,8 +358,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
 
   EXPECT_CALL(request_delegate_, OnStreamReady(_, _, http_stream))
       .WillOnce(Invoke(DeleteHttpStreamPointer));
-  job_controller_->OnStreamReady(job_factory_.main_job(), SSLConfig(),
-                                 ProxyInfo());
+  job_controller_->OnStreamReady(job_factory_.main_job(), SSLConfig());
 
   // JobController shouldn't report the status of second job as request
   // is already successfully served.
@@ -373,8 +372,9 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
   EXPECT_TRUE(HttpStreamFactoryImplPeer::IsJobControllerDeleted(factory_));
 }
 
-// Tests that if alt job succeeds and main job is blocked, |request_| completion
-// will clean up JobController. Regression test for crbug.com/678768.
+// Tests that if alt job succeeds and main job is blocked, main job should be
+// cancelled immediately. |request_| completion will clean up the JobController.
+// Regression test for crbug.com/678768.
 TEST_F(HttpStreamFactoryImplJobControllerTest,
        AltJobSucceedsMainJobBlockedControllerDestroyed) {
   ProxyConfig proxy_config;
@@ -407,12 +407,10 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
   job_factory_.alternative_job()->SetStream(http_stream);
   EXPECT_CALL(request_delegate_, OnStreamReady(_, _, http_stream))
       .WillOnce(Invoke(DeleteHttpStreamPointer));
-  job_controller_->OnStreamReady(job_factory_.alternative_job(), SSLConfig(),
-                                 ProxyInfo());
+  job_controller_->OnStreamReady(job_factory_.alternative_job(), SSLConfig());
 
-  EXPECT_TRUE(job_controller_->main_job());
+  EXPECT_FALSE(job_controller_->main_job());
   EXPECT_TRUE(job_controller_->alternative_job());
-  EXPECT_TRUE(JobControllerPeer::main_job_is_blocked(job_controller_));
 
   // Invoke OnRequestComplete() which should delete |job_controller_| from
   // |factory_|.
@@ -470,9 +468,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
 
   EXPECT_CALL(request_delegate_, OnStreamReady(_, _, http_stream))
       .WillOnce(Invoke(DeleteHttpStreamPointer));
-  job_controller_->OnStreamReady(job_factory_.main_job(), SSLConfig(),
-                                 ProxyInfo());
-
+  job_controller_->OnStreamReady(job_factory_.main_job(), SSLConfig());
   // Invoke OnRequestComplete() which should not delete |job_controller_| from
   // |factory_| because alt job is yet to finish.
   request_.reset();
@@ -487,8 +483,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
       new HttpBasicStream(base::MakeUnique<ClientSocketHandle>(), false, false);
   job_factory_.alternative_job()->SetStream(http_stream2);
   // This should not call request_delegate_::OnStreamReady.
-  job_controller_->OnStreamReady(job_factory_.alternative_job(), SSLConfig(),
-                                 ProxyInfo());
+  job_controller_->OnStreamReady(job_factory_.alternative_job(), SSLConfig());
   // Make sure that controller does not leak.
   EXPECT_TRUE(HttpStreamFactoryImplPeer::IsJobControllerDeleted(factory_));
 }
@@ -533,8 +528,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
 
   EXPECT_CALL(request_delegate_, OnStreamReady(_, _, http_stream))
       .WillOnce(Invoke(DeleteHttpStreamPointer));
-  job_controller_->OnStreamReady(job_factory_.alternative_job(), SSLConfig(),
-                                 ProxyInfo());
+  job_controller_->OnStreamReady(job_factory_.alternative_job(), SSLConfig());
   VerifyBrokenAlternateProtocolMapping(request_info, false);
 }
 
@@ -578,8 +572,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
 
   EXPECT_CALL(request_delegate_, OnStreamReady(_, _, http_stream))
       .WillOnce(Invoke(DeleteHttpStreamPointer));
-  job_controller_->OnStreamReady(job_factory_.main_job(), SSLConfig(),
-                                 ProxyInfo());
+  job_controller_->OnStreamReady(job_factory_.main_job(), SSLConfig());
 
   VerifyBrokenAlternateProtocolMapping(request_info, true);
 }
@@ -629,8 +622,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest, GetLoadStateAfterMainJobFailed) {
 
   EXPECT_CALL(request_delegate_, OnStreamReady(_, _, http_stream))
       .WillOnce(Invoke(DeleteHttpStreamPointer));
-  job_controller_->OnStreamReady(job_factory_.alternative_job(), SSLConfig(),
-                                 ProxyInfo());
+  job_controller_->OnStreamReady(job_factory_.alternative_job(), SSLConfig());
 }
 
 TEST_F(HttpStreamFactoryImplJobControllerTest, DoNotResumeMainJobBeforeWait) {
@@ -822,6 +814,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
 }
 
 TEST_F(HttpStreamFactoryImplJobControllerTest, DelayedTCP) {
+  base::ScopedMockTimeMessageLoopTaskRunner test_task_runner;
   HangingResolver* resolver = new HangingResolver();
   session_deps_.host_resolver.reset(resolver);
 
@@ -851,16 +844,147 @@ TEST_F(HttpStreamFactoryImplJobControllerTest, DelayedTCP) {
                              DEFAULT_PRIORITY, SSLConfig(), SSLConfig()));
   EXPECT_TRUE(job_controller_->main_job());
   EXPECT_TRUE(job_controller_->alternative_job());
+  EXPECT_TRUE(job_controller_->main_job()->is_waiting());
 
   // The alternative job stalls as host resolution hangs when creating the QUIC
   // request and controller should resume the main job after delay.
-  // Verify the waiting time for delayed main job.
-  EXPECT_CALL(*job_factory_.main_job(), Resume())
-      .WillOnce(Invoke(testing::CreateFunctor(
-          &JobControllerPeer::VerifyWaitingTimeForMainJob, job_controller_,
-          base::TimeDelta::FromMicroseconds(15))));
+  EXPECT_TRUE(test_task_runner->HasPendingTask());
+  EXPECT_EQ(1u, test_task_runner->GetPendingTaskCount());
+  EXPECT_CALL(*job_factory_.main_job(), Resume()).Times(1);
+  test_task_runner->FastForwardBy(base::TimeDelta::FromMicroseconds(15));
+  EXPECT_FALSE(test_task_runner->HasPendingTask());
 
-  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(job_controller_->main_job());
+  EXPECT_TRUE(job_controller_->alternative_job());
+
+  // |alternative_job| fails but should not report status to Request.
+  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _)).Times(0);
+
+  EXPECT_FALSE(JobControllerPeer::main_job_is_blocked(job_controller_));
+  // OnStreamFailed will post a task to resume the main job immediately but
+  // won't call Resume() on the main job since it's been resumed already.
+  EXPECT_CALL(*job_factory_.main_job(), Resume()).Times(0);
+  job_controller_->OnStreamFailed(job_factory_.alternative_job(),
+                                  ERR_NETWORK_CHANGED, SSLConfig());
+  EXPECT_EQ(1u, test_task_runner->GetPendingTaskCount());
+  test_task_runner->RunUntilIdle();
+}
+
+// Test that main job is blocked for kMaxDelayTimeForMainJob(3s) if
+// http_server_properties cached an inappropriate large srtt for the server,
+// which would potentially delay the main job for a extremely long time in
+// delayed tcp case.
+TEST_F(HttpStreamFactoryImplJobControllerTest, DelayedTCPWithLargeSrtt) {
+  // Overrides the main thread's message loop with a mock tick clock so that we
+  // could verify the main job is resumed with appropriate delay.
+  base::ScopedMockTimeMessageLoopTaskRunner test_task_runner;
+  // The max delay time should be in sync with .cc file.
+  base::TimeDelta kMaxDelayTimeForMainJob = base::TimeDelta::FromSeconds(3);
+  HangingResolver* resolver = new HangingResolver();
+  session_deps_.host_resolver.reset(resolver);
+
+  HttpRequestInfo request_info;
+  request_info.method = "GET";
+  request_info.url = GURL("https://www.google.com");
+
+  Initialize(false);
+
+  // Enable delayed TCP and set a extremely large time delay for waiting job.
+  QuicStreamFactory* quic_stream_factory = session_->quic_stream_factory();
+  test::QuicStreamFactoryPeer::SetDelayTcpRace(quic_stream_factory, true);
+  quic_stream_factory->set_require_confirmation(false);
+  ServerNetworkStats stats1;
+  stats1.srtt = base::TimeDelta::FromSeconds(100);
+  session_->http_server_properties()->SetServerNetworkStats(
+      url::SchemeHostPort(GURL("https://www.google.com")), stats1);
+
+  // Set a SPDY alternative service for the server.
+  url::SchemeHostPort server(request_info.url);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
+  SetAlternativeService(request_info, alternative_service);
+
+  request_.reset(
+      job_controller_->Start(request_info, &request_delegate_, nullptr,
+                             NetLogWithSource(), HttpStreamRequest::HTTP_STREAM,
+                             DEFAULT_PRIORITY, SSLConfig(), SSLConfig()));
+  EXPECT_TRUE(job_controller_->main_job());
+  EXPECT_TRUE(job_controller_->alternative_job());
+  EXPECT_TRUE(job_controller_->main_job()->is_waiting());
+
+  // The alternative job stalls as host resolution hangs when creating the QUIC
+  // request and controller should resume the main job after delay.
+  EXPECT_TRUE(test_task_runner->HasPendingTask());
+  EXPECT_EQ(1u, test_task_runner->GetPendingTaskCount());
+
+  EXPECT_CALL(*job_factory_.main_job(), Resume()).Times(1);
+  // Move forward the task runner with kMaxDelayTimeForMainJob and verify the
+  // main job is resumed.
+  test_task_runner->FastForwardBy(kMaxDelayTimeForMainJob);
+  EXPECT_FALSE(test_task_runner->HasPendingTask());
+}
+
+TEST_F(HttpStreamFactoryImplJobControllerTest,
+       ResumeMainJobImmediatelyOnStreamFailed) {
+  // Overrides the main thread's message loop with a mock tick clock so that we
+  // could verify the main job is resumed with appropriate delay.
+  base::ScopedMockTimeMessageLoopTaskRunner test_task_runner;
+
+  HangingResolver* resolver = new HangingResolver();
+  session_deps_.host_resolver.reset(resolver);
+
+  HttpRequestInfo request_info;
+  request_info.method = "GET";
+  request_info.url = GURL("https://www.google.com");
+
+  Initialize(false);
+
+  // Enable delayed TCP and set time delay for waiting job.
+  QuicStreamFactory* quic_stream_factory = session_->quic_stream_factory();
+  test::QuicStreamFactoryPeer::SetDelayTcpRace(quic_stream_factory, true);
+  quic_stream_factory->set_require_confirmation(false);
+  ServerNetworkStats stats1;
+  stats1.srtt = base::TimeDelta::FromMicroseconds(10);
+  session_->http_server_properties()->SetServerNetworkStats(
+      url::SchemeHostPort(GURL("https://www.google.com")), stats1);
+
+  // Set a SPDY alternative service for the server.
+  url::SchemeHostPort server(request_info.url);
+  AlternativeService alternative_service(kProtoQUIC, server.host(), 443);
+  SetAlternativeService(request_info, alternative_service);
+
+  // The alternative job stalls as host resolution hangs when creating the QUIC
+  // request and controller should resume the main job with delay.
+  // OnStreamFailed should resume the main job immediately.
+  request_.reset(
+      job_controller_->Start(request_info, &request_delegate_, nullptr,
+                             NetLogWithSource(), HttpStreamRequest::HTTP_STREAM,
+                             DEFAULT_PRIORITY, SSLConfig(), SSLConfig()));
+  EXPECT_TRUE(job_controller_->main_job());
+  EXPECT_TRUE(job_controller_->alternative_job());
+  EXPECT_TRUE(job_controller_->main_job()->is_waiting());
+
+  EXPECT_TRUE(test_task_runner->HasPendingTask());
+  EXPECT_EQ(1u, test_task_runner->GetPendingTaskCount());
+
+  // |alternative_job| fails but should not report status to Request.
+  EXPECT_CALL(request_delegate_, OnStreamFailed(_, _)).Times(0);
+  job_controller_->OnStreamFailed(job_factory_.alternative_job(),
+                                  ERR_NETWORK_CHANGED, SSLConfig());
+  EXPECT_EQ(2u, test_task_runner->GetPendingTaskCount());
+
+  // Verify the main job will be resumed immediately.
+  EXPECT_CALL(*job_factory_.main_job(), Resume()).Times(1);
+  // Execute tasks that have no remaining delay. Tasks with nonzero delay will
+  // remain queued.
+  test_task_runner->RunUntilIdle();
+
+  // Verify there is another task to resume main job with delay but should
+  // not call Resume() on the main job as main job has been resumed.
+  EXPECT_TRUE(test_task_runner->HasPendingTask());
+  EXPECT_EQ(1u, test_task_runner->GetPendingTaskCount());
+  EXPECT_CALL(*job_factory_.main_job(), Resume()).Times(0);
+  test_task_runner->FastForwardBy(base::TimeDelta::FromMicroseconds(15));
+  EXPECT_FALSE(test_task_runner->HasPendingTask());
 }
 
 // Verifies that the alternative proxy server job is not created if the URL
@@ -1055,8 +1179,7 @@ TEST_F(HttpStreamFactoryImplJobControllerTest,
 
   EXPECT_CALL(request_delegate_, OnStreamReady(_, _, http_stream))
       .WillOnce(Invoke(DeleteHttpStreamPointer));
-  job_controller_->OnStreamReady(job_factory_.main_job(), SSLConfig(),
-                                 ProxyInfo());
+  job_controller_->OnStreamReady(job_factory_.main_job(), SSLConfig());
 
   // JobController shouldn't report the status of alternative server job as
   // request is already successfully served.

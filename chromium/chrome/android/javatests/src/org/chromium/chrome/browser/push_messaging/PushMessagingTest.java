@@ -10,14 +10,15 @@ import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.content.Context;
 import android.os.Bundle;
+import android.support.test.filters.LargeTest;
+import android.support.test.filters.MediumTest;
 import android.test.MoreAsserts;
-import android.test.suitebuilder.annotation.LargeTest;
-import android.test.suitebuilder.annotation.MediumTest;
 import android.util.Pair;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.infobar.InfoBar;
@@ -116,6 +117,7 @@ public class PushMessagingTest
      */
     @MediumTest
     @Feature({"Browser", "PushMessaging"})
+    @CommandLineFlags.Add("disable-features=ModalPermissionPrompts")
     public void testPushPermissionDenied() throws InterruptedException, TimeoutException {
         // Notifications permission should initially be prompt.
         assertEquals("\"default\"", runScriptBlocking("Notification.permission"));
@@ -166,6 +168,7 @@ public class PushMessagingTest
      */
     @MediumTest
     @Feature({"Browser", "PushMessaging"})
+    @CommandLineFlags.Add("disable-features=ModalPermissionPrompts")
     public void testPushPermissionGranted() throws InterruptedException, TimeoutException {
         // Notifications permission should initially be prompt.
         assertEquals("\"default\"", runScriptBlocking("Notification.permission"));
@@ -312,7 +315,7 @@ public class PushMessagingTest
         }
     }
 
-    private InfoBar getInfobarBlocking() throws InterruptedException {
+    private InfoBar getInfobarBlocking() {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
@@ -324,7 +327,7 @@ public class PushMessagingTest
         return infoBars.get(0);
     }
 
-    private void waitForInfobarToClose() throws InterruptedException {
+    private void waitForInfobarToClose() {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {

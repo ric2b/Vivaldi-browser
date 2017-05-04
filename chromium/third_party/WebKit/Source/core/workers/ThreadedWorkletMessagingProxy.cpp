@@ -5,7 +5,6 @@
 #include "core/workers/ThreadedWorkletMessagingProxy.h"
 
 #include "bindings/core/v8/ScriptSourceCode.h"
-#include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContextTask.h"
 #include "core/dom/SecurityContext.h"
@@ -19,22 +18,12 @@
 
 namespace blink {
 
-namespace {
-
-void evaluateScriptOnWorkletGlobalScope(const String& source,
-                                        const KURL& scriptURL,
-                                        ExecutionContext* executionContext) {
-  WorkletGlobalScope* globalScope = toWorkletGlobalScope(executionContext);
-  globalScope->scriptController()->evaluate(
-      ScriptSourceCode(source, scriptURL));
-}
-
-}  // namespace
-
 ThreadedWorkletMessagingProxy::ThreadedWorkletMessagingProxy(
     ExecutionContext* executionContext)
-    : ThreadedMessagingProxyBase(executionContext),
-      m_workletObjectProxy(ThreadedWorkletObjectProxy::create(this)) {}
+    : ThreadedMessagingProxyBase(executionContext), m_weakPtrFactory(this) {
+  m_workletObjectProxy = ThreadedWorkletObjectProxy::create(
+      m_weakPtrFactory.createWeakPtr(), getParentFrameTaskRunners());
+}
 
 void ThreadedWorkletMessagingProxy::initialize() {
   DCHECK(isParentContextThread());
@@ -51,7 +40,7 @@ void ThreadedWorkletMessagingProxy::initialize() {
   WorkerThreadStartMode startMode =
       workerInspectorProxy()->workerStartMode(document);
   std::unique_ptr<WorkerSettings> workerSettings =
-      wrapUnique(new WorkerSettings(document->settings()));
+      WTF::wrapUnique(new WorkerSettings(document->settings()));
 
   // TODO(ikilpatrick): Decide on sensible a value for referrerPolicy.
   std::unique_ptr<WorkerThreadStartupData> startupData =
@@ -60,7 +49,7 @@ void ThreadedWorkletMessagingProxy::initialize() {
           csp->headers().get(), /* referrerPolicy */ String(), starterOrigin,
           nullptr, document->addressSpace(),
           OriginTrialContext::getTokens(document).get(),
-          std::move(workerSettings));
+          std::move(workerSettings), WorkerV8Settings::Default());
 
   initializeWorkerThread(std::move(startupData));
   workerInspectorProxy()->workerThreadCreated(document, workerThread(),
@@ -71,8 +60,10 @@ void ThreadedWorkletMessagingProxy::evaluateScript(
     const ScriptSourceCode& scriptSourceCode) {
   postTaskToWorkerGlobalScope(
       BLINK_FROM_HERE,
-      createCrossThreadTask(&evaluateScriptOnWorkletGlobalScope,
-                            scriptSourceCode.source(), scriptSourceCode.url()));
+      crossThreadBind(&ThreadedWorkletObjectProxy::evaluateScript,
+                      crossThreadUnretained(m_workletObjectProxy.get()),
+                      scriptSourceCode.source(), scriptSourceCode.url(),
+                      crossThreadUnretained(workerThread())));
 }
 
 void ThreadedWorkletMessagingProxy::terminateWorkletGlobalScope() {

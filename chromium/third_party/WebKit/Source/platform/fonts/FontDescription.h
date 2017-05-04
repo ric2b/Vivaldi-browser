@@ -31,7 +31,6 @@
 #include "platform/LayoutLocale.h"
 #include "platform/fonts/FontCacheKey.h"
 #include "platform/fonts/FontFamily.h"
-#include "platform/fonts/FontFeatureSettings.h"
 #include "platform/fonts/FontOrientation.h"
 #include "platform/fonts/FontSmoothingMode.h"
 #include "platform/fonts/FontTraits.h"
@@ -39,6 +38,7 @@
 #include "platform/fonts/FontWidthVariant.h"
 #include "platform/fonts/TextRenderingMode.h"
 #include "platform/fonts/TypesettingFeatures.h"
+#include "platform/fonts/opentype/FontSettings.h"
 #include "wtf/Allocator.h"
 #include "wtf/MathExtras.h"
 
@@ -84,38 +84,10 @@ class PLATFORM_EXPORT FontDescription {
     TitlingCaps
   };
 
-  FontDescription()
-      : m_specifiedSize(0),
-        m_computedSize(0),
-        m_adjustedSize(0),
-        m_sizeAdjust(FontSizeAdjustNone),
-        m_letterSpacing(0),
-        m_wordSpacing(0) {
-    m_fieldsAsUnsigned.parts[0] = 0;
-    m_fieldsAsUnsigned.parts[1] = 0;
-    m_fields.m_orientation = static_cast<unsigned>(FontOrientation::Horizontal);
-    m_fields.m_widthVariant = RegularWidth;
-    m_fields.m_style = FontStyleNormal;
-    m_fields.m_variantCaps = CapsNormal;
-    m_fields.m_isAbsoluteSize = false;
-    m_fields.m_weight = FontWeightNormal;
-    m_fields.m_stretch = FontStretchNormal;
-    m_fields.m_genericFamily = NoFamily;
-    m_fields.m_kerning = AutoKerning;
-    m_fields.m_commonLigaturesState = NormalLigaturesState;
-    m_fields.m_discretionaryLigaturesState = NormalLigaturesState;
-    m_fields.m_historicalLigaturesState = NormalLigaturesState;
-    m_fields.m_contextualLigaturesState = NormalLigaturesState;
-    m_fields.m_keywordSize = 0;
-    m_fields.m_fontSmoothing = AutoSmoothing;
-    m_fields.m_textRendering = AutoTextRendering;
-    m_fields.m_syntheticBold = false;
-    m_fields.m_syntheticItalic = false;
-    m_fields.m_subpixelTextPosition = s_useSubpixelTextPositioning;
-    m_fields.m_typesettingFeatures = s_defaultTypesettingFeatures;
-    m_fields.m_variantNumeric = FontVariantNumeric().m_fieldsAsUnsigned;
-    m_fields.m_subpixelAscentDescent = false;
-  }
+  FontDescription();
+  FontDescription(const FontDescription&);
+
+  FontDescription& operator=(const FontDescription&);
 
   bool operator==(const FontDescription&) const;
   bool operator!=(const FontDescription& other) const {
@@ -256,6 +228,9 @@ class PLATFORM_EXPORT FontDescription {
   FontFeatureSettings* featureSettings() const {
     return m_featureSettings.get();
   }
+  FontVariationSettings* variationSettings() const {
+    return m_variationSettings.get();
+  }
 
   float effectiveFontSize()
       const;  // Returns either the computedSize or the computedPixelSize
@@ -305,6 +280,9 @@ class PLATFORM_EXPORT FontDescription {
   void setFeatureSettings(PassRefPtr<FontFeatureSettings> settings) {
     m_featureSettings = settings;
   }
+  void setVariationSettings(PassRefPtr<FontVariationSettings> settings) {
+    m_variationSettings = settings;
+  }
   void setTraits(FontTraits);
   void setWordSpacing(float s) { m_wordSpacing = s; }
   void setLetterSpacing(float s) {
@@ -343,6 +321,7 @@ class PLATFORM_EXPORT FontDescription {
  private:
   FontFamily m_familyList;  // The list of font families to be used.
   RefPtr<FontFeatureSettings> m_featureSettings;
+  RefPtr<FontVariationSettings> m_variationSettings;
   RefPtr<const LayoutLocale> m_locale;
 
   void updateTypesettingFeatures();
@@ -414,21 +393,6 @@ class PLATFORM_EXPORT FontDescription {
 
   static bool s_useSubpixelTextPositioning;
 };
-
-inline bool FontDescription::operator==(const FontDescription& other) const {
-  return m_familyList == other.m_familyList && m_locale == other.m_locale &&
-         m_specifiedSize == other.m_specifiedSize &&
-         m_computedSize == other.m_computedSize &&
-         m_adjustedSize == other.m_adjustedSize &&
-         m_sizeAdjust == other.m_sizeAdjust &&
-         m_letterSpacing == other.m_letterSpacing &&
-         m_wordSpacing == other.m_wordSpacing &&
-         m_fieldsAsUnsigned.parts[0] == other.m_fieldsAsUnsigned.parts[0] &&
-         m_fieldsAsUnsigned.parts[1] == other.m_fieldsAsUnsigned.parts[1] &&
-         (m_featureSettings == other.m_featureSettings ||
-          (m_featureSettings && other.m_featureSettings &&
-           *m_featureSettings == *other.m_featureSettings));
-}
 
 }  // namespace blink
 

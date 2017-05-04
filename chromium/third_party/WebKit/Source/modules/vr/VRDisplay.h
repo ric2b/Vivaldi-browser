@@ -5,9 +5,9 @@
 #ifndef VRDisplay_h
 #define VRDisplay_h
 
-#include "bindings/core/v8/ScriptWrappable.h"
 #include "core/dom/Document.h"
 #include "core/dom/FrameRequestCallback.h"
+#include "core/events/EventTarget.h"
 #include "device/vr/vr_service.mojom-blink.h"
 #include "modules/vr/VRDisplayCapabilities.h"
 #include "modules/vr/VRLayer.h"
@@ -38,10 +38,12 @@ class WebGLRenderingContextBase;
 
 enum VREye { VREyeNone, VREyeLeft, VREyeRight };
 
-class VRDisplay final : public GarbageCollectedFinalized<VRDisplay>,
-                        public device::mojom::blink::VRDisplayClient,
-                        public ScriptWrappable {
+class VRDisplay final : public EventTargetWithInlineData,
+                        public ActiveScriptWrappable<VRDisplay>,
+                        public ContextLifecycleObserver,
+                        public device::mojom::blink::VRDisplayClient {
   DEFINE_WRAPPERTYPEINFO();
+  USING_GARBAGE_COLLECTED_MIXIN(VRDisplay);
   USING_PRE_FINALIZER(VRDisplay, dispose);
 
  public:
@@ -80,6 +82,16 @@ class VRDisplay final : public GarbageCollectedFinalized<VRDisplay>,
   void submitFrame();
 
   Document* document();
+
+  // EventTarget overrides:
+  ExecutionContext* getExecutionContext() const override;
+  const AtomicString& interfaceName() const override;
+
+  // ContextLifecycleObserver implementation.
+  void contextDestroyed(ExecutionContext*) override;
+
+  // ScriptWrappable implementation.
+  bool hasPendingActivity() const final;
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -149,6 +161,7 @@ class VRDisplay final : public GarbageCollectedFinalized<VRDisplay>,
   bool m_animationCallbackRequested;
   bool m_inAnimationFrame;
   bool m_displayBlurred;
+  bool m_reenteredFullscreen;
 
   device::mojom::blink::VRDisplayPtr m_display;
 

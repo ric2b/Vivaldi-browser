@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "skia/ext/image_operations.h"
+#include "third_party/skia/include/core/SkClipOp.h"
 #include "third_party/skia/include/core/SkDrawLooper.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
@@ -370,11 +371,8 @@ class ResizeSource : public ImageSkiaSource {
 // |source| that represent requested scale factors.
 class DropShadowSource : public ImageSkiaSource {
  public:
-  DropShadowSource(const ImageSkia& source,
-                   const ShadowValues& shadows_in_dip)
-      : source_(source),
-        shaodws_in_dip_(shadows_in_dip) {
-  }
+  DropShadowSource(const ImageSkia& source, const ShadowValues& shadows_in_dip)
+      : source_(source), shadows_in_dip_(shadows_in_dip) {}
   ~DropShadowSource() override {}
 
   // gfx::ImageSkiaSource overrides:
@@ -382,8 +380,8 @@ class DropShadowSource : public ImageSkiaSource {
     const ImageSkiaRep& image_rep = source_.GetRepresentation(scale);
 
     ShadowValues shadows_in_pixel;
-    for (size_t i = 0; i < shaodws_in_dip_.size(); ++i)
-      shadows_in_pixel.push_back(shaodws_in_dip_[i].Scale(scale));
+    for (size_t i = 0; i < shadows_in_dip_.size(); ++i)
+      shadows_in_pixel.push_back(shadows_in_dip_[i].Scale(scale));
 
     const SkBitmap shadow_bitmap = SkBitmapOperations::CreateDropShadow(
         image_rep.sk_bitmap(),
@@ -393,12 +391,12 @@ class DropShadowSource : public ImageSkiaSource {
 
  private:
   const ImageSkia source_;
-  const ShadowValues shaodws_in_dip_;
+  const ShadowValues shadows_in_dip_;
 
   DISALLOW_COPY_AND_ASSIGN(DropShadowSource);
 };
 
-// An image source that is 1dp wide, suitable for tiling horizontally.
+// An image source that is 1px wide, suitable for tiling horizontally.
 class HorizontalShadowSource : public CanvasImageSource {
  public:
   HorizontalShadowSource(const std::vector<ShadowValue>& shadows,
@@ -595,8 +593,7 @@ ImageSkia ImageSkiaOperations::CreateImageWithDropShadow(
 ImageSkia ImageSkiaOperations::CreateHorizontalShadow(
     const std::vector<ShadowValue>& shadows,
     bool fades_down) {
-  HorizontalShadowSource* source =
-      new HorizontalShadowSource(shadows, fades_down);
+  auto source = new HorizontalShadowSource(shadows, fades_down);
   return ImageSkia(source, source->size());
 }
 

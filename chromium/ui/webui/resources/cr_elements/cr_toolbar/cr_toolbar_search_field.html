@@ -38,13 +38,12 @@
       }
 
       paper-spinner-lite {
+        @apply(--cr-icon-height-width);
         --paper-spinner-color: white;
-        height: 20px;
         margin: 0 6px;
         opacity: 0;
         padding: 6px;
         position: absolute;
-        width: 20px;
       }
 
       paper-spinner-lite[active] {
@@ -76,7 +75,7 @@
         white-space: nowrap;
       }
 
-      :host([has-search-text_]) label {
+      :host([has-search-text]) label {
         visibility: hidden;
       }
 
@@ -109,7 +108,7 @@
 
       :host(:not([narrow]):not([showing-search])) #icon,
       :host(:not([narrow])) #prompt {
-        opacity: 0.6;
+        opacity: 0.7;
       }
 
       :host([narrow]:not([showing-search])) #searchTerm {
@@ -141,16 +140,16 @@
       <label id="prompt" for="searchInput">[[label]]</label>
       <input id="searchInput"
           type="search"
-          on-input="onSearchInput_"
+          on-input="onSearchTermInput"
           on-search="onSearchTermSearch"
-          on-keydown="onSearchTermKeydown"
+          on-keydown="onSearchTermKeydown_"
           on-focus="onInputFocus_"
           on-blur="onInputBlur_"
           incremental
           autofocus>
       </input>
     </div>
-    <template is="dom-if" if="[[hasSearchText_]]">
+    <template is="dom-if" if="[[hasSearchText]]">
       <paper-icon-button icon="cr:cancel" id="clearSearch"
           title="[[clearLabel]]" on-tap="clearSearch_">
       </paper-icon-button>

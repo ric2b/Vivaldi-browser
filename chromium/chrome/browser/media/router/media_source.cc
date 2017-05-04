@@ -6,20 +6,27 @@
 
 #include <string>
 
-#include "url/gurl.h"
+#include "chrome/browser/media/router/media_source_helper.h"
 
 namespace media_router {
 
 MediaSource::MediaSource(const MediaSource::Id& source_id) : id_(source_id) {
+  GURL url(source_id);
+  if (IsValidPresentationUrl(url))
+    url_ = url;
 }
 
 MediaSource::MediaSource(const GURL& presentation_url)
-    : id_(presentation_url.spec()) {}
+    : id_(presentation_url.spec()), url_(presentation_url) {}
 
 MediaSource::~MediaSource() {}
 
 MediaSource::Id MediaSource::id() const {
   return id_;
+}
+
+GURL MediaSource::url() const {
+  return url_;
 }
 
 bool MediaSource::operator==(const MediaSource& other) const {

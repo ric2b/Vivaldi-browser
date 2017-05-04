@@ -3,11 +3,13 @@
 // found in the LICENSE file.
 
 #include "core/events/MessageEvent.h"
+#include "core/inspector/ConsoleMessageStorage.h"
 #include "core/testing/DummyPageHolder.h"
 #include "core/workers/DedicatedWorkerGlobalScope.h"
 #include "core/workers/DedicatedWorkerThread.h"
 #include "core/workers/InProcessWorkerMessagingProxy.h"
 #include "core/workers/InProcessWorkerObjectProxy.h"
+#include "core/workers/WorkerInspectorProxy.h"
 #include "core/workers/WorkerThread.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "core/workers/WorkerThreadTestHelper.h"
@@ -35,14 +37,12 @@ class DedicatedWorkerThreadForTest final : public DedicatedWorkerThread {
  public:
   DedicatedWorkerThreadForTest(
       WorkerLoaderProxyProvider* workerLoaderProxyProvider,
-      InProcessWorkerObjectProxy& workerObjectProxy,
-      BlinkGC::ThreadHeapMode threadHeapMode)
+      InProcessWorkerObjectProxy& workerObjectProxy)
       : DedicatedWorkerThread(
             WorkerLoaderProxy::create(workerLoaderProxyProvider),
             workerObjectProxy,
             monotonicallyIncreasingTime()) {
-    m_workerBackingThread =
-        WorkerBackingThread::createForTest("Test thread", threadHeapMode);
+    m_workerBackingThread = WorkerBackingThread::createForTest("Test thread");
   }
 
   WorkerOrWorkletGlobalScope* createWorkerGlobalScope(
@@ -52,13 +52,39 @@ class DedicatedWorkerThreadForTest final : public DedicatedWorkerThread {
         std::move(startupData->m_starterOriginPrivilegeData),
         std::move(startupData->m_workerClients));
   }
+
+  // Emulates API use on DedicatedWorkerGlobalScope.
+  void countFeature(UseCounter::Feature feature) {
+    EXPECT_TRUE(isCurrentThread());
+    globalScope()->countFeature(feature);
+    workerReportingProxy()
+        .getParentFrameTaskRunners()
+        ->get(TaskType::UnspecedTimer)
+        ->postTask(BLINK_FROM_HERE, crossThreadBind(&testing::exitRunLoop));
+  }
+
+  // Emulates deprecated API use on DedicatedWorkerGlobalScope.
+  void countDeprecation(UseCounter::Feature feature) {
+    EXPECT_TRUE(isCurrentThread());
+    EXPECT_EQ(0u, consoleMessageStorage()->size());
+    globalScope()->countDeprecation(feature);
+
+    // countDeprecation() should add a warning message.
+    EXPECT_EQ(1u, consoleMessageStorage()->size());
+    String consoleMessage = consoleMessageStorage()->at(0)->message();
+    EXPECT_TRUE(consoleMessage.contains("deprecated"));
+
+    workerReportingProxy()
+        .getParentFrameTaskRunners()
+        ->get(TaskType::UnspecedTimer)
+        ->postTask(BLINK_FROM_HERE, crossThreadBind(&testing::exitRunLoop));
+  }
 };
 
 class InProcessWorkerMessagingProxyForTest
     : public InProcessWorkerMessagingProxy {
  public:
-  InProcessWorkerMessagingProxyForTest(ExecutionContext* executionContext,
-                                       BlinkGC::ThreadHeapMode threadHeapMode)
+  InProcessWorkerMessagingProxyForTest(ExecutionContext* executionContext)
       : InProcessWorkerMessagingProxy(executionContext,
                                       nullptr /* workerObject */,
                                       nullptr /* workerClients */) {
@@ -67,63 +93,85 @@ class InProcessWorkerMessagingProxyForTest
     workerObjectProxy().m_maxIntervalInSec = kMaxIntervalInSec;
 
     m_mockWorkerLoaderProxyProvider =
-        makeUnique<MockWorkerLoaderProxyProvider>();
-    m_workerThread = wrapUnique(
-        new DedicatedWorkerThreadForTest(m_mockWorkerLoaderProxyProvider.get(),
-                                         workerObjectProxy(), threadHeapMode));
-    workerThreadCreated();
-
+        WTF::makeUnique<MockWorkerLoaderProxyProvider>();
+    m_workerThread = WTF::wrapUnique(new DedicatedWorkerThreadForTest(
+        m_mockWorkerLoaderProxyProvider.get(), workerObjectProxy()));
     m_mockWorkerThreadLifecycleObserver = new MockWorkerThreadLifecycleObserver(
         m_workerThread->getWorkerThreadLifecycleContext());
-    EXPECT_CALL(*m_mockWorkerThreadLifecycleObserver, contextDestroyed())
+    EXPECT_CALL(*m_mockWorkerThreadLifecycleObserver,
+                contextDestroyed(::testing::_))
         .Times(1);
   }
 
   ~InProcessWorkerMessagingProxyForTest() override {
-    EXPECT_EQ(WaitUntilMode::DontWait, m_waitUntilMode);
+    EXPECT_FALSE(m_blocking);
     m_workerThread->workerLoaderProxy()->detachProvider(
         m_mockWorkerLoaderProxyProvider.get());
   }
 
-  enum class WaitUntilMode {
-    DontWait,
+  void startWithSourceCode(const String& source) {
+    KURL scriptURL(ParsedURLString, "http://fake.url/");
+    m_securityOrigin = SecurityOrigin::create(scriptURL);
+    std::unique_ptr<Vector<CSPHeaderAndType>> headers =
+        WTF::makeUnique<Vector<CSPHeaderAndType>>();
+    CSPHeaderAndType headerAndType("contentSecurityPolicy",
+                                   ContentSecurityPolicyHeaderTypeReport);
+    headers->push_back(headerAndType);
+    workerThread()->start(WorkerThreadStartupData::create(
+        scriptURL, "fake user agent", source, nullptr /* cachedMetaData */,
+        DontPauseWorkerGlobalScopeOnStart, headers.get(),
+        "" /* referrerPolicy */, m_securityOrigin.get(),
+        nullptr /* workerClients */, WebAddressSpaceLocal,
+        nullptr /* originTrialTokens */, nullptr /* workerSettings */,
+        WorkerV8Settings::Default()));
+
+    workerInspectorProxy()->workerThreadCreated(
+        toDocument(getExecutionContext()), m_workerThread.get(), scriptURL);
+    workerThreadCreated();
+  }
+
+  enum class Notification {
     MessageConfirmed,
     PendingActivityReported,
     ThreadTerminated,
   };
 
-  // Blocks the main thread until a specified event happens.
-  void waitUntil(WaitUntilMode mode) {
+  // Blocks the main thread until some event is notified.
+  Notification waitForNotification() {
     EXPECT_TRUE(isMainThread());
-    EXPECT_EQ(WaitUntilMode::DontWait, m_waitUntilMode);
-    m_waitUntilMode = mode;
-    testing::enterRunLoop();
+    DCHECK(!m_blocking);
+    if (m_events.isEmpty()) {
+      m_blocking = true;
+      testing::enterRunLoop();
+      DCHECK(!m_blocking);
+    }
+    return m_events.takeFirst();
   }
 
   void confirmMessageFromWorkerObject() override {
     EXPECT_TRUE(isMainThread());
     InProcessWorkerMessagingProxy::confirmMessageFromWorkerObject();
-    if (m_waitUntilMode != WaitUntilMode::MessageConfirmed)
-      return;
-    m_waitUntilMode = WaitUntilMode::DontWait;
-    testing::exitRunLoop();
+    m_events.append(Notification::MessageConfirmed);
+    if (m_blocking)
+      testing::exitRunLoop();
+    m_blocking = false;
   }
 
   void pendingActivityFinished() override {
     EXPECT_TRUE(isMainThread());
     InProcessWorkerMessagingProxy::pendingActivityFinished();
-    if (m_waitUntilMode != WaitUntilMode::PendingActivityReported)
-      return;
-    m_waitUntilMode = WaitUntilMode::DontWait;
-    testing::exitRunLoop();
+    m_events.append(Notification::PendingActivityReported);
+    if (m_blocking)
+      testing::exitRunLoop();
+    m_blocking = false;
   }
 
   void workerThreadTerminated() override {
     EXPECT_TRUE(isMainThread());
-    if (m_waitUntilMode != WaitUntilMode::ThreadTerminated)
-      return;
-    m_waitUntilMode = WaitUntilMode::DontWait;
-    testing::exitRunLoop();
+    m_events.append(Notification::ThreadTerminated);
+    if (m_blocking)
+      testing::exitRunLoop();
+    m_blocking = false;
   }
 
   std::unique_ptr<WorkerThread> createWorkerThread(double originTime) override {
@@ -135,9 +183,6 @@ class InProcessWorkerMessagingProxyForTest
     return static_cast<DedicatedWorkerThreadForTest*>(m_workerThread.get());
   }
 
-  bool workerGlobalScopeMayHavePendingActivity() const {
-    return m_workerGlobalScopeMayHavePendingActivity;
-  }
   unsigned unconfirmedMessageCount() const { return m_unconfirmedMessageCount; }
 
  private:
@@ -145,44 +190,28 @@ class InProcessWorkerMessagingProxyForTest
       m_mockWorkerLoaderProxyProvider;
   Persistent<MockWorkerThreadLifecycleObserver>
       m_mockWorkerThreadLifecycleObserver;
+  RefPtr<SecurityOrigin> m_securityOrigin;
 
-  WaitUntilMode m_waitUntilMode = WaitUntilMode::DontWait;
+  WTF::Deque<Notification> m_events;
+  bool m_blocking = false;
 };
 
-using WaitUntilMode = InProcessWorkerMessagingProxyForTest::WaitUntilMode;
+using Notification = InProcessWorkerMessagingProxyForTest::Notification;
 
-class DedicatedWorkerTest
-    : public ::testing::TestWithParam<BlinkGC::ThreadHeapMode> {
+class DedicatedWorkerTest : public ::testing::Test {
  public:
-  DedicatedWorkerTest() : m_threadHeapMode(GetParam()) {}
+  DedicatedWorkerTest() {}
 
   void SetUp() override {
     m_page = DummyPageHolder::create();
-    m_workerMessagingProxy =
-        wrapUnique(new InProcessWorkerMessagingProxyForTest(&m_page->document(),
-                                                            m_threadHeapMode));
-    m_securityOrigin =
-        SecurityOrigin::create(KURL(ParsedURLString, "http://fake.url/"));
+    m_workerMessagingProxy = WTF::wrapUnique(
+        new InProcessWorkerMessagingProxyForTest(&m_page->document()));
   }
 
   void TearDown() override {
     workerThread()->terminate();
-    workerMessagingProxy()->waitUntil(WaitUntilMode::ThreadTerminated);
-  }
-
-  void startWithSourceCode(const String& source) {
-    std::unique_ptr<Vector<CSPHeaderAndType>> headers =
-        makeUnique<Vector<CSPHeaderAndType>>();
-    CSPHeaderAndType headerAndType("contentSecurityPolicy",
-                                   ContentSecurityPolicyHeaderTypeReport);
-    headers->append(headerAndType);
-    workerThread()->start(WorkerThreadStartupData::create(
-        KURL(ParsedURLString, "http://fake.url/"), "fake user agent", source,
-        nullptr /* cachedMetaData */, DontPauseWorkerGlobalScopeOnStart,
-        headers.get(), "" /* referrerPolicy */, m_securityOrigin.get(),
-        nullptr /* workerClients */, WebAddressSpaceLocal,
-        nullptr /* originTrialTokens */, nullptr /* workerSettings */,
-        V8CacheOptionsDefault));
+    EXPECT_EQ(Notification::ThreadTerminated,
+              workerMessagingProxy()->waitForNotification());
   }
 
   void dispatchMessageEvent() {
@@ -198,111 +227,99 @@ class DedicatedWorkerTest
     return m_workerMessagingProxy->workerThread();
   }
 
+  Document& document() { return m_page->document(); }
+
  private:
-  RefPtr<SecurityOrigin> m_securityOrigin;
   std::unique_ptr<DummyPageHolder> m_page;
   std::unique_ptr<InProcessWorkerMessagingProxyForTest> m_workerMessagingProxy;
-  const BlinkGC::ThreadHeapMode m_threadHeapMode;
 };
 
-INSTANTIATE_TEST_CASE_P(MainThreadHeap,
-                        DedicatedWorkerTest,
-                        ::testing::Values(BlinkGC::MainThreadHeapMode));
-
-INSTANTIATE_TEST_CASE_P(PerThreadHeap,
-                        DedicatedWorkerTest,
-                        ::testing::Values(BlinkGC::PerThreadHeapMode));
-
-TEST_P(DedicatedWorkerTest, PendingActivity_NoActivity) {
+TEST_F(DedicatedWorkerTest, PendingActivity_NoActivity) {
   const String sourceCode = "// Do nothing";
-  startWithSourceCode(sourceCode);
+  workerMessagingProxy()->startWithSourceCode(sourceCode);
 
   // Worker initialization should be counted as a pending activity.
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
+  EXPECT_TRUE(workerMessagingProxy()->hasPendingActivity());
 
   // There should be no pending activities after the initialization.
-  workerMessagingProxy()->waitUntil(WaitUntilMode::PendingActivityReported);
+  EXPECT_EQ(Notification::PendingActivityReported,
+            workerMessagingProxy()->waitForNotification());
   EXPECT_FALSE(workerMessagingProxy()->hasPendingActivity());
 }
 
-TEST_P(DedicatedWorkerTest, PendingActivity_SetTimeout) {
+TEST_F(DedicatedWorkerTest, PendingActivity_SetTimeout) {
   // Start an oneshot timer on initial script evaluation.
   const String sourceCode = "setTimeout(function() {}, 0);";
-  startWithSourceCode(sourceCode);
+  workerMessagingProxy()->startWithSourceCode(sourceCode);
 
   // Worker initialization should be counted as a pending activity.
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
+  EXPECT_TRUE(workerMessagingProxy()->hasPendingActivity());
 
   // The timer is fired soon and there should be no pending activities after
   // that.
-  workerMessagingProxy()->waitUntil(WaitUntilMode::PendingActivityReported);
+  EXPECT_EQ(Notification::PendingActivityReported,
+            workerMessagingProxy()->waitForNotification());
   EXPECT_FALSE(workerMessagingProxy()->hasPendingActivity());
 }
 
-TEST_P(DedicatedWorkerTest, PendingActivity_SetInterval) {
+TEST_F(DedicatedWorkerTest, PendingActivity_SetInterval) {
   // Start a repeated timer on initial script evaluation, and stop it when a
   // message is received. The timer needs a non-zero delay or else worker
   // activities would not run.
   const String sourceCode =
       "var id = setInterval(function() {}, 50);"
       "addEventListener('message', function(event) { clearInterval(id); });";
-  startWithSourceCode(sourceCode);
+  workerMessagingProxy()->startWithSourceCode(sourceCode);
 
   // Worker initialization should be counted as a pending activity.
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
+  EXPECT_TRUE(workerMessagingProxy()->hasPendingActivity());
 
   // Stop the timer.
   dispatchMessageEvent();
   EXPECT_EQ(1u, workerMessagingProxy()->unconfirmedMessageCount());
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
-  workerMessagingProxy()->waitUntil(WaitUntilMode::MessageConfirmed);
+  EXPECT_TRUE(workerMessagingProxy()->hasPendingActivity());
+  EXPECT_EQ(Notification::MessageConfirmed,
+            workerMessagingProxy()->waitForNotification());
   EXPECT_EQ(0u, workerMessagingProxy()->unconfirmedMessageCount());
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
+  EXPECT_TRUE(workerMessagingProxy()->hasPendingActivity());
 
   // There should be no pending activities after the timer is stopped.
-  workerMessagingProxy()->waitUntil(WaitUntilMode::PendingActivityReported);
-  EXPECT_FALSE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
+  EXPECT_EQ(Notification::PendingActivityReported,
+            workerMessagingProxy()->waitForNotification());
+  EXPECT_FALSE(workerMessagingProxy()->hasPendingActivity());
 }
 
-TEST_P(DedicatedWorkerTest, PendingActivity_SetTimeoutOnMessageEvent) {
+TEST_F(DedicatedWorkerTest, PendingActivity_SetTimeoutOnMessageEvent) {
   // Start an oneshot timer on a message event.
   const String sourceCode =
       "addEventListener('message', function(event) {"
       "  setTimeout(function() {}, 0);"
       "});";
-  startWithSourceCode(sourceCode);
+  workerMessagingProxy()->startWithSourceCode(sourceCode);
 
   // Worker initialization should be counted as a pending activity.
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
-  workerMessagingProxy()->waitUntil(WaitUntilMode::PendingActivityReported);
-  EXPECT_FALSE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
+  EXPECT_TRUE(workerMessagingProxy()->hasPendingActivity());
+  EXPECT_EQ(Notification::PendingActivityReported,
+            workerMessagingProxy()->waitForNotification());
+  EXPECT_FALSE(workerMessagingProxy()->hasPendingActivity());
 
   // A message starts the oneshot timer that is counted as a pending activity.
   dispatchMessageEvent();
   EXPECT_EQ(1u, workerMessagingProxy()->unconfirmedMessageCount());
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
-  workerMessagingProxy()->waitUntil(WaitUntilMode::MessageConfirmed);
+  EXPECT_TRUE(workerMessagingProxy()->hasPendingActivity());
+  EXPECT_EQ(Notification::MessageConfirmed,
+            workerMessagingProxy()->waitForNotification());
   EXPECT_EQ(0u, workerMessagingProxy()->unconfirmedMessageCount());
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
+  EXPECT_TRUE(workerMessagingProxy()->hasPendingActivity());
 
   // The timer is fired soon and there should be no pending activities after
   // that.
-  workerMessagingProxy()->waitUntil(WaitUntilMode::PendingActivityReported);
-  EXPECT_FALSE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
+  EXPECT_EQ(Notification::PendingActivityReported,
+            workerMessagingProxy()->waitForNotification());
+  EXPECT_FALSE(workerMessagingProxy()->hasPendingActivity());
 }
 
-TEST_P(DedicatedWorkerTest, PendingActivity_SetIntervalOnMessageEvent) {
+TEST_F(DedicatedWorkerTest, PendingActivity_SetIntervalOnMessageEvent) {
   // Start a repeated timer on a message event, and stop it when another
   // message is received. The timer needs a non-zero delay or else worker
   // activities would not run.
@@ -316,25 +333,23 @@ TEST_P(DedicatedWorkerTest, PendingActivity_SetIntervalOnMessageEvent) {
       "    clearInterval(id);"
       "  }"
       "});";
-  startWithSourceCode(sourceCode);
+  workerMessagingProxy()->startWithSourceCode(sourceCode);
 
   // Worker initialization should be counted as a pending activity.
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
-  workerMessagingProxy()->waitUntil(WaitUntilMode::PendingActivityReported);
-  EXPECT_FALSE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
+  EXPECT_TRUE(workerMessagingProxy()->hasPendingActivity());
+  EXPECT_EQ(Notification::PendingActivityReported,
+            workerMessagingProxy()->waitForNotification());
+  EXPECT_FALSE(workerMessagingProxy()->hasPendingActivity());
 
   // The first message event sets the active timer that is counted as a
   // pending activity.
   dispatchMessageEvent();
   EXPECT_EQ(1u, workerMessagingProxy()->unconfirmedMessageCount());
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
-  workerMessagingProxy()->waitUntil(WaitUntilMode::MessageConfirmed);
+  EXPECT_TRUE(workerMessagingProxy()->hasPendingActivity());
+  EXPECT_EQ(Notification::MessageConfirmed,
+            workerMessagingProxy()->waitForNotification());
   EXPECT_EQ(0u, workerMessagingProxy()->unconfirmedMessageCount());
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
+  EXPECT_TRUE(workerMessagingProxy()->hasPendingActivity());
 
   // Run the message loop for a while to make sure the timer is counted as a
   // pending activity until it's stopped. The delay is equal to the max
@@ -342,23 +357,51 @@ TEST_P(DedicatedWorkerTest, PendingActivity_SetIntervalOnMessageEvent) {
   // to run before the next expectation check.
   const double kDelayInMs = kMaxIntervalInSec * 1000;
   testing::runDelayedTasks(kDelayInMs);
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
+  EXPECT_TRUE(workerMessagingProxy()->hasPendingActivity());
 
   // Stop the timer.
   dispatchMessageEvent();
   EXPECT_EQ(1u, workerMessagingProxy()->unconfirmedMessageCount());
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
-  workerMessagingProxy()->waitUntil(WaitUntilMode::MessageConfirmed);
+  EXPECT_TRUE(workerMessagingProxy()->hasPendingActivity());
+  EXPECT_EQ(Notification::MessageConfirmed,
+            workerMessagingProxy()->waitForNotification());
   EXPECT_EQ(0u, workerMessagingProxy()->unconfirmedMessageCount());
-  EXPECT_TRUE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
 
   // There should be no pending activities after the timer is stopped.
-  workerMessagingProxy()->waitUntil(WaitUntilMode::PendingActivityReported);
-  EXPECT_FALSE(
-      workerMessagingProxy()->workerGlobalScopeMayHavePendingActivity());
+  EXPECT_EQ(Notification::PendingActivityReported,
+            workerMessagingProxy()->waitForNotification());
+  EXPECT_FALSE(workerMessagingProxy()->hasPendingActivity());
+}
+
+TEST_F(DedicatedWorkerTest, UseCounter) {
+  const String sourceCode = "// Do nothing";
+  workerMessagingProxy()->startWithSourceCode(sourceCode);
+
+  // This feature is randomly selected.
+  const UseCounter::Feature feature1 = UseCounter::Feature::RequestFileSystem;
+
+  // API use on the DedicatedWorkerGlobalScope should be recorded in UseCounter
+  // on the Document.
+  EXPECT_FALSE(UseCounter::isCounted(document(), feature1));
+  workerThread()->postTask(
+      BLINK_FROM_HERE,
+      createCrossThreadTask(&DedicatedWorkerThreadForTest::countFeature,
+                            crossThreadUnretained(workerThread()), feature1));
+  testing::enterRunLoop();
+  EXPECT_TRUE(UseCounter::isCounted(document(), feature1));
+
+  // This feature is randomly selected from Deprecation::deprecationMessage().
+  const UseCounter::Feature feature2 = UseCounter::Feature::PrefixedStorageInfo;
+
+  // Deprecated API use on the DedicatedWorkerGlobalScope should be recorded in
+  // UseCounter on the Document.
+  EXPECT_FALSE(UseCounter::isCounted(document(), feature2));
+  workerThread()->postTask(
+      BLINK_FROM_HERE,
+      createCrossThreadTask(&DedicatedWorkerThreadForTest::countDeprecation,
+                            crossThreadUnretained(workerThread()), feature2));
+  testing::enterRunLoop();
+  EXPECT_TRUE(UseCounter::isCounted(document(), feature2));
 }
 
 }  // namespace blink

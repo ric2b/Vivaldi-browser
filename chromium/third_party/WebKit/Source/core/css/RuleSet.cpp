@@ -40,7 +40,7 @@
 #include "core/html/track/TextTrackCue.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/heap/HeapTerminatedArrayBuilder.h"
-#include "platform/tracing/TraceEvent.h"
+#include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
 
 #include "wtf/TerminatedArrayBuilder.h"
@@ -129,7 +129,8 @@ RuleData::RuleData(StyleRule* rule,
       m_linkMatchType(selector().computeLinkMatchType()),
       m_hasDocumentSecurityOrigin(addRuleFlags & RuleHasDocumentSecurityOrigin),
       m_propertyWhitelist(
-          determinePropertyWhitelistType(addRuleFlags, selector())) {
+          determinePropertyWhitelistType(addRuleFlags, selector())),
+      m_descendantSelectorIdentifierHashes() {
   SelectorFilter::collectIdentifierHashes(
       selector(), m_descendantSelectorIdentifierHashes, maximumIdentifierCount);
 }
@@ -176,7 +177,7 @@ bool RuleSet::findBestRuleSetAndAdd(const CSSSelector& component,
   AtomicString tagName;
 
 #ifndef NDEBUG
-  m_allRules.append(ruleData);
+  m_allRules.push_back(ruleData);
 #endif
 
   const CSSSelector* it = &component;
@@ -210,15 +211,18 @@ bool RuleSet::findBestRuleSetAndAdd(const CSSSelector& component,
 
   switch (component.getPseudoType()) {
     case CSSSelector::PseudoCue:
-      m_cuePseudoRules.append(ruleData);
+      m_cuePseudoRules.push_back(ruleData);
       return true;
     case CSSSelector::PseudoLink:
     case CSSSelector::PseudoVisited:
     case CSSSelector::PseudoAnyLink:
-      m_linkPseudoClassRules.append(ruleData);
+      m_linkPseudoClassRules.push_back(ruleData);
       return true;
     case CSSSelector::PseudoFocus:
-      m_focusPseudoClassRules.append(ruleData);
+      m_focusPseudoClassRules.push_back(ruleData);
+      return true;
+    case CSSSelector::PseudoPlaceholder:
+      m_placeholderPseudoRules.push_back(ruleData);
       return true;
     default:
       break;
@@ -230,7 +234,7 @@ bool RuleSet::findBestRuleSetAndAdd(const CSSSelector& component,
   }
 
   if (component.isHostPseudoClass()) {
-    m_shadowHostRules.append(ruleData);
+    m_shadowHostRules.push_back(ruleData);
     return true;
   }
 
@@ -248,23 +252,23 @@ void RuleSet::addRule(StyleRule* rule,
   if (!findBestRuleSetAndAdd(ruleData.selector(), ruleData)) {
     // If we didn't find a specialized map to stick it in, file under universal
     // rules.
-    m_universalRules.append(ruleData);
+    m_universalRules.push_back(ruleData);
   }
 }
 
 void RuleSet::addPageRule(StyleRulePage* rule) {
   ensurePendingRules();  // So that m_pageRules.shrinkToFit() gets called.
-  m_pageRules.append(rule);
+  m_pageRules.push_back(rule);
 }
 
 void RuleSet::addFontFaceRule(StyleRuleFontFace* rule) {
   ensurePendingRules();  // So that m_fontFaceRules.shrinkToFit() gets called.
-  m_fontFaceRules.append(rule);
+  m_fontFaceRules.push_back(rule);
 }
 
 void RuleSet::addKeyframesRule(StyleRuleKeyframes* rule) {
   ensurePendingRules();  // So that m_keyframesRules.shrinkToFit() gets called.
-  m_keyframesRules.append(rule);
+  m_keyframesRules.push_back(rule);
 }
 
 void RuleSet::addChildRules(const HeapVector<Member<StyleRuleBase>>& rules,
@@ -281,13 +285,13 @@ void RuleSet::addChildRules(const HeapVector<Member<StyleRuleBase>>& rules,
            selector = selectorList.next(*selector)) {
         size_t selectorIndex = selectorList.selectorIndex(*selector);
         if (selector->hasDeepCombinatorOrShadowPseudo()) {
-          m_deepCombinatorOrShadowPseudoRules.append(
+          m_deepCombinatorOrShadowPseudoRules.push_back(
               MinimalRuleData(styleRule, selectorIndex, addRuleFlags));
         } else if (selector->hasContentPseudo()) {
-          m_contentPseudoElementRules.append(
+          m_contentPseudoElementRules.push_back(
               MinimalRuleData(styleRule, selectorIndex, addRuleFlags));
         } else if (selector->hasSlottedPseudo()) {
-          m_slottedPseudoElementRules.append(
+          m_slottedPseudoElementRules.push_back(
               MinimalRuleData(styleRule, selectorIndex, addRuleFlags));
         } else {
           addRule(styleRule, selectorIndex, addRuleFlags);
@@ -297,10 +301,10 @@ void RuleSet::addChildRules(const HeapVector<Member<StyleRuleBase>>& rules,
       addPageRule(toStyleRulePage(rule));
     } else if (rule->isMediaRule()) {
       StyleRuleMedia* mediaRule = toStyleRuleMedia(rule);
-      if ((!mediaRule->mediaQueries() ||
-           medium.eval(mediaRule->mediaQueries(),
-                       &m_viewportDependentMediaQueryResults,
-                       &m_deviceDependentMediaQueryResults)))
+      if (!mediaRule->mediaQueries() ||
+          medium.eval(mediaRule->mediaQueries(),
+                      &m_features.viewportDependentMediaQueryResults(),
+                      &m_features.deviceDependentMediaQueryResults()))
         addChildRules(mediaRule->childRules(), medium, addRuleFlags);
     } else if (rule->isFontFaceRule()) {
       addFontFaceRule(toStyleRuleFontFace(rule));
@@ -327,8 +331,8 @@ void RuleSet::addRulesFromSheet(StyleSheetContents* sheet,
     if (importRule->styleSheet() &&
         (!importRule->mediaQueries() ||
          medium.eval(importRule->mediaQueries(),
-                     &m_viewportDependentMediaQueryResults,
-                     &m_deviceDependentMediaQueryResults)))
+                     &m_features.viewportDependentMediaQueryResults(),
+                     &m_features.deviceDependentMediaQueryResults())))
       addRulesFromSheet(importRule->styleSheet(), medium, addRuleFlags);
   }
 
@@ -371,6 +375,7 @@ void RuleSet::compactRules() {
   m_linkPseudoClassRules.shrinkToFit();
   m_cuePseudoRules.shrinkToFit();
   m_focusPseudoClassRules.shrinkToFit();
+  m_placeholderPseudoRules.shrinkToFit();
   m_universalRules.shrinkToFit();
   m_shadowHostRules.shrinkToFit();
   m_pageRules.shrinkToFit();
@@ -404,6 +409,7 @@ DEFINE_TRACE(RuleSet) {
   visitor->trace(m_linkPseudoClassRules);
   visitor->trace(m_cuePseudoRules);
   visitor->trace(m_focusPseudoClassRules);
+  visitor->trace(m_placeholderPseudoRules);
   visitor->trace(m_universalRules);
   visitor->trace(m_shadowHostRules);
   visitor->trace(m_features);
@@ -413,8 +419,6 @@ DEFINE_TRACE(RuleSet) {
   visitor->trace(m_deepCombinatorOrShadowPseudoRules);
   visitor->trace(m_contentPseudoElementRules);
   visitor->trace(m_slottedPseudoElementRules);
-  visitor->trace(m_viewportDependentMediaQueryResults);
-  visitor->trace(m_deviceDependentMediaQueryResults);
   visitor->trace(m_pendingRules);
 #ifndef NDEBUG
   visitor->trace(m_allRules);

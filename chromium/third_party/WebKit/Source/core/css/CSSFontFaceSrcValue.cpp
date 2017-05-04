@@ -31,10 +31,10 @@
 #include "core/dom/Node.h"
 #include "core/fetch/FetchInitiatorTypeNames.h"
 #include "core/fetch/FetchRequest.h"
-#include "core/fetch/FontResource.h"
 #include "core/fetch/ResourceFetcher.h"
-#include "core/loader/MixedContentChecker.h"
+#include "core/loader/resource/FontResource.h"
 #include "platform/CrossOriginAttributeValue.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontCustomPlatformData.h"
 #include "platform/weborigin/SecurityPolicy.h"
@@ -47,9 +47,10 @@ bool CSSFontFaceSrcValue::isSupportedFormat() const {
   // with the old WinIE style of font-face, we will also check to see if the URL
   // ends with .eot.  If so, we'll go ahead and assume that we shouldn't load
   // it.
-  if (m_format.isEmpty())
-    return m_absoluteResource.startsWith("data:", TextCaseInsensitive) ||
-           !m_absoluteResource.endsWith(".eot", TextCaseInsensitive);
+  if (m_format.isEmpty()) {
+    return m_absoluteResource.startsWith("data:", TextCaseASCIIInsensitive) ||
+           !m_absoluteResource.endsWith(".eot", TextCaseASCIIInsensitive);
+  }
 
   return FontCustomPlatformData::supportsFormat(m_format);
 }
@@ -90,6 +91,8 @@ FontResource* CSSFontFaceSrcValue::fetch(Document* document) const {
   if (!m_fetched) {
     FetchRequest request(ResourceRequest(m_absoluteResource),
                          FetchInitiatorTypeNames::css);
+    if (RuntimeEnabledFeatures::webFontsCacheAwareTimeoutAdaptationEnabled())
+      request.setCacheAwareLoadingEnabled(IsCacheAwareLoadingEnabled);
     request.setContentSecurityCheck(m_shouldCheckContentSecurityPolicy);
     SecurityOrigin* securityOrigin = document->getSecurityOrigin();
     setCrossOriginAccessControl(request, securityOrigin);
@@ -114,21 +117,11 @@ void CSSFontFaceSrcValue::restoreCachedResourceIfNeeded(
   ASSERT(document && document->fetcher());
 
   const String resourceURL = document->completeURL(m_absoluteResource);
-  if (document->fetcher()->cachedResource(KURL(ParsedURLString, resourceURL)))
-    return;
-
-  FetchRequest request(ResourceRequest(resourceURL),
-                       FetchInitiatorTypeNames::css);
-  request.setContentSecurityCheck(m_shouldCheckContentSecurityPolicy);
-  request.mutableResourceRequest().setRequestContext(
-      WebURLRequest::RequestContextFont);
-  MixedContentChecker::shouldBlockFetch(
-      document->frame(), m_fetched->resource()->lastResourceRequest(),
-      m_fetched->resource()->lastResourceRequest().url(),
-      MixedContentChecker::SendReport);
-  document->fetcher()->requestLoadStarted(
-      m_fetched->resource()->identifier(), m_fetched->resource(), request,
-      ResourceFetcher::ResourceLoadingFromCache);
+  DCHECK_EQ(m_shouldCheckContentSecurityPolicy,
+            m_fetched->resource()->options().contentSecurityPolicyOption);
+  document->fetcher()->emulateLoadStartedForInspector(
+      m_fetched->resource(), KURL(ParsedURLString, resourceURL),
+      WebURLRequest::RequestContextFont, FetchInitiatorTypeNames::css);
 }
 
 bool CSSFontFaceSrcValue::equals(const CSSFontFaceSrcValue& other) const {

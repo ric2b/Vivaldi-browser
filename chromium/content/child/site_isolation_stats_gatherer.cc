@@ -98,7 +98,7 @@ void SiteIsolationStatsGatherer::SetEnabled(bool enabled) {
 
 std::unique_ptr<SiteIsolationResponseMetaData>
 SiteIsolationStatsGatherer::OnReceivedResponse(
-    const GURL& frame_origin,
+    const url::Origin& frame_origin,
     const GURL& response_url,
     ResourceType resource_type,
     int origin_pid,
@@ -124,6 +124,8 @@ SiteIsolationStatsGatherer::OnReceivedResponse(
   if (!CrossSiteDocumentClassifier::IsBlockableScheme(response_url))
     return nullptr;
 
+  // TODO(csharrison): Add a path for IsSameSite/IsValidCorsHeaderSet to take an
+  // Origin.
   if (CrossSiteDocumentClassifier::IsSameSite(frame_origin, response_url))
     return nullptr;
 
@@ -143,8 +145,9 @@ SiteIsolationStatsGatherer::OnReceivedResponse(
   info.headers->EnumerateHeader(NULL, "access-control-allow-origin",
                                 &access_control_origin);
   if (CrossSiteDocumentClassifier::IsValidCorsHeaderSet(
-          frame_origin, response_url, access_control_origin))
+          frame_origin, response_url, access_control_origin)) {
     return nullptr;
+  }
 
   // Real XSD data collection starts from here.
   std::string no_sniff;
@@ -152,7 +155,6 @@ SiteIsolationStatsGatherer::OnReceivedResponse(
 
   std::unique_ptr<SiteIsolationResponseMetaData> resp_data(
       new SiteIsolationResponseMetaData);
-  resp_data->frame_origin = frame_origin.spec();
   resp_data->response_url = response_url;
   resp_data->resource_type = resource_type;
   resp_data->canonical_mime_type = canonical_mime_type;

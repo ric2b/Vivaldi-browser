@@ -21,20 +21,21 @@ const char kVivaldiAppId[] = VIVALDI_APP_ID;
 const char kVivaldiAppURLDomain[] = "chrome-extension://" VIVALDI_APP_ID "/";
 
 // Defines the URL that should be opened in an empty new tab or window.
-const char kVivaldiNewTabURL[] =
-  "chrome-extension://" VIVALDI_APP_ID "/components/"
-  "startpage/startpage.html";
+const char kVivaldiNewTabURL[] = "chrome-extension://" VIVALDI_APP_ID
+                                 "/components/"
+                                 "startpage/startpage.html";
 
 // Error message reported to extensions trying to use Vivaldi reserved APIs
 const char kVivaldiReservedApiError[] =
     "Access denied while trying to set a reserved property.";
 
 const char kVivaldiUIScheme[] = "vivaldi";
-const char kVivaldiUINewTabHost[] = "newtab";
-const char kVivaldiUINewTabURL[] = "vivaldi://newtab/";
 
 const char kVivaldiVersion[] = VIVALDI_VERSION_STRING;
 
 const char kWindowExtDataKey[] = "extData";
 
+const wchar_t kUpdateNotifierAutorunName[] = L"Vivaldi Update Notifier";
+const wchar_t kQuitAllUpdateNotifiersEventName[] =
+    L"Local\\Vivaldi/Update_notifier/QuitAll";
 }  // namespace vivaldi

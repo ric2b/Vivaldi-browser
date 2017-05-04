@@ -8,9 +8,10 @@ import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_E
 
 import android.content.Context;
 import android.net.Uri;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 import android.widget.LinearLayout;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
@@ -113,8 +114,8 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
 
         @Override
         protected void nativeGatherSurroundingText(long nativeContextualSearchManager,
-                String selection, boolean useResolvedSearchTerm,
-                WebContents webContents, boolean maySendBasePageUrl) {}
+                String selection, String homeCountry, WebContents webContents,
+                boolean maySendBasePageUrl) {}
 
         /**
          * @return A stubbed ContentViewCore for mocking text selection.
@@ -198,7 +199,13 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
      */
     private void mockTapText(String text) {
         mContextualSearchManager.getBaseContentView().setSelectedText(text);
-        mContextualSearchClient.onSelectionEvent(SelectionEventType.SELECTION_HANDLES_SHOWN, 0, 0);
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mContextualSearchClient.onSelectionEvent(SelectionEventType.SELECTION_HANDLES_SHOWN,
+                        0, 0);
+            }
+        });
     }
 
     /**

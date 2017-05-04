@@ -328,14 +328,13 @@ def summarize_results(port_obj, expectations, initial_results,
     # checking total number of results vs. total number of tests?)
     results['interrupted'] = initial_results.interrupted
     results['layout_tests_dir'] = port_obj.layout_tests_dir()
-    results['has_wdiff'] = port_obj.wdiff_available()
-    results['has_pretty_patch'] = port_obj.pretty_patch_available()
     results['pixel_tests_enabled'] = port_obj.get_option('pixel_tests')
     results['seconds_since_epoch'] = int(time.time())
     results['build_number'] = port_obj.get_option('build_number')
     results['builder_name'] = port_obj.get_option('builder_name')
     if port_obj.get_option('order') == 'random':
         results['random_order_seed'] = port_obj.get_option('seed')
+    results['path_delimiter'] = '/'
 
     # Don't do this by default since it takes >100ms.
     # It's only used for rebaselining and uploading data to the flakiness dashboard.

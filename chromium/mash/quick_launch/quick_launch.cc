@@ -24,13 +24,9 @@
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 #include "ui/views/mus/aura_init.h"
-#include "ui/views/mus/window_manager_connection.h"
+#include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "url/gurl.h"
-
-namespace views {
-class AuraInit;
-}
 
 namespace mash {
 namespace quick_launch {
@@ -140,7 +136,7 @@ class QuickLaunchUI : public views::WidgetDelegateView,
   void Launch(const std::string& name, bool new_window) {
     std::unique_ptr<service_manager::Connection> connection =
         connector_->Connect(name);
-    mojom::LaunchablePtr launchable;
+    ::mash::mojom::LaunchablePtr launchable;
     connection->GetInterface(&launchable);
     connections_.push_back(std::move(connection));
     launchable->Launch(mojom::kWindow,
@@ -174,16 +170,15 @@ void QuickLaunch::OnStart() {
   tracing_.Initialize(context()->connector(), context()->identity().name());
 
   aura_init_ = base::MakeUnique<views::AuraInit>(
-      context()->connector(), context()->identity(), "views_mus_resources.pak");
-  window_manager_connection_ = views::WindowManagerConnection::Create(
-      context()->connector(), context()->identity());
+      context()->connector(), context()->identity(), "views_mus_resources.pak",
+      std::string(), nullptr, views::AuraInit::Mode::AURA_MUS);
 
   Launch(mojom::kWindow, mojom::LaunchMode::MAKE_NEW);
 }
 
 bool QuickLaunch::OnConnect(const service_manager::ServiceInfo& remote_info,
                             service_manager::InterfaceRegistry* registry) {
-  registry->AddInterface<mojom::Launchable>(this);
+  registry->AddInterface<::mash::mojom::Launchable>(this);
   return true;
 }
 
@@ -195,8 +190,7 @@ void QuickLaunch::Launch(uint32_t what, mojom::LaunchMode how) {
     return;
   }
   catalog::mojom::CatalogPtr catalog;
-  context()->connector()->ConnectToInterface(catalog::mojom::kServiceName,
-                                             &catalog);
+  context()->connector()->BindInterface(catalog::mojom::kServiceName, &catalog);
 
   views::Widget* window = views::Widget::CreateWindowWithContextAndBounds(
       new QuickLaunchUI(this, context()->connector(), std::move(catalog)),
@@ -206,7 +200,7 @@ void QuickLaunch::Launch(uint32_t what, mojom::LaunchMode how) {
 }
 
 void QuickLaunch::Create(const service_manager::Identity& remote_identity,
-                         mojom::LaunchableRequest request) {
+                         ::mash::mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }
 

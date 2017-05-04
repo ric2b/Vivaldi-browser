@@ -19,6 +19,10 @@ const base::Feature kAsmJsToWebAssembly{"AsmJsToWebAssembly",
 const base::Feature kBrotliEncoding{"brotli-encoding",
                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables browser side navigation (aka PlzNavigate). http://crbug.com/368813
+const base::Feature kBrowserSideNavigation{"browser-side-navigation",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
 // If Canvas2D Image Chromium is allowed, this feature controls whether it is
 // enabled.
 const base::Feature kCanvas2DImageChromium{"Canvas2DImageChromium",
@@ -61,10 +65,19 @@ const base::Feature kDocumentWriteEvaluator{"DocumentWriteEvaluator",
 const base::Feature kExpensiveBackgroundTimerThrottling{
     "ExpensiveBackgroundTimerThrottling", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables faster location.reload() to use a reload mode that revalidates only
+// main resource forcibly. https://crbug.com/670237.
+const base::Feature kFasterLocationReload{"FasterLocationReload",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables the Feature Policy framework for granting and removing access to
 // other features through HTTP headers.
 const base::Feature kFeaturePolicy{"FeaturePolicy",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable filtering of same-origin tiny plugins
+const base::Feature kFilterSameOriginTinyPlugin{
+    "FilterSameOriginTinyPlugins", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables a blink::FontCache optimization that reuses a font to serve different
 // size of font.
@@ -92,6 +105,10 @@ const base::Feature kGenericSensor{"GenericSensor",
 const base::Feature kGuestViewCrossProcessFrames{
     "GuestViewCrossProcessFrames", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables BlinkGC heap compaction.
+const base::Feature kHeapCompaction{"HeapCompaction",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables lazily parsing css properties for performance.
 const base::Feature kLazyParseCSS{"LazyParseCSS",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
@@ -111,14 +128,13 @@ const base::Feature kMemoryCoordinator {
   "MemoryCoordinator", base::FEATURE_DISABLED_BY_DEFAULT
 };
 
-// Non-validating reload for desktop.
-// See https://crbug.com/591245
-const base::Feature kNonValidatingReloadOnNormalReload{
-    "NonValidatingReloadOnNormalReload", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Kill switch for Web Notification content images.
 const base::Feature kNotificationContentImage{"NotificationContentImage",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
+// An experiment forcing events to be non-blocking when the main thread is
+// deemed unresponsive.  See crbug.com/599609.
+const base::Feature kMainThreadBusyScrollIntervention{
+    "MainThreadBusyScrollIntervention", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // An experiment to optimize resource loading IPC for small resources.
 // http://crbug.com/580928
@@ -139,18 +155,13 @@ const base::Feature kPassiveDocumentEventListeners{
     "PassiveDocumentEventListeners", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Whether we should force a touchstart and first touchmove per scroll event
-// listeners to be 'passive' during fling.
+// listeners to be non-blocking during fling.
 const base::Feature kPassiveEventListenersDueToFling{
-    "PassiveEventListenersDueToFling", base::FEATURE_DISABLED_BY_DEFAULT};
+    "PassiveEventListenersDueToFling", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Pointer events support.
 const base::Feature kPointerEvents{"PointerEvent",
                                    base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Whether pointer event capturing follow v1 spec instead of v2 proposal.
-// See https://rawgit.com/w3c/pointerevents/reduce-hit-tests/index.html.
-const base::Feature kPointerEventV1SpecCapturing{
-    "PointerEventV1SpecCapturing", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables purge and suspend.
 const base::Feature kPurgeAndSuspend{"PurgeAndSuspend",
@@ -166,8 +177,14 @@ const base::Feature kRafAlignedTouchInputEvents{
 
 // If Pepper 3D Image Chromium is allowed, this feature controls whether it is
 // enabled.
-const base::Feature kPepper3DImageChromium{"Pepper3DImageChromium",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kPepper3DImageChromium {
+  "Pepper3DImageChromium",
+#if defined(OS_MACOSX)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 // Throttle Blink's rendering pipeline based on frame visibility.
 const base::Feature kRenderingPipelineThrottling{
@@ -178,14 +195,20 @@ const base::Feature kScrollAnchoring{"ScrollAnchoring",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Navigation preload feature of service workers.
-// TODO(horo): Revise link when this lands in the spec:
-// https://github.com/w3c/ServiceWorker/pull/983/files
+// Enables this base::Feature by default for Origin-Trial, but enables the
+// corresponding blink::WebRuntimeFeatures only when '--enable-features' command
+// line flag is given. See the comments in runtime_features.cc and
+// service_worker_version.h for the details.
 const base::Feature kServiceWorkerNavigationPreload{
-    "ServiceWorkerNavigationPreload", base::FEATURE_DISABLED_BY_DEFAULT};
+    "ServiceWorkerNavigationPreload", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // http://tc39.github.io/ecmascript_sharedmem/shmem.html
 const base::Feature kSharedArrayBuffer{"SharedArrayBuffer",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Paint invalidation based on slimming paint. See https://goo.gl/eQczQW
+const base::Feature kSlimmingPaintInvalidation{
+    "SlimmingPaintInvalidation", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Speculatively launches Service Workers on mouse/touch events.
 const base::Feature kSpeculativeLaunchServiceWorker{
@@ -199,7 +222,7 @@ const base::Feature kStaleWhileRevalidate{"StaleWhileRevalidate2",
 
 // Throttle Blink timers in out-of-view cross origin frames.
 const base::Feature kTimerThrottlingForHiddenFrames{
-    "TimerThrottlingForHiddenFrames", base::FEATURE_DISABLED_BY_DEFAULT};
+    "TimerThrottlingForHiddenFrames", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables token binding
 // (https://www.ietf.org/id/draft-ietf-tokbind-protocol-04.txt).
@@ -233,6 +256,10 @@ const base::Feature kWebRtcUseGpuMemoryBufferVideoFrames{
     "WebRTC-UseGpuMemoryBufferVideoFrames",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables HW H264 encoding on Android.
+const base::Feature kWebRtcHWH264Encoding{
+    "WebRtcHWH264Encoding", base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Controls whether the WebUSB API is enabled:
 // https://wicg.github.io/webusb
 const base::Feature kWebUsb{"WebUSB", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -243,20 +270,29 @@ const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
-// Use IME's own thread instead of using main UI thread. It also means that
-// we will not use replica editor and do a round trip to renderer to synchronize
-// with Blink data.
-const base::Feature kImeThread{"ImeThread", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // FeatureList definition for the Seccomp field trial.
 const base::Feature kSeccompSandboxAndroid{"SeccompSandboxAndroid",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Service worker based payment apps as defined by w3c here:
+// https://w3c.github.io/webpayments-payment-apps-api/
+const base::Feature kServiceWorkerPaymentApps{
+    "ServiceWorkerPaymentApps",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // The JavaScript API for payments on the web.
 const base::Feature kWebPayments{"WebPayments",
                                  base::FEATURE_ENABLED_BY_DEFAULT};
 
 #endif
+
+#if !defined(OS_ANDROID)
+// Controls whether media playback in cross-origin iframes is enabled. The
+// feature overrides |kDisableGestureRequirementForMediaPlayback|.
+const base::Feature kCrossOriginMediaPlaybackRequiresUserGesture{
+    "CrossOriginMediaPlaybackRequiresUserGesture",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // !defined(OS_ANDROID)
 
 #if defined(OS_WIN)
 // Emergency "off switch" for new Windows sandbox security mitigation,

@@ -34,13 +34,13 @@ Sources.AdvancedSearchView = class extends UI.VBox {
     this._searchInputClearElement.hidden = true;
     this._searchInputClearElement.addEventListener('click', this._onSearchInputClear.bind(this), false);
 
-    this._ignoreCaseLabel = createCheckboxLabel(Common.UIString('Ignore case'));
+    this._ignoreCaseLabel = UI.createCheckboxLabel(Common.UIString('Ignore case'));
     this._ignoreCaseLabel.classList.add('search-config-label');
     this._searchPanelElement.appendChild(this._ignoreCaseLabel);
     this._ignoreCaseCheckbox = this._ignoreCaseLabel.checkboxElement;
     this._ignoreCaseCheckbox.classList.add('search-config-checkbox');
 
-    this._regexLabel = createCheckboxLabel(Common.UIString('Regular expression'));
+    this._regexLabel = UI.createCheckboxLabel(Common.UIString('Regular expression'));
     this._regexLabel.classList.add('search-config-label');
     this._searchPanelElement.appendChild(this._regexLabel);
     this._regexCheckbox = this._regexLabel.checkboxElement;
@@ -236,8 +236,15 @@ Sources.AdvancedSearchView = class extends UI.VBox {
 
   _updateSearchResultsMessage() {
     if (this._searchMatchesCount && this._searchResultsCount) {
-      this._searchResultsMessageElement.textContent =
-          Common.UIString('Found %d matches in %d files.', this._searchMatchesCount, this._nonEmptySearchResultsCount);
+      if (this._searchMatchesCount === 1 && this._nonEmptySearchResultsCount === 1) {
+        this._searchResultsMessageElement.textContent = Common.UIString('Found 1 matching line in 1 file.');
+      } else if (this._searchMatchesCount > 1 && this._nonEmptySearchResultsCount === 1) {
+        this._searchResultsMessageElement.textContent =
+            Common.UIString('Found %d matching lines in 1 file.', this._searchMatchesCount);
+      } else {
+        this._searchResultsMessageElement.textContent = Common.UIString(
+            'Found %d matching lines in %d files.', this._searchMatchesCount, this._nonEmptySearchResultsCount);
+      }
     } else {
       this._searchResultsMessageElement.textContent = '';
     }
@@ -419,18 +426,18 @@ Sources.SearchScope.prototype = {
    * @param {function(!Sources.FileBasedSearchResult)} searchResultCallback
    * @param {function(boolean)} searchFinishedCallback
    */
-  performSearch: function(searchConfig, progress, searchResultCallback, searchFinishedCallback) {},
+  performSearch(searchConfig, progress, searchResultCallback, searchFinishedCallback) {},
 
   /**
    * @param {!Common.Progress} progress
    */
-  performIndexing: function(progress) {},
+  performIndexing(progress) {},
 
-  stopSearch: function() {},
+  stopSearch() {},
 
   /**
    * @param {!Workspace.ProjectSearchConfig} searchConfig
    * @return {!Sources.SearchResultsPane}
    */
-  createSearchResultsPane: function(searchConfig) {}
+  createSearchResultsPane(searchConfig) {}
 };

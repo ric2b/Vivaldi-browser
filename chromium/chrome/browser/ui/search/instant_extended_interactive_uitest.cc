@@ -15,7 +15,6 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -308,7 +307,13 @@ class InstantPolicyTest : public ExtensionBrowserTest, public InstantTestBase {
   DISALLOW_COPY_AND_ASSIGN(InstantPolicyTest);
 };
 
-IN_PROC_BROWSER_TEST_F(InstantExtendedTest, SearchDoesntReuseInstantTab) {
+// Flaky on Windows in the CQ and Linux memory bot: https://crbug.com/678975
+#if defined(OS_WIN) || defined(OS_LINUX)
+#define MAYBE_SearchDoesntReuseInstantTab DISABLED_SearchDoesntReuseInstantTab
+#else
+#define MAYBE_SearchDoesntReuseInstantTab SearchDoesntReuseInstantTab
+#endif
+IN_PROC_BROWSER_TEST_F(InstantExtendedTest, MAYBE_SearchDoesntReuseInstantTab) {
   ASSERT_NO_FATAL_FAILURE(SetupInstant(browser()));
   FocusOmnibox();
 

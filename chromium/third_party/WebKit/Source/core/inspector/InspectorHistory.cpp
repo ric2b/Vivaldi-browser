@@ -31,7 +31,6 @@
 #include "core/inspector/InspectorHistory.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Node.h"
 
 namespace blink {
@@ -91,13 +90,13 @@ void InspectorHistory::appendPerformedAction(Action* action) {
     m_history.resize(m_afterLastActionIndex);
   } else {
     m_history.resize(m_afterLastActionIndex);
-    m_history.append(action);
+    m_history.push_back(action);
     ++m_afterLastActionIndex;
   }
 }
 
 void InspectorHistory::markUndoableState() {
-  perform(new UndoableStateMark(), IGNORE_EXCEPTION);
+  perform(new UndoableStateMark(), IGNORE_EXCEPTION_FOR_TESTING);
 }
 
 bool InspectorHistory::undo(ExceptionState& exceptionState) {

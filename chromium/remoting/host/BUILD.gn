@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/util/process_version.gni")
+import("//media/media_options.gni")
 import("//remoting/build/config/remoting_build.gni")
 
 group("all_tests") {
@@ -161,6 +162,8 @@ static_library("host") {
     "host_event_logger_win.cc",
     "host_exit_codes.cc",
     "host_exit_codes.h",
+    "host_experiment_session_plugin.cc",
+    "host_experiment_session_plugin.h",
     "host_export.h",
     "host_extension.h",
     "host_extension_session.h",
@@ -170,6 +173,8 @@ static_library("host") {
     "host_power_save_blocker.h",
     "host_secret.cc",
     "host_secret.h",
+    "host_session_options.cc",
+    "host_session_options.h",
     "host_status_logger.cc",
     "host_status_logger.h",
     "host_status_monitor.h",
@@ -197,8 +202,6 @@ static_library("host") {
     "ipc_mouse_cursor_monitor.h",
     "ipc_screen_controls.cc",
     "ipc_screen_controls.h",
-    "ipc_util.h",
-    "ipc_util_win.cc",
     "ipc_video_frame_capturer.cc",
     "ipc_video_frame_capturer.h",
     "it2me_desktop_environment.cc",
@@ -322,7 +325,7 @@ static_library("host") {
 
   public_deps = []
 
-  if (enable_configuration_policy) {
+  if (!is_ios) {
     deps += [ "//components/policy:generated" ]
   }
 
@@ -336,11 +339,7 @@ static_library("host") {
       "//build/config/linux:xrandr",
     ]
     if (is_desktop_linux) {
-      if (use_gtk3) {
-        deps += [ "//build/config/linux/gtk3" ]
-      } else {
-        deps += [ "//build/config/linux/gtk2" ]
-      }
+      deps += [ "//build/config/linux/gtk" ]
     }
   } else {
     sources -= [
@@ -473,9 +472,8 @@ static_library("test_support") {
 
   if (enable_webrtc) {
     public_deps += [
-      "//third_party/libjingle:libjingle_webrtc",
-      "//third_party/webrtc/libjingle/xmllite",
-      "//third_party/webrtc/libjingle/xmpp",
+      "//third_party/libjingle/webrtc:libjingle_webrtc",
+      "//third_party/libjingle_xmpp",
       "//third_party/webrtc/modules/desktop_capture",
     ]
   }
@@ -502,8 +500,10 @@ source_set("unit_tests") {
     "host_attributes_unittest.cc",
     "host_change_notification_listener_unittest.cc",
     "host_config_unittest.cc",
+    "host_experiment_session_plugin_unittest.cc",
     "host_extension_session_manager_unittest.cc",
     "host_power_save_blocker_unittest.cc",
+    "host_session_options_unittest.cc",
     "host_status_logger_unittest.cc",
     "ipc_desktop_environment_unittest.cc",
     "it2me/it2me_confirmation_dialog_proxy_unittest.cc",
@@ -567,7 +567,7 @@ source_set("unit_tests") {
     deps += [ "//remoting/host/win:unit_tests" ]
   }
 
-  if (enable_configuration_policy) {
+  if (!is_ios) {
     deps += [ "//components/policy/core/browser:test_support" ]
   }
 }
@@ -605,7 +605,8 @@ if (enable_remoting_host) {
     configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
     if (is_win) {
-      defines = host_predefines + [ "BINARY=BINARY_REMOTING_START_HOST" ]
+      defines = host_predefines +
+                [ "REMOTING_HOST_BINARY=BINARY_REMOTING_START_HOST" ]
 
       deps += [
         "//build/win:default_exe_manifest",
@@ -625,9 +626,8 @@ if (enable_remoting_host) {
 
     if (enable_webrtc) {
       deps += [
-        "//third_party/libjingle:libjingle_webrtc",
-        "//third_party/webrtc/libjingle/xmllite",
-        "//third_party/webrtc/libjingle/xmpp",
+        "//third_party/libjingle/webrtc:libjingle_webrtc",
+        "//third_party/libjingle_xmpp",
       ]
     }
   }
@@ -736,24 +736,19 @@ if (enable_me2me_host) {
       "//third_party/webrtc/modules/desktop_capture",
     ]
 
-    if (enable_configuration_policy) {
+    if (!is_ios) {
       deps += [ "//components/policy:generated" ]
     }
 
     if (enable_webrtc) {
       deps += [
-        "//third_party/libjingle:libjingle_webrtc",
-        "//third_party/webrtc/libjingle/xmllite",
-        "//third_party/webrtc/libjingle/xmpp",
+        "//third_party/libjingle/webrtc:libjingle_webrtc",
+        "//third_party/libjingle_xmpp",
       ]
     }
 
     if (is_desktop_linux) {
-      if (use_gtk3) {
-        deps += [ "//build/config/linux/gtk3" ]
-      } else {
-        deps += [ "//build/config/linux/gtk2" ]
-      }
+      deps += [ "//build/config/linux/gtk" ]
     }
     if ((is_linux && !is_chromeos) || is_mac) {
       libs = [ "pam" ]

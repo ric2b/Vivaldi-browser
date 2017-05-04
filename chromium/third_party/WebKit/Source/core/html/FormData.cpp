@@ -30,6 +30,7 @@
 
 #include "core/html/FormData.h"
 
+#include "bindings/core/v8/ScriptState.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/File.h"
 #include "core/frame/UseCounter.h"
@@ -84,8 +85,8 @@ FormData::FormData(HTMLFormElement* form) : m_encoding(UTF8Encoding()) {
   if (!form)
     return;
 
-  for (unsigned i = 0; i < form->associatedElements().size(); ++i) {
-    FormAssociatedElement* element = form->associatedElements()[i];
+  for (unsigned i = 0; i < form->listedElements().size(); ++i) {
+    ListedElement* element = form->listedElements()[i];
     if (!toHTMLElement(element)->isDisabledFormControl())
       element->appendToFormData(*this);
   }
@@ -96,28 +97,17 @@ DEFINE_TRACE(FormData) {
 }
 
 void FormData::append(const String& name, const String& value) {
-  m_entries.append(
+  m_entries.push_back(
       new Entry(encodeAndNormalize(name), encodeAndNormalize(value)));
 }
 
-void FormData::append(ExecutionContext* context,
+void FormData::append(ScriptState* scriptState,
                       const String& name,
                       Blob* blob,
                       const String& filename) {
-  if (blob) {
-    if (blob->isFile()) {
-      if (filename.isNull())
-        UseCounter::count(context, UseCounter::FormDataAppendFile);
-      else
-        UseCounter::count(context, UseCounter::FormDataAppendFileWithFilename);
-    } else {
-      if (filename.isNull())
-        UseCounter::count(context, UseCounter::FormDataAppendBlob);
-      else
-        UseCounter::count(context, UseCounter::FormDataAppendBlobWithFilename);
-    }
-  } else {
-    UseCounter::count(context, UseCounter::FormDataAppendNull);
+  if (!blob) {
+    UseCounter::count(scriptState->getExecutionContext(),
+                      UseCounter::FormDataAppendNull);
   }
   append(name, blob, filename);
 }
@@ -163,7 +153,7 @@ HeapVector<FormDataEntryValue> FormData::getAll(const String& name) {
       DCHECK(entry->isFile());
       value.setFile(entry->file());
     }
-    results.append(value);
+    results.push_back(value);
   }
   return results;
 }
@@ -202,7 +192,7 @@ void FormData::setEntry(const Entry* entry) {
     }
   }
   if (!found)
-    m_entries.append(entry);
+    m_entries.push_back(entry);
 }
 
 void FormData::append(const String& name, int value) {
@@ -210,7 +200,7 @@ void FormData::append(const String& name, int value) {
 }
 
 void FormData::append(const String& name, Blob* blob, const String& filename) {
-  m_entries.append(new Entry(encodeAndNormalize(name), blob, filename));
+  m_entries.push_back(new Entry(encodeAndNormalize(name), blob, filename));
 }
 
 CString FormData::encodeAndNormalize(const String& string) const {

@@ -72,9 +72,6 @@ class FileSystemDispatcher : public IPC::Listener {
   void ResolveURL(const GURL& filesystem_url,
                   const ResolveURLCallback& success_callback,
                   const StatusCallback& error_callback);
-  void DeleteFileSystem(const GURL& origin_url,
-                        storage::FileSystemType type,
-                        const StatusCallback& callback);
   void Move(const GURL& src_path,
             const GURL& dest_path,
             const StatusCallback& callback);
@@ -147,7 +144,7 @@ class FileSystemDispatcher : public IPC::Listener {
   void OnDidFail(int request_id, base::File::Error error_code);
   void OnDidWrite(int request_id, int64_t bytes, bool complete);
 
-  IDMap<CallbackDispatcher, IDMapOwnPointer> dispatchers_;
+  IDMap<std::unique_ptr<CallbackDispatcher>> dispatchers_;
 
   DISALLOW_COPY_AND_ASSIGN(FileSystemDispatcher);
 };

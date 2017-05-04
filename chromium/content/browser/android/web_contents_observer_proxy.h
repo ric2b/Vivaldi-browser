@@ -32,7 +32,6 @@ class WebContentsObserverProxy : public WebContentsObserver {
  private:
   void RenderViewReady() override;
   void RenderProcessGone(base::TerminationStatus termination_status) override;
-  void DidFinishNavigation(NavigationHandle* navigation_handle) override;
   void DidStartLoading() override;
   void DidStopLoading() override;
   void DidFailProvisionalLoad(RenderFrameHost* render_frame_host,
@@ -54,14 +53,18 @@ class WebContentsObserverProxy : public WebContentsObserver {
   void DidFirstVisuallyNonEmptyPaint() override;
   void WasShown() override;
   void WasHidden() override;
+  void TitleWasSet(NavigationEntry* entry, bool explicit_set) override;
   void DidStartProvisionalLoadForFrame(RenderFrameHost* render_frame_host,
                                        const GURL& validated_url,
-                                       bool is_error_page,
-                                       bool is_iframe_srcdoc) override;
+                                       bool is_error_page) override;
   void DidCommitProvisionalLoadForFrame(
       RenderFrameHost* render_frame_host,
       const GURL& url,
       ui::PageTransition transition_type) override;
+
+  void DidStartNavigation(NavigationHandle* navigation_handle) override;
+  void DidFinishNavigation(NavigationHandle* navigation_handle) override;
+
   void DidFinishLoad(RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
   void DocumentLoadedInFrame(RenderFrameHost* render_frame_host) override;

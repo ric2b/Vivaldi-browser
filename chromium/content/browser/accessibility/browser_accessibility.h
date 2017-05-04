@@ -97,6 +97,8 @@ class CONTENT_EXPORT BrowserAccessibility {
   // Returns true if this object is used only for representing text.
   bool IsTextOnlyObject() const;
 
+  bool IsLineBreakObject() const;
+
   // Returns true if this is a leaf node on this platform, meaning any
   // children should not be exposed to this platform's native accessibility
   // layer. Each platform subclass should implement this itself.
@@ -328,8 +330,11 @@ class CONTENT_EXPORT BrowserAccessibility {
   // Returns true if the bit corresponding to the given state enum is 1.
   bool HasState(ui::AXState state_enum) const;
 
-  // Returns true if this node is an cell or an table header.
+  // Returns true if this node is a cell or a table header.
   bool IsCellOrTableHeaderRole() const;
+
+  // Returns true if this node is a table, a grid or a treegrid.
+  bool IsTableOrGridOrTreeGridRole() const;
 
   // Returns true if the caret is active on this object.
   bool HasCaret() const;

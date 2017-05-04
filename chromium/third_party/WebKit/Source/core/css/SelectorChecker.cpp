@@ -114,16 +114,17 @@ static Element* parentElement(
   return context.element->parentElement();
 }
 
+// If context has scope, return slot that matches the scope, otherwise return
+// the assigned slot for scope-less matching of ::slotted pseudo element.
 static const HTMLSlotElement* findSlotElementInScope(
     const SelectorChecker::SelectorCheckingContext& context) {
   if (!context.scope)
-    return nullptr;
+    return context.element->assignedSlot();
 
-  const HTMLSlotElement* slot = context.element->assignedSlot();
-  while (slot) {
+  for (const HTMLSlotElement* slot = context.element->assignedSlot(); slot;
+       slot = slot->assignedSlot()) {
     if (slot->treeScope() == context.scope->treeScope())
       return slot;
-    slot = slot->assignedSlot();
   }
   return nullptr;
 }
@@ -200,7 +201,7 @@ static bool isLastOfType(Element& element, const QualifiedName& type) {
 // * SelectorFailsAllSiblings - the selector fails for e and any sibling of e
 // * SelectorFailsCompletely  - the selector fails for e and any sibling or
 //   ancestor of e
-SelectorChecker::Match SelectorChecker::matchSelector(
+SelectorChecker::MatchStatus SelectorChecker::matchSelector(
     const SelectorCheckingContext& context,
     MatchResult& result) const {
   MatchResult subResult;
@@ -218,7 +219,7 @@ SelectorChecker::Match SelectorChecker::matchSelector(
     return SelectorFailsLocally;
   }
 
-  Match match;
+  MatchStatus match;
   if (context.selector->relation() != CSSSelector::SubSelector) {
     if (nextSelectorExceedsScope(context))
       return SelectorFailsCompletely;
@@ -246,7 +247,7 @@ prepareNextContextForRelation(
   return nextContext;
 }
 
-SelectorChecker::Match SelectorChecker::matchForSubSelector(
+SelectorChecker::MatchStatus SelectorChecker::matchForSubSelector(
     const SelectorCheckingContext& context,
     MatchResult& result) const {
   SelectorCheckingContext nextContext = prepareNextContextForRelation(context);
@@ -266,7 +267,7 @@ static inline bool isV0ShadowRoot(const Node* node) {
          toShadowRoot(node)->type() == ShadowRootType::V0;
 }
 
-SelectorChecker::Match SelectorChecker::matchForPseudoShadow(
+SelectorChecker::MatchStatus SelectorChecker::matchForPseudoShadow(
     const SelectorCheckingContext& context,
     const ContainerNode* node,
     MatchResult& result) const {
@@ -293,7 +294,7 @@ static inline Element* parentOrOpenShadowHostElement(const Element& element) {
   return element.parentOrShadowHostElement();
 }
 
-SelectorChecker::Match SelectorChecker::matchForRelation(
+SelectorChecker::MatchStatus SelectorChecker::matchForRelation(
     const SelectorCheckingContext& context,
     MatchResult& result) const {
   SelectorCheckingContext nextContext = prepareNextContextForRelation(context);
@@ -330,7 +331,7 @@ SelectorChecker::Match SelectorChecker::matchForRelation(
 
       for (nextContext.element = parentElement(context); nextContext.element;
            nextContext.element = parentElement(nextContext)) {
-        Match match = matchSelector(nextContext, result);
+        MatchStatus match = matchSelector(nextContext, result);
         if (match == SelectorMatches || match == SelectorFailsCompletely)
           return match;
         if (nextSelectorExceedsScope(nextContext))
@@ -379,7 +380,7 @@ SelectorChecker::Match SelectorChecker::matchForRelation(
       for (; nextContext.element;
            nextContext.element =
                ElementTraversal::previousSibling(*nextContext.element)) {
-        Match match = matchSelector(nextContext, result);
+        MatchStatus match = matchSelector(nextContext, result);
         if (match == SelectorMatches || match == SelectorFailsAllSiblings ||
             match == SelectorFailsCompletely)
           return match;
@@ -434,7 +435,7 @@ SelectorChecker::Match SelectorChecker::matchForRelation(
            nextContext.element;
            nextContext.element =
                parentOrV0ShadowHostElement(*nextContext.element)) {
-        Match match = matchSelector(nextContext, result);
+        MatchStatus match = matchSelector(nextContext, result);
         if (match == SelectorMatches && context.element->isInShadowTree())
           UseCounter::count(context.element->document(),
                             UseCounter::CSSDeepCombinatorAndShadow);
@@ -459,7 +460,7 @@ SelectorChecker::Match SelectorChecker::matchForRelation(
            nextContext.element;
            nextContext.element =
                parentOrOpenShadowHostElement(*nextContext.element)) {
-        Match match = matchSelector(nextContext, result);
+        MatchStatus match = matchSelector(nextContext, result);
         if (match == SelectorMatches || match == SelectorFailsCompletely)
           return match;
         if (nextSelectorExceedsScope(nextContext))
@@ -484,7 +485,7 @@ SelectorChecker::Match SelectorChecker::matchForRelation(
   return SelectorFailsCompletely;
 }
 
-SelectorChecker::Match SelectorChecker::matchForPseudoContent(
+SelectorChecker::MatchStatus SelectorChecker::matchForPseudoContent(
     const SelectorCheckingContext& context,
     const Element& element,
     MatchResult& result) const {
@@ -1096,6 +1097,12 @@ bool SelectorChecker::checkPseudoElement(const SelectorCheckingContext& context,
       }
       return false;
     }
+    case CSSSelector::PseudoPlaceholder:
+      if (ShadowRoot* root = element.containingShadowRoot()) {
+        return root->type() == ShadowRootType::UserAgent &&
+               element.shadowPseudoId() == "-webkit-input-placeholder";
+      }
+      return false;
     case CSSSelector::PseudoWebKitCustomElement: {
       if (ShadowRoot* root = element.containingShadowRoot())
         return root->type() == ShadowRootType::UserAgent &&

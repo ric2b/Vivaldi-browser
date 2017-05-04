@@ -1,0 +1,15 @@
+{
+  "name": "Simple e2e",
+  "description": "A simple e2e test for native bindings",
+  "manifest_version": 2,
+  "version": "0.1",
+  "permissions": ["idle", "tabs"],
+  "background": {
+    "persistent": false,
+    "page": "background.html"
+  },
+  "content_scripts": [{
+    "matches": ["*://*/*messaging_test.html"],
+    "js": ["content_script.js"]
+  }]
+}

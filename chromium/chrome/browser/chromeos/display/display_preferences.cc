@@ -26,6 +26,7 @@
 #include "ui/display/manager/display_layout_store.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/display_manager_utilities.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/insets.h"
 #include "url/url_canon.h"
 #include "url/url_util.h"
@@ -37,6 +38,10 @@ const char kInsetsTopKey[] = "insets_top";
 const char kInsetsLeftKey[] = "insets_left";
 const char kInsetsBottomKey[] = "insets_bottom";
 const char kInsetsRightKey[] = "insets_right";
+
+const char kTouchCalibrationWidth[] = "touch_calibration_width";
+const char kTouchCalibrationHeight[] = "touch_calibration_height";
+const char kTouchCalibrationPointPairs[] = "touch_calibration_point_pairs";
 
 // This kind of boilerplates should be done by base::JSONValueConverter but it
 // doesn't support classes like gfx::Insets for now.
@@ -65,34 +70,116 @@ void InsetsToValue(const gfx::Insets& insets, base::DictionaryValue* value) {
   value->SetInteger(kInsetsRightKey, insets.right());
 }
 
-std::string ColorProfileToString(ui::ColorCalibrationProfile profile) {
+// Unmarshalls the string containing CalibrationPointPairQuad and populates
+// |point_pair_quad| with the unmarshalled data.
+bool ParseTouchCalibrationStringValue(
+    const std::string& str,
+    display::TouchCalibrationData::CalibrationPointPairQuad* point_pair_quad) {
+  DCHECK(point_pair_quad);
+  int x = 0, y = 0;
+  std::vector<std::string> parts = base::SplitString(
+      str, " ", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  size_t total = point_pair_quad->size();
+  gfx::Point display_point, touch_point;
+  for (std::size_t row = 0; row < total; row++) {
+    if (!base::StringToInt(parts[row * total], &x) ||
+        !base::StringToInt(parts[row * total + 1], &y)) {
+      return false;
+    }
+    display_point.SetPoint(x, y);
+
+    if (!base::StringToInt(parts[row * total + 2], &x) ||
+        !base::StringToInt(parts[row * total + 3], &y)) {
+      return false;
+    }
+    touch_point.SetPoint(x, y);
+
+    (*point_pair_quad)[row] = std::make_pair(display_point, touch_point);
+  }
+  return true;
+}
+
+// Retrieves touch calibration associated data from the dictionary and stores
+// it in an instance of TouchCalibrationData struct.
+bool ValueToTouchData(const base::DictionaryValue& value,
+                      display::TouchCalibrationData* touch_calibration_data) {
+  display::TouchCalibrationData::CalibrationPointPairQuad* point_pair_quad =
+      &(touch_calibration_data->point_pairs);
+
+  std::string str;
+  if (!value.GetString(kTouchCalibrationPointPairs, &str))
+    return false;
+
+  if (!ParseTouchCalibrationStringValue(str, point_pair_quad))
+    return false;
+
+  int width, height;
+  if (!value.GetInteger(kTouchCalibrationWidth, &width) ||
+      !value.GetInteger(kTouchCalibrationHeight, &height)) {
+    return false;
+  }
+  touch_calibration_data->bounds = gfx::Size(width, height);
+  return true;
+}
+
+// Stores the touch calibration data into the dictionary.
+void TouchDataToValue(
+    const display::TouchCalibrationData& touch_calibration_data,
+    base::DictionaryValue* value) {
+  DCHECK(value);
+  std::string str;
+  for (std::size_t row = 0; row < touch_calibration_data.point_pairs.size();
+       row++) {
+    str +=
+        base::IntToString(touch_calibration_data.point_pairs[row].first.x()) +
+        " ";
+    str +=
+        base::IntToString(touch_calibration_data.point_pairs[row].first.y()) +
+        " ";
+    str +=
+        base::IntToString(touch_calibration_data.point_pairs[row].second.x()) +
+        " ";
+    str +=
+        base::IntToString(touch_calibration_data.point_pairs[row].second.y());
+    if (row != touch_calibration_data.point_pairs.size() - 1)
+      str += " ";
+  }
+  value->SetString(kTouchCalibrationPointPairs, str);
+  value->SetInteger(kTouchCalibrationWidth,
+                    touch_calibration_data.bounds.width());
+  value->SetInteger(kTouchCalibrationHeight,
+                    touch_calibration_data.bounds.height());
+}
+
+std::string ColorProfileToString(display::ColorCalibrationProfile profile) {
   switch (profile) {
-    case ui::COLOR_PROFILE_STANDARD:
+    case display::COLOR_PROFILE_STANDARD:
       return "standard";
-    case ui::COLOR_PROFILE_DYNAMIC:
+    case display::COLOR_PROFILE_DYNAMIC:
       return "dynamic";
-    case ui::COLOR_PROFILE_MOVIE:
+    case display::COLOR_PROFILE_MOVIE:
       return "movie";
-    case ui::COLOR_PROFILE_READING:
+    case display::COLOR_PROFILE_READING:
       return "reading";
-    case ui::NUM_COLOR_PROFILES:
+    case display::NUM_COLOR_PROFILES:
       break;
   }
   NOTREACHED();
   return "";
 }
 
-ui::ColorCalibrationProfile StringToColorProfile(const std::string& value) {
+display::ColorCalibrationProfile StringToColorProfile(
+    const std::string& value) {
   if (value == "standard")
-    return ui::COLOR_PROFILE_STANDARD;
+    return display::COLOR_PROFILE_STANDARD;
   else if (value == "dynamic")
-    return ui::COLOR_PROFILE_DYNAMIC;
+    return display::COLOR_PROFILE_DYNAMIC;
   else if (value == "movie")
-    return ui::COLOR_PROFILE_MOVIE;
+    return display::COLOR_PROFILE_MOVIE;
   else if (value == "reading")
-    return ui::COLOR_PROFILE_READING;
+    return display::COLOR_PROFILE_READING;
   NOTREACHED();
-  return ui::COLOR_PROFILE_STANDARD;
+  return display::COLOR_PROFILE_STANDARD;
 }
 
 display::DisplayManager* GetDisplayManager() {
@@ -150,9 +237,9 @@ void LoadDisplayProperties() {
     const base::DictionaryValue* dict_value = nullptr;
     if (!it.value().GetAsDictionary(&dict_value) || dict_value == nullptr)
       continue;
-    int64_t id = display::Display::kInvalidDisplayID;
+    int64_t id = display::kInvalidDisplayId;
     if (!base::StringToInt64(it.key(), &id) ||
-        id == display::Display::kInvalidDisplayID) {
+        id == display::kInvalidDisplayId) {
       continue;
     }
     display::Display::Rotation rotation = display::Display::ROTATE_0;
@@ -181,17 +268,19 @@ void LoadDisplayProperties() {
     if (ValueToInsets(*dict_value, &insets))
       insets_to_set = &insets;
 
-    ui::ColorCalibrationProfile color_profile = ui::COLOR_PROFILE_STANDARD;
+    display::TouchCalibrationData calibration_data;
+    display::TouchCalibrationData* calibration_data_to_set = nullptr;
+    if (ValueToTouchData(*dict_value, &calibration_data))
+      calibration_data_to_set = &calibration_data;
+
+    display::ColorCalibrationProfile color_profile =
+        display::COLOR_PROFILE_STANDARD;
     std::string color_profile_name;
     if (dict_value->GetString("color_profile_name", &color_profile_name))
       color_profile = StringToColorProfile(color_profile_name);
-    GetDisplayManager()->RegisterDisplayProperty(id,
-                                                 rotation,
-                                                 ui_scale,
-                                                 insets_to_set,
-                                                 resolution_in_pixels,
-                                                 device_scale_factor,
-                                                 color_profile);
+    GetDisplayManager()->RegisterDisplayProperty(
+        id, rotation, ui_scale, insets_to_set, resolution_in_pixels,
+        device_scale_factor, color_profile, calibration_data_to_set);
   }
 }
 
@@ -278,10 +367,12 @@ void StoreCurrentDisplayProperties() {
     }
     if (!info.overscan_insets_in_dip().IsEmpty())
       InsetsToValue(info.overscan_insets_in_dip(), property_value.get());
-    if (info.color_profile() != ui::COLOR_PROFILE_STANDARD) {
+    if (info.color_profile() != display::COLOR_PROFILE_STANDARD) {
       property_value->SetString(
           "color_profile_name", ColorProfileToString(info.color_profile()));
     }
+    if (info.has_touch_calibration_data())
+      TouchDataToValue(info.GetTouchCalibrationData(), property_value.get());
     pref_data->Set(base::Int64ToString(id), property_value.release());
   }
 }
@@ -398,6 +489,12 @@ void StoreDisplayLayoutPrefForTest(const display::DisplayIdList& list,
 // Stores the given |power_state|.
 void StoreDisplayPowerStateForTest(DisplayPowerState power_state) {
   StoreDisplayPowerState(power_state);
+}
+
+bool ParseTouchCalibrationStringForTest(
+    const std::string& str,
+    display::TouchCalibrationData::CalibrationPointPairQuad* point_pair_quad) {
+  return ParseTouchCalibrationStringValue(str, point_pair_quad);
 }
 
 }  // namespace chromeos

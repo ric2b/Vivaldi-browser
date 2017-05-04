@@ -188,15 +188,15 @@ public class Stack {
 
     // Drag Lock
     private DragLock mDragLock = DragLock.NONE;
-    private long mLastScrollUpdate = 0;
-    private float mMinScrollMotion = 0;
+    private long mLastScrollUpdate;
+    private float mMinScrollMotion;
 
     // Scrolling Variables
-    private float mScrollTarget = 0;
-    private float mScrollOffset = 0;
-    private float mScrollOffsetForDyingTabs = 0;
-    private float mCurrentScrollDirection = 0.0f;
-    private StackTab mScrollingTab = null;
+    private float mScrollTarget;
+    private float mScrollOffset;
+    private float mScrollOffsetForDyingTabs;
+    private float mCurrentScrollDirection;
+    private StackTab mScrollingTab;
 
     // Swipe Variables
     private float mSwipeUnboundScrollOffset;
@@ -594,8 +594,12 @@ public class Stack {
         }
 
         if (mOverviewAnimationType != OverviewAnimationType.NONE) {
-            // sync the scrollTarget and scrollOffset;
-            setScrollTarget(mScrollOffset, true);
+            // sync the scrollTarget and scrollOffset. For ENTER_STACK animation, don't sync to
+            // ensure the tab can tilt back.
+            if (mOverviewAnimationType != OverviewAnimationType.ENTER_STACK) {
+                setScrollTarget(mScrollOffset, true);
+            }
+
             mOverviewAnimationType = OverviewAnimationType.NONE;
         }
         mTabAnimations = null;
@@ -1167,8 +1171,10 @@ public class Stack {
                 float maxScreen = tab0ScreenAfter;
                 for (int i = pinch0TabIndex; i <= pinch1TabIndex; i++) {
                     float screenBefore = approxScreen(mStackTabs[i], oldScrollTarget);
-                    float t = (screenBefore - tab0ScreenBefore)
-                            / (tab1ScreenBefore - tab0ScreenBefore);
+                    float t = (tab1ScreenBefore == tab0ScreenBefore)
+                            ? 1
+                            : ((screenBefore - tab0ScreenBefore)
+                                      / (tab1ScreenBefore - tab0ScreenBefore));
                     float screenAfter = (1 - t) * tab0ScreenAfter + t * tab1ScreenAfter;
                     screenAfter = Math.max(minScreen, screenAfter);
                     screenAfter = Math.min(maxScreen, screenAfter);

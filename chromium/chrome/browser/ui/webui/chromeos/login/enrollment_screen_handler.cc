@@ -12,18 +12,18 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/login/error_screens_histogram_helper.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
+#include "chrome/browser/chromeos/login/helper.h"
+#include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/screens/network_error.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/policy/enrollment_status_chromeos.h"
 #include "chrome/browser/chromeos/policy/policy_oauth2_token_fetcher.h"
-#include "chrome/browser/ui/webui/chromeos/login/oobe_screen.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/dbus/auth_policy_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -108,26 +108,13 @@ std::string GetEnterpriseDomain() {
   return connector->GetEnterpriseDomain();
 }
 
-// Returns file descriptor of a pipe, open for reading. Pipe keeps user
-// password, which can be read from the returned descriptor.
-base::ScopedFD GetPasswordReadPipe(const std::string& password) {
-  DCHECK(content::BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
-  int pipe_fds[2];
-  if (!base::CreateLocalNonBlockingPipe(pipe_fds)) {
-    LOG(ERROR) << "Failed to create pipe";
-    return base::ScopedFD();
-  }
-  base::ScopedFD pipe_read_end(pipe_fds[0]);
-  base::ScopedFD pipe_write_end(pipe_fds[1]);
-
-  if (!base::WriteFileDescriptor(pipe_write_end.get(),
-                                 password.c_str(),
-                                 password.size())) {
-    LOG(ERROR) << "Failed to write to pipe";
-    return base::ScopedFD();
-  }
-  return pipe_read_end;
-}
+enum ActiveDirectoryErrorState {
+  ERROR_STATE_NONE = 0,
+  ERROR_STATE_MACHINE_NAME_INVALID = 1,
+  ERROR_STATE_MACHINE_NAME_TOO_LONG = 2,
+  ERROR_STATE_BAD_USERNAME = 3,
+  ERROR_STATE_BAD_PASSWORD = 4,
+};
 
 }  // namespace
 
@@ -186,9 +173,6 @@ void EnrollmentScreenHandler::SetParameters(
   CHECK(config.should_enroll());
   controller_ = controller;
   config_ = config;
-}
-
-void EnrollmentScreenHandler::PrepareToShow() {
 }
 
 void EnrollmentScreenHandler::Show() {
@@ -272,16 +256,16 @@ void EnrollmentScreenHandler::ShowOtherError(
 void EnrollmentScreenHandler::ShowEnrollmentStatus(
     policy::EnrollmentStatus status) {
   switch (status.status()) {
-    case policy::EnrollmentStatus::STATUS_SUCCESS:
+    case policy::EnrollmentStatus::SUCCESS:
       if (config_.is_mode_attestation())
         ShowAttestationBasedEnrollmentSuccessScreen(GetEnterpriseDomain());
       else
         ShowStep(kEnrollmentStepSuccess);
       return;
-    case policy::EnrollmentStatus::STATUS_NO_STATE_KEYS:
+    case policy::EnrollmentStatus::NO_STATE_KEYS:
       ShowError(IDS_ENTERPRISE_ENROLLMENT_STATUS_NO_STATE_KEYS, false);
       return;
-    case policy::EnrollmentStatus::STATUS_REGISTRATION_FAILED:
+    case policy::EnrollmentStatus::REGISTRATION_FAILED:
       // Some special cases for generating a nicer message that's more helpful.
       switch (status.client_status()) {
         case policy::DM_STATUS_SERVICE_MANAGEMENT_NOT_SUPPORTED:
@@ -304,37 +288,37 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
               true);
       }
       return;
-    case policy::EnrollmentStatus::STATUS_ROBOT_AUTH_FETCH_FAILED:
+    case policy::EnrollmentStatus::ROBOT_AUTH_FETCH_FAILED:
       ShowError(IDS_ENTERPRISE_ENROLLMENT_ROBOT_AUTH_FETCH_FAILED, true);
       return;
-    case policy::EnrollmentStatus::STATUS_ROBOT_REFRESH_FETCH_FAILED:
+    case policy::EnrollmentStatus::ROBOT_REFRESH_FETCH_FAILED:
       ShowError(IDS_ENTERPRISE_ENROLLMENT_ROBOT_REFRESH_FETCH_FAILED, true);
       return;
-    case policy::EnrollmentStatus::STATUS_ROBOT_REFRESH_STORE_FAILED:
+    case policy::EnrollmentStatus::ROBOT_REFRESH_STORE_FAILED:
       ShowError(IDS_ENTERPRISE_ENROLLMENT_ROBOT_REFRESH_STORE_FAILED, true);
       return;
-    case policy::EnrollmentStatus::STATUS_REGISTRATION_BAD_MODE:
+    case policy::EnrollmentStatus::REGISTRATION_BAD_MODE:
       ShowError(IDS_ENTERPRISE_ENROLLMENT_STATUS_REGISTRATION_BAD_MODE, false);
       return;
-    case policy::EnrollmentStatus::STATUS_REGISTRATION_CERTIFICATE_FETCH_FAILED:
+    case policy::EnrollmentStatus::REGISTRATION_CERT_FETCH_FAILED:
       ShowError(IDS_ENTERPRISE_ENROLLMENT_STATUS_REGISTRATION_CERT_FETCH_FAILED,
                 true);
       return;
-    case policy::EnrollmentStatus::STATUS_POLICY_FETCH_FAILED:
+    case policy::EnrollmentStatus::POLICY_FETCH_FAILED:
       ShowErrorMessage(
           l10n_util::GetStringFUTF8(
               IDS_ENTERPRISE_ENROLLMENT_STATUS_POLICY_FETCH_FAILED,
               policy::FormatDeviceManagementStatus(status.client_status())),
           true);
       return;
-    case policy::EnrollmentStatus::STATUS_VALIDATION_FAILED:
+    case policy::EnrollmentStatus::VALIDATION_FAILED:
       ShowErrorMessage(
           l10n_util::GetStringFUTF8(
               IDS_ENTERPRISE_ENROLLMENT_STATUS_VALIDATION_FAILED,
               policy::FormatValidationStatus(status.validation_status())),
           true);
       return;
-    case policy::EnrollmentStatus::STATUS_LOCK_ERROR:
+    case policy::EnrollmentStatus::LOCK_ERROR:
       switch (status.lock_status()) {
         case InstallAttributes::LOCK_SUCCESS:
         case InstallAttributes::LOCK_NOT_READY:
@@ -362,7 +346,7 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
       }
       NOTREACHED();
       return;
-    case policy::EnrollmentStatus::STATUS_STORE_ERROR:
+    case policy::EnrollmentStatus::STORE_ERROR:
       ShowErrorMessage(
           l10n_util::GetStringFUTF8(
               IDS_ENTERPRISE_ENROLLMENT_STATUS_STORE_ERROR,
@@ -370,18 +354,19 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
                                         status.validation_status())),
           true);
       return;
-    case policy::EnrollmentStatus::STATUS_STORE_TOKEN_AND_ID_FAILED:
-      // This error should not happen for enterprise enrollment.
-      ShowError(IDS_ENTERPRISE_ENROLLMENT_STATUS_STORE_TOKEN_AND_ID_FAILED,
-                true);
-      NOTREACHED();
-      return;
-    case policy::EnrollmentStatus::STATUS_ATTRIBUTE_UPDATE_FAILED:
+    case policy::EnrollmentStatus::ATTRIBUTE_UPDATE_FAILED:
       ShowErrorForDevice(IDS_ENTERPRISE_ENROLLMENT_ATTRIBUTE_ERROR, false);
       return;
-    case policy::EnrollmentStatus::STATUS_NO_MACHINE_IDENTIFICATION:
+    case policy::EnrollmentStatus::NO_MACHINE_IDENTIFICATION:
       ShowError(IDS_ENTERPRISE_ENROLLMENT_STATUS_NO_MACHINE_IDENTIFICATION,
                 false);
+      return;
+    case policy::EnrollmentStatus::ACTIVE_DIRECTORY_POLICY_FETCH_FAILED:
+      ShowError(IDS_ENTERPRISE_ENROLLMENT_ERROR_ACTIVE_DIRECTORY_POLICY_FETCH,
+                false);
+      return;
+    case policy::EnrollmentStatus::DM_TOKEN_STORE_FAILED:
+      ShowError(IDS_ENTERPRISE_ENROLLMENT_ERROR_STORE_DM_TOKEN_FAILED, false);
       return;
   }
   NOTREACHED();
@@ -423,8 +408,12 @@ void EnrollmentScreenHandler::DeclareLocalizedValues(
                IDS_AD_MACHINE_NAME_INPUT_LABEL);
   builder->Add("oauthEnrollAdDomainJoinWelcomeMessage",
                IDS_AD_DOMAIN_JOIN_WELCOME_MESSAGE);
-  builder->Add("adLoginUser", IDS_AD_LOGIN_USER);
+  builder->Add("adLoginUsername", IDS_AD_LOGIN_USER);
+  builder->Add("adLoginInvalidUsername", IDS_AD_INVALID_USERNAME);
   builder->Add("adLoginPassword", IDS_AD_LOGIN_PASSWORD);
+  builder->Add("adLoginInvalidPassword", IDS_AD_INVALID_PASSWORD);
+  builder->Add("adJoinErrorMachineNameInvalid", IDS_AD_MACHINENAME_INVALID);
+  builder->Add("adJoinErrorMachineNameTooLong", IDS_AD_MACHINENAME_TOO_LONG);
 }
 
 bool EnrollmentScreenHandler::IsOnEnrollmentScreen() const {
@@ -560,9 +549,8 @@ void EnrollmentScreenHandler::HandleAdCompleteLogin(
     const std::string& password) {
   observe_network_failure_ = false;
   DCHECK(controller_);
-  base::PostTaskAndReplyWithResult(
-      content::BrowserThread::GetBlockingPool(), FROM_HERE,
-      base::Bind(&GetPasswordReadPipe, password),
+  login::GetPipeReadEnd(
+      password,
       base::Bind(&EnrollmentScreenHandler::OnPasswordPipeReady,
                  weak_ptr_factory_.GetWeakPtr(), machine_name, user_name));
 }
@@ -573,7 +561,7 @@ void EnrollmentScreenHandler::OnPasswordPipeReady(
     base::ScopedFD password_fd) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!password_fd.is_valid()) {
-    LOG(ERROR) << "Got invalid password_fd";
+    DLOG(ERROR) << "Got invalid password_fd";
     return;
   }
   chromeos::AuthPolicyClient* client =
@@ -591,13 +579,59 @@ void EnrollmentScreenHandler::OnPasswordPipeReady(
 void EnrollmentScreenHandler::HandleAdDomainJoin(
     const std::string& machine_name,
     const std::string& user_name,
-    int code) {
-  if (code == 0) {
-    controller_->OnAdJoined(gaia::ExtractDomainName(user_name));
-    return;
+    authpolicy::ErrorType code) {
+  switch (code) {
+    case authpolicy::ERROR_NONE:
+      controller_->OnAdJoined(gaia::ExtractDomainName(user_name));
+      return;
+    case authpolicy::ERROR_UNKNOWN:
+    case authpolicy::ERROR_DBUS_FAILURE:
+    case authpolicy::ERROR_NET_FAILED:
+    case authpolicy::ERROR_SMBCLIENT_FAILED:
+    case authpolicy::ERROR_PARSE_FAILED:
+    case authpolicy::ERROR_PARSE_PREG_FAILED:
+    case authpolicy::ERROR_BAD_GPOS:
+    case authpolicy::ERROR_LOCAL_IO:
+    case authpolicy::ERROR_STORE_POLICY_FAILED:
+      ShowError(IDS_AD_DOMAIN_JOIN_UNKNOWN_ERROR, true);
+      return;
+    case authpolicy::ERROR_NETWORK_PROBLEM:
+      ShowError(IDS_ENTERPRISE_ENROLLMENT_AUTH_NETWORK_ERROR, true);
+      return;
+    case authpolicy::ERROR_PARSE_UPN_FAILED:
+    case authpolicy::ERROR_BAD_USER_NAME:
+      CallJS("invalidateAd", machine_name, user_name,
+             static_cast<int>(ERROR_STATE_BAD_USERNAME));
+      return;
+    case authpolicy::ERROR_BAD_PASSWORD:
+      CallJS("invalidateAd", machine_name, user_name,
+             static_cast<int>(ERROR_STATE_BAD_PASSWORD));
+      return;
+    case authpolicy::ERROR_MACHINE_NAME_TOO_LONG:
+      CallJS("invalidateAd", machine_name, user_name,
+             static_cast<int>(ERROR_STATE_MACHINE_NAME_TOO_LONG));
+      return;
+    case authpolicy::ERROR_BAD_MACHINE_NAME:
+      CallJS("invalidateAd", machine_name, user_name,
+             static_cast<int>(ERROR_STATE_MACHINE_NAME_INVALID));
+      return;
+    case authpolicy::ERROR_JOIN_ACCESS_DENIED:
+      ShowError(IDS_AD_USER_DENIED_TO_JOIN_MACHINE, true);
+      return;
+    case authpolicy::ERROR_USER_HIT_JOIN_QUOTA:
+      ShowError(IDS_AD_USER_HIT_JOIN_QUOTA, true);
+      return;
+    case authpolicy::ERROR_PASSWORD_EXPIRED:
+    case authpolicy::ERROR_CANNOT_RESOLVE_KDC:
+    case authpolicy::ERROR_KINIT_FAILED:
+    case authpolicy::ERROR_NOT_JOINED:
+    case authpolicy::ERROR_NOT_LOGGED_IN:
+    default:
+      LOG(WARNING) << "Unhandled error code: " << code;
+      CallJS("invalidateAd", machine_name, user_name,
+             static_cast<int>(ERROR_STATE_NONE));
+      return;
   }
-  // TODO(rsorokin): Add passing/displaying error codes. (see crbug.com/659984)
-  CallJS("invalidateAd", machine_name, user_name);
 }
 
 void EnrollmentScreenHandler::HandleRetry() {
@@ -653,10 +687,11 @@ void EnrollmentScreenHandler::DoShow() {
   screen_data.SetBoolean("attestationBased", config_.is_mode_attestation());
   screen_data.SetString("management_domain", config_.management_domain);
 
-  const bool cfm = g_browser_process->platform_part()
-                       ->browser_policy_connector_chromeos()
-                       ->GetDeviceCloudPolicyManager()
-                       ->IsRemoraRequisition();
+  policy::DeviceCloudPolicyManagerChromeOS* policy_manager =
+      g_browser_process->platform_part()
+          ->browser_policy_connector_chromeos()
+          ->GetDeviceCloudPolicyManager();
+  const bool cfm = policy_manager && policy_manager->IsRemoraRequisition();
   screen_data.SetString("flow", cfm ? "cfm" : "enterprise");
 
   ShowScreenWithData(OobeScreen::SCREEN_OOBE_ENROLLMENT, &screen_data);

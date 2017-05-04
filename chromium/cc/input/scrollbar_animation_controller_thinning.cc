@@ -72,7 +72,8 @@ void ScrollbarAnimationControllerThinning::RunAnimationFrame(float progress) {
     if (current_animating_property_ == THICKNESS) {
       thickness_change_ = NONE;
       SetCurrentAnimatingProperty(OPACITY);
-      PostDelayedAnimationTask(false);
+      if (!mouse_is_near_scrollbar_)
+        PostDelayedAnimationTask(false);
     }
   }
 }
@@ -107,7 +108,6 @@ void ScrollbarAnimationControllerThinning::DidMouseUp() {
     StartAnimation();
   } else {
     SetCurrentAnimatingProperty(OPACITY);
-    PostDelayedAnimationTask(false);
   }
 }
 
@@ -135,6 +135,18 @@ void ScrollbarAnimationControllerThinning::DidScrollUpdate(bool on_resize) {
   ApplyThumbThicknessScale(mouse_is_near_scrollbar_ ? 1.f
                                                     : kIdleThicknessScale);
   SetCurrentAnimatingProperty(OPACITY);
+
+  // Don't fade out the scrollbar when mouse is near.
+  if (mouse_is_near_scrollbar_)
+    StopAnimation();
+}
+
+void ScrollbarAnimationControllerThinning::DidScrollEnd() {
+  ScrollbarAnimationController::DidScrollEnd();
+
+  // Don't fade out the scrollbar when mouse is near.
+  if (mouse_is_near_scrollbar_)
+    StopAnimation();
 }
 
 void ScrollbarAnimationControllerThinning::DidMouseMoveNear(float distance) {
@@ -204,15 +216,15 @@ void ScrollbarAnimationControllerThinning::ApplyOpacity(float opacity) {
     PropertyTrees* property_trees =
         scrollbar->layer_tree_impl()->property_trees();
     // If this method is called during LayerImpl::PushPropertiesTo, we may not
-    // yet have valid effect_id_to_index_map entries as property trees are
-    // pushed after layers during activation. We can skip updating opacity in
-    // that case as we are only registering a scrollbar and because opacity will
-    // be overwritten anyway when property trees are pushed.
+    // yet have valid layer_id_to_effect_node_index entries as property trees
+    // are pushed after layers during activation. We can skip updating opacity
+    // in that case as we are only registering a scrollbar and because opacity
+    // will be overwritten anyway when property trees are pushed.
     if (property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT,
                                          scrollbar->id())) {
       property_trees->effect_tree.OnOpacityAnimated(
           effective_opacity,
-          property_trees->effect_id_to_index_map[scrollbar->id()],
+          property_trees->layer_id_to_effect_node_index[scrollbar->id()],
           scrollbar->layer_tree_impl());
     }
   }

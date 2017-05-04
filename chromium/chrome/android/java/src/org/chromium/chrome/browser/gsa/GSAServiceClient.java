@@ -18,6 +18,7 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.RemoteException;
+import android.os.StrictMode;
 import android.util.Log;
 
 import org.chromium.base.Callback;
@@ -52,6 +53,12 @@ public class GSAServiceClient {
     @VisibleForTesting
     static final int INVALID_PSS = -1;
 
+    static final String ACCOUNT_CHANGE_HISTOGRAM = "Search.GsaAccountChangeNotificationSource";
+    // For the histogram above. Append-only.
+    static final int ACCOUNT_CHANGE_SOURCE_SERVICE = 0;
+    static final int ACCOUNT_CHANGE_SOURCE_BROADCAST = 1;
+    static final int ACCOUNT_CHANGE_SOURCE_COUNT = 2;
+
     private static boolean sHasRecordedPss;
     /** Messenger to handle incoming messages from the service */
     private final Messenger mMessenger;
@@ -81,6 +88,8 @@ public class GSAServiceClient {
             if (mService == null) return;
             final Bundle bundle = (Bundle) msg.obj;
             String account = mGsaHelper.getGSAAccountFromState(bundle.getByteArray(KEY_GSA_STATE));
+            RecordHistogram.recordEnumeratedHistogram(ACCOUNT_CHANGE_HISTOGRAM,
+                    ACCOUNT_CHANGE_SOURCE_SERVICE, ACCOUNT_CHANGE_SOURCE_COUNT);
             GSAState.getInstance(mContext.getApplicationContext()).setGsaAccount(account);
             if (sHasRecordedPss) {
                 if (mOnMessageReceived != null) mOnMessageReceived.onResult(bundle);
@@ -180,8 +189,16 @@ public class GSAServiceClient {
     boolean connect() {
         if (mService != null) Log.e(TAG, "Already connected.");
         Intent intent = new Intent(GSA_SERVICE).setPackage(GSAState.SEARCH_INTENT_PACKAGE);
-        return mContext.bindService(
-                intent, mConnection, Context.BIND_AUTO_CREATE | Context.BIND_NOT_FOREGROUND);
+
+        // Third-party modifications to the framework lead to StrictMode violations in
+        // Context#bindService(). See crbug.com/670195.
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+        try {
+            return mContext.bindService(
+                    intent, mConnection, Context.BIND_AUTO_CREATE | Context.BIND_NOT_FOREGROUND);
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy);
+        }
     }
 
     /**

@@ -61,12 +61,11 @@ std::unique_ptr<DeferredImageDecoder> DeferredImageDecoder::create(
     PassRefPtr<SharedBuffer> passData,
     bool dataComplete,
     ImageDecoder::AlphaOption alphaOption,
-    ImageDecoder::ColorSpaceOption colorOptions) {
+    const ColorBehavior& colorBehavior) {
   RefPtr<SharedBuffer> data = passData;
 
   std::unique_ptr<ImageDecoder> actualDecoder =
-      ImageDecoder::create(data, dataComplete, alphaOption, colorOptions);
-
+      ImageDecoder::create(data, dataComplete, alphaOption, colorBehavior);
   if (!actualDecoder)
     return nullptr;
 
@@ -75,14 +74,14 @@ std::unique_ptr<DeferredImageDecoder> DeferredImageDecoder::create(
 
   // Since we've just instantiated a fresh decoder, there's no need to reset its
   // data.
-  decoder->setDataInternal(data.release(), dataComplete, false);
+  decoder->setDataInternal(std::move(data), dataComplete, false);
 
   return decoder;
 }
 
 std::unique_ptr<DeferredImageDecoder> DeferredImageDecoder::createForTesting(
     std::unique_ptr<ImageDecoder> actualDecoder) {
-  return wrapUnique(new DeferredImageDecoder(std::move(actualDecoder)));
+  return WTF::wrapUnique(new DeferredImageDecoder(std::move(actualDecoder)));
 }
 
 DeferredImageDecoder::DeferredImageDecoder(
@@ -160,7 +159,7 @@ void DeferredImageDecoder::setDataInternal(PassRefPtr<SharedBuffer> passData,
 
   if (m_frameGenerator) {
     if (!m_rwBuffer)
-      m_rwBuffer = wrapUnique(new SkRWBuffer(data->size()));
+      m_rwBuffer = WTF::wrapUnique(new SkRWBuffer(data->size()));
 
     const char* segment = 0;
     for (size_t length = data->getSomeData(segment, m_rwBuffer->size()); length;
@@ -267,6 +266,7 @@ void DeferredImageDecoder::activateLazyDecoding() {
   m_canYUVDecode = RuntimeEnabledFeatures::decodeToYUVEnabled() &&
                    (m_filenameExtension == "jpg");
   m_hasEmbeddedColorSpace = m_actualDecoder->hasEmbeddedColorSpace();
+  m_colorSpaceForSkImages = m_actualDecoder->colorSpaceForSkImages();
 
   const bool isSingleFrame =
       m_actualDecoder->repetitionCount() == cAnimationNone ||
@@ -275,7 +275,7 @@ void DeferredImageDecoder::activateLazyDecoding() {
       SkISize::Make(m_actualDecoder->decodedSize().width(),
                     m_actualDecoder->decodedSize().height());
   m_frameGenerator = ImageFrameGenerator::create(
-      decodedSize, m_actualDecoder->colorSpace(), !isSingleFrame);
+      decodedSize, !isSingleFrame, m_actualDecoder->colorBehavior());
 }
 
 void DeferredImageDecoder::prepareLazyDecodedFrames() {
@@ -326,11 +326,11 @@ sk_sp<SkImage> DeferredImageDecoder::createFrameImageAtIndex(
   SkImageInfo info = SkImageInfo::MakeN32(
       decodedSize.width(), decodedSize.height(),
       knownToBeOpaque ? kOpaque_SkAlphaType : kPremul_SkAlphaType,
-      m_frameGenerator->getColorSpace());
+      m_colorSpaceForSkImages);
 
   DecodingImageGenerator* generator = new DecodingImageGenerator(
-      m_frameGenerator, info, segmentReader.release(), m_allDataReceived, index,
-      m_frameData[index].m_uniqueID);
+      m_frameGenerator, info, std::move(segmentReader), m_allDataReceived,
+      index, m_frameData[index].m_uniqueID);
   sk_sp<SkImage> image = SkImage::MakeFromGenerator(
       generator);  // SkImage takes ownership of the generator.
   if (!image)

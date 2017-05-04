@@ -27,32 +27,39 @@
 
 namespace blink {
 
+// This constant specifies the maximum number of pixel buffer that are allowed
+// to co-exist at a given time. The minimum number is 2 (double buffered).
+// larger numbers can help maintain a steadier frame rates, but they increase
+// latency.
+const int kMaximumOffscreenCanvasBufferCount = 3;
+
 OffscreenCanvasFrameDispatcherImpl::OffscreenCanvasFrameDispatcherImpl(
+    OffscreenCanvasFrameDispatcherClient* client,
     uint32_t clientId,
     uint32_t sinkId,
-    uint32_t localId,
-    uint64_t nonceHigh,
-    uint64_t nonceLow,
     int canvasId,
     int width,
     int height)
-    : m_surfaceId(
-          cc::FrameSinkId(clientId, sinkId),
-          cc::LocalFrameId(
-              localId,
-              base::UnguessableToken::Deserialize(nonceHigh, nonceLow))),
+    : OffscreenCanvasFrameDispatcher(client),
+      m_frameSinkId(cc::FrameSinkId(clientId, sinkId)),
       m_width(width),
       m_height(height),
+      m_changeSizeForNextCommit(false),
       m_nextResourceId(1u),
       m_binding(this),
       m_placeholderCanvasId(canvasId) {
+  m_currentLocalFrameId = m_surfaceIdAllocator.GenerateId();
   DCHECK(!m_sink.is_bound());
   mojom::blink::OffscreenCanvasCompositorFrameSinkProviderPtr provider;
   Platform::current()->interfaceProvider()->getInterface(
-      mojo::GetProxy(&provider));
-  provider->CreateCompositorFrameSink(m_surfaceId,
+      mojo::MakeRequest(&provider));
+  provider->CreateCompositorFrameSink(m_frameSinkId,
                                       m_binding.CreateInterfacePtrAndBind(),
-                                      mojo::GetProxy(&m_sink));
+                                      mojo::MakeRequest(&m_sink));
+}
+
+OffscreenCanvasFrameDispatcherImpl::~OffscreenCanvasFrameDispatcherImpl() {
+  m_syntheticBeginFrameTask.cancel();
 }
 
 void OffscreenCanvasFrameDispatcherImpl::setTransferableResourceToSharedBitmap(
@@ -70,8 +77,10 @@ void OffscreenCanvasFrameDispatcherImpl::setTransferableResourceToSharedBitmap(
   // TODO(xlai): Optimize to avoid copying pixels. See crbug.com/651456.
   // However, in the case when |image| is texture backed, this function call
   // does a GPU readback which is required.
-  image->imageForCurrentFrame()->readPixels(imageInfo, pixels,
-                                            imageInfo.minRowBytes(), 0, 0);
+  // TODO(ccameron): Canvas should produce sRGB images.
+  // https://crbug.com/672299
+  image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget())
+      ->readPixels(imageInfo, pixels, imageInfo.minRowBytes(), 0, 0);
   resource.mailbox_holder.mailbox = bitmap->id();
   resource.mailbox_holder.texture_target = 0;
   resource.is_software = true;
@@ -105,8 +114,10 @@ void OffscreenCanvasFrameDispatcherImpl::
     return;
   RefPtr<Uint8Array> dstPixels =
       Uint8Array::create(dstBuffer, 0, dstBuffer->byteLength());
-  image->imageForCurrentFrame()->readPixels(info, dstPixels->data(),
-                                            info.minRowBytes(), 0, 0);
+  // TODO(ccameron): Canvas should produce sRGB images.
+  // https://crbug.com/672299
+  image->imageForCurrentFrame(ColorBehavior::transformToGlobalTarget())
+      ->readPixels(info, dstPixels->data(), info.minRowBytes(), 0, 0);
 
   GLuint textureId = 0u;
   gl->GenTextures(1, &textureId);
@@ -158,9 +169,9 @@ void OffscreenCanvasFrameDispatcherImpl::
 namespace {
 
 void updatePlaceholderImage(WeakPtr<OffscreenCanvasFrameDispatcher> dispatcher,
-                            std::unique_ptr<WebTaskRunner> taskRunner,
+                            RefPtr<WebTaskRunner> taskRunner,
                             int placeholderCanvasId,
-                            RefPtr<blink::Image> image,
+                            RefPtr<blink::StaticBitmapImage> image,
                             unsigned resourceId) {
   DCHECK(isMainThread());
   OffscreenCanvasPlaceholder* placeholderCanvas =
@@ -179,30 +190,25 @@ void OffscreenCanvasFrameDispatcherImpl::dispatchFrame(
     double commitStartTime,
     bool isWebGLSoftwareRendering /* This flag is true when WebGL's commit is
     called on SwiftShader. */) {
-  if (!image)
-    return;
-  if (!verifyImageSize(image->size()))
+  if (!image || !verifyImageSize(image->size()))
     return;
   cc::CompositorFrame frame;
   // TODO(crbug.com/652931): update the device_scale_factor
   frame.metadata.device_scale_factor = 1.0f;
-  frame.delegated_frame_data.reset(new cc::DelegatedFrameData);
 
   const gfx::Rect bounds(m_width, m_height);
-  const cc::RenderPassId renderPassId(1, 1);
+  const int renderPassId = 1;
   std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
-  pass->SetAll(renderPassId, bounds, bounds, gfx::Transform(), false);
+  pass->SetNew(renderPassId, bounds, bounds, gfx::Transform());
+  pass->has_transparent_background = false;
 
   cc::SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
   sqs->SetAll(gfx::Transform(), bounds.size(), bounds, bounds, false, 1.f,
-              SkXfermode::kSrcOver_Mode, 0);
+              SkBlendMode::kSrcOver, 0);
 
   cc::TransferableResource resource;
   resource.id = m_nextResourceId;
   resource.format = cc::ResourceFormat::RGBA_8888;
-  // TODO(crbug.com/645590): filter should respect the image-rendering CSS
-  // property of associated canvas element.
-  resource.filter = GL_LINEAR;
   resource.size = gfx::Size(m_width, m_height);
   // TODO(crbug.com/646022): making this overlay-able.
   resource.is_overlay_candidate = false;
@@ -244,20 +250,20 @@ void OffscreenCanvasFrameDispatcherImpl::dispatchFrame(
   // After this point, |image| can only be used on the main thread, until
   // it is returned.
   image->transfer();
-  std::unique_ptr<WebTaskRunner> dispatcherTaskRunner =
-      Platform::current()->currentThread()->getWebTaskRunner()->clone();
+  RefPtr<WebTaskRunner> dispatcherTaskRunner =
+      Platform::current()->currentThread()->getWebTaskRunner();
 
   Platform::current()->mainThread()->getWebTaskRunner()->postTask(
       BLINK_FROM_HERE,
       crossThreadBind(updatePlaceholderImage, this->createWeakPtr(),
-                      passed(std::move(dispatcherTaskRunner)),
+                      WTF::passed(std::move(dispatcherTaskRunner)),
                       m_placeholderCanvasId, std::move(image), resource.id));
   m_spareResourceLocks.add(m_nextResourceId);
 
   commitTypeHistogram.count(commitType);
 
   m_nextResourceId++;
-  frame.delegated_frame_data->resource_list.push_back(std::move(resource));
+  frame.resource_list.push_back(std::move(resource));
 
   cc::TextureDrawQuad* quad =
       pass->CreateAndAppendDrawQuad<cc::TextureDrawQuad>();
@@ -272,13 +278,15 @@ void OffscreenCanvasFrameDispatcherImpl::dispatchFrame(
   float vertexOpacity[4] = {1.f, 1.f, 1.f, 1.f};
   // TODO(crbug.com/645994): this should be true when using style
   // "image-rendering: pixelated".
+  // TODO(crbug.com/645590): filter should respect the image-rendering CSS
+  // property of associated canvas element.
   const bool nearestNeighbor = false;
   quad->SetAll(sqs, bounds, bounds, bounds, needsBlending, resource.id,
                gfx::Size(), premultipliedAlpha, uvTopLeft, uvBottomRight,
                SK_ColorTRANSPARENT, vertexOpacity, yflipped, nearestNeighbor,
                false);
 
-  frame.delegated_frame_data->render_pass_list.push_back(std::move(pass));
+  frame.render_pass_list.push_back(std::move(pass));
 
   double elapsedTime = WTF::monotonicallyIncreasingTime() - commitStartTime;
 
@@ -359,7 +367,26 @@ void OffscreenCanvasFrameDispatcherImpl::dispatchFrame(
       NOTREACHED();
   }
 
-  m_sink->SubmitCompositorFrame(std::move(frame));
+  if (m_changeSizeForNextCommit) {
+    m_currentLocalFrameId = m_surfaceIdAllocator.GenerateId();
+    m_changeSizeForNextCommit = false;
+  }
+  m_sink->SubmitCompositorFrame(m_currentLocalFrameId, std::move(frame));
+
+  // TODO(crbug.com/674744): Get BeginFrame to fire on its own.
+  scheduleSyntheticBeginFrame();
+}
+
+void OffscreenCanvasFrameDispatcherImpl::scheduleSyntheticBeginFrame() {
+  m_syntheticBeginFrameTask =
+      Platform::current()
+          ->currentThread()
+          ->getWebTaskRunner()
+          ->postDelayedCancellableTask(
+              BLINK_FROM_HERE,
+              WTF::bind(&OffscreenCanvasFrameDispatcherImpl::OnBeginFrame,
+                        WTF::unretained(this), cc::BeginFrameArgs()),
+              16);
 }
 
 void OffscreenCanvasFrameDispatcherImpl::DidReceiveCompositorFrameAck() {
@@ -367,7 +394,22 @@ void OffscreenCanvasFrameDispatcherImpl::DidReceiveCompositorFrameAck() {
 }
 
 void OffscreenCanvasFrameDispatcherImpl::OnBeginFrame(
-    const cc::BeginFrameArgs& beginFrameArgs) {}
+    const cc::BeginFrameArgs& beginFrameArgs) {
+  if (!client())
+    return;
+  unsigned framesInFlight = m_cachedImages.size() + m_sharedBitmaps.size() +
+                            m_cachedTextureIds.size();
+
+  // Limit the rate of compositor commits.
+  if (framesInFlight < kMaximumOffscreenCanvasBufferCount) {
+    client()->beginFrame();
+  } else {
+    // TODO(crbug.com/674744): Get BeginFrame to fire on its own.
+    // The following call is to reschedule the frame in cases where we encounter
+    // a backlog.
+    scheduleSyntheticBeginFrame();
+  }
+}
 
 void OffscreenCanvasFrameDispatcherImpl::ReclaimResources(
     const cc::ReturnedResourceArray& resources) {
@@ -377,6 +419,10 @@ void OffscreenCanvasFrameDispatcherImpl::ReclaimResources(
       image->updateSyncToken(resource.sync_token);
     reclaimResource(resource.id);
   }
+}
+
+void OffscreenCanvasFrameDispatcherImpl::WillDrawSurface() {
+  // TODO(fsamuel, staraz): Implement this.
 }
 
 void OffscreenCanvasFrameDispatcherImpl::reclaimResource(unsigned resourceId) {
@@ -400,6 +446,14 @@ bool OffscreenCanvasFrameDispatcherImpl::verifyImageSize(
   if (imageSize.width() == m_width && imageSize.height() == m_height)
     return true;
   return false;
+}
+
+void OffscreenCanvasFrameDispatcherImpl::reshape(int width, int height) {
+  if (m_width != width || m_height != height) {
+    m_width = width;
+    m_height = height;
+    m_changeSizeForNextCommit = true;
+  }
 }
 
 }  // namespace blink

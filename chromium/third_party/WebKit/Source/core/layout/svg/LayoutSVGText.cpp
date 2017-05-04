@@ -98,7 +98,7 @@ static inline void collectDescendantTextNodes(
   for (LayoutObject* descendant = textRoot.firstChild(); descendant;
        descendant = descendant->nextInPreOrder(&textRoot)) {
     if (descendant->isSVGInlineText())
-      descendantTextNodes.append(toLayoutSVGInlineText(descendant));
+      descendantTextNodes.push_back(toLayoutSVGInlineText(descendant));
   }
 }
 
@@ -166,7 +166,7 @@ static inline void updateFontAndMetrics(LayoutSVGText& textRoot) {
 static inline void checkDescendantTextNodeConsistency(
     LayoutSVGText& text,
     Vector<LayoutSVGInlineText*>& expectedDescendantTextNodes) {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
   Vector<LayoutSVGInlineText*> newDescendantTextNodes;
   collectDescendantTextNodes(text, newDescendantTextNodes);
   ASSERT(newDescendantTextNodes == expectedDescendantTextNodes);
@@ -181,8 +181,8 @@ void LayoutSVGText::layout() {
 
   bool updateParentBoundaries = false;
   if (m_needsTransformUpdate) {
-    m_localTransform =
-        toSVGTextElement(node())->calculateAnimatedLocalTransform();
+    m_localTransform = toSVGTextElement(node())->calculateTransform(
+        SVGElement::IncludeMotionTransform);
     m_needsTransformUpdate = false;
     updateParentBoundaries = true;
   }
@@ -249,16 +249,13 @@ void LayoutSVGText::layout() {
 
   m_needsReordering = false;
 
-  // If we don't have any line boxes, then make sure the frame rect is still
-  // cleared.
-  if (!firstLineBox())
-    setFrameRect(LayoutRect());
+  FloatRect newBoundaries = objectBoundingBox();
+  if (!updateParentBoundaries)
+    updateParentBoundaries = oldBoundaries != newBoundaries;
 
   m_overflow.reset();
+  addSelfVisualOverflow(LayoutRect(newBoundaries));
   addVisualEffectOverflow();
-
-  if (!updateParentBoundaries)
-    updateParentBoundaries = oldBoundaries != objectBoundingBox();
 
   // Invalidate all resources of this client if our layout changed.
   if (everHadLayout() && selfNeedsLayout())
@@ -291,7 +288,7 @@ bool LayoutSVGText::nodeAtFloatPoint(HitTestResult& result,
   PointerEventsHitRules hitRules(PointerEventsHitRules::SVG_TEXT_HITTESTING,
                                  result.hitTestRequest(),
                                  style()->pointerEvents());
-  bool isVisible = (style()->visibility() == EVisibility::Visible);
+  bool isVisible = (style()->visibility() == EVisibility::kVisible);
   if (isVisible || !hitRules.requireVisible) {
     if ((hitRules.canHitBoundingBox && !objectBoundingBox().isEmpty()) ||
         (hitRules.canHitStroke &&
@@ -330,7 +327,9 @@ PositionWithAffinity LayoutSVGText::positionForPoint(
     return createPositionWithAffinity(0);
 
   LayoutPoint clippedPointInContents(pointInContents);
+  clippedPointInContents.moveBy(-rootBox->location());
   clippedPointInContents.clampNegativeToZero();
+  clippedPointInContents.moveBy(rootBox->location());
 
   ASSERT(!rootBox->nextRootBox());
   ASSERT(childrenInline());
@@ -345,13 +344,20 @@ PositionWithAffinity LayoutSVGText::positionForPoint(
       LayoutPoint(clippedPointInContents.x(), closestBox->y()));
 }
 
-void LayoutSVGText::absoluteQuads(Vector<FloatQuad>& quads) const {
-  quads.append(localToAbsoluteQuad(strokeBoundingBox()));
+void LayoutSVGText::absoluteQuads(Vector<FloatQuad>& quads,
+                                  MapCoordinatesFlags mode) const {
+  quads.push_back(localToAbsoluteQuad(strokeBoundingBox(), mode));
 }
 
 void LayoutSVGText::paint(const PaintInfo& paintInfo,
                           const LayoutPoint&) const {
   SVGTextPainter(*this).paint(paintInfo);
+}
+
+FloatRect LayoutSVGText::objectBoundingBox() const {
+  if (const RootInlineBox* box = firstRootBox())
+    return FloatRect(box->frameRect());
+  return FloatRect();
 }
 
 FloatRect LayoutSVGText::strokeBoundingBox() const {
@@ -376,6 +382,12 @@ FloatRect LayoutSVGText::visualRectInLocalSVGCoordinates() const {
     textShadow->adjustRectForShadow(visualRect);
 
   return visualRect;
+}
+
+void LayoutSVGText::addOutlineRects(Vector<LayoutRect>& rects,
+                                    const LayoutPoint&,
+                                    IncludeBlockVisualOverflowOrNot) const {
+  rects.push_back(LayoutRect(objectBoundingBox()));
 }
 
 bool LayoutSVGText::isObjectBoundingBoxValid() const {

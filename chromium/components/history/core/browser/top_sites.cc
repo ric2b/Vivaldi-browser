@@ -49,4 +49,8 @@ void TopSites::NotifyTopSitesChanged(
     observer.TopSitesChanged(this, reason);
 }
 
+bool TopSites::HasPageThumbnail(const GURL& url) {
+  return false;
+}
+
 }  // namespace history

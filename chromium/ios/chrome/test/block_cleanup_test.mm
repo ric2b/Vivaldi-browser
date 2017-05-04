@@ -4,10 +4,11 @@
 
 #import <Foundation/Foundation.h>
 
-#include "ios/chrome/test/block_cleanup_test.h"
+#import "ios/chrome/test/block_cleanup_test.h"
 
 #include "base/logging.h"
-#include "base/mac/scoped_nsobject.h"
+#import "base/mac/scoped_nsobject.h"
+#import "base/mac/foundation_util.h"
 
 void BlockCleanupTest::SetUp() {
   block_cleanup_pool_ = [[NSAutoreleasePool alloc] init];
@@ -22,7 +23,7 @@ void BlockCleanupTest::TearDown() {
   // Drain the autorelease pool to finish cleaning up after blocks.
   // TODO(rohitrao): Can this be an EXPECT, so as to not crash the whole suite?
   DCHECK(block_cleanup_pool_);
-  [block_cleanup_pool_ release];
+  [base::mac::ObjCCastStrict<NSAutoreleasePool>(block_cleanup_pool_) release];
   block_cleanup_pool_ = nil;
 
   PlatformTest::TearDown();

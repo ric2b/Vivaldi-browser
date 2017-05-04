@@ -193,8 +193,8 @@ void EpollServer::RegisterFD(int fd, CB* cb, int event_mask) {
   VLOG(3) << "RegisterFD fd=" << fd << " event_mask=" << event_mask;
   FDToCBMap::iterator fd_i = cb_map_.find(CBAndEventMask(NULL, 0, fd));
   if (cb_map_.end() != fd_i) {
-    // do we just abort, or do we just unregister the other guy?
-    // for now, lets just unregister the other guy.
+    // do we just abort, or do we just unregister the other callback?
+    // for now, lets just unregister the other callback.
 
     // unregister any callback that may already be registered for this FD.
     CB* other_cb = fd_i->cb;
@@ -680,7 +680,7 @@ void EpollServer::CallReadyListCallbacks() {
   std::swap(ready_list_.lh_first, tmp_list_.lh_first);
   if (tmp_list_.lh_first) {
     tmp_list_.lh_first->entry.le_prev = &tmp_list_.lh_first;
-    EpollEvent event(0, false);
+    EpollEvent event(0);
     while (tmp_list_.lh_first != NULL) {
       DCHECK_GT(ready_list_size_, 0);
       CBAndEventMask* cb_and_mask = tmp_list_.lh_first;

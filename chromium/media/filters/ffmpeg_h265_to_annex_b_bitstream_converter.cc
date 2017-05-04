@@ -16,31 +16,30 @@
 namespace media {
 
 FFmpegH265ToAnnexBBitstreamConverter::FFmpegH265ToAnnexBBitstreamConverter(
-    AVCodecContext* stream_codec_context)
-    : stream_codec_context_(stream_codec_context) {
-  CHECK(stream_codec_context_);
+    AVCodecParameters* stream_codec_parameters)
+    : stream_codec_parameters_(stream_codec_parameters) {
+  CHECK(stream_codec_parameters_);
 }
 
 FFmpegH265ToAnnexBBitstreamConverter::~FFmpegH265ToAnnexBBitstreamConverter() {}
 
 bool FFmpegH265ToAnnexBBitstreamConverter::ConvertPacket(AVPacket* packet) {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   if (packet == NULL || !packet->data)
     return false;
 
   // Calculate the needed output buffer size.
   if (!hevc_config_) {
-    if (!stream_codec_context_->extradata ||
-        stream_codec_context_->extradata_size <= 0) {
+    if (!stream_codec_parameters_->extradata ||
+        stream_codec_parameters_->extradata_size <= 0) {
       DVLOG(1) << "HEVCDecoderConfiguration not found, no extra codec data";
       return false;
     }
 
     hevc_config_.reset(new mp4::HEVCDecoderConfigurationRecord());
 
-    if (!hevc_config_->Parse(
-            stream_codec_context_->extradata,
-            stream_codec_context_->extradata_size)) {
+    if (!hevc_config_->Parse(stream_codec_parameters_->extradata,
+                             stream_codec_parameters_->extradata_size)) {
       DVLOG(1) << "Parsing HEVCDecoderConfiguration failed";
       return false;
     }

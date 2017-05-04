@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/time/clock.h"
 #include "extensions/browser/api/cast_channel/cast_auth_util.h"
@@ -157,10 +158,7 @@ void Logger::LogNewSocketEvent(const CastSocket& cast_socket) {
   const net::IPAddress& ip = cast_socket.ip_endpoint().address();
   DCHECK(ip.IsValid());
   aggregated_socket_event.set_endpoint_id(ip.bytes().back());
-  aggregated_socket_event.set_channel_auth_type(cast_socket.channel_auth() ==
-                                                        CHANNEL_AUTH_TYPE_SSL
-                                                    ? proto::SSL
-                                                    : proto::SSL_VERIFIED);
+  aggregated_socket_event.set_channel_auth_type(proto::SSL_VERIFIED);
 }
 
 void Logger::LogSocketEvent(int channel_id, EventType event_type) {

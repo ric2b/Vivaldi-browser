@@ -9,18 +9,33 @@ import threading
 
 class ResultType(object):
   """Class enumerating test types."""
+  # The test passed.
   PASS = 'PASS'
+
+  # The test was intentionally skipped.
   SKIP = 'SKIP'
+
+  # The test failed.
   FAIL = 'FAIL'
+
+  # The test caused the containing process to crash.
   CRASH = 'CRASH'
+
+  # The test timed out.
   TIMEOUT = 'TIMEOUT'
+
+  # The test ran, but we couldn't determine what happened.
   UNKNOWN = 'UNKNOWN'
+
+  # The test did not run.
+  NOTRUN = 'NOTRUN'
 
   @staticmethod
   def GetTypes():
     """Get a list of all test types."""
     return [ResultType.PASS, ResultType.SKIP, ResultType.FAIL,
-            ResultType.CRASH, ResultType.TIMEOUT, ResultType.UNKNOWN]
+            ResultType.CRASH, ResultType.TIMEOUT, ResultType.UNKNOWN,
+            ResultType.NOTRUN]
 
 
 class BaseTestResult(object):
@@ -41,7 +56,8 @@ class BaseTestResult(object):
     self._test_type = test_type
     self._duration = duration
     self._log = log
-    self._tombstones = None
+    self._tombstones_url = None
+    self._logcat_url = None
 
   def __str__(self):
     return self._name
@@ -89,11 +105,17 @@ class BaseTestResult(object):
     """Get the test log."""
     return self._log
 
-  def SetTombstones(self, tombstones):
-    self._tombstones = tombstones
+  def SetTombstonesUrl(self, tombstones_url):
+    self._tombstones_url = tombstones_url
 
-  def GetTombstones(self):
-    return self._tombstones
+  def GetTombstonesUrl(self):
+    return self._tombstones_url
+
+  def SetLogcatUrl(self, logcat_url):
+    self._logcat_url = logcat_url
+
+  def GetLogcatUrl(self):
+    return self._logcat_url
 
 class TestRunResults(object):
   """Set of results for a test run."""

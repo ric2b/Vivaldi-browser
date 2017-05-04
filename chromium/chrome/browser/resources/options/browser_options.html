@@ -1,3 +1,6 @@
+<if expr="chromeos">
+<link rel="import" href="/people_page/lock_screen_constants.html">
+</if>
 <div id="settings" class="page" hidden>
   <header>
     <h1 i18n-content="settingsTitle"></h1>
@@ -567,12 +570,12 @@
     <div class="checkbox controlled-setting-with-label">
       <label>
         <input id="password-manager-enabled"
-            pref="profile.password_manager_enabled"
+            pref="credentials_enable_service"
             metric="Options_PasswordManager" type="checkbox">
         <span>
           <span i18n-content="passwordManagerEnabled"></span>
           <span class="controlled-setting-indicator"
-              pref="profile.password_manager_enabled"></span>
+              pref="credentials_enable_service"></span>
         </span>
       </label>
       <a is="action-link" id="manage-passwords" i18n-content="managePasswords">

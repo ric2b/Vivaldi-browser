@@ -1,0 +1,18 @@
+# Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
+
+source_set("glue"){
+  sources = [
+    "notes_change_processor.cpp",
+    "notes_change_processor.h",
+    "notes_data_type_controller.cpp",
+    "notes_data_type_controller.h",
+    "notes_model_associator.cpp",
+    "notes_model_associator.h",
+  ]
+  deps = [
+    "//skia",
+  ]
+  public_deps = [
+    "//components/sync/protocol",
+  ]
+}

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ios/web/net/request_tracker_impl.h"
+#import "ios/web/net/request_tracker_impl.h"
 
 #include <pthread.h>
 #include <stddef.h>
@@ -12,16 +12,14 @@
 #include "base/containers/hash_tables.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/mac/bind_objc_block.h"
-#include "base/mac/scoped_nsobject.h"
+#import "base/mac/bind_objc_block.h"
+#import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/synchronization/lock.h"
-#import "ios/net/clients/crn_forwarding_network_client.h"
-#import "ios/net/clients/crn_forwarding_network_client_factory.h"
-#import "ios/web/crw_network_activity_indicator_manager.h"
-#import "ios/web/history_state_util.h"
+#include "ios/web/history_state_util.h"
 #import "ios/web/net/crw_request_tracker_delegate.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/certificate_policy_cache.h"
@@ -405,7 +403,6 @@ void RequestTrackerImpl::Close() {
                            base::Bind(
                                [](RequestTrackerImpl* tracker) {
                                  tracker->is_closing_ = true;
-                                 tracker->CancelRequests();
                                },
                                base::RetainedRef(this)));
 
@@ -480,16 +477,6 @@ void RequestTrackerImpl::StartRequest(net::URLRequest* request) {
   DCHECK(!counts_by_request_.count(request));
   DCHECK_EQ(is_for_static_file_requests_, request->url().SchemeIsFile());
 
-  bool addedRequest = live_requests_.insert(request).second;
-  if (!is_for_static_file_requests_ && addedRequest) {
-    NSString* networkActivityKey = GetNetworkActivityKey();
-    web::WebThread::PostTask(
-        web::WebThread::UI, FROM_HERE, base::BindBlockArc(^{
-          [[CRWNetworkActivityIndicatorManager sharedInstance]
-              startNetworkTaskForGroup:networkActivityKey];
-        }));
-  }
-
   if (new_estimate_round_) {
     // Starting a new estimate round. Ignore the previous requests for the
     // calculation.
@@ -498,10 +485,10 @@ void RequestTrackerImpl::StartRequest(net::URLRequest* request) {
     new_estimate_round_ = false;
   }
   const GURL& url = request->original_url();
-  TrackerCounts* counts = new TrackerCounts(
-      GURLByRemovingRefFromGURL(url), request);
-  counts_.push_back(counts);
-  counts_by_request_[request] = counts;
+  auto counts =
+      base::MakeUnique<TrackerCounts>(GURLByRemovingRefFromGURL(url), request);
+  counts_by_request_[request] = counts.get();
+  counts_.push_back(std::move(counts));
   if (page_url_.SchemeIsCryptographic() && !url.SchemeIsCryptographic())
     has_mixed_content_ = true;
   Notify();
@@ -560,16 +547,6 @@ void RequestTrackerImpl::CaptureReceivedBytes(const net::URLRequest* request,
 void RequestTrackerImpl::StopRequest(net::URLRequest* request) {
   DCHECK_CURRENTLY_ON(web::WebThread::IO);
 
-  int removedRequests = live_requests_.erase(request);
-  if (!is_for_static_file_requests_ && removedRequests > 0) {
-    NSString* networkActivityKey = GetNetworkActivityKey();
-    web::WebThread::PostTask(
-        web::WebThread::UI, FROM_HERE, base::BindBlockArc(^{
-          [[CRWNetworkActivityIndicatorManager sharedInstance]
-              stopNetworkTaskForGroup:networkActivityKey];
-        }));
-  }
-
   if (counts_by_request_.count(request)) {
     StopRedirectedRequest(request);
     Notify();
@@ -578,16 +555,6 @@ void RequestTrackerImpl::StopRequest(net::URLRequest* request) {
 
 void RequestTrackerImpl::StopRedirectedRequest(net::URLRequest* request) {
   DCHECK_CURRENTLY_ON(web::WebThread::IO);
-
-  int removedRequests = live_requests_.erase(request);
-  if (!is_for_static_file_requests_ && removedRequests > 0) {
-    NSString* networkActivityKey = GetNetworkActivityKey();
-    web::WebThread::PostTask(
-        web::WebThread::UI, FROM_HERE, base::BindBlockArc(^{
-          [[CRWNetworkActivityIndicatorManager sharedInstance]
-              stopNetworkTaskForGroup:networkActivityKey];
-        }));
-  }
 
   if (counts_by_request_.count(request)) {
     TrackerCounts* counts = counts_by_request_[request];
@@ -689,14 +656,6 @@ void RequestTrackerImpl::PostIOTask(const base::Closure& task) {
 void RequestTrackerImpl::ScheduleIOTask(const base::Closure& task) {
   DCHECK_CURRENTLY_ON(web::WebThread::IO);
   web::WebThread::PostTask(web::WebThread::IO, FROM_HERE, task);
-}
-
-void RequestTrackerImpl::SetCacheModeFromUIThread(
-    RequestTracker::CacheMode mode) {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE,
-      base::Bind(&RequestTracker::SetCacheMode, this, mode));
 }
 
 #pragma mark Private Object Lifecycle API
@@ -818,17 +777,17 @@ void RequestTrackerImpl::SSLNotify() {
     return;
 
   const GURL page_origin = page_url_.GetOrigin();
-  ScopedVector<TrackerCounts>::iterator it;
-  for (it = counts_.begin(); it != counts_.end(); ++it) {
-    if (!(*it)->ssl_info.is_valid())
+  for (const auto& tracker_count : counts_) {
+    if (!tracker_count->ssl_info.is_valid())
       continue;  // No SSL info at this point in time on this tracker.
 
-    GURL request_origin = (*it)->url.GetOrigin();
+    GURL request_origin = tracker_count->url.GetOrigin();
     if (request_origin != page_origin)
       continue;  // Not interesting in the context of the page.
 
-    base::scoped_nsobject<CRWSSLCarrier> carrier(
-        [[CRWSSLCarrier alloc] initWithTracker:this counts:*it]);
+    base::scoped_nsobject<CRWSSLCarrier> carrier([[CRWSSLCarrier alloc]
+        initWithTracker:this
+                 counts:tracker_count.get()]);
     web::WebThread::PostTask(
         web::WebThread::UI, FROM_HERE,
         base::Bind(&RequestTrackerImpl::NotifyUpdatedSSLStatus, this, carrier));
@@ -958,26 +917,25 @@ void RequestTrackerImpl::ReevaluateCallbacksForAllCounts() {
   if (is_closing_)
     return;
 
-  ScopedVector<TrackerCounts>::iterator it;
-  for (it = counts_.begin(); it != counts_.end(); ++it) {
+  for (const auto& tracker_count : counts_) {
     // Check if the value hasn't changed via a user action.
-    if ((*it)->ssl_judgment == CertPolicy::UNKNOWN)
-      EvaluateSSLCallbackForCounts(*it);
+    if (tracker_count->ssl_judgment == CertPolicy::UNKNOWN)
+      EvaluateSSLCallbackForCounts(tracker_count.get());
 
-    CertPolicy::Judgment judgment = (*it)->ssl_judgment;
+    CertPolicy::Judgment judgment = tracker_count->ssl_judgment;
     if (judgment == CertPolicy::ALLOWED)
       continue;
 
     // SSL errors on subrequests are simply ignored. The call to
     // EvaluateSSLCallbackForCounts() cancelled the request and nothing will
     // restart it.
-    if ((*it)->is_subrequest)
+    if (tracker_count->is_subrequest)
       continue;
 
     if (!current_ssl_error_) {
       // For the UNKNOWN and DENIED state the information should be pushed to
       // the delegate. But only one at a time.
-      current_ssl_error_ = (*it);
+      current_ssl_error_ = tracker_count.get();
       base::scoped_nsobject<CRWSSLCarrier> carrier([[CRWSSLCarrier alloc]
           initWithTracker:this counts:current_ssl_error_]);
       web::WebThread::PostTask(
@@ -1003,11 +961,9 @@ PageCounts RequestTrackerImpl::pageCounts() {
 
   PageCounts page_counts;
 
-  ScopedVector<TrackerCounts>::iterator it;
-  for (it = counts_.begin() + estimate_start_index_;
-       it != counts_.end(); ++it) {
-    if ((*it)->done) {
-      uint64_t size = (*it)->processed;
+  for (const auto& tracker_count : counts_) {
+    if (tracker_count->done) {
+      uint64_t size = tracker_count->processed;
       page_counts.finished += 1;
       page_counts.finished_bytes += size;
       if (page_counts.largest_byte_size_known < size) {
@@ -1015,16 +971,17 @@ PageCounts RequestTrackerImpl::pageCounts() {
       }
     } else {
       page_counts.unfinished += 1;
-      if ((*it)->expected_length) {
-        uint64_t size = (*it)->expected_length;
-        page_counts.unfinished_estimate_bytes_done += (*it)->processed;
+      if (tracker_count->expected_length) {
+        uint64_t size = tracker_count->expected_length;
+        page_counts.unfinished_estimate_bytes_done += tracker_count->processed;
         page_counts.unfinished_estimated_bytes_left += size;
         if (page_counts.largest_byte_size_known < size) {
           page_counts.largest_byte_size_known = size;
         }
       } else {
         page_counts.unfinished_no_estimate += 1;
-        page_counts.unfinished_no_estimate_bytes_done += (*it)->processed;
+        page_counts.unfinished_no_estimate_bytes_done +=
+            tracker_count->processed;
       }
     }
   }
@@ -1112,8 +1069,8 @@ void RequestTrackerImpl::RecomputeMixedContent(
   if (page_url_.SchemeIsCryptographic() && has_mixed_content_) {
     bool old_url_has_mixed_content = false;
     const GURL origin = page_url_.GetOrigin();
-    ScopedVector<TrackerCounts>::iterator it = counts_.begin();
-    while (it != counts_.end() && *it != split_position) {
+    auto it = counts_.begin();
+    while (it != counts_.end() && it->get() != split_position) {
       if (!(*it)->url.SchemeIsCryptographic() &&
           origin == (*it)->first_party_for_cookies_origin) {
         old_url_has_mixed_content = true;
@@ -1141,9 +1098,8 @@ void RequestTrackerImpl::RecomputeCertificatePolicy(
       web::WebThread::UI, FROM_HERE,
       base::Bind(&RequestTrackerImpl::NotifyClearCertificates, this));
   // Report judgements for the new URL.
-  ScopedVector<TrackerCounts>::const_reverse_iterator it;
-  for (it = counts_.rbegin(); it != counts_.rend(); ++it) {
-    TrackerCounts* counts = *it;
+  for (auto it = counts_.rbegin(); it != counts_.rend(); ++it) {
+    TrackerCounts* counts = it->get();
     if (counts->allowed_by_user) {
       std::string host = counts->url.host();
       web::WebThread::PostTask(
@@ -1175,7 +1131,7 @@ void RequestTrackerImpl::TrimToURL(const GURL& full_url, id user_info) {
   // Locate the request with this url, if present.
   bool new_url_has_mixed_content = false;
   bool url_scheme_is_secure = url.SchemeIsCryptographic();
-  ScopedVector<TrackerCounts>::const_reverse_iterator rit = counts_.rbegin();
+  auto rit = counts_.rbegin();
   while (rit != counts_.rend() && (*rit)->url != url) {
     if (url_scheme_is_secure && !(*rit)->url.SchemeIsCryptographic() &&
         (*rit)->first_party_for_cookies_origin == url.GetOrigin()) {
@@ -1187,7 +1143,7 @@ void RequestTrackerImpl::TrimToURL(const GURL& full_url, id user_info) {
   // |split_position| will be set to the count for the passed url if it exists.
   TrackerCounts* split_position = NULL;
   if (rit != counts_.rend()) {
-    split_position = (*rit);
+    split_position = rit->get();
   } else {
     // The URL was not found, everything will be trimmed. The mixed content
     // calculation is invalid.
@@ -1200,7 +1156,7 @@ void RequestTrackerImpl::TrimToURL(const GURL& full_url, id user_info) {
     // domain as the page itself this will allow retrieval of the SSL
     // information.
     if (url_scheme_is_secure && counts_.size()) {
-      TrackerCounts* back = counts_.back();
+      TrackerCounts* back = counts_.back().get();
       const GURL& back_url = back->url;
       if (back_url.SchemeIsCryptographic() &&
           back_url.GetOrigin() == url.GetOrigin() && !back->is_subrequest) {
@@ -1212,13 +1168,13 @@ void RequestTrackerImpl::TrimToURL(const GURL& full_url, id user_info) {
   RecomputeCertificatePolicy(split_position);
 
   // Trim up to that element.
-  ScopedVector<TrackerCounts>::iterator it = counts_.begin();
-  while (it != counts_.end() && *it != split_position) {
+  auto it = counts_.begin();
+  while (it != counts_.end() && it->get() != split_position) {
     if (!(*it)->done) {
       // This is for an unfinished request on a previous page. We do not care
       // about those anymore. Cancel the request.
       if ((*it)->ssl_judgment == CertPolicy::UNKNOWN)
-        CancelRequestForCounts(*it);
+        CancelRequestForCounts(it->get());
       counts_by_request_.erase((*it)->request);
     }
     it = counts_.erase(it);
@@ -1264,44 +1220,13 @@ NSString* RequestTrackerImpl::UnsafeDescription() {
   DCHECK_CURRENTLY_ON(web::WebThread::IO);
 
   NSMutableArray* urls = [NSMutableArray array];
-  ScopedVector<TrackerCounts>::iterator it;
-  for (it = counts_.begin(); it != counts_.end(); ++it)
-    [urls addObject:(*it)->Description()];
+  for (const auto& tracker_count : counts_)
+    [urls addObject:tracker_count->Description()];
 
   return [NSString stringWithFormat:@"RequestGroupID %@\n%@\n%@",
                                     request_group_id_.get(),
                                     net::NSURLWithGURL(page_url_),
                                     [urls componentsJoinedByString:@"\n"]];
-}
-
-NSString* RequestTrackerImpl::GetNetworkActivityKey() {
-  return [NSString
-      stringWithFormat:@"RequestTrackerImpl.NetworkActivityIndicatorKey.%@",
-                       request_group_id_.get()];
-  }
-
-void RequestTrackerImpl::CancelRequests() {
-  DCHECK_CURRENTLY_ON(web::WebThread::IO);
-  std::set<net::URLRequest*>::iterator it;
-  // TODO(droger): When canceling the request, we should in theory make sure
-  // that the NSURLProtocol client method |didFailWithError| is called,
-  // otherwise the iOS system may wait indefinitely for the request to complete.
-  // However, as we currently only cancel the requests when closing a tab, the
-  // requests are all canceled by the system shortly after and nothing bad
-  // happens.
-  for (it = live_requests_.begin(); it != live_requests_.end(); ++it)
-    (*it)->Cancel();
-
-  int removedRequests = live_requests_.size();
-  live_requests_.clear();
-  if (!is_for_static_file_requests_ && removedRequests > 0) {
-    NSString* networkActivityKey = GetNetworkActivityKey();
-    web::WebThread::PostTask(
-        web::WebThread::UI, FROM_HERE, base::BindBlockArc(^{
-          [[CRWNetworkActivityIndicatorManager sharedInstance]
-              clearNetworkTasksForGroup:networkActivityKey];
-        }));
-  }
 }
 
 void RequestTrackerImpl::SetCertificatePolicyCacheForTest(

@@ -21,7 +21,9 @@ function assert(condition, opt_message) {
     if (opt_message)
       message = message + ': ' + opt_message;
     var error = new Error(message);
-    var global = function() { return this; }();
+    var global = function() {
+      return this;
+    }();
     if (global.traceAssertionsForTesting)
       console.warn(error.stack);
     throw error;
@@ -65,8 +67,9 @@ function assertInstanceof(value, type, opt_message) {
   // We don't use assert immediately here so that we avoid constructing an error
   // message if we don't have to.
   if (!(value instanceof type)) {
-    assertNotReached(opt_message || 'Value ' + value +
-                     ' is not a[n] ' + (type.name || typeof type));
+    assertNotReached(
+        opt_message ||
+        'Value ' + value + ' is not a[n] ' + (type.name || typeof type));
   }
   return value;
 }

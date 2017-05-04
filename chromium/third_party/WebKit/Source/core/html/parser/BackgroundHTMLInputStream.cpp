@@ -34,7 +34,7 @@ BackgroundHTMLInputStream::BackgroundHTMLInputStream()
 
 void BackgroundHTMLInputStream::append(const String& input) {
   m_current.append(SegmentedString(input));
-  m_segments.append(input);
+  m_segments.push_back(input);
 }
 
 void BackgroundHTMLInputStream::close() {
@@ -44,8 +44,8 @@ void BackgroundHTMLInputStream::close() {
 HTMLInputCheckpoint BackgroundHTMLInputStream::createCheckpoint(
     size_t tokensExtractedSincePreviousCheckpoint) {
   HTMLInputCheckpoint checkpoint = m_checkpoints.size();
-  m_checkpoints.append(Checkpoint(m_current, m_segments.size(),
-                                  tokensExtractedSincePreviousCheckpoint));
+  m_checkpoints.push_back(Checkpoint(m_current, m_segments.size(),
+                                     tokensExtractedSincePreviousCheckpoint));
   m_totalCheckpointTokenCount += tokensExtractedSincePreviousCheckpoint;
   return checkpoint;
 }
@@ -115,10 +115,10 @@ void BackgroundHTMLInputStream::rewindTo(HTMLInputCheckpoint checkpointIndex,
 
 void BackgroundHTMLInputStream::updateTotalCheckpointTokenCount() {
   m_totalCheckpointTokenCount = 0;
-  size_t lastCheckpointIndex = m_checkpoints.size();
-  for (size_t i = 0; i < lastCheckpointIndex; ++i)
+  for (const auto& checkpoint : m_checkpoints) {
     m_totalCheckpointTokenCount +=
-        m_checkpoints[i].tokensExtractedSincePreviousCheckpoint;
+        checkpoint.tokensExtractedSincePreviousCheckpoint;
+  }
 }
 
 }  // namespace blink

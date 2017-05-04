@@ -42,6 +42,7 @@
 #include "media/base/media_log_event.h"
 #include "media/capture/ipc/capture_param_traits.h"
 #include "net/base/network_change_notifier.h"
+#include "ppapi/features/features.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
 #include "third_party/WebKit/public/platform/WebFloatRect.h"
@@ -288,7 +289,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::TextInputState)
   IPC_STRUCT_TRAITS_MEMBER(composition_end)
   IPC_STRUCT_TRAITS_MEMBER(can_compose_inline)
   IPC_STRUCT_TRAITS_MEMBER(show_ime_if_needed)
-  IPC_STRUCT_TRAITS_MEMBER(is_non_ime_change)
+  IPC_STRUCT_TRAITS_MEMBER(reply_to_request)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_BEGIN(ViewHostMsg_CreateWorker_Params)
@@ -457,12 +458,6 @@ IPC_MESSAGE_ROUTED2(ViewMsg_PluginActionAt,
 // Sets the page scale for the current main frame to the given page scale.
 IPC_MESSAGE_ROUTED1(ViewMsg_SetPageScale, float /* page_scale_factor */)
 
-// Change the zoom level for the current main frame.  If the level actually
-// changes, a ViewHostMsg_DidZoomURL message will be sent back to the browser
-// telling it what url got zoomed and what its current zoom level is.
-IPC_MESSAGE_ROUTED1(ViewMsg_Zoom,
-                    content::PageZoom /* function */)
-
 // Used to tell a render view whether it should expose various bindings
 // that allow JS content extended privileges.  See BindingsPolicy for valid
 // flag values.
@@ -503,11 +498,11 @@ IPC_MESSAGE_ROUTED2(ViewMsg_UpdateScreenRects,
                     gfx::Rect /* view_screen_rect */,
                     gfx::Rect /* window_screen_rect */)
 
-// Reply to ViewHostMsg_RequestMove, ViewHostMsg_ShowView, and
-// ViewHostMsg_ShowWidget to inform the renderer that the browser has
+// Reply to ViewHostMsg_RequestMove, ViewHostMsg_ShowWidget, and
+// FrameHostMsg_ShowCreatedWindow, to inform the renderer that the browser has
 // processed the move.  The browser may have ignored the move, but it finished
-// processing.  This is used because the renderer keeps a temporary cache of
-// the widget position while these asynchronous operations are in progress.
+// processing.  This is used because the renderer keeps a temporary cache of the
+// widget position while these asynchronous operations are in progress.
 IPC_MESSAGE_ROUTED0(ViewMsg_Move_ACK)
 
 // Used to instruct the RenderView to send back updates to the preferred size.
@@ -559,7 +554,7 @@ IPC_MESSAGE_ROUTED0(ViewMsg_WorkerConnected)
 // for tests.
 IPC_MESSAGE_ROUTED1(ViewMsg_WaitForNextFrameForTests, int /* routing_id */)
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 // Reply to ViewHostMsg_OpenChannelToPpapiBroker
 // Tells the renderer that the channel to the broker has been created.
 IPC_MESSAGE_ROUTED2(ViewMsg_PpapiBrokerChannelCreated,
@@ -622,6 +617,10 @@ IPC_MESSAGE_ROUTED1(ViewMsg_BeginFrame,
 IPC_MESSAGE_ROUTED1(ViewMsg_HandleCompositorProto,
                     std::vector<uint8_t> /* proto */)
 
+// Sets the viewport intersection on the widget for an out-of-process iframe.
+IPC_MESSAGE_ROUTED1(ViewMsg_SetViewportIntersection,
+                    gfx::Rect /* viewport_intersection */)
+
 // -----------------------------------------------------------------------------
 // Messages sent from the renderer to the browser.
 
@@ -631,20 +630,10 @@ IPC_MESSAGE_ROUTED1(ViewMsg_HandleCompositorProto,
 IPC_MESSAGE_ROUTED1(ViewHostMsg_SetNeedsBeginFrames,
                     bool /* enabled */)
 
-// These three messages are sent to the parent RenderViewHost to display the
-// page/widget that was created by
-// CreateWindow/CreateWidget/CreateFullscreenWidget. routing_id
-// refers to the id that was returned from the Create message above.
-// The initial_rect parameter is in screen coordinates.
-//
-// FUTURE: there will probably be flags here to control if the result is
-// in a new window.
-IPC_MESSAGE_ROUTED4(ViewHostMsg_ShowView,
-                    int /* route_id */,
-                    WindowOpenDisposition /* disposition */,
-                    gfx::Rect /* initial_rect */,
-                    bool /* opened_by_user_gesture */)
-
+// These two messages are sent to the parent RenderViewHost to display a widget
+// that was created by CreateWidget/CreateFullscreenWidget. |route_id| refers
+// to the id that was returned from the corresponding Create message above.
+// |initial_rect| is in screen coordinates.
 IPC_MESSAGE_ROUTED2(ViewHostMsg_ShowWidget,
                     int /* route_id */,
                     gfx::Rect /* initial_rect */)
@@ -723,10 +712,11 @@ IPC_SYNC_MESSAGE_CONTROL1_1(ViewHostMsg_CreateWorker,
 // is detached).
 IPC_MESSAGE_CONTROL1(ViewHostMsg_DocumentDetached, uint64_t /* document_id */)
 
-// Wraps an IPC message that's destined to the worker on the renderer->browser
-// hop.
-IPC_MESSAGE_CONTROL1(ViewHostMsg_ForwardToWorker,
-                     IPC::Message /* message */)
+// A renderer sends this to the browser process when it wants to connect to a
+// worker.
+IPC_MESSAGE_CONTROL2(ViewHostMsg_ConnectToWorker,
+                     int /* route_id */,
+                     int /* sent_message_port_id */)
 
 // Tells the browser that a specific Appcache manifest in the current page
 // was accessed.
@@ -758,7 +748,7 @@ IPC_MESSAGE_ROUTED3(ViewHostMsg_WebUISend,
                     std::string  /* message */,
                     base::ListValue /* args */)
 
-#if defined(ENABLE_PLUGINS)
+#if BUILDFLAG(ENABLE_PLUGINS)
 // A renderer sends this to the browser process when it wants to access a PPAPI
 // broker. In contrast to FrameHostMsg_OpenChannelToPpapiBroker, this is called
 // for every connection.
@@ -767,7 +757,7 @@ IPC_MESSAGE_ROUTED3(ViewHostMsg_RequestPpapiBrokerPermission,
                     int /* routing_id */,
                     GURL /* document_url */,
                     base::FilePath /* plugin_path */)
-#endif  // defined(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 // Send the tooltip text for the current mouse position to the browser.
 IPC_MESSAGE_ROUTED2(ViewHostMsg_SetTooltipText,
@@ -798,14 +788,6 @@ IPC_MESSAGE_ROUTED1(ViewHostMsg_OpenDateTimeDialog,
 // Required for updating text input state.
 IPC_MESSAGE_ROUTED1(ViewHostMsg_TextInputStateChanged,
                     content::TextInputState /* text_input_state */)
-
-// Sent when the renderer changes the zoom level for a particular url, so the
-// browser can update its records.  If the view is a plugin doc, then url is
-// used to update the zoom level for all pages in that site.  Otherwise, the
-// render view's id is used so that only the menu is updated.
-IPC_MESSAGE_ROUTED2(ViewHostMsg_DidZoomURL,
-                    double /* zoom_level */,
-                    GURL /* url */)
 
 // Sent when the renderer changes its page scale factor.
 IPC_MESSAGE_ROUTED1(ViewHostMsg_PageScaleFactorChanged,
@@ -895,10 +877,6 @@ IPC_MESSAGE_ROUTED0(ViewHostMsg_DidFirstVisuallyNonEmptyPaint)
 // RenderWidget(Host), should be renamed to WidgetHostMsg_*.
 // See https://crbug.com/537793.
 IPC_MESSAGE_ROUTED0(ViewHostMsg_DidFirstPaintAfterLoad)
-
-// Sent by the renderer to deliver a compositor proto to the browser.
-IPC_MESSAGE_ROUTED1(ViewHostMsg_ForwardCompositorProto,
-                    std::vector<uint8_t> /* proto */)
 
 // Sent in reply to ViewMsg_WaitForNextFrameForTests.
 IPC_MESSAGE_ROUTED0(ViewHostMsg_WaitForNextFrameForTests_ACK)

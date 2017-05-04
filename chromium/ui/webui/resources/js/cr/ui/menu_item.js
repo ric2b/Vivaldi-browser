@@ -130,8 +130,7 @@ cr.define('cr.ui', function() {
     updateShortcut_: function() {
       this.removeAttribute('shortcutText');
 
-      if (!this.command_ ||
-          !this.command_.shortcut ||
+      if (!this.command_ || !this.command_.shortcut ||
           this.command_.hideShortcutText)
         return;
 
@@ -185,7 +184,7 @@ cr.define('cr.ui', function() {
      * @private
      */
     handleMouseUp_: function(e) {
-      e = /** @type {!MouseEvent} */(e);
+      e = /** @type {!MouseEvent} */ (e);
       // Only dispatch an activate event for left or middle click.
       if (e.button > 1)
         return;
@@ -193,8 +192,9 @@ cr.define('cr.ui', function() {
       if (!this.disabled && !this.isSeparator() && this.selected) {
         // Store |contextElement| since it'll be removed by {Menu} on handling
         // 'activate' event.
-        var contextElement = /** @type {{contextElement: Element}} */(
-            this.parentNode).contextElement;
+        var contextElement =
+            /** @type {{contextElement: Element}} */ (this.parentNode)
+                .contextElement;
         var activationEvent = cr.doc.createEvent('Event');
         activationEvent.initEvent('activate', true, true);
         activationEvent.originalEvent = e;
@@ -267,7 +267,5 @@ cr.define('cr.ui', function() {
   cr.defineProperty(MenuItem, 'checkable', cr.PropertyKind.BOOL_ATTR);
 
   // Export
-  return {
-    MenuItem: MenuItem
-  };
+  return {MenuItem: MenuItem};
 });

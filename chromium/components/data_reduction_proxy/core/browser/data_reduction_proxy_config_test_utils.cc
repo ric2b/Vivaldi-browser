@@ -54,7 +54,8 @@ TestDataReductionProxyConfig::TestDataReductionProxyConfig(
       tick_clock_(nullptr),
       network_quality_prohibitively_slow_set_(false),
       network_quality_prohibitively_slow_(false),
-      lofi_accuracy_recording_intervals_set_(false) {
+      lofi_accuracy_recording_intervals_set_(false),
+      is_captive_portal_(false) {
   network_interfaces_.reset(new net::NetworkInterfaceList());
 }
 
@@ -87,13 +88,6 @@ TestDataReductionProxyParams* TestDataReductionProxyConfig::test_params() {
 
 DataReductionProxyConfigValues* TestDataReductionProxyConfig::config_values() {
   return config_values_.get();
-}
-
-void TestDataReductionProxyConfig::SetStateForTest(
-    bool enabled_by_user,
-    bool secure_proxy_allowed) {
-  enabled_by_user_ = enabled_by_user;
-  secure_proxy_allowed_ = secure_proxy_allowed;
 }
 
 void TestDataReductionProxyConfig::ResetLoFiStatusForTest() {
@@ -157,6 +151,14 @@ void TestDataReductionProxyConfig::ResetWasDataReductionProxyUsed() {
   proxy_index_.reset();
 }
 
+void TestDataReductionProxyConfig::SetIsCaptivePortal(bool is_captive_portal) {
+  is_captive_portal_ = is_captive_portal;
+}
+
+bool TestDataReductionProxyConfig::GetIsCaptivePortal() const {
+  return is_captive_portal_;
+}
+
 MockDataReductionProxyConfig::MockDataReductionProxyConfig(
     std::unique_ptr<DataReductionProxyConfigValues> config_values,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
@@ -170,12 +172,6 @@ MockDataReductionProxyConfig::MockDataReductionProxyConfig(
                                    event_creator) {}
 
 MockDataReductionProxyConfig::~MockDataReductionProxyConfig() {
-}
-
-void MockDataReductionProxyConfig::UpdateConfigurator(
-    bool enabled,
-    bool secure_proxy_allowed) {
-  DataReductionProxyConfig::UpdateConfigurator(enabled, secure_proxy_allowed);
 }
 
 void MockDataReductionProxyConfig::ResetLoFiStatusForTest() {

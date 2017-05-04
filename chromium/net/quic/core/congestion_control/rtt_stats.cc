@@ -6,9 +6,7 @@
 
 #include <cstdlib>  // std::abs
 
-#include "net/quic/core/quic_flags.h"
-
-using std::max;
+#include "net/quic/platform/api/quic_logging.h"
 
 namespace net {
 
@@ -32,10 +30,10 @@ RttStats::RttStats()
       initial_rtt_us_(kInitialRttMs * kNumMicrosPerMilli) {}
 
 void RttStats::ExpireSmoothedMetrics() {
-  mean_deviation_ = max(mean_deviation_,
-                        QuicTime::Delta::FromMicroseconds(std::abs(
-                            (smoothed_rtt_ - latest_rtt_).ToMicroseconds())));
-  smoothed_rtt_ = max(smoothed_rtt_, latest_rtt_);
+  mean_deviation_ = std::max(
+      mean_deviation_, QuicTime::Delta::FromMicroseconds(std::abs(
+                           (smoothed_rtt_ - latest_rtt_).ToMicroseconds())));
+  smoothed_rtt_ = std::max(smoothed_rtt_, latest_rtt_);
 }
 
 // Updates the RTT based on a new sample.
@@ -43,9 +41,10 @@ void RttStats::UpdateRtt(QuicTime::Delta send_delta,
                          QuicTime::Delta ack_delay,
                          QuicTime now) {
   if (send_delta.IsInfinite() || send_delta <= QuicTime::Delta::Zero()) {
-    LOG(WARNING) << "Ignoring measured send_delta, because it's is "
-                 << "either infinite, zero, or negative.  send_delta = "
-                 << send_delta.ToMicroseconds();
+    QUIC_LOG_FIRST_N(WARNING, 3)
+        << "Ignoring measured send_delta, because it's is "
+        << "either infinite, zero, or negative.  send_delta = "
+        << send_delta.ToMicroseconds();
     return;
   }
 
@@ -77,8 +76,8 @@ void RttStats::UpdateRtt(QuicTime::Delta send_delta,
         kOneMinusBeta * mean_deviation_.ToMicroseconds() +
         kBeta * std::abs((smoothed_rtt_ - rtt_sample).ToMicroseconds())));
     smoothed_rtt_ = kOneMinusAlpha * smoothed_rtt_ + kAlpha * rtt_sample;
-    DVLOG(1) << " smoothed_rtt(us):" << smoothed_rtt_.ToMicroseconds()
-             << " mean_deviation(us):" << mean_deviation_.ToMicroseconds();
+    QUIC_DVLOG(1) << " smoothed_rtt(us):" << smoothed_rtt_.ToMicroseconds()
+                  << " mean_deviation(us):" << mean_deviation_.ToMicroseconds();
   }
 }
 

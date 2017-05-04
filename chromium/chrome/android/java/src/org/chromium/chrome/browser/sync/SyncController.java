@@ -62,7 +62,7 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
     public static final String SESSION_TAG_PREFIX = "session_sync";
 
     private static SyncController sInstance;
-    private static boolean sInitialized = false;
+    private static boolean sInitialized;
 
     private final Context mContext;
     private final ChromeSigninController mChromeSigninController;
@@ -212,7 +212,7 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
      * @return Whether sync is enabled to sync urls or open tabs with a non custom passphrase.
      */
     public boolean isSyncingUrlsWithKeystorePassphrase() {
-        return mProfileSyncService.isBackendInitialized()
+        return mProfileSyncService.isEngineInitialized()
                 && mProfileSyncService.getPreferredDataTypes().contains(ModelType.TYPED_URLS)
                 && mProfileSyncService.getPassphraseType().equals(
                            PassphraseType.KEYSTORE_PASSPHRASE);

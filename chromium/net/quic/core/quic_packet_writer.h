@@ -2,21 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_QUIC_QUIC_PACKET_WRITER_H_
-#define NET_QUIC_QUIC_PACKET_WRITER_H_
+#ifndef NET_QUIC_CORE_QUIC_PACKET_WRITER_H_
+#define NET_QUIC_CORE_QUIC_PACKET_WRITER_H_
 
-#include <stddef.h>
+#include <cstddef>
 
-#include "net/base/ip_endpoint.h"
-#include "net/base/net_export.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
+#include "net/quic/platform/api/quic_export.h"
+#include "net/quic/platform/api/quic_socket_address.h"
 
 namespace net {
 
-class IPAddress;
 struct WriteResult;
 
-class NET_EXPORT_PRIVATE PerPacketOptions {
+class QUIC_EXPORT_PRIVATE PerPacketOptions {
  public:
   PerPacketOptions() = default;
   virtual ~PerPacketOptions() {}
@@ -34,7 +33,7 @@ class NET_EXPORT_PRIVATE PerPacketOptions {
 // An interface between writers and the entity managing the
 // socket (in our case the QuicDispatcher).  This allows the Dispatcher to
 // control writes, and manage any writers who end up write blocked.
-class NET_EXPORT_PRIVATE QuicPacketWriter {
+class QUIC_EXPORT_PRIVATE QuicPacketWriter {
  public:
   virtual ~QuicPacketWriter() {}
 
@@ -46,8 +45,8 @@ class NET_EXPORT_PRIVATE QuicPacketWriter {
   // implementation. Options may be ignored, depending on the implementation.
   virtual WriteResult WritePacket(const char* buffer,
                                   size_t buf_len,
-                                  const IPAddress& self_address,
-                                  const IPEndPoint& peer_address,
+                                  const QuicIpAddress& self_address,
+                                  const QuicSocketAddress& peer_address,
                                   PerPacketOptions* options) = 0;
 
   // Returns true if the writer buffers and subsequently rewrites data
@@ -66,9 +65,9 @@ class NET_EXPORT_PRIVATE QuicPacketWriter {
   // writer for the supplied peer address.  This size may actually exceed the
   // size of a valid QUIC packet.
   virtual QuicByteCount GetMaxPacketSize(
-      const IPEndPoint& peer_address) const = 0;
+      const QuicSocketAddress& peer_address) const = 0;
 };
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_PACKET_WRITER_H_
+#endif  // NET_QUIC_CORE_QUIC_PACKET_WRITER_H_

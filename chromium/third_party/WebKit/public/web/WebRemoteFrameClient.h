@@ -42,9 +42,10 @@ class WebRemoteFrameClient {
 
   virtual void frameRectsChanged(const WebRect&) {}
 
-  virtual void visibilityChanged(bool visible) {}
+  virtual void updateRemoteViewportIntersection(
+      const WebRect& viewportIntersection) {}
 
-  virtual void setHasReceivedUserGesture() {}
+  virtual void visibilityChanged(bool visible) {}
 
   // This frame updated its opener to another frame.
   virtual void didChangeOpener(WebFrame* opener) {}

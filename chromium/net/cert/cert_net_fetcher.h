@@ -19,59 +19,42 @@ class GURL;
 
 namespace net {
 
-class URLRequestContext;
-
-// CertNetFetcher is an asynchronous interface for fetching AIA URLs and CRL
-// URLs.
+// CertNetFetcher is a synchronous interface for fetching AIA URLs and CRL
+// URLs. It is shared between a caller thread (which starts and waits for
+// fetches), and a network thread (which does the actual fetches). It can be
+// shutdown from the network thread to cancel outstanding requests.
 //
-// -------------------------
-// Cancellation of requests
-// -------------------------
-//
-//  * Network requests started by the CertNetFetcher can be cancelled by
-//    deleting the Request object. Cancellation means the request's callback
-//    will no longer be invoked.
-//
-//  * If the CertNetFetcher is deleted then any outstanding
-//    requests are automatically cancelled.
-//
-//  * Cancelling a request within the execution of a callback is allowed.
-//
-//  * Deleting the CertNetFetcher from within the execution of a callback is
-//    allowed.
-//
-// -------------------------
-// Threading
-// -------------------------
-//
-// The CertNetFetcher is expected to be operated from a single thread, which has
-// an IO message loop. The URLRequestContext will be accessed from this same
-// thread, and callbacks will be posted to this message loop.
-//
-// For more details see the design document:
-//   https://docs.google.com/a/chromium.org/document/d/1CdS9YOnPdAyVZBJqHY7ZJ6tUlU71OCvX8kHnaVhf144/edit
-class NET_EXPORT CertNetFetcher {
+// A Request object is returned when starting a fetch. The consumer can
+// use this as a handle for aborting the request (by freeing it), or reading
+// the result of the request (WaitForResult)
+class NET_EXPORT CertNetFetcher
+    : public base::RefCountedThreadSafe<CertNetFetcher> {
  public:
   class Request {
    public:
     virtual ~Request() {}
-  };
 
-  // Callback invoked on request completion. If the Error is OK, then the
-  // vector contains the response bytes.
-  using FetchCallback =
-      base::Callback<void(Error, const std::vector<uint8_t>&)>;
+    // WaitForResult() can be called at most once.
+    //
+    // It will block and wait for the (network) request to complete, and
+    // then write the result into the provided out-parameters.
+    virtual void WaitForResult(Error* error, std::vector<uint8_t>* bytes) = 0;
+  };
 
   // This value can be used in place of timeout or max size limits.
   enum { DEFAULT = -1 };
 
   CertNetFetcher() {}
 
-  // Deletion implicitly cancels any outstanding requests.
-  virtual ~CertNetFetcher() {}
+  // Shuts down the CertNetFetcher and cancels outstanding network requests. It
+  // is not guaranteed that any outstanding or subsequent
+  // Request::WaitForResult() calls will be completed. Shutdown() must be called
+  // from the network thread. It can be called more than once, but must be
+  // called before the CertNetFetcher is destroyed.
+  virtual void Shutdown() = 0;
 
-  // The Fetch*() methods start an asynchronous request which can be cancelled
-  // by deleting the returned Request. Here is the meaning of the common
+  // The Fetch*() methods start a request which can be cancelled by
+  // deleting the returned Request. Here is the meaning of the common
   // parameters:
   //
   //   * url -- The http:// URL to fetch.
@@ -81,30 +64,30 @@ class NET_EXPORT CertNetFetcher {
   //   * max_response_bytes -- The maximum size of the response body. If this
   //     size is exceeded then the request will fail. To use a default timeout
   //     pass DEFAULT.
-  //   * callback -- The callback that will be invoked on completion of the job.
 
   virtual WARN_UNUSED_RESULT std::unique_ptr<Request> FetchCaIssuers(
       const GURL& url,
       int timeout_milliseconds,
-      int max_response_bytes,
-      const FetchCallback& callback) = 0;
+      int max_response_bytes) = 0;
 
   virtual WARN_UNUSED_RESULT std::unique_ptr<Request> FetchCrl(
       const GURL& url,
       int timeout_milliseconds,
-      int max_response_bytes,
-      const FetchCallback& callback) = 0;
+      int max_response_bytes) = 0;
 
   virtual WARN_UNUSED_RESULT std::unique_ptr<Request> FetchOcsp(
       const GURL& url,
       int timeout_milliseconds,
-      int max_response_bytes,
-      const FetchCallback& callback) = 0;
+      int max_response_bytes) = 0;
+
+ protected:
+  virtual ~CertNetFetcher() {}
 
  private:
+  friend class base::RefCountedThreadSafe<CertNetFetcher>;
   DISALLOW_COPY_AND_ASSIGN(CertNetFetcher);
 };
 
 }  // namespace net
 
-#endif  // NET_CERT_NET_CERT_NET_FETCHER_H_
+#endif  // NET_CERT_CERT_NET_FETCHER_H_

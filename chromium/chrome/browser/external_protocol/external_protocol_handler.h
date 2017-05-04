@@ -9,10 +9,12 @@
 
 #include "base/macros.h"
 #include "chrome/browser/shell_integration.h"
+#include "content/public/browser/web_contents.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
 class PrefRegistrySimple;
+class Profile;
 
 namespace base {
 class DictionaryValue;
@@ -26,6 +28,17 @@ class ExternalProtocolHandler {
     UNKNOWN,
   };
 
+  // This is used to back a UMA histogram, so it should be treated as
+  // append-only. Any new values should be inserted immediately prior to
+  // HANDLE_STATE_LAST.
+  enum HandleState {
+    LAUNCH,
+    CHECKED_LAUNCH,
+    DONT_LAUNCH,
+    CHECKED_DONT_LAUNCH,
+    HANDLE_STATE_LAST
+  };
+
   // Delegate to allow unit testing to provide different behavior.
   class Delegate {
    public:
@@ -33,7 +46,8 @@ class ExternalProtocolHandler {
     CreateShellWorker(
         const shell_integration::DefaultWebClientWorkerCallback& callback,
         const std::string& protocol) = 0;
-    virtual BlockState GetBlockState(const std::string& scheme) = 0;
+    virtual BlockState GetBlockState(const std::string& scheme,
+                                     Profile* profile) = 0;
     virtual void BlockRequest() = 0;
     virtual void RunExternalProtocolDialog(
         const GURL& url,
@@ -41,16 +55,24 @@ class ExternalProtocolHandler {
         int routing_id,
         ui::PageTransition page_transition,
         bool has_user_gesture) = 0;
-    virtual void LaunchUrlWithoutSecurityCheck(const GURL& url) = 0;
+    virtual void LaunchUrlWithoutSecurityCheck(
+        const GURL& url,
+        content::WebContents* web_contents) = 0;
     virtual void FinishedProcessingCheck() = 0;
     virtual ~Delegate() {}
   };
 
+  // UMA histogram metric names.
+  static const char kRememberCheckboxMetric[];
+  static const char kHandleStateMetric[];
+
   // Returns whether we should block a given scheme.
-  static BlockState GetBlockState(const std::string& scheme);
+  static BlockState GetBlockState(const std::string& scheme, Profile* profile);
 
   // Sets whether we should block a given scheme.
-  static void SetBlockState(const std::string& scheme, BlockState state);
+  static void SetBlockState(const std::string& scheme,
+                            BlockState state,
+                            Profile* profile);
 
   // Checks to see if the protocol is allowed, if it is whitelisted,
   // the application associated with the protocol is launched on the io thread,
@@ -62,7 +84,7 @@ class ExternalProtocolHandler {
   // Allowing use of a delegate to facilitate unit testing.
   static void LaunchUrlWithDelegate(const GURL& url,
                                     int render_process_host_id,
-                                    int tab_contents_id,
+                                    int render_view_routing_id,
                                     ui::PageTransition page_transition,
                                     bool has_user_gesture,
                                     Delegate* delegate);
@@ -76,8 +98,7 @@ class ExternalProtocolHandler {
   // url you have has been checked against the blacklist, and has been escaped.
   // All calls to this function should originate in some way from LaunchUrl.
   static void LaunchUrlWithoutSecurityCheck(const GURL& url,
-                                            int render_process_host_id,
-                                            int tab_contents_id);
+                                            content::WebContents* web_contents);
 
   // Allows LaunchUrl to proceed with launching an external protocol handler.
   // This is typically triggered by a user gesture, but is also called for
@@ -91,7 +112,12 @@ class ExternalProtocolHandler {
 
   // Records an UMA metric for the state of the checkbox in the dialog, i.e.
   // whether |selected| is true (checked) or false (unchecked).
-  static void RecordMetrics(bool selected);
+  static void RecordCheckboxStateMetrics(bool selected);
+
+  // Records an UMA metric for the external protocol HandleState selected, based
+  // on if the check box is selected / not and block / Dont block is picked.
+  static void RecordHandleStateMetrics(bool checkbox_selected,
+                                       BlockState state);
 
   // Register the ExcludedSchemes preference.
   static void RegisterPrefs(PrefRegistrySimple* registry);
@@ -106,11 +132,16 @@ class ExternalProtocolHandler {
   //       to change the command line by itself, we do not do anything special
   //       to protect against this scenario.
   // This is implemented separately on each platform.
+  // TODO(davidsac): Consider refactoring this to take a WebContents directly.
+  // crbug.com/668289
   static void RunExternalProtocolDialog(const GURL& url,
                                         int render_process_host_id,
                                         int routing_id,
                                         ui::PageTransition page_transition,
                                         bool has_user_gesture);
+
+  // Clears the external protocol handling data.
+  static void ClearData(Profile* profile);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ExternalProtocolHandler);

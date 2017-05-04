@@ -139,6 +139,26 @@ public class PersonalDataManager {
                     "" /* emailAddress */, "" /* languageCode */);
         }
 
+        /* Builds an AutofillProfile that is an exact copy of the one passed as parameter. */
+        public AutofillProfile(AutofillProfile profile) {
+            mGUID = profile.getGUID();
+            mOrigin = profile.getOrigin();
+            mIsLocal = profile.getIsLocal();
+            mFullName = profile.getFullName();
+            mCompanyName = profile.getCompanyName();
+            mStreetAddress = profile.getStreetAddress();
+            mRegion = profile.getRegion();
+            mLocality = profile.getLocality();
+            mDependentLocality = profile.getDependentLocality();
+            mPostalCode = profile.getPostalCode();
+            mSortingCode = profile.getSortingCode();
+            mCountryCode = profile.getCountryCode();
+            mPhoneNumber = profile.getPhoneNumber();
+            mEmailAddress = profile.getEmailAddress();
+            mLanguageCode = profile.getLanguageCode();
+            mLabel = profile.getLabel();
+        }
+
         /** TODO(estade): remove this constructor. */
         @VisibleForTesting
         public AutofillProfile(String guid, String origin, String fullName, String companyName,
@@ -658,10 +678,9 @@ public class PersonalDataManager {
         return nativeSetCreditCard(mPersonalDataManagerAndroid, card);
     }
 
-    public void updateServerCardBillingAddress(String cardServerId, String billingAddressId) {
+    public void updateServerCardBillingAddress(CreditCard card) {
         ThreadUtils.assertOnUiThread();
-        nativeUpdateServerCardBillingAddress(
-                mPersonalDataManagerAndroid, cardServerId, billingAddressId);
+        nativeUpdateServerCardBillingAddress(mPersonalDataManagerAndroid, card);
     }
 
     public String getBasicCardPaymentType(String cardNumber, boolean emptyIfInvalid) {
@@ -686,8 +705,18 @@ public class PersonalDataManager {
         nativeClearUnmaskedCache(mPersonalDataManagerAndroid, guid);
     }
 
-    public String getAddressLabelForPaymentRequest(AutofillProfile profile) {
-        return nativeGetAddressLabelForPaymentRequest(mPersonalDataManagerAndroid, profile);
+    public String getShippingAddressLabelWithCountryForPaymentRequest(AutofillProfile profile) {
+        return nativeGetShippingAddressLabelWithCountryForPaymentRequest(
+                mPersonalDataManagerAndroid, profile);
+    }
+
+    public String getShippingAddressLabelWithoutCountryForPaymentRequest(AutofillProfile profile) {
+        return nativeGetShippingAddressLabelWithoutCountryForPaymentRequest(
+                mPersonalDataManagerAndroid, profile);
+    }
+
+    public String getBillingAddressLabelForPaymentRequest(AutofillProfile profile) {
+        return nativeGetBillingAddressLabelForPaymentRequest(mPersonalDataManagerAndroid, profile);
     }
 
     public void getFullCard(WebContents webContents, CreditCard card,
@@ -861,7 +890,11 @@ public class PersonalDataManager {
             long nativePersonalDataManagerAndroid, AutofillProfile profile);
     private native String nativeSetProfileToLocal(
             long nativePersonalDataManagerAndroid, AutofillProfile profile);
-    private native String nativeGetAddressLabelForPaymentRequest(
+    private native String nativeGetShippingAddressLabelWithCountryForPaymentRequest(
+            long nativePersonalDataManagerAndroid, AutofillProfile profile);
+    private native String nativeGetShippingAddressLabelWithoutCountryForPaymentRequest(
+            long nativePersonalDataManagerAndroid, AutofillProfile profile);
+    private native String nativeGetBillingAddressLabelForPaymentRequest(
             long nativePersonalDataManagerAndroid, AutofillProfile profile);
     private native String[] nativeGetCreditCardGUIDsForSettings(
             long nativePersonalDataManagerAndroid);
@@ -874,7 +907,7 @@ public class PersonalDataManager {
     private native String nativeSetCreditCard(long nativePersonalDataManagerAndroid,
             CreditCard card);
     private native void nativeUpdateServerCardBillingAddress(long nativePersonalDataManagerAndroid,
-            String guid, String billingAddressId);
+            CreditCard card);
     private native String nativeGetBasicCardPaymentType(
             long nativePersonalDataManagerAndroid, String cardNumber, boolean emptyIfInvalid);
     private native void nativeAddServerCreditCardForTest(long nativePersonalDataManagerAndroid,

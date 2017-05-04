@@ -6,7 +6,7 @@
 #define NET_QUIC_TEST_TOOLS_QUIC_RECEIVED_PACKET_MANAGER_PEER_H_
 
 #include "base/macros.h"
-#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_packets.h"
 
 namespace net {
 
@@ -16,11 +16,6 @@ namespace test {
 
 class QuicReceivedPacketManagerPeer {
  public:
-  static void SetCumulativeEntropyUpTo(
-      QuicReceivedPacketManager* received_packet_manager,
-      QuicPacketNumber peer_least_unacked,
-      QuicPacketEntropyHash entropy_hash);
-
   static bool DontWaitForPacketsBefore(
       QuicReceivedPacketManager* received_packet_manager,
       QuicPacketNumber least_unacked);

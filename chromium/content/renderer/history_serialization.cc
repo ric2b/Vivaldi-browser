@@ -41,18 +41,18 @@ void GenerateFrameStateFromItem(const WebHistoryItem& item,
                                 ExplodedFrameState* state) {
   state->url_string = item.urlString();
   state->referrer = item.referrer();
-  state->referrer_policy = item.referrerPolicy();
+  state->referrer_policy = item.getReferrerPolicy();
   state->target = item.target();
   if (!item.stateObject().isNull())
     state->state_object = item.stateObject().toString();
   state->scroll_restoration_type = item.scrollRestorationType();
   state->visual_viewport_scroll_offset = item.visualViewportScrollOffset();
-  state->scroll_offset = item.scrollOffset();
+  state->scroll_offset = item.getScrollOffset();
   state->item_sequence_number = item.itemSequenceNumber();
   state->document_sequence_number =
       item.documentSequenceNumber();
   state->page_scale_factor = item.pageScaleFactor();
-  ToNullableString16Vector(item.documentState(), &state->document_state);
+  ToNullableString16Vector(item.getDocumentState(), &state->document_state);
 
   state->http_body.http_content_type = item.httpContentType();
   const WebHTTPBody& http_body = item.httpBody();

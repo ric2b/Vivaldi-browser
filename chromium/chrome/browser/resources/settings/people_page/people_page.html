@@ -1,14 +1,16 @@
+<link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_expand_button/cr_expand_button.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/icon.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-collapse/iron-collapse.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
-<link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
-<link rel="import" href="/controls/settings_checkbox.html">
+<link rel="import" href="/controls/settings_toggle_button.html">
 <link rel="import" href="/people_page/sync_page.html">
 <link rel="import" href="/people_page/profile_info_browser_proxy.html">
 <link rel="import" href="/people_page/sync_browser_proxy.html">
@@ -87,8 +89,15 @@
         width: var(--iron-icon-width);
       }
 
-      paper-checkbox {
-        margin: 16px 0 2px;
+      .footer .settings-box {
+        --settings-box-row-padding: 0;
+      }
+
+      .delete-profile-warning {
+        /* In order to line up with the checkbox text. */
+        -webkit-padding-start: 36px;
+        padding-bottom: 10px;
+        padding-top: 10px;
       }
     </style>
     <settings-animated-pages id="pages" section="people">
@@ -99,10 +108,12 @@
                 style="background-image: [[getIconImageset_(profileIconUrl_)]]">
             </div>
 <if expr="not chromeos">
-            <div class="middle two-line" on-tap="onProfileNameTap_" actionable>
+            <div class="middle two-line text-elide" on-tap="onProfileNameTap_"
+                actionable>
 </if>
 <if expr="chromeos">
-            <div class="middle two-line" on-tap="onPictureTap_" actionable>
+            <div class="middle two-line text-elide" on-tap="onPictureTap_"
+                actionable>
 </if>
               <div class="flex">
                 <span id="profile-name">[[profileName_]]</span>
@@ -191,10 +202,11 @@
 
 <if expr="chromeos">
         <template is="dom-if" if="[[!quickUnlockEnabled_]]">
-          <div class="settings-box single-column">
-            <settings-checkbox pref="{{prefs.settings.enable_screen_lock}}"
+          <div class="settings-box">
+            <settings-toggle-button class="start"
+                pref="{{prefs.settings.enable_screen_lock}}"
                 label="$i18n{enableScreenlock}">
-            </settings-checkbox>
+            </settings-toggle-button>
           </div>
         </template>
 
@@ -226,13 +238,15 @@
                 <a target="_blank" href="$i18n{easyUnlockLearnMoreURL}">
                   $i18n{learnMore}
                 </a>
+                <!-- TODO(dbeam): this should be 1 dom-if with a method instead
+                     of 2 nested dom-ifs. -->
                 <template is="dom-if" if="[[easyUnlockEnabled_]]">
                   <template is="dom-if"
                       if="[[easyUnlockProximityDetectionAllowed_]]">
-                    <settings-checkbox
+                    <settings-toggle-button
                         pref="{{prefs.easy_unlock.proximity_required}}"
                         label="$i18n{easyUnlockRequireProximityLabel}">
-                    </settings-checkbox>
+                    </settings-toggle-button>
                   </template>
                 </template>
               </div>
@@ -268,7 +282,7 @@
         </div>
 </if>
 
-        <template is="dom-if" if=[[profileManagesSupervisedUsers_]]>
+        <template is="dom-if" if="[[profileManagesSupervisedUsers_]]">
           <div id="manageSupervisedUsersContainer" class="settings-box two-line"
               on-tap="onManageSupervisedUsers_" actionable>
             <div class="start">
@@ -334,25 +348,38 @@
       <div class="body">
         <div inner-h-t-m-l="[[getDisconnectExplanationHtml_(syncStatus.domain)]]">
         </div>
-  <if expr="(not chromeos and is_posix) or is_win or is_macosx">
-        <paper-checkbox id="deleteProfile" hidden=[[syncStatus.domain]]>
-          $i18n{syncDisconnectDeleteProfile}
-        </paper-checkbox>
-  </if>
       </div>
       <div class="button-container">
         <paper-button on-tap="onDisconnectCancel_" class="cancel-button">
           $i18n{cancel}
         </paper-button>
         <paper-button id="disconnectConfirm" class="action-button"
-            hidden=[[syncStatus.domain]] on-tap="onDisconnectConfirm_">
+            hidden="[[syncStatus.domain]]" on-tap="onDisconnectConfirm_">
           $i18n{syncDisconnect}
         </paper-button>
         <paper-button id="disconnectManagedProfileConfirm" class="action-button"
-            hidden=[[!syncStatus.domain]] on-tap="onDisconnectConfirm_">
+            hidden="[[!syncStatus.domain]]" on-tap="onDisconnectConfirm_">
           $i18n{syncDisconnectConfirm}
         </paper-button>
       </div>
+<if expr="(not chromeos and is_posix) or is_win or is_macosx">
+      <template is="dom-if" if="[[!syncStatus.domain]]">
+        <div class="footer">
+          <div class="settings-box first">
+            <paper-checkbox id="deleteProfile" class="start"
+                checked="{{deleteProfile_}}">
+              $i18n{syncDisconnectDeleteProfile}
+            </paper-checkbox>
+            <cr-expand-button expanded="{{deleteProfileWarningVisible_}}"
+                alt="$i18n{deleteProfileWarningExpandA11yLabel}">
+            </cr-expand-button>
+          </div>
+          <iron-collapse opened="[[deleteProfileWarningVisible_]]">
+            <div class="delete-profile-warning">[[deleteProfileWarning_]]</div>
+          </iron-collapse>
+        </div>
+      </template>
+</if>
     </dialog>
 
     <template is="dom-if" if="[[showImportDataDialog_]]" restamp>
@@ -362,8 +389,9 @@
     </template>
 
 <if expr="chromeos">
-    <template is="dom-if" if="[[easyUnlockEnabled_]]">
-      <easy-unlock-turn-off-dialog id="easyUnlockTurnOffDialog">
+    <template is="dom-if" if="[[showEasyUnlockTurnOffDialog_]]">
+      <easy-unlock-turn-off-dialog id="easyUnlockTurnOffDialog"
+          on-close="onEasyUnlockTurnOffDialogClose_">
       </easy-unlock-turn-off-dialog>
     </template>
 </if>

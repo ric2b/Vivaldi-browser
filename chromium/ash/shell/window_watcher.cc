@@ -6,10 +6,10 @@
 
 #include <utility>
 
-#include "ash/aura/wm_window_aura.h"
 #include "ash/common/shelf/shelf_model.h"
 #include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/common/wm_window_property.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -100,7 +100,7 @@ void WindowWatcher::OnWindowAdded(aura::Window* new_window) {
   ShelfItem item;
   item.type = new_window->type() == ui::wm::WINDOW_TYPE_PANEL
                   ? ash::TYPE_APP_PANEL
-                  : ash::TYPE_PLATFORM_APP;
+                  : ash::TYPE_APP;
   ash::ShelfID id = model->next_id();
   id_to_window_[id] = new_window;
 
@@ -110,13 +110,14 @@ void WindowWatcher::OnWindowAdded(aura::Window* new_window) {
                         image_count == 1 ? 255 : 0, image_count == 2 ? 255 : 0);
   image_count = (image_count + 1) % 3;
   item.image = gfx::ImageSkia(gfx::ImageSkiaRep(icon_bitmap, 1.0f));
+  item.title = new_window->GetTitle();
 
   model->Add(item);
 
   std::unique_ptr<ShelfItemDelegate> delegate(
       new WindowWatcherShelfItemDelegate(id, this));
   model->SetShelfItemDelegate(id, std::move(delegate));
-  WmWindowAura::Get(new_window)->SetIntProperty(WmWindowProperty::SHELF_ID, id);
+  WmWindow::Get(new_window)->SetIntProperty(WmWindowProperty::SHELF_ID, id);
 }
 
 void WindowWatcher::OnWillRemoveWindow(aura::Window* window) {

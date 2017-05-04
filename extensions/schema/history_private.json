@@ -79,8 +79,18 @@
           },
           "transition_type": {
             "$ref": "TransitionType",
-            "optional":  true,
+            "optional": true,
             "description": "The transition type for this visit from its referrer."
+          },
+          "dateKey": {
+            "type": "string",
+            "optional": true,
+            "description": "Date string of the visit. Format: YYYY-MM-DD"
+          },
+          "hour": {
+            "type": "integer",
+            "optional": true,
+            "description": "Hour of day when this url was visited."
           }
         }
       },

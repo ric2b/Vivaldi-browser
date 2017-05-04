@@ -35,6 +35,9 @@ void VrShellUIMessageHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "doAction", base::Bind(&VrShellUIMessageHandler::HandleDoAction,
                              base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "setUiCssSize", base::Bind(&VrShellUIMessageHandler::HandleSetUiCssSize,
+                                 base::Unretained(this)));
 }
 
 void VrShellUIMessageHandler::HandleDomLoaded(const base::ListValue* args) {
@@ -55,13 +58,7 @@ void VrShellUIMessageHandler::OnJavascriptAllowed() {
 void VrShellUIMessageHandler::HandleUpdateScene(const base::ListValue* args) {
   if (!vr_shell_)
     return;
-
-  // Copy the update instructions and handle them on the render thread.
-  auto cb = base::Bind(&vr_shell::UiScene::HandleCommands,
-                       base::Unretained(vr_shell_->GetScene()),
-                       base::Owned(args->CreateDeepCopy().release()),
-                       vr_shell::UiScene::TimeInMicroseconds());
-  vr_shell_->QueueTask(cb);
+  vr_shell_->UpdateScene(args);
 }
 
 void VrShellUIMessageHandler::HandleDoAction(const base::ListValue* args) {
@@ -69,6 +66,17 @@ void VrShellUIMessageHandler::HandleDoAction(const base::ListValue* args) {
   CHECK(args->GetInteger(0, &action));
   if (vr_shell_) {
     vr_shell_->DoUiAction((vr_shell::UiAction) action);
+  }
+}
+
+void VrShellUIMessageHandler::HandleSetUiCssSize(const base::ListValue* args) {
+  CHECK(args->GetSize() == 3);
+  double width, height, dpr;
+  CHECK(args->GetDouble(0, &width));
+  CHECK(args->GetDouble(1, &height));
+  CHECK(args->GetDouble(2, &dpr));
+  if (vr_shell_) {
+    vr_shell_->SetUiCssSize(width, height, dpr);
   }
 }
 

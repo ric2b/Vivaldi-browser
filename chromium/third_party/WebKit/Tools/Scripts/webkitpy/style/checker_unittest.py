@@ -37,8 +37,8 @@ import logging
 import os
 import unittest
 
-from webkitpy.common.system.logtesting import LoggingTestCase
-from webkitpy.common.system.logtesting import TestLogStream
+from webkitpy.common.system.log_testing import LoggingTestCase
+from webkitpy.common.system.log_testing import TestLogStream
 from webkitpy.style import checker as style
 from webkitpy.style.checker import _all_categories
 from webkitpy.style.checker import _BASE_FILTER_RULES
@@ -207,8 +207,6 @@ class GlobalVariablesTest(unittest.TestCase):
                     "build/include")
         assert_check("random_path.cpp",
                     "readability/naming")
-        assert_no_check("Source/core/css/CSSParser-in.cpp",
-                      "readability/naming")
 
         # Third-party Python code: webkitpy/thirdparty
         path = "Tools/Scripts/webkitpy/thirdparty/mock.py"

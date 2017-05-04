@@ -12,6 +12,7 @@
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
 #include "net/base/net_errors.h"
+#include "net/base/trace_constants.h"
 #include "net/log/net_log_event_type.h"
 #include "net/socket/client_socket_pool.h"
 
@@ -66,8 +67,6 @@ void ClientSocketHandle::ResetInternal(bool cancel) {
     RemoveHigherLayeredPool(higher_pool_);
   pool_ = NULL;
   idle_time_ = base::TimeDelta();
-  init_time_ = base::TimeTicks();
-  setup_time_ = base::TimeDelta();
   connect_timing_ = LoadTimingInfo::ConnectTiming();
   pool_id_ = -1;
 }
@@ -134,12 +133,17 @@ bool ClientSocketHandle::GetLoadTimingInfo(
   return true;
 }
 
+void ClientSocketHandle::DumpMemoryStats(
+    StreamSocket::SocketMemoryStats* stats) const {
+  socket_->DumpMemoryStats(stats);
+}
+
 void ClientSocketHandle::SetSocket(std::unique_ptr<StreamSocket> s) {
   socket_ = std::move(s);
 }
 
 void ClientSocketHandle::OnIOComplete(int result) {
-  TRACE_EVENT0("net", "ClientSocketHandle::OnIOComplete");
+  TRACE_EVENT0(kNetTracingCategory, "ClientSocketHandle::OnIOComplete");
   CompletionCallback callback = user_callback_;
   user_callback_.Reset();
   HandleInitCompletion(result);
@@ -161,7 +165,6 @@ void ClientSocketHandle::HandleInitCompletion(int result) {
   }
   is_initialized_ = true;
   CHECK_NE(-1, pool_id_) << "Pool should have set |pool_id_| to a valid value.";
-  setup_time_ = base::TimeTicks::Now() - init_time_;
 
   // Broadcast that the socket has been acquired.
   // TODO(eroman): This logging is not complete, in particular set_socket() and

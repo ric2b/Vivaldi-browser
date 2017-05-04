@@ -74,6 +74,7 @@
 <translation id="1680732992526857724"><ph name="NAME" /> เปิดอยู่</translation>
 <translation id="1692077714702418899">บรรทัดแบบโครงสร้าง</translation>
 <translation id="1700517974991662022">เคยเข้าชม</translation>
+<translation id="1714116687360794776">เครื่องวัด</translation>
 <translation id="1722567105086139392">ลิงก์</translation>
 <translation id="1727806147743597030">ส่วนท้าย</translation>
 <translation id="174268867904053074">กราฟิกถัดไป</translation>
@@ -123,6 +124,7 @@
 <translation id="2344193891939537199">การควบคุมวันที่และเวลา</translation>
 <translation id="2347456970887948350">ลิงก์</translation>
 <translation id="2359897517538099099">ไม่ได้อยู่ในโหมดตาราง</translation>
+<translation id="2390264819538553347">กด Enter เพื่อดำเนินการต่อ หรือกด Backspace เพื่อกลับ</translation>
 <translation id="241124561063364910">ตามด้วย</translation>
 <translation id="2416512023405990736">ช่องทำเครื่องหมายที่ไม่ได้ทำเครื่องหมาย</translation>
 <translation id="2417569100218200841">ข้อมูลเนื้อหา</translation>
@@ -177,6 +179,7 @@
 <translation id="2899328121302785497">{COUNT,plural, =1{วงเล็บปีกกาซ้าย}other{# วงเล็บปีกกาซ้าย}}</translation>
 <translation id="2911433807131383493">เปิดบทแนะนำ ChromeVox</translation>
 <translation id="2932083475399492303">สลับประเภทบรรทัดระหว่างโครงสร้างหรือรูปแบบ</translation>
+<translation id="2944762337049891859">อ่านหน้าโดยอัตโนมัติหลังจากที่โหลดเสร็จ</translation>
 <translation id="2964026537669811554">กลุ่มของส่วนหัว</translation>
 <translation id="296951647852255825">{COUNT,plural, =1{เครื่องหมายแท็บ}other{# เครื่องหมายแท็บ}}</translation>
 <translation id="2972078295414139404">ไม่มีลิงก์ที่เคยเข้าชมก่อนหน้า</translation>
@@ -188,6 +191,7 @@
 <translation id="3012414509011670858">ไม่มีส่วนก่อนหน้า</translation>
 <translation id="3030432017085518523">ปุ่มตัวเลือกรายการเมนู</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{อะโพสโทรฟี}other{# อะโพสโทรฟี}}</translation>
+<translation id="3040901448410802366">ตัวบอกสถานะความคืบหน้า</translation>
 <translation id="3046838483509668188">ตัวเลือก ChromeVox</translation>
 <translation id="3047143736589213134">รูปแบบแป้นแบบทดลอง</translation>
 <translation id="3060756054951570867">เปิดเมนู <ph name="TITLE" /> แล้ว</translation>
@@ -229,7 +233,7 @@
 <translation id="3321460131042519426">เปิดใช้การตัดคำ</translation>
 <translation id="3322936298410871309">ส่วนหัวระดับ 1 ก่อนหน้า</translation>
 <translation id="3323447499041942178">ช่องข้อความ</translation>
-<translation id="3329854757664111426">หากต้องการดำเนินการต่อ กด Enter</translation>
+<translation id="3338224621010291843">แถบเลื่อน <ph name="VALUE" /> <ph name="NAME" /></translation>
 <translation id="3353420241558113817">{"ar": "อาหรับ",
         "bg": "บัลแกเรีย",
         "ca": "คาตาลัน",
@@ -306,6 +310,7 @@
 <translation id="3712520970944678024">การควบคุมการพูด</translation>
 <translation id="3716845769494773620">หลายบรรทัด</translation>
 <translation id="3731746171184829332">ไม่มีส่วนหัวก่อนหน้า</translation>
+<translation id="3735039640698208086">เมื่อเล่นเสียง...</translation>
 <translation id="3762198587642264450">ไปที่ด้านล่างของแถวปัจจุบัน</translation>
 <translation id="3777255250339039212">h1</translation>
 <translation id="3793710123303304873">ออกจากช่องโต้ตอบแล้ว</translation>
@@ -546,6 +551,7 @@
 <translation id="5876817486144482042">ลดความดังเสียงพูด</translation>
 <translation id="5887397643266327462">เปิดใช้คำบรรยายอักษรเบรลล์แล้ว</translation>
 <translation id="5891934789323004067">ตาราง</translation>
+<translation id="5899860758576822363">เล่นโดยลดระดับเสียงเมื่อ ChromeVox กำลังพูด</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{เครื่องหมายเท่ากับ}other{# เครื่องหมายเท่ากับ}}</translation>
 <translation id="5939518447894949180">รีเซ็ต</translation>
 <translation id="5948123859135882163">สลับการตีความสูตรคณิตศาสตร์ระหว่างโครงสร้างและความหมาย</translation>
@@ -568,6 +574,7 @@
 <translation id="6132506484792346370">ช่องรายการหรือช่องตัวเลือกรวม</translation>
 <translation id="6138576064440631958">$1 คอร์ด</translation>
 <translation id="6142308968191113180">ส่วนหัวระดับ 4</translation>
+<translation id="6164829606128959761">เมตร</translation>
 <translation id="6169420925157477918">ภาพมีคำอธิบายยาว</translation>
 <translation id="6186305613600865047">ไปที่ส่วนล่างสุดของหน้าเว็บ</translation>
 <translation id="6193330012414963395">AM PM</translation>
@@ -578,6 +585,7 @@
 <translation id="6281876499889881039">เอลิเมนต์ที่คล้ายกันถัดไป</translation>
 <translation id="6282062888058716985">นำทาง</translation>
 <translation id="6290434000785343030">ไม่มีช่องตัวเลือกรวมถัดไป</translation>
+<translation id="6305702903308659374">เล่นที่ระดับเสียงปกติแม้ว่า ChromeVox กำลังพูด</translation>
 <translation id="6307969636681130414">กดแล้ว</translation>
 <translation id="6322856989298155004">เสียง</translation>
 <translation id="6324551002951139333">ตรวจพบข้อผิดพลาดทางไวยากรณ์</translation>
@@ -690,7 +698,6 @@
 <translation id="7492049978501397201">ข้อความที่ป้อน</translation>
 <translation id="7518543783849163354">หากต้องการหยุดคำอธิบายของ ChromeVox ชั่วคราว ให้กดปุ่ม Control</translation>
 <translation id="7532613204005497612">มิถุนายน</translation>
-<translation id="7540083713905917247">แถบเลื่อน <ph name="NAME" /> <ph name="VALUE" /></translation>
 <translation id="7552432549459840808">แป้นพิมพ์ลัดของ Chrome ที่มีประโยชน์</translation>
 <translation id="7579911500627256166">จุด <ph name="DOT" /></translation>
 <translation id="7596919493010894443">ล้างการเลือกแล้ว</translation>
@@ -768,6 +775,7 @@
 <translation id="8455868257606149352">สูงสุด <ph name="X" /></translation>
 <translation id="84575901236241018">มีรหัสการเข้าถึง <ph name="KEY" /></translation>
 <translation id="847154984256717791">ไม่ว่าง</translation>
+<translation id="8476408756881832830">หยุดเล่นชั่วคราวเมื่อ ChromeVox กำลังพูด</translation>
 <translation id="8476508772960940536">ภาพรวมหน้าต่าง</translation>
 <translation id="8503360654911991865">ลดความละเอียดในการนำทาง</translation>
 <translation id="8520472399088452386">ปุ่มหมุน</translation>

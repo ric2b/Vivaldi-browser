@@ -15,10 +15,11 @@
 #include "modules/fetch/Headers.h"
 #include "platform/blob/BlobData.h"
 #include "platform/heap/Handle.h"
+#include "wtf/Vector.h"
+#include "wtf/text/WTFString.h"
 
 namespace blink {
 
-class Blob;
 class ExceptionState;
 class ResponseInit;
 class ScriptState;
@@ -48,8 +49,8 @@ class MODULES_EXPORT Response final : public Body {
 
   static Response* createClone(const Response&);
 
-  static Response* error(ExecutionContext*);
-  static Response* redirect(ExecutionContext*,
+  static Response* error(ScriptState*);
+  static Response* redirect(ScriptState*,
                             const String& url,
                             unsigned short status,
                             ExceptionState&);
@@ -59,6 +60,7 @@ class MODULES_EXPORT Response final : public Body {
   // From Response.idl:
   String type() const;
   String url() const;
+  bool redirected() const;
   unsigned short status() const;
   bool ok() const;
   String statusText() const;
@@ -94,6 +96,8 @@ class MODULES_EXPORT Response final : public Body {
 
   String mimeType() const override;
   String internalMIMEType() const;
+
+  const Vector<KURL>& internalURLList() const;
 
   DECLARE_VIRTUAL_TRACE();
 

@@ -35,17 +35,17 @@ namespace media {
 
 namespace {
 
-cdm::SessionType ToCdmSessionType(MediaKeys::SessionType session_type) {
+cdm::SessionType ToCdmSessionType(CdmSessionType session_type) {
   switch (session_type) {
-    case MediaKeys::TEMPORARY_SESSION:
+    case CdmSessionType::TEMPORARY_SESSION:
       return cdm::kTemporary;
-    case MediaKeys::PERSISTENT_LICENSE_SESSION:
+    case CdmSessionType::PERSISTENT_LICENSE_SESSION:
       return cdm::kPersistentLicense;
-    case MediaKeys::PERSISTENT_RELEASE_MESSAGE_SESSION:
+    case CdmSessionType::PERSISTENT_RELEASE_MESSAGE_SESSION:
       return cdm::kPersistentKeyRelease;
   }
 
-  NOTREACHED() << "Unexpected SessionType " << session_type;
+  NOTREACHED() << "Unexpected session type: " << static_cast<int>(session_type);
   return cdm::kTemporary;
 }
 
@@ -87,18 +87,19 @@ CdmPromise::Exception ToMediaExceptionType(cdm::Error error) {
   return CdmPromise::UNKNOWN_ERROR;
 }
 
-MediaKeys::MessageType ToMediaMessageType(cdm::MessageType message_type) {
+ContentDecryptionModule::MessageType ToMediaMessageType(
+    cdm::MessageType message_type) {
   switch (message_type) {
     case cdm::kLicenseRequest:
-      return MediaKeys::LICENSE_REQUEST;
+      return ContentDecryptionModule::LICENSE_REQUEST;
     case cdm::kLicenseRenewal:
-      return MediaKeys::LICENSE_RENEWAL;
+      return ContentDecryptionModule::LICENSE_RENEWAL;
     case cdm::kLicenseRelease:
-      return MediaKeys::LICENSE_RELEASE;
+      return ContentDecryptionModule::LICENSE_RELEASE;
   }
 
   NOTREACHED() << "Unexpected cdm::MessageType " << message_type;
-  return MediaKeys::LICENSE_REQUEST;
+  return ContentDecryptionModule::LICENSE_REQUEST;
 }
 
 CdmKeyInformation::KeyStatus ToCdmKeyInformationKeyStatus(
@@ -448,7 +449,7 @@ void CdmAdapter::SetServerCertificate(
 }
 
 void CdmAdapter::CreateSessionAndGenerateRequest(
-    SessionType session_type,
+    CdmSessionType session_type,
     EmeInitDataType init_data_type,
     const std::vector<uint8_t>& init_data,
     std::unique_ptr<NewSessionCdmPromise> promise) {
@@ -460,7 +461,7 @@ void CdmAdapter::CreateSessionAndGenerateRequest(
       ToCdmInitDataType(init_data_type), init_data.data(), init_data.size());
 }
 
-void CdmAdapter::LoadSession(SessionType session_type,
+void CdmAdapter::LoadSession(CdmSessionType session_type,
                              const std::string& session_id,
                              std::unique_ptr<NewSessionCdmPromise> promise) {
   DCHECK(task_runner_->BelongsToCurrentThread());

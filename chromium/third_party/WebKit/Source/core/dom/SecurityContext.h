@@ -33,6 +33,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/Suborigin.h"
 #include "public/platform/WebAddressSpace.h"
+#include "public/platform/WebFeaturePolicy.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/platform/WebURLRequest.h"
 #include "wtf/HashSet.h"
@@ -93,9 +94,11 @@ class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
   void enforceSuborigin(const Suborigin&);
 
   FeaturePolicy* getFeaturePolicy() const { return m_featurePolicy.get(); }
-  void setFeaturePolicy(std::unique_ptr<FeaturePolicy> newPolicy) {
+  void setFeaturePolicyForTesting(std::unique_ptr<FeaturePolicy> newPolicy) {
     m_featurePolicy = std::move(newPolicy);
   }
+  void setFeaturePolicyFromHeader(const WebParsedFeaturePolicy& parsedHeader,
+                                  FeaturePolicy* parentFeaturePolicy);
 
  protected:
   SecurityContext();

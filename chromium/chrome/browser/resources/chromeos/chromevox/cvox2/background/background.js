@@ -17,6 +17,7 @@ goog.require('ChromeVoxState');
 goog.require('CommandHandler');
 goog.require('FindHandler');
 goog.require('LiveRegions');
+goog.require('MediaAutomationHandler');
 goog.require('NextEarcons');
 goog.require('Notifications');
 goog.require('Output');
@@ -87,12 +88,6 @@ Background = function() {
    */
   this.currentRange_ = null;
 
-  /**
-   * @type {cursors.Range}
-   * @private
-   */
-  this.savedRange_ = null;
-
   // Manually bind all functions to |this|.
   for (var func in this) {
     if (typeof(this[func]) == 'function')
@@ -155,9 +150,6 @@ Background = function() {
   /** @type {!LiveRegions} @private */
   this.liveRegions_ = new LiveRegions(this);
 
-  /** @type {boolean} @private */
-  this.inExcursion_ = false;
-
   /**
    * Stores the mode as computed the last time a current range was set.
    * @type {?ChromeVoxMode}
@@ -176,8 +168,13 @@ Background = function() {
    */
   this.focusRecoveryMap_ = new WeakMap();
 
+  chrome.automation.getDesktop(function(desktop) {
+    /** @type {string} */
+    this.chromeChannel_ = desktop.chromeChannel;
+  }.bind(this));
+
   // Record a metric with the mode we're in on startup.
-  var useNext = localStorage['useNext'] !== 'false';
+  var useNext = localStorage['useClassic'] != 'true';
   chrome.metricsPrivate.recordValue(
       { metricName: 'Accessibility.CrosChromeVoxNext',
         type: chrome.metricsPrivate.MetricTypeType.HISTOGRAM_LINEAR,
@@ -221,6 +218,7 @@ Background.GESTURE_NEXT_COMMAND_MAP = {
 
 Background.prototype = {
   __proto__: ChromeVoxState.prototype,
+
   /**
    * Maps the last node with range in a given root.
    * @type {WeakMap<AutomationNode>}
@@ -233,7 +231,7 @@ Background.prototype = {
    * @override
    */
   getMode: function() {
-    var useNext = localStorage['useNext'] !== 'false';
+    var useNext = localStorage['useClassic'] !== 'true';
 
     var target;
     if (!this.getCurrentRange()) {
@@ -255,7 +253,8 @@ Background.prototype = {
           ChromeVoxMode.CLASSIC_COMPAT;
 
     var nextSite = this.isWhitelistedForNext_(topLevelRoot.docUrl);
-    var nextCompat = this.nextCompatRegExp_.test(topLevelRoot.docUrl);
+    var nextCompat = this.nextCompatRegExp_.test(topLevelRoot.docUrl) &&
+        this.chromeChannel_ != 'dev';
     var classicCompat =
         this.isWhitelistedForClassicCompat_(topLevelRoot.docUrl);
     if (nextCompat && useNext)
@@ -357,7 +356,7 @@ Background.prototype = {
     if (opt_setValue !== undefined)
       useNext = opt_setValue;
     else
-      useNext = localStorage['useNext'] !== 'true';
+      useNext = localStorage['useClassic'] == 'true';
 
     if (useNext) {
       chrome.metricsPrivate.recordUserAction(
@@ -367,7 +366,7 @@ Background.prototype = {
           'Accessibility.ChromeVox.ToggleNextOff');
     }
 
-    localStorage['useNext'] = useNext;
+    localStorage['useClassic'] = !useNext;
     if (useNext)
       this.setCurrentRangeToFocus_();
     else
@@ -396,9 +395,6 @@ Background.prototype = {
    * @override
    */
   setCurrentRange: function(newRange) {
-    if (!this.inExcursion_ && newRange)
-      this.savedRange_ = new cursors.Range(newRange.start, newRange.end);
-
     if (newRange && !newRange.isValid())
       return;
 
@@ -578,7 +574,7 @@ Background.prototype = {
    * @private
    */
   shouldEnableClassicForUrl_: function(url) {
-    return this.nextCompatRegExp_.test(url) ||
+    return (this.nextCompatRegExp_.test(url) &&this.chromeChannel_ != 'dev') ||
         (this.mode != ChromeVoxMode.FORCE_NEXT &&
          !this.isBlacklistedForClassic_(url) &&
          !this.isWhitelistedForNext_(url));

@@ -53,7 +53,6 @@
 #include "chrome/browser/extensions/updater/extension_cache_fake.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
 #include "chrome/browser/infobars/infobar_service.h"
-#include "chrome/browser/interstitials/security_interstitial_page.h"
 #include "chrome/browser/interstitials/security_interstitial_page_test_utils.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/media/router/media_router_feature.h"
@@ -114,6 +113,7 @@
 #include "components/search/search.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/security_interstitials/content/security_interstitial_page.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/translate/core/browser/language_state.h"
@@ -168,6 +168,7 @@
 #include "extensions/common/extension_set.h"
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/manifest_handlers/shared_module_info.h"
+#include "media/media_features.h"
 #include "net/base/net_errors.h"
 #include "net/base/url_util.h"
 #include "net/http/http_stream_factory.h"
@@ -196,7 +197,7 @@
 #include "ash/shell.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
-#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -208,9 +209,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_session_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
-#include "components/arc/arc_bridge_service.h"
-#include "components/arc/arc_bridge_service_impl.h"
-#include "components/arc/arc_service_manager.h"
+#include "components/arc/arc_session_runner.h"
 #include "components/arc/test/fake_arc_session.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
@@ -278,7 +277,7 @@ const base::FilePath::CharType kUnpackedFullscreenAppName[] =
     FILE_PATH_LITERAL("fullscreen_app");
 #endif  // !defined(OS_MACOSX)
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 // Arbitrary port range for testing the WebRTC UDP port policy.
 const char kTestWebRtcUdpPortRange[] = "10000-10100";
 #endif
@@ -467,7 +466,7 @@ bool IsJavascriptEnabled(content::WebContents* contents) {
       content::ExecuteScriptAndGetValue(contents->GetMainFrame(), "123");
   int result = 0;
   if (!value->GetAsInteger(&result))
-    EXPECT_EQ(base::Value::TYPE_NULL, value->GetType());
+    EXPECT_EQ(base::Value::Type::NONE, value->GetType());
   return result == 123;
 }
 
@@ -785,14 +784,15 @@ class PolicyTest : public InProcessBrowserTest {
   void PerformClick(int x, int y) {
     content::WebContents* contents =
         browser()->tab_strip_model()->GetActiveWebContents();
-    blink::WebMouseEvent click_event;
-    click_event.type = blink::WebInputEvent::MouseDown;
+    blink::WebMouseEvent click_event(blink::WebInputEvent::MouseDown,
+                                     blink::WebInputEvent::NoModifiers,
+                                     blink::WebInputEvent::TimeStampForTesting);
     click_event.button = blink::WebMouseEvent::Button::Left;
     click_event.clickCount = 1;
     click_event.x = x;
     click_event.y = y;
     contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(click_event);
-    click_event.type = blink::WebInputEvent::MouseUp;
+    click_event.setType(blink::WebInputEvent::MouseUp);
     contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(click_event);
   }
 
@@ -1315,6 +1315,98 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DeveloperToolsDisabled) {
   // And it's not possible to open it again.
   EXPECT_FALSE(chrome::ExecuteCommand(browser(), IDC_DEV_TOOLS));
   EXPECT_FALSE(DevToolsWindow::GetInstanceForInspectedWebContents(contents));
+}
+
+namespace {
+
+// Utility for waiting until the dev-mode controls are visible/hidden
+// Uses a MutationObserver on the attributes of the DOM element.
+void WaitForExtensionsDevModeControlsVisibility(
+    content::WebContents* contents,
+    const char* dev_controls_accessor_js,
+    const char* dev_controls_visibility_check_js,
+    bool expected_visible) {
+  bool done = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      contents,
+      base::StringPrintf(
+          "var screenElement = %s;"
+          "function SendReplyIfAsExpected() {"
+          "  var is_visible = %s;"
+          "  if (is_visible != %s)"
+          "    return false;"
+          "  observer.disconnect();"
+          "  domAutomationController.send(true);"
+          "  return true;"
+          "}"
+          "var observer = new MutationObserver(SendReplyIfAsExpected);"
+          "if (!SendReplyIfAsExpected()) {"
+          "  var options = { 'attributes': true };"
+          "  observer.observe(screenElement, options);"
+          "}",
+          dev_controls_accessor_js,
+          dev_controls_visibility_check_js,
+          (expected_visible ? "true" : "false")),
+      &done));
+}
+
+}  // namespace
+
+IN_PROC_BROWSER_TEST_F(PolicyTest, DeveloperToolsDisabledExtensionsDevMode) {
+  // Verifies that when DeveloperToolsDisabled policy is set, the "dev mode"
+  // in chrome://extensions-frame is actively turned off and the checkbox
+  // is disabled.
+  // Note: We don't test the indicator as it is tested in the policy pref test
+  // for kDeveloperToolsDisabled.
+
+  // This test currently depends on the following assumptions about the webui:
+  // (1) The ID of the checkbox to toggle dev mode
+  const char toggle_dev_mode_accessor_js[] =
+      "document.getElementById('toggle-dev-on')";
+  // (2) The ID of the dev controls containing element
+  const char dev_controls_accessor_js[] =
+      "document.getElementById('dev-controls')";
+  // (3) the fact that dev-controls is displayed/hidden using its height attr
+  const char dev_controls_visibility_check_js[] =
+      "parseFloat(document.getElementById('dev-controls').style.height) > 0";
+
+  // Navigate to the extensions frame and enabled "Developer mode"
+  ui_test_utils::NavigateToURL(browser(),
+                               GURL(chrome::kChromeUIExtensionsFrameURL));
+
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(content::ExecuteScript(
+      contents, base::StringPrintf("domAutomationController.send(%s.click());",
+                                   toggle_dev_mode_accessor_js)));
+
+  WaitForExtensionsDevModeControlsVisibility(contents,
+                                             dev_controls_accessor_js,
+                                             dev_controls_visibility_check_js,
+                                             true);
+
+  // Disable devtools via policy.
+  PolicyMap policies;
+  policies.Set(key::kDeveloperToolsDisabled, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+               base::MakeUnique<base::FundamentalValue>(true), nullptr);
+  UpdateProviderPolicy(policies);
+
+  // Expect devcontrols to be hidden now...
+  WaitForExtensionsDevModeControlsVisibility(contents,
+                                             dev_controls_accessor_js,
+                                             dev_controls_visibility_check_js,
+                                             false);
+
+  // ... and checkbox is not disabled
+  bool is_toggle_dev_mode_checkbox_enabled = false;
+  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+      contents,
+      base::StringPrintf(
+          "domAutomationController.send(!%s.hasAttribute('disabled'))",
+          toggle_dev_mode_accessor_js),
+      &is_toggle_dev_mode_checkbox_enabled));
+  EXPECT_FALSE(is_toggle_dev_mode_checkbox_enabled);
 }
 
 // TODO(samarth): remove along with rest of NTP4 code.
@@ -2001,7 +2093,13 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, HomepageLocation) {
   EXPECT_EQ(GURL(chrome::kChromeUINewTabURL), contents->GetURL());
 }
 
-IN_PROC_BROWSER_TEST_F(PolicyTest, IncognitoEnabled) {
+#if defined(OS_MACOSX) && defined(ADDRESS_SANITIZER)
+// Flaky on ASAN on Mac. See https://crbug.com/674497.
+#define MAYBE_IncognitoEnabled DISABLED_IncognitoEnabled
+#else
+#define MAYBE_IncognitoEnabled IncognitoEnabled
+#endif
+IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_IncognitoEnabled) {
   // Verifies that incognito windows can't be opened when disabled by policy.
 
   const BrowserList* active_browser_list = BrowserList::GetInstance();
@@ -2880,6 +2978,16 @@ class RestoreOnStartupPolicyTest
 };
 
 IN_PROC_BROWSER_TEST_P(RestoreOnStartupPolicyTest, PRE_RunTest) {
+  // Do not show Welcome Page.
+  browser()->profile()->GetPrefs()->SetBoolean(prefs::kHasSeenWelcomePage,
+                                               true);
+
+#if defined(OS_WIN)
+  // Do not show the Windows 10 promo page.
+  g_browser_process->local_state()->SetBoolean(prefs::kHasSeenWin10PromoPage,
+                                               true);
+#endif
+
   // Open some tabs to verify if they are restored after the browser restarts.
   // Most policy settings override this, except kPrefValueLast which enforces
   // a restore.
@@ -3486,7 +3594,7 @@ IN_PROC_BROWSER_TEST_F(MediaRouterDisabledPolicyTest, MediaRouterDisabled) {
 }
 #endif  // defined(ENABLE_MEDIA_ROUTER)
 
-#if defined(ENABLE_WEBRTC)
+#if BUILDFLAG(ENABLE_WEBRTC)
 // Sets the proper policy before the browser is started.
 template <bool enable>
 class WebRtcUdpPortRangePolicyTest : public PolicyTest {
@@ -3531,7 +3639,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcUdpPortRangeDisabledPolicyTest,
   pref->GetValue()->GetAsString(&port_range);
   EXPECT_TRUE(port_range.empty());
 }
-#endif  // defined(ENABLE_WEBRTC)
+#endif  // BUILDFLAG(ENABLE_WEBRTC)
 
 // Tests the ComponentUpdater's EnabledComponentUpdates group policy by
 // calling the OnDemand interface. It uses the network interceptor to inspect
@@ -3952,14 +4060,17 @@ class ArcPolicyTest : public PolicyTest {
 
  protected:
   void SetUpTest() {
-    arc::ArcAuthService::DisableUIForTesting();
+    arc::ArcSessionManager::DisableUIForTesting();
+    arc::ArcSessionManager::Get()->SetArcSessionRunnerForTesting(
+        base::MakeUnique<arc::ArcSessionRunner>(
+            base::Bind(arc::FakeArcSession::Create)));
 
     browser()->profile()->GetPrefs()->SetBoolean(prefs::kArcSignedIn, true);
+    browser()->profile()->GetPrefs()->SetBoolean(prefs::kArcTermsAccepted,
+                                                 true);
   }
 
-  void TearDownTest() {
-    arc::ArcAuthService::Get()->Shutdown();
-  }
+  void TearDownTest() { arc::ArcSessionManager::Get()->Shutdown(); }
 
   void SetUpInProcessBrowserTestFixture() override {
     PolicyTest::SetUpInProcessBrowserTestFixture();
@@ -3968,17 +4079,11 @@ class ArcPolicyTest : public PolicyTest {
     chromeos::DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
         std::unique_ptr<chromeos::SessionManagerClient>(
             fake_session_manager_client_));
-
-    // Inject FakeArcSession here so blocking task runner is not needed.
-    auto service = base::MakeUnique<arc::ArcBridgeServiceImpl>(nullptr);
-    service->SetArcSessionFactoryForTesting(
-        base::Bind(arc::FakeArcSession::Create));
-    arc::ArcServiceManager::SetArcBridgeServiceForTesting(std::move(service));
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    // ArcAuthService functionality is available only when Arc is enabled. Use
-    // kEnableArc switch that activates it.
+    // ArcSessionManager functionality is available only when Arc is enabled.
+    // Use kEnableArc switch that activates it.
     command_line->AppendSwitch(chromeos::switches::kEnableArc);
   }
 
@@ -4006,20 +4111,19 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcEnabled) {
   SetUpTest();
 
   const PrefService* const pref = browser()->profile()->GetPrefs();
-  const arc::ArcBridgeService* const arc_bridge_service =
-      arc::ArcBridgeService::Get();
+  const auto* const arc_session_manager = arc::ArcSessionManager::Get();
 
   // ARC is switched off by default.
-  EXPECT_TRUE(arc_bridge_service->stopped());
+  EXPECT_TRUE(arc_session_manager->IsSessionStopped());
   EXPECT_FALSE(pref->GetBoolean(prefs::kArcEnabled));
 
   // Enable ARC.
   SetArcEnabledByPolicy(true);
-  EXPECT_TRUE(arc_bridge_service->ready());
+  EXPECT_TRUE(arc_session_manager->IsSessionRunning());
 
   // Disable ARC.
   SetArcEnabledByPolicy(false);
-  EXPECT_TRUE(arc_bridge_service->stopped());
+  EXPECT_TRUE(arc_session_manager->IsSessionStopped());
 
   TearDownTest();
 }
@@ -4054,41 +4158,77 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcBackupRestoreEnabled) {
   TearDownTest();
 }
 
-// Test ArcLocationServiceEnabled policy.
+// Test ArcLocationServiceEnabled policy and its interplay with the
+// DefaultGeolocationSetting policy.
 IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcLocationServiceEnabled) {
   SetUpTest();
 
   const PrefService* const pref = browser()->profile()->GetPrefs();
 
-  // ARC Location Service is switched on by default.
-  EXPECT_TRUE(pref->GetBoolean(prefs::kArcLocationServiceEnabled));
-  EXPECT_FALSE(pref->IsManagedPreference(prefs::kArcLocationServiceEnabled));
+  // Values of the ArcLocationServiceEnabled policy to be tested.
+  std::vector<std::unique_ptr<base::Value>> test_policy_values;
+  test_policy_values.push_back(base::Value::CreateNullValue());  // unset
+  test_policy_values.push_back(
+      base::MakeUnique<base::FundamentalValue>(false));  // disabled
+  test_policy_values.push_back(
+      base::MakeUnique<base::FundamentalValue>(false));  // enabled
+  // Values of the DefaultGeolocationSetting policy to be tested.
+  std::vector<std::unique_ptr<base::Value>> test_default_geo_policy_values;
+  test_default_geo_policy_values.push_back(
+      base::Value::CreateNullValue());  // unset
+  test_default_geo_policy_values.push_back(
+      base::MakeUnique<base::FundamentalValue>(1));  // 'AllowGeolocation'
+  test_default_geo_policy_values.push_back(
+      base::MakeUnique<base::FundamentalValue>(2));  // 'BlockGeolocation'
+  test_default_geo_policy_values.push_back(
+      base::MakeUnique<base::FundamentalValue>(3));  // 'AskGeolocation'
 
-  // Managed Location Service.
-  PolicyMap policies;
-  // AllowGeolocation
-  policies.Set(key::kDefaultGeolocationSetting, POLICY_LEVEL_MANDATORY,
-               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::FundamentalValue>(1), nullptr);
-  UpdateProviderPolicy(policies);
-  EXPECT_TRUE(pref->GetBoolean(prefs::kArcLocationServiceEnabled));
-  EXPECT_FALSE(pref->IsManagedPreference(prefs::kArcLocationServiceEnabled));
+  for (const auto& test_policy_value : test_policy_values) {
+    for (const auto& test_default_geo_policy_value :
+         test_default_geo_policy_values) {
+      bool test_policy = false;
+      test_policy_value->GetAsBoolean(&test_policy);
+      int test_default_geo_policy = 0;
+      test_default_geo_policy_value->GetAsInteger(&test_default_geo_policy);
 
-  // BlockGeolocation
-  policies.Set(key::kDefaultGeolocationSetting, POLICY_LEVEL_MANDATORY,
-               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::FundamentalValue>(2), nullptr);
-  UpdateProviderPolicy(policies);
-  EXPECT_FALSE(pref->GetBoolean(prefs::kArcLocationServiceEnabled));
-  EXPECT_TRUE(pref->IsManagedPreference(prefs::kArcLocationServiceEnabled));
+      PolicyMap policies;
+      if (!test_policy_value->IsType(base::Value::Type::NONE)) {
+        policies.Set(key::kArcLocationServiceEnabled, POLICY_LEVEL_MANDATORY,
+                     POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+                     test_policy_value->CreateDeepCopy(), nullptr);
+      }
+      if (!test_default_geo_policy_value->IsType(base::Value::Type::NONE)) {
+        policies.Set(key::kDefaultGeolocationSetting, POLICY_LEVEL_MANDATORY,
+                     POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+                     test_default_geo_policy_value->CreateDeepCopy(), nullptr);
+      }
+      UpdateProviderPolicy(policies);
 
-  // AskGeolocation
-  policies.Set(key::kDefaultGeolocationSetting, POLICY_LEVEL_MANDATORY,
-               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::FundamentalValue>(3), nullptr);
-  UpdateProviderPolicy(policies);
-  EXPECT_TRUE(pref->GetBoolean(prefs::kArcLocationServiceEnabled));
-  EXPECT_FALSE(pref->IsManagedPreference(prefs::kArcLocationServiceEnabled));
+      const bool should_be_disabled_by_policy =
+          test_policy_value->IsType(base::Value::Type::BOOLEAN) && !test_policy;
+      const bool should_be_disabled_by_default_geo_policy =
+          test_default_geo_policy_value->IsType(base::Value::Type::INTEGER) &&
+          test_default_geo_policy == 2;
+      const bool expected_pref_value =
+          !(should_be_disabled_by_policy ||
+            should_be_disabled_by_default_geo_policy);
+      EXPECT_EQ(expected_pref_value,
+                pref->GetBoolean(prefs::kArcLocationServiceEnabled))
+          << "ArcLocationServiceEnabled policy is set to " << *test_policy_value
+          << "DefaultGeolocationSetting policy is set to "
+          << *test_default_geo_policy_value;
+
+      const bool expected_pref_managed =
+          test_policy_value->IsType(base::Value::Type::BOOLEAN) ||
+          (test_default_geo_policy_value->IsType(base::Value::Type::INTEGER) &&
+           test_default_geo_policy == 2);
+      EXPECT_EQ(expected_pref_managed,
+                pref->IsManagedPreference(prefs::kArcLocationServiceEnabled))
+          << "ArcLocationServiceEnabled policy is set to " << *test_policy_value
+          << "DefaultGeolocationSetting policy is set to "
+          << *test_default_geo_policy_value;
+    }
+  }
 
   TearDownTest();
 }

@@ -5,7 +5,6 @@
 #include "cc/test/surface_hittest_test_helpers.h"
 
 #include "cc/output/compositor_frame.h"
-#include "cc/output/delegated_frame_data.h"
 #include "cc/quads/render_pass_draw_quad.h"
 #include "cc/quads/shared_quad_state.h"
 #include "cc/quads/solid_color_draw_quad.h"
@@ -19,7 +18,7 @@ void CreateSharedQuadState(RenderPass* pass,
                            const gfx::Rect& root_rect) {
   SharedQuadState* child_shared_state = pass->CreateAndAppendSharedQuadState();
   child_shared_state->SetAll(transform, root_rect.size(), root_rect, root_rect,
-                             false, 1.0f, SkXfermode::kSrcOver_Mode, 0);
+                             false, 1.0f, SkBlendMode::kSrcOver, 0);
 }
 
 void CreateSolidColorDrawQuad(RenderPass* pass,
@@ -37,14 +36,14 @@ void CreateRenderPassDrawQuad(RenderPass* pass,
                               const gfx::Transform& transform,
                               const gfx::Rect& root_rect,
                               const gfx::Rect& quad_rect,
-                              const RenderPassId& render_pass_id) {
+                              int render_pass_id) {
   CreateSharedQuadState(pass, transform, root_rect);
   RenderPassDrawQuad* render_pass_quad =
       pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
   render_pass_quad->SetNew(pass->shared_quad_state_list.back(), quad_rect,
                            quad_rect, render_pass_id, ResourceId(),
-                           gfx::Vector2dF(), gfx::Size(), FilterOperations(),
-                           gfx::Vector2dF(), gfx::PointF(), FilterOperations());
+                           gfx::Vector2dF(), gfx::Size(), gfx::Vector2dF(),
+                           gfx::PointF());
 }
 
 void CreateSurfaceDrawQuad(RenderPass* pass,
@@ -59,7 +58,7 @@ void CreateSurfaceDrawQuad(RenderPass* pass,
                        quad_rect, surface_id);
 }
 
-void CreateRenderPass(const RenderPassId& render_pass_id,
+void CreateRenderPass(int render_pass_id,
                       const gfx::Rect& rect,
                       const gfx::Transform& transform_to_root_target,
                       RenderPassList* render_pass_list) {
@@ -68,26 +67,13 @@ void CreateRenderPass(const RenderPassId& render_pass_id,
   render_pass_list->push_back(std::move(render_pass));
 }
 
-CompositorFrame CreateCompositorFrameWithRenderPassList(
-    RenderPassList* render_pass_list) {
-  std::unique_ptr<DelegatedFrameData> root_delegated_frame_data(
-      new DelegatedFrameData);
-  root_delegated_frame_data->render_pass_list.swap(*render_pass_list);
-  CompositorFrame root_frame;
-  root_frame.delegated_frame_data = std::move(root_delegated_frame_data);
-  return root_frame;
-}
-
 CompositorFrame CreateCompositorFrame(const gfx::Rect& root_rect,
                                       RenderPass** render_pass) {
-  RenderPassList render_pass_list;
-  RenderPassId root_id(1, 1);
-  CreateRenderPass(root_id, root_rect, gfx::Transform(), &render_pass_list);
-
-  CompositorFrame root_frame =
-      CreateCompositorFrameWithRenderPassList(&render_pass_list);
-
-  *render_pass = root_frame.delegated_frame_data->render_pass_list.back().get();
+  CompositorFrame root_frame;
+  int root_id = 1;
+  CreateRenderPass(root_id, root_rect, gfx::Transform(),
+                   &root_frame.render_pass_list);
+  *render_pass = root_frame.render_pass_list.back().get();
   return root_frame;
 }
 

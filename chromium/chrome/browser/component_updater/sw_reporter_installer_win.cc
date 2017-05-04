@@ -29,8 +29,8 @@
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/threading/worker_pool.h"
 #include "base/time/time.h"
 #include "base/win/registry.h"
 #include "base/win/windows_version.h"
@@ -83,6 +83,10 @@ const wchar_t kVersionValueName[] = L"Version";
 
 constexpr base::Feature kExperimentalEngineFeature{
     "ExperimentalSwReporterEngine", base::FEATURE_DISABLED_BY_DEFAULT};
+constexpr base::Feature kExperimentalEngineAllArchsFeature{
+    "ExperimentalSwReporterEngineOnAllArchitectures",
+    base::FEATURE_DISABLED_BY_DEFAULT
+};
 
 void SRTHasCompleted(SRTCompleted value) {
   UMA_HISTOGRAM_ENUMERATION("SoftwareReporter.Cleaner.HasCompleted", value,
@@ -136,7 +140,15 @@ void RunSwReportersAfterStartup(
       FROM_HERE, base::ThreadTaskRunnerHandle::Get(),
       base::Bind(&safe_browsing::RunSwReporters, invocations, version,
                  base::ThreadTaskRunnerHandle::Get(),
-                 base::WorkerPool::GetTaskRunner(true)));
+                 // Runs LaunchAndWaitForExit() which creates (MayBlock()) and
+                 // joins (WithBaseSyncPrimitives()) a process.
+                 base::CreateTaskRunnerWithTraits(
+                     base::TaskTraits()
+                         .WithShutdownBehavior(
+                             base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN)
+                         .WithPriority(base::TaskPriority::BACKGROUND)
+                         .MayBlock()
+                         .WithBaseSyncPrimitives())));
 }
 
 // Ensures |str| contains only alphanumeric characters and characters from
@@ -467,11 +479,15 @@ void RegisterSwReporterComponent(ComponentUpdateService* cus) {
     }
   }
 
-  // The experiment is only enabled on x86. There's no way to check this in the
+  // If the experiment is not explicitly enabled on all platforms, it
+  // should be only enabled on x86. There's no way to check this in the
   // variations config so we'll hard-code it.
-  const bool is_experimental_engine_supported =
+  const bool is_x86_architecture =
       base::win::OSInfo::GetInstance()->architecture() ==
       base::win::OSInfo::X86_ARCHITECTURE;
+  const bool is_experimental_engine_supported =
+      base::FeatureList::IsEnabled(kExperimentalEngineAllArchsFeature) ||
+      is_x86_architecture;
 
   // Install the component.
   std::unique_ptr<ComponentInstallerTraits> traits(

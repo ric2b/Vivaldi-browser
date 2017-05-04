@@ -14,15 +14,6 @@ Polymer({
 
   properties: {
     /**
-     * The maximum height in pixels for the list.
-     */
-    maxHeight: {
-      type: Number,
-      value: 1000,
-      observer: 'maxHeightChanged_',
-    },
-
-    /**
      * The list of network state properties for the items to display.
      * @type {!Array<!CrOnc.NetworkStateProperties>}
      */
@@ -51,13 +42,6 @@ Polymer({
       reflectToAttribute: true,
     },
 
-    /** Whether to show separators between all items. */
-    showSeparators: {
-      type: Boolean,
-      value: false,
-      reflectToAttribute: true,
-    },
-
     /**
      * Reflects the iron-list selecteditem property.
      * @type {!CrNetworkList.CrNetworkListItemType}
@@ -73,11 +57,6 @@ Polymer({
   observers: ['listChanged_(networks, customItems)'],
 
   /** @private */
-  maxHeightChanged_: function() {
-    this.$.container.style.maxHeight = this.maxHeight + 'px';
-  },
-
-  /** @private */
   listChanged_: function() {
     this.updateScrollableContents();
   },
@@ -90,7 +69,7 @@ Polymer({
   getItems_: function() {
     let customItems = this.customItems.slice();
     // Flag the first custom item with isFirstCustomItem = true.
-    if (!this.showSeparators && customItems.length > 0)
+    if (customItems.length > 0)
       customItems[0].isFirstCustomItem = true;
     return this.networks.concat(customItems);
   },

@@ -68,7 +68,7 @@ void LinkImport::process() {
     // The document should be the master.
     Document& master = m_owner->document();
     DCHECK(master.frame());
-    master.setImportsController(HTMLImportsController::create(master));
+    master.createImportsController();
   }
 
   LinkRequestBuilder builder(m_owner);
@@ -116,6 +116,11 @@ bool LinkImport::hasLoaded() const {
 void LinkImport::ownerInserted() {
   if (m_child)
     m_child->ownerInserted();
+}
+
+void LinkImport::ownerRemoved() {
+  if (m_owner)
+    m_owner->document().styleEngine().htmlImportAddedOrRemoved();
 }
 
 DEFINE_TRACE(LinkImport) {

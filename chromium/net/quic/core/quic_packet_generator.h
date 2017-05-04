@@ -37,19 +37,19 @@
 // mode is ended via |FinishBatchOperations|, the current packet
 // will be serialzied, even if it is not full.
 
-#ifndef NET_QUIC_QUIC_PACKET_GENERATOR_H_
-#define NET_QUIC_QUIC_PACKET_GENERATOR_H_
+#ifndef NET_QUIC_CORE_QUIC_PACKET_GENERATOR_H_
+#define NET_QUIC_CORE_QUIC_PACKET_GENERATOR_H_
 
-#include <stddef.h>
-#include <stdint.h>
-
+#include <cstddef>
+#include <cstdint>
 #include <list>
 
 #include "base/macros.h"
-#include "net/base/net_export.h"
 #include "net/quic/core/quic_packet_creator.h"
+#include "net/quic/core/quic_pending_retransmission.h"
 #include "net/quic/core/quic_sent_packet_manager.h"
 #include "net/quic/core/quic_types.h"
+#include "net/quic/platform/api/quic_export.h"
 
 namespace net {
 
@@ -57,9 +57,9 @@ namespace test {
 class QuicPacketGeneratorPeer;
 }  // namespace test
 
-class NET_EXPORT_PRIVATE QuicPacketGenerator {
+class QUIC_EXPORT_PRIVATE QuicPacketGenerator {
  public:
-  class NET_EXPORT_PRIVATE DelegateInterface
+  class QUIC_EXPORT_PRIVATE DelegateInterface
       : public QuicPacketCreator::DelegateInterface {
    public:
     ~DelegateInterface() override {}
@@ -73,7 +73,6 @@ class NET_EXPORT_PRIVATE QuicPacketGenerator {
 
   QuicPacketGenerator(QuicConnectionId connection_id,
                       QuicFramer* framer,
-                      QuicRandom* random_generator,
                       QuicBufferAllocator* buffer_allocator,
                       DelegateInterface* delegate);
 
@@ -93,24 +92,27 @@ class NET_EXPORT_PRIVATE QuicPacketGenerator {
   // mode, these packets will also be sent during this call.
   // |delegate| (if not nullptr) will be informed once all packets sent as a
   // result of this call are ACKed by the peer.
-  QuicConsumedData ConsumeData(QuicStreamId id,
-                               QuicIOVector iov,
-                               QuicStreamOffset offset,
-                               bool fin,
-                               QuicAckListenerInterface* listener);
+  QuicConsumedData ConsumeData(
+      QuicStreamId id,
+      QuicIOVector iov,
+      QuicStreamOffset offset,
+      bool fin,
+      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
 
   // Sends as many data only packets as allowed by the send algorithm and the
   // available iov.
   // This path does not support FEC, padding, or bundling pending frames.
-  QuicConsumedData ConsumeDataFastPath(QuicStreamId id,
-                                       const QuicIOVector& iov,
-                                       QuicStreamOffset offset,
-                                       bool fin,
-                                       QuicAckListenerInterface* listener);
+  QuicConsumedData ConsumeDataFastPath(
+      QuicStreamId id,
+      const QuicIOVector& iov,
+      QuicStreamOffset offset,
+      bool fin,
+      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
 
   // Generates an MTU discovery packet of specified size.
-  void GenerateMtuDiscoveryPacket(QuicByteCount target_mtu,
-                                  QuicAckListenerInterface* listener);
+  void GenerateMtuDiscoveryPacket(
+      QuicByteCount target_mtu,
+      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener);
 
   // Indicates whether batch mode is currently enabled.
   bool InBatchMode();
@@ -136,14 +138,12 @@ class NET_EXPORT_PRIVATE QuicPacketGenerator {
   void SetDiversificationNonce(const DiversificationNonce& nonce);
 
   // Creates a version negotiation packet which supports |supported_versions|.
-  // Also, sets the entropy hash of the serialized packet to a random bool and
-  // returns that value as a member of SerializedPacket.
   std::unique_ptr<QuicEncryptedPacket> SerializeVersionNegotiationPacket(
       const QuicVersionVector& supported_versions);
 
   // Re-serializes frames with the original packet's packet number length.
   // Used for retransmitting packets to ensure they aren't too long.
-  void ReserializeAllFrames(const PendingRetransmission& retransmission,
+  void ReserializeAllFrames(const QuicPendingRetransmission& retransmission,
                             char* buffer,
                             size_t buffer_len);
 
@@ -219,4 +219,4 @@ class NET_EXPORT_PRIVATE QuicPacketGenerator {
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_PACKET_GENERATOR_H_
+#endif  // NET_QUIC_CORE_QUIC_PACKET_GENERATOR_H_
